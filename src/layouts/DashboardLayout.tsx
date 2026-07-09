@@ -2,17 +2,20 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import PageTransition from '../components/PageTransition';
+import NewRequestModal from '../components/forms/NewRequestModal';
 
 export default function DashboardLayout() {
   const location = useLocation();
   const isPos = location.pathname === '/pos';
+  const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
 
   return (
     <div className="h-screen w-screen bg-[#f4f3f1] flex overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
       {!isPos && (
         <div className="print:hidden h-full z-20 shrink-0">
-          <Sidebar />
+          <Sidebar onNewRequest={() => setIsNewRequestModalOpen(true)} />
         </div>
       )}
       
@@ -28,6 +31,11 @@ export default function DashboardLayout() {
           </div>
         </main>
       </div>
+
+      <NewRequestModal 
+        isOpen={isNewRequestModalOpen} 
+        onClose={() => setIsNewRequestModalOpen(false)} 
+      />
     </div>
   );
 }

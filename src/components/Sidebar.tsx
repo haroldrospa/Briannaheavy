@@ -24,7 +24,11 @@ const navigation = [
   { name: 'Ajustes', href: '/configuracion', icon: Cog6ToothIcon },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  onNewRequest?: () => void;
+}
+
+export default function Sidebar({ onNewRequest }: SidebarProps) {
   const location = useLocation();
 
   return (
@@ -84,7 +88,10 @@ export default function Sidebar() {
       
       {/* Bottom Action Area */}
       <div className="mt-8">
-        <div className="bg-white rounded-[2rem] p-6 text-center shadow-sm border border-gray-100 relative overflow-hidden border-dashed border-2 hover:border-[#fb3c44] transition-colors cursor-pointer group">
+        <div 
+          onClick={onNewRequest}
+          className="bg-white rounded-[2rem] p-6 text-center shadow-sm border border-gray-100 relative overflow-hidden border-dashed border-2 hover:border-[#fb3c44] transition-colors cursor-pointer group"
+        >
           <div className="h-12 w-12 rounded-full bg-[#fb3c44] text-white flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform shadow-[0_4px_12px_rgba(251,60,68,0.4)]">
             <span className="text-2xl leading-none">+</span>
           </div>
