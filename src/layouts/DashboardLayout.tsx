@@ -2,9 +2,11 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import PageTransition from '../components/PageTransition';
-import NewRequestModal from '../components/forms/NewRequestModal';
+
+// Lazy load the modal since it contains two very large forms
+const NewRequestModal = React.lazy(() => import('../components/forms/NewRequestModal'));
 
 export default function DashboardLayout() {
   const location = useLocation();
@@ -32,10 +34,12 @@ export default function DashboardLayout() {
         </main>
       </div>
 
-      <NewRequestModal 
-        isOpen={isNewRequestModalOpen} 
-        onClose={() => setIsNewRequestModalOpen(false)} 
-      />
+      <Suspense fallback={null}>
+        <NewRequestModal 
+          isOpen={isNewRequestModalOpen} 
+          onClose={() => setIsNewRequestModalOpen(false)} 
+        />
+      </Suspense>
     </div>
   );
 }
