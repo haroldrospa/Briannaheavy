@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #C1121F;
+  --color-secondary: #000000;
+  --color-support-dark: #333333;
+  --color-support-light: #F5F5F5;
+  --color-success: #22c55e; /* Green */
+  --color-warning: #f97316; /* Orange */
+  --color-error: #ef4444; /* Red */
+}
+
+@layer base {
+  :root {
+    --background: #f4f3f1; /* Warm off-white for Bento aesthetic */
+    --foreground: #1a1a1a;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer utilities {
+  @media print {
+    @page {
+      margin: 0mm; /* Removes browser headers and footers */
+    }
+    body, html {
+      background-color: white !important;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
