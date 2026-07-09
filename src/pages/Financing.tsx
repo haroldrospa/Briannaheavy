@@ -22,7 +22,8 @@ const dummyInstallments = Array.from({ length: 18 }).map((_, i) => {
     interest: 750,
     penalty: isCurrent ? 120 : 0,
     total: 2450 + (isCurrent ? 120 : 0),
-    status: isPaid ? 'Pagado' : (isCurrent ? 'Atrasado' : 'Pendiente')
+    status: isPaid ? 'Pagado' : (isCurrent ? 'Atrasado' : 'Pendiente'),
+    isPaid
   };
 });
 

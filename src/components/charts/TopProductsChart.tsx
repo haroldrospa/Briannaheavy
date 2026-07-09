@@ -49,7 +49,7 @@ export default function TopProductsChart() {
               itemStyle={{ fontWeight: 600 }}
             />
             <Bar dataKey="sales" name="Ventas" radius={[0, 4, 4, 0]} barSize={24} style={{ filter: 'url(#barShadow)' }}>
-              {data.map((entry, index) => (
+              {data.map((_, index) => (
                 <Cell key={`cell-${index}`} fill={index === 0 ? 'url(#barGradientRed)' : 'url(#barGradientSlate)'} />
               ))}
             </Bar>

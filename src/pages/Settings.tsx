@@ -290,7 +290,7 @@ export default function Settings() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200/50">
-                            {['Dashboard', 'POS', 'Clientes', 'Inventario', 'Financiamientos', 'Reportes', 'Configuración'].map((module, idx) => (
+                            {['Dashboard', 'POS', 'Clientes', 'Inventario', 'Financiamientos', 'Reportes', 'Configuración'].map((module) => (
                               <tr key={module}>
                                 <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm font-bold text-gray-900">{module}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-center">
