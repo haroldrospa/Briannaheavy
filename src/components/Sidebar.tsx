@@ -29,7 +29,7 @@ interface SidebarProps {
   onNewRequest?: () => void;
 }
 
-const Sidebar = React.memo(function Sidebar({ onNewRequest }: SidebarProps) {
+export default function Sidebar({ onNewRequest }: SidebarProps) {
   const location = useLocation();
 
   return (
@@ -102,6 +102,4 @@ const Sidebar = React.memo(function Sidebar({ onNewRequest }: SidebarProps) {
       </div>
     </div>
   );
-});
-
-export default Sidebar;
+}
