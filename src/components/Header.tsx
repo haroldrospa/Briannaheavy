@@ -12,7 +12,9 @@ const routeNames: Record<string, string> = {
   '/usuarios': 'Gestión de Usuarios',
 };
 
-export default function Header() {
+import React from 'react';
+
+const Header = React.memo(function Header() {
   const location = useLocation();
   const currentName = routeNames[location.pathname] || 'Dashboard';
 
@@ -48,4 +50,6 @@ export default function Header() {
       </div>
     </header>
   );
-}
+});
+
+export default Header;

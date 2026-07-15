@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { cn } from '../lib/utils';
@@ -28,13 +29,14 @@ interface SidebarProps {
   onNewRequest?: () => void;
 }
 
-export default function Sidebar({ onNewRequest }: SidebarProps) {
+const Sidebar = React.memo(function Sidebar({ onNewRequest }: SidebarProps) {
   const location = useLocation();
 
   return (
     <div className="w-[280px] h-full flex flex-col bg-[#f4f3f1] p-6 border-r border-gray-200/60 overflow-y-auto scrollbar-hide">
       
-      {/* Company Profile Dropdown Simulator */}      <div className="mb-8 flex items-center justify-between bg-white rounded-full p-2 pr-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
+      {/* Company Profile Dropdown Simulator */}
+      <div className="mb-8 flex items-center justify-between bg-white rounded-full p-2 pr-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div className="h-10 w-10 shrink-0 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-400 text-xs">
             BH
@@ -100,4 +102,6 @@ export default function Sidebar({ onNewRequest }: SidebarProps) {
       </div>
     </div>
   );
-}
+});
+
+export default Sidebar;

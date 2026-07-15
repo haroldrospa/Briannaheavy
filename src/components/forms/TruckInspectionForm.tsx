@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { PrinterIcon } from '@heroicons/react/24/outline';
 
 const INSPECTION_ITEMS = [
@@ -13,22 +13,78 @@ const INSPECTION_ITEMS = [
   'ORDEN Y LIMPIEZA', 'SISTEMA ECOLÓGICO'
 ];
 
+interface InspectionItemRowProps {
+  item: string;
+  idx: number;
+  status: 'B'|'R'|'D'|'';
+  obs: string;
+  onStatusChange: (item: string, status: 'B'|'R'|'D') => void;
+  onObsChange: (item: string, obs: string) => void;
+}
+
+const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, onObsChange }: InspectionItemRowProps) => {
+  return (
+    <div className="flex border-b border-gray-300 hover:bg-gray-50 group">
+      <div className="w-1/3 p-0.5 px-2 border-r border-gray-900 text-[9px] sm:text-[10px] font-bold text-gray-700 flex items-center">
+        {item}
+      </div>
+      <div className="w-24 border-r border-gray-900 flex">
+        <div className="w-1/3 border-r border-gray-900 flex items-center justify-center hover:bg-green-50">
+          <input 
+            type="radio" 
+            name={`status-${idx}`} 
+            checked={status === 'B'}
+            onChange={() => onStatusChange(item, 'B')}
+            className="w-3 h-3 text-green-600 focus:ring-green-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-green-600 print:checked:border-transparent" 
+          />
+        </div>
+        <div className="w-1/3 border-r border-gray-900 flex items-center justify-center hover:bg-yellow-50">
+          <input 
+            type="radio" 
+            name={`status-${idx}`} 
+            checked={status === 'R'}
+            onChange={() => onStatusChange(item, 'R')}
+            className="w-3 h-3 text-yellow-500 focus:ring-yellow-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-yellow-500 print:checked:border-transparent" 
+          />
+        </div>
+        <div className="w-1/3 flex items-center justify-center hover:bg-red-50">
+          <input 
+            type="radio" 
+            name={`status-${idx}`} 
+            checked={status === 'D'}
+            onChange={() => onStatusChange(item, 'D')}
+            className="w-3 h-3 text-red-600 focus:ring-red-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-red-600 print:checked:border-transparent" 
+          />
+        </div>
+      </div>
+      <div className="flex-1">
+        <input 
+          type="text" 
+          value={obs}
+          onChange={(e) => onObsChange(item, e.target.value)}
+          className="w-full h-full p-0.5 px-2 outline-none bg-transparent font-medium text-[#2c3e50] text-[10px]" 
+        />
+      </div>
+    </div>
+  );
+});
+
 export default function TruckInspectionForm() {
   const [formData, setFormData] = useState<Record<string, { status: 'B'|'R'|'D'|'', obs: string }>>({});
 
-  const handleStatusChange = (item: string, status: 'B'|'R'|'D') => {
+  const handleStatusChange = useCallback((item: string, status: 'B'|'R'|'D') => {
     setFormData(prev => ({
       ...prev,
       [item]: { ...prev[item], status }
     }));
-  };
+  }, []);
 
-  const handleObsChange = (item: string, obs: string) => {
+  const handleObsChange = useCallback((item: string, obs: string) => {
     setFormData(prev => ({
       ...prev,
       [item]: { ...prev[item], obs }
     }));
-  };
+  }, []);
 
   return (
     <div className="w-full bg-white print:w-full print:m-0 print:p-0">
@@ -134,48 +190,15 @@ export default function TruckInspectionForm() {
         {/* Table Body */}
         <div className="flex flex-col">
           {INSPECTION_ITEMS.map((item, idx) => (
-            <div key={idx} className="flex border-b border-gray-300 hover:bg-gray-50 group">
-              <div className="w-1/3 p-0.5 px-2 border-r border-gray-900 text-[9px] sm:text-[10px] font-bold text-gray-700 flex items-center">
-                {item}
-              </div>
-              <div className="w-24 border-r border-gray-900 flex">
-                <div className="w-1/3 border-r border-gray-900 flex items-center justify-center hover:bg-green-50">
-                  <input 
-                    type="radio" 
-                    name={`status-${idx}`} 
-                    checked={formData[item]?.status === 'B'}
-                    onChange={() => handleStatusChange(item, 'B')}
-                    className="w-3 h-3 text-green-600 focus:ring-green-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-green-600 print:checked:border-transparent" 
-                  />
-                </div>
-                <div className="w-1/3 border-r border-gray-900 flex items-center justify-center hover:bg-yellow-50">
-                  <input 
-                    type="radio" 
-                    name={`status-${idx}`} 
-                    checked={formData[item]?.status === 'R'}
-                    onChange={() => handleStatusChange(item, 'R')}
-                    className="w-3 h-3 text-yellow-500 focus:ring-yellow-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-yellow-500 print:checked:border-transparent" 
-                  />
-                </div>
-                <div className="w-1/3 flex items-center justify-center hover:bg-red-50">
-                  <input 
-                    type="radio" 
-                    name={`status-${idx}`} 
-                    checked={formData[item]?.status === 'D'}
-                    onChange={() => handleStatusChange(item, 'D')}
-                    className="w-3 h-3 text-red-600 focus:ring-red-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-red-600 print:checked:border-transparent" 
-                  />
-                </div>
-              </div>
-              <div className="flex-1">
-                <input 
-                  type="text" 
-                  value={formData[item]?.obs || ''}
-                  onChange={(e) => handleObsChange(item, e.target.value)}
-                  className="w-full h-full p-0.5 px-2 outline-none bg-transparent font-medium text-[#2c3e50] text-[10px]" 
-                />
-              </div>
-            </div>
+            <InspectionItemRow
+              key={item}
+              item={item}
+              idx={idx}
+              status={formData[item]?.status || ''}
+              obs={formData[item]?.obs || ''}
+              onStatusChange={handleStatusChange}
+              onObsChange={handleObsChange}
+            />
           ))}
         </div>
 
