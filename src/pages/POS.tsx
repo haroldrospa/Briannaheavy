@@ -39,6 +39,7 @@ type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
 export default function POS() {
   const [cart, setCart] = useState<{product: typeof DUMMY_PRODUCTS[0], quantity: number}[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
   
   // Modals
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -83,6 +84,11 @@ export default function POS() {
   if (paymentMethod === 'Crédito' && !canUseCredit) {
      // Failsafe in render, but let's keep logic clean
   }
+
+  const filteredClients = DUMMY_CLIENTS.filter(client => 
+    client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || 
+    client.rnc.includes(clientSearchTerm)
+  );
 
   const openCheckout = () => {
     if (cart.length === 0) return;
@@ -376,21 +382,38 @@ export default function POS() {
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
-              <div className="p-4 max-h-96 overflow-y-auto">
+              
+              {/* Search Bar */}
+              <div className="p-4 border-b border-gray-100 bg-white">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o RNC/Cédula..."
+                    value={clientSearchTerm}
+                    onChange={(e) => setClientSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24] focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 max-h-72 overflow-y-auto">
                 <div className="space-y-2">
-                  <div 
-                    onClick={() => { 
-                      setSelectedClient(null); 
-                      setIsClientModalOpen(false); 
-                      if(paymentMethod === 'Crédito') setPaymentMethod('Efectivo');
-                    }}
-                    className="p-3 border rounded-lg hover:border-[#ED1C24] hover:bg-red-50 cursor-pointer transition-colors"
-                  >
-                    <p className="font-medium text-gray-900">Cliente de Contado</p>
-                    <p className="text-xs text-gray-500">Sin registro fiscal</p>
-                  </div>
+                  {!clientSearchTerm && (
+                    <div 
+                      onClick={() => { 
+                        setSelectedClient(null); 
+                        setIsClientModalOpen(false); 
+                        if(paymentMethod === 'Crédito') setPaymentMethod('Efectivo');
+                      }}
+                      className="p-3 border rounded-lg hover:border-[#ED1C24] hover:bg-red-50 cursor-pointer transition-colors"
+                    >
+                      <p className="font-medium text-gray-900">Cliente de Contado</p>
+                      <p className="text-xs text-gray-500">Sin registro fiscal</p>
+                    </div>
+                  )}
                   
-                  {DUMMY_CLIENTS.map(client => (
+                  {filteredClients.map(client => (
                     <div 
                       key={client.id}
                       onClick={() => { setSelectedClient(client); setIsClientModalOpen(false); }}
@@ -403,6 +426,12 @@ export default function POS() {
                       {selectedClient?.id === client.id && <CheckCircleIcon className="h-5 w-5 text-[#ED1C24]" />}
                     </div>
                   ))}
+
+                  {filteredClients.length === 0 && (
+                    <div className="text-center py-4 text-gray-500 text-sm">
+                      No se encontraron clientes con esos datos.
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
