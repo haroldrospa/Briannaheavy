@@ -22,6 +22,54 @@ const TABS = [
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('empresa');
 
+  type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar';
+  type PermissionsRecord = Record<string, Record<PermissionAction, boolean>>;
+
+  const [roles, setRoles] = useState<Record<string, PermissionsRecord>>({
+    'Administrador': {
+      'Dashboard': { ver: true, crear: true, editar: true, eliminar: true },
+      'POS': { ver: true, crear: true, editar: true, eliminar: true },
+      'Clientes': { ver: true, crear: true, editar: true, eliminar: true },
+      'Inventario': { ver: true, crear: true, editar: true, eliminar: true },
+      'Financiamientos': { ver: true, crear: true, editar: true, eliminar: true },
+      'Reportes': { ver: true, crear: true, editar: true, eliminar: true },
+      'Configuración': { ver: true, crear: true, editar: true, eliminar: true },
+    },
+    'Vendedor': {
+      'Dashboard': { ver: true, crear: false, editar: false, eliminar: false },
+      'POS': { ver: true, crear: true, editar: true, eliminar: false },
+      'Clientes': { ver: true, crear: true, editar: true, eliminar: false },
+      'Inventario': { ver: true, crear: false, editar: false, eliminar: false },
+      'Financiamientos': { ver: true, crear: true, editar: true, eliminar: false },
+      'Reportes': { ver: false, crear: false, editar: false, eliminar: false },
+      'Configuración': { ver: false, crear: false, editar: false, eliminar: false },
+    },
+    'Inventario': {
+      'Dashboard': { ver: true, crear: false, editar: false, eliminar: false },
+      'POS': { ver: false, crear: false, editar: false, eliminar: false },
+      'Clientes': { ver: false, crear: false, editar: false, eliminar: false },
+      'Inventario': { ver: true, crear: true, editar: true, eliminar: false },
+      'Financiamientos': { ver: false, crear: false, editar: false, eliminar: false },
+      'Reportes': { ver: false, crear: false, editar: false, eliminar: false },
+      'Configuración': { ver: false, crear: false, editar: false, eliminar: false },
+    }
+  });
+
+  const [selectedRole, setSelectedRole] = useState('Administrador');
+
+  const togglePermission = (module: string, action: PermissionAction) => {
+    setRoles(prev => ({
+      ...prev,
+      [selectedRole]: {
+        ...prev[selectedRole],
+        [module]: {
+          ...prev[selectedRole]?.[module],
+          [action]: !prev[selectedRole]?.[module]?.[action]
+        }
+      }
+    }));
+  };
+
   // Users State
   const [users, setUsers] = useState([
     { id: 1, name: 'Admin Principal', role: 'Administrador', status: 'Activo' },
@@ -267,10 +315,15 @@ export default function Settings() {
                   </div>
                   <div className="mt-4 sm:mt-0">
                     <label htmlFor="role-select" className="sr-only">Seleccionar Rol</label>
-                    <select id="role-select" className="block w-full px-6 py-3 bg-[#f4f3f1] border-none rounded-full text-sm font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all appearance-none cursor-pointer pr-10">
-                      <option>Administrador</option>
-                      <option>Vendedor</option>
-                      <option>Inventario</option>
+                    <select 
+                      id="role-select" 
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="block w-full px-6 py-3 bg-[#f4f3f1] border-none rounded-full text-sm font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all appearance-none cursor-pointer pr-10"
+                    >
+                      {Object.keys(roles).map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -294,16 +347,36 @@ export default function Settings() {
                               <tr key={module}>
                                 <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm font-bold text-gray-900">{module}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input type="checkbox" defaultChecked className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded" />
+                                  <input 
+                                    type="checkbox" 
+                                    checked={roles[selectedRole]?.[module]?.ver || false}
+                                    onChange={() => togglePermission(module, 'ver')}
+                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                                  />
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input type="checkbox" defaultChecked={module !== 'Configuración' && module !== 'Reportes'} className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded" />
+                                  <input 
+                                    type="checkbox" 
+                                    checked={roles[selectedRole]?.[module]?.crear || false}
+                                    onChange={() => togglePermission(module, 'crear')}
+                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                                  />
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input type="checkbox" defaultChecked={module !== 'Configuración'} className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded" />
+                                  <input 
+                                    type="checkbox" 
+                                    checked={roles[selectedRole]?.[module]?.editar || false}
+                                    onChange={() => togglePermission(module, 'editar')}
+                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                                  />
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input type="checkbox" defaultChecked={module === 'Inventario' || module === 'Clientes'} className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded" />
+                                  <input 
+                                    type="checkbox" 
+                                    checked={roles[selectedRole]?.[module]?.eliminar || false}
+                                    onChange={() => togglePermission(module, 'eliminar')}
+                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                                  />
                                 </td>
                               </tr>
                             ))}
