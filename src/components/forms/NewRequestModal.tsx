@@ -84,10 +84,10 @@ export default function NewRequestModal({ isOpen, onClose }: NewRequestModalProp
                   <motion.div variants={cardVariants} className="h-full">
                     <button
                       onClick={() => setSelectedForm('inspection')}
-                      className="w-full h-full flex flex-col items-center justify-center gap-6 p-10 rounded-2xl bg-white border border-gray-200 shadow-sm hover:border-[#ED1C24] hover:shadow-md transition-all group text-center"
+                      className="w-full h-full flex flex-col items-center justify-center gap-6 p-10 rounded-2xl bg-white border border-gray-200 hover:border-gray-900 hover:bg-gray-50 transition-colors text-center"
                     >
-                      <div className="h-16 w-16 rounded-xl bg-red-50 flex items-center justify-center group-hover:bg-[#ED1C24] transition-colors">
-                        <TruckIcon className="h-8 w-8 text-[#ED1C24] group-hover:text-white transition-colors" />
+                      <div className="h-16 w-16 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <TruckIcon className="h-8 w-8 text-gray-900" />
                       </div>
                       
                       <div className="space-y-2">
@@ -104,10 +104,10 @@ export default function NewRequestModal({ isOpen, onClose }: NewRequestModalProp
                   <motion.div variants={cardVariants} className="h-full">
                     <button
                       onClick={() => setSelectedForm('maintenance')}
-                      className="w-full h-full flex flex-col items-center justify-center gap-6 p-10 rounded-2xl bg-white border border-gray-200 shadow-sm hover:border-blue-600 hover:shadow-md transition-all group text-center"
+                      className="w-full h-full flex flex-col items-center justify-center gap-6 p-10 rounded-2xl bg-white border border-gray-200 hover:border-gray-900 hover:bg-gray-50 transition-colors text-center"
                     >
-                      <div className="h-16 w-16 rounded-xl bg-blue-50 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                        <WrenchScrewdriverIcon className="h-8 w-8 text-blue-600 group-hover:text-white transition-colors" />
+                      <div className="h-16 w-16 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <WrenchScrewdriverIcon className="h-8 w-8 text-gray-900" />
                       </div>
                       
                       <div className="space-y-2">
