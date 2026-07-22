@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import CashClosureModal from '../components/finance/CashClosureModal';
 import { 
   MagnifyingGlassIcon, 
   QrCodeIcon, 
@@ -17,7 +18,8 @@ import {
   PrinterIcon,
   DocumentArrowDownIcon,
   EnvelopeIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 
 const DUMMY_PRODUCTS = [
@@ -37,6 +39,7 @@ const DUMMY_CLIENTS = [
 type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
 
 export default function POS() {
+  const navigate = useNavigate();
   const [cart, setCart] = useState<{product: typeof DUMMY_PRODUCTS[0], quantity: number}[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
@@ -45,6 +48,7 @@ export default function POS() {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
 
   // States
   const [selectedClient, setSelectedClient] = useState<typeof DUMMY_CLIENTS[0] | null>(null);
@@ -115,51 +119,68 @@ export default function POS() {
   };
 
   return (
-    <div className="h-screen bg-[#f4f3f1] flex flex-col">
-      <header className="h-20 bg-[#0f0f11] text-white flex items-center justify-between px-6 shrink-0 print:hidden z-20 border-b border-gray-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-        <div className="flex items-center gap-6">
+    <div className="h-screen bg-[#f4f3f1] dark:bg-[#09090b] text-gray-900 dark:text-zinc-100 flex flex-col transition-colors duration-300">
+      <header className="h-20 bg-white/90 dark:bg-[#0c0d10]/95 backdrop-blur-md text-gray-900 dark:text-zinc-100 flex items-center justify-between px-6 shrink-0 print:hidden z-20 border-b border-gray-200/80 dark:border-zinc-800/80 shadow-sm transition-colors duration-300">
+        <div className="flex items-center gap-5">
           <Link 
             to="/dashboard" 
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 group"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800/80 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-600 dark:text-zinc-300 transition-all duration-200 group shadow-sm"
             title="Volver al inicio"
           >
-            <ArrowLeftIcon className="h-5 w-5 text-gray-400 group-hover:text-white group-hover:-translate-x-0.5 transition-all" />
+            <ArrowLeftIcon className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
           </Link>
-          <div className="h-8 w-px bg-gray-800"></div>
+          <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800"></div>
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-[#ED1C24] to-[#990a10] p-2 rounded-xl shadow-lg shadow-red-900/20">
-              <ShoppingCartIcon className="h-6 w-6 text-white" />
+            <div className="bg-gradient-to-br from-[#fb3c44] to-[#c1121f] p-2.5 rounded-xl shadow-md shadow-red-500/20 text-white">
+              <ShoppingCartIcon className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-black bg-gradient-to-r from-white via-gray-100 to-gray-400 bg-clip-text text-transparent tracking-tight leading-none">
+              <h1 className="text-lg font-black tracking-tight leading-none text-gray-900 dark:text-zinc-100">
                 PUNTO DE VENTA
               </h1>
-              <p className="text-[11px] font-medium text-gray-400 tracking-widest uppercase mt-1">
+              <p className="text-[11px] font-bold text-[#fb3c44] tracking-widest uppercase mt-1">
                 Brianna Heavy Equipment
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-4">
+          {/* Cierre de Caja Button */}
+          <button
+            onClick={() => setIsCashClosureOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#fb3c44] hover:bg-[#e03138] active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-red-500/20 transition-all cursor-pointer"
+          >
+            <CalculatorIcon className="h-4 w-4 stroke-[2.5]" />
+            <span>Cierre de Caja</span>
+          </button>
+
           {/* Status badge */}
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
-            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs font-semibold text-green-400">Sistema en línea</span>
+          <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Sistema en línea</span>
           </div>
           
-          <div className="h-8 w-px bg-gray-800 hidden md:block"></div>
+          <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800 hidden md:block"></div>
 
           {/* User Profile */}
-          <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-full pl-2 pr-5 py-1.5 hover:bg-white/10 transition-colors cursor-pointer">
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[#ED1C24] to-[#b31218] flex items-center justify-center font-bold text-white shadow-md border border-[#ff4d54]/30 text-sm">
+          <div className="flex items-center gap-3 bg-gray-100/80 dark:bg-[#16171d] border border-gray-200/80 dark:border-zinc-800/80 rounded-full pl-2 pr-4 py-1.5 shadow-sm hover:shadow transition-all cursor-pointer">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#fb3c44] to-[#b31218] flex items-center justify-center font-bold text-white shadow-sm text-xs">
               A
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-gray-100 leading-none">Admin</span>
-              <span className="text-[11px] font-medium text-gray-400 mt-1">Caja 01</span>
+              <span className="text-xs font-bold text-gray-900 dark:text-zinc-100 leading-none">Admin</span>
+              <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 mt-0.5">Caja 01</span>
             </div>
           </div>
+
+          <button
+            onClick={() => navigate('/login')}
+            className="p-2.5 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-sm flex items-center justify-center group cursor-pointer"
+            title="Cerrar Sesión"
+          >
+            <ArrowRightOnRectangleIcon className="h-5 w-5 text-red-500 group-hover:scale-110 transition-transform" />
+          </button>
         </div>
       </header>
 
@@ -171,29 +192,29 @@ export default function POS() {
           <div className="flex gap-4">
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-0 flex items-center pl-5 pointer-events-none">
-                <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-zinc-500" />
               </div>
               <input
                 type="text"
-                className="block w-full pl-12 pr-4 py-4 border-none rounded-full leading-5 bg-white shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all sm:text-sm font-medium"
+                className="block w-full pl-12 pr-4 py-3.5 border border-gray-200/80 dark:border-zinc-800/80 rounded-full leading-5 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 shadow-sm placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#fb3c44]/20 transition-all text-sm font-medium"
                 placeholder="Buscar por nombre o código..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button className="bg-white border-none p-4 rounded-full hover:bg-gray-50 text-gray-600 transition-all shadow-sm flex items-center justify-center" title="Escanear Código">
-              <QrCodeIcon className="h-6 w-6" />
+            <button className="bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 p-3.5 rounded-full hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:text-[#fb3c44] dark:hover:text-[#fb3c44] transition-all shadow-sm flex items-center justify-center" title="Escanear Código">
+              <QrCodeIcon className="h-5 w-5" />
             </button>
           </div>
           {/* Categories Tab */}
-          <div className="mt-6 flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="mt-4 flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
             {['Todas', 'Piezas', 'Camiones', 'Equipos'].map((cat, idx) => (
               <button 
                 key={cat} 
-                className={`px-5 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                className={`px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                   idx === 0 
-                    ? 'bg-[#ED1C24] text-white shadow-md shadow-red-500/20' 
-                    : 'bg-white border border-gray-100 text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-[#fb3c44] text-white shadow-md shadow-red-500/25 border border-transparent' 
+                    : 'bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 text-gray-600 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 hover:text-gray-900 dark:hover:text-zinc-100'
                 }`}
               >
                 {cat}
@@ -207,18 +228,18 @@ export default function POS() {
             {DUMMY_PRODUCTS.map(product => (
               <div 
                 key={product.id} 
-                className="bg-white p-5 rounded-3xl shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 group flex flex-col"
+                className="bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800/80 p-5 rounded-[1.75rem] shadow-sm cursor-pointer hover:shadow-md hover:border-[#fb3c44]/40 dark:hover:border-[#fb3c44]/40 hover:-translate-y-1 transition-all duration-300 active:scale-95 group flex flex-col justify-between"
                 onClick={() => addToCart(product)}
               >
-                <div className="h-32 bg-gray-50/50 rounded-2xl mb-4 flex flex-col items-center justify-center text-gray-400 group-hover:bg-red-50/50 transition-colors relative overflow-hidden">
-                  <ShoppingCartIcon className="h-8 w-8 text-gray-300 group-hover:text-red-300 transition-colors mb-2" />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400 group-hover:text-red-400">Añadir</span>
+                <div className="h-32 bg-gray-50/70 dark:bg-zinc-800/40 rounded-2xl mb-4 flex flex-col items-center justify-center text-gray-400 dark:text-zinc-500 group-hover:bg-red-50/50 dark:group-hover:bg-red-950/30 transition-colors relative overflow-hidden">
+                  <ShoppingCartIcon className="h-8 w-8 text-gray-300 dark:text-zinc-600 group-hover:text-[#fb3c44] transition-colors mb-2" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-[#fb3c44]">Añadir</span>
                 </div>
                 <div className="flex-1 flex flex-col justify-between">
-                  <h4 className="text-sm font-semibold text-gray-800 line-clamp-2 leading-snug mb-2">{product.name}</h4>
+                  <h4 className="text-sm font-bold text-gray-800 dark:text-zinc-100 line-clamp-2 leading-snug mb-2">{product.name}</h4>
                   <div className="mt-auto flex items-end justify-between">
-                    <span className="text-lg font-black text-[#ED1C24]">${product.price.toFixed(2)}</span>
-                    <span className="text-xs font-bold px-3 py-1 bg-gray-50 text-gray-500 rounded-full">Stock: {product.stock}</span>
+                    <span className="text-lg font-black text-[#fb3c44]">${product.price.toFixed(2)}</span>
+                    <span className="text-xs font-bold px-3 py-1 bg-gray-100 dark:bg-zinc-800/80 text-gray-500 dark:text-zinc-400 rounded-full">Stock: {product.stock}</span>
                   </div>
                 </div>
               </div>
@@ -228,35 +249,35 @@ export default function POS() {
       </div>
 
       {/* Cart Sidebar */}
-      <div className="w-full md:w-[420px] flex flex-col bg-white rounded-[2rem] shadow-sm overflow-hidden relative z-10">
-        <div className="p-6 pb-4 bg-white flex justify-between items-center relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-[#f4f3f1] rounded-full">
-              <UserIcon className="h-5 w-5 text-gray-600" />
+      <div className="w-full md:w-[420px] flex flex-col bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800/80 rounded-[2rem] shadow-sm overflow-hidden relative z-10">
+        <div className="p-6 pb-4 bg-white dark:bg-[#121318] border-b border-gray-100 dark:border-zinc-800/80 flex justify-between items-center relative z-10">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-gray-100 dark:bg-zinc-800/80 rounded-full">
+              <UserIcon className="h-5 w-5 text-gray-600 dark:text-zinc-400" />
             </div>
             <div>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-0.5">Cliente Actual</p>
-              <h2 className="text-sm font-bold text-gray-900 truncate max-w-[150px]">
+              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-wider mb-0.5">Cliente Actual</p>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-zinc-100 truncate max-w-[150px]">
                 {selectedClient ? selectedClient.name : 'Venta de Contado'}
               </h2>
             </div>
           </div>
           <button 
             onClick={() => setIsClientModalOpen(true)}
-            className="text-xs text-gray-700 bg-white border border-gray-100 hover:bg-gray-50 hover:border-gray-200 px-4 py-2 rounded-full font-bold transition-all shadow-sm"
+            className="text-xs text-gray-700 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700 px-4 py-2 rounded-full font-bold transition-all shadow-sm"
           >
             {selectedClient ? 'Cambiar' : 'Asignar'}
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-6 pt-0">
+        <div className="flex-1 overflow-y-auto p-6 pt-4">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400">
+            <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-zinc-500">
               <ShoppingCartIcon className="h-12 w-12 mb-2 opacity-50" />
-              <p>El carrito está vacío</p>
+              <p className="text-sm font-medium">El carrito está vacío</p>
             </div>
           ) : (
-            <ul className="space-y-4">
+            <ul className="space-y-3">
               <AnimatePresence>
                 {cart.map(item => (
                   <motion.li 
@@ -265,15 +286,15 @@ export default function POS() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     key={item.product.id} 
-                    className="flex justify-between items-start gap-3 bg-[#f4f3f1] p-4 rounded-2xl"
+                    className="flex justify-between items-start gap-3 bg-gray-50/70 dark:bg-zinc-800/40 border border-gray-100 dark:border-zinc-800/60 p-4 rounded-2xl"
                   >
                     <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900">{item.product.name}</p>
-                      <p className="text-sm font-semibold text-gray-500 mt-1">${item.product.price.toFixed(2)} <span className="text-xs text-gray-400 font-medium">x {item.quantity}</span></p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-zinc-100">{item.product.name}</p>
+                      <p className="text-sm font-semibold text-gray-500 dark:text-zinc-400 mt-1">${item.product.price.toFixed(2)} <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium">x {item.quantity}</span></p>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      <p className="text-sm font-black text-[#ED1C24]">${(item.product.price * item.quantity).toFixed(2)}</p>
-                      <button onClick={() => removeFromCart(item.product.id)} className="bg-white text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors shadow-sm">
+                      <p className="text-sm font-black text-[#fb3c44]">${(item.product.price * item.quantity).toFixed(2)}</p>
+                      <button onClick={() => removeFromCart(item.product.id)} className="bg-white dark:bg-zinc-800 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 p-1.5 rounded-full transition-colors shadow-sm">
                         <TrashIcon className="h-4 w-4" />
                       </button>
                     </div>
@@ -284,21 +305,21 @@ export default function POS() {
           )}
         </div>
 
-        <div className="p-6 bg-white">
-          <div className="bg-[#f4f3f1] p-6 rounded-3xl mb-6">
+        <div className="p-6 bg-white dark:bg-[#121318]">
+          <div className="bg-gray-50/70 dark:bg-zinc-800/40 border border-gray-100 dark:border-zinc-800/60 p-6 rounded-3xl mb-6">
             <div className="space-y-3 mb-4">
-              <div className="flex justify-between text-sm text-gray-600">
+              <div className="flex justify-between text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-medium">Subtotal</span>
                 <span className="font-medium">${subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-sm text-gray-600">
+              <div className="flex justify-between text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-medium">ITBIS (18%)</span>
                 <span className="font-medium">${tax.toFixed(2)}</span>
               </div>
             </div>
-            <div className="flex justify-between items-end pt-4 border-t border-dashed border-gray-200">
-              <span className="text-sm font-bold text-gray-900 uppercase tracking-wider">Total</span>
-              <span className="text-3xl font-black text-[#ED1C24]">${total.toFixed(2)}</span>
+            <div className="flex justify-between items-end pt-4 border-t border-dashed border-gray-200 dark:border-zinc-700/80">
+              <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider">Total</span>
+              <span className="text-3xl font-black text-[#fb3c44]">${total.toFixed(2)}</span>
             </div>
           </div>
           
@@ -306,38 +327,48 @@ export default function POS() {
             <button 
               onClick={() => setPaymentMethod('Efectivo')}
               className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-bold transition-all ${
-                paymentMethod === 'Efectivo' ? 'bg-[#4ADE80]/20 text-green-700 border-none' : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50 shadow-sm'
+                paymentMethod === 'Efectivo' 
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' 
+                  : 'bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 shadow-sm'
               }`}
             >
-              <BanknotesIcon className={`h-5 w-5 ${paymentMethod === 'Efectivo' ? 'text-green-600' : 'text-gray-400'}`} />
+              <BanknotesIcon className={`h-5 w-5 ${paymentMethod === 'Efectivo' ? 'text-emerald-500' : 'text-gray-400 dark:text-zinc-500'}`} />
               Efectivo
             </button>
             <button 
               onClick={() => setPaymentMethod('Tarjeta')}
               className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-bold transition-all ${
-                paymentMethod === 'Tarjeta' ? 'bg-[#60A5FA]/20 text-blue-700 border-none' : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50 shadow-sm'
+                paymentMethod === 'Tarjeta' 
+                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30' 
+                  : 'bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 shadow-sm'
               }`}
             >
-              <CreditCardIcon className={`h-5 w-5 ${paymentMethod === 'Tarjeta' ? 'text-blue-600' : 'text-gray-400'}`} />
+              <CreditCardIcon className={`h-5 w-5 ${paymentMethod === 'Tarjeta' ? 'text-blue-500' : 'text-gray-400 dark:text-zinc-500'}`} />
               Tarjeta
             </button>
             <button 
               onClick={() => setPaymentMethod('Transferencia')}
               className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-bold transition-all ${
-                paymentMethod === 'Transferencia' ? 'bg-[#C084FC]/20 text-purple-700 border-none' : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50 shadow-sm'
+                paymentMethod === 'Transferencia' 
+                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30' 
+                  : 'bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 shadow-sm'
               }`}
             >
-              <BuildingLibraryIcon className={`h-5 w-5 ${paymentMethod === 'Transferencia' ? 'text-purple-600' : 'text-gray-400'}`} />
+              <BuildingLibraryIcon className={`h-5 w-5 ${paymentMethod === 'Transferencia' ? 'text-purple-500' : 'text-gray-400 dark:text-zinc-500'}`} />
               Transf.
             </button>
             <button 
               onClick={() => setPaymentMethod('Crédito')}
               disabled={!canUseCredit}
               className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 text-xs font-bold transition-all ${
-                paymentMethod === 'Crédito' ? 'bg-[#FBBF24]/20 text-orange-700 border-none' : !canUseCredit ? 'bg-gray-50 border border-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white border border-gray-100 text-gray-500 hover:bg-gray-50 shadow-sm'
+                paymentMethod === 'Crédito' 
+                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' 
+                  : !canUseCredit 
+                    ? 'bg-gray-100 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800/50 text-gray-400 dark:text-zinc-600 cursor-not-allowed' 
+                    : 'bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/60 shadow-sm'
               }`}
             >
-              <UserIcon className={`h-5 w-5 ${paymentMethod === 'Crédito' ? 'text-orange-600' : 'text-gray-400'}`} />
+              <UserIcon className={`h-5 w-5 ${paymentMethod === 'Crédito' ? 'text-amber-500' : 'text-gray-400 dark:text-zinc-500'}`} />
               Crédito
             </button>
           </div>
@@ -347,13 +378,13 @@ export default function POS() {
             whileTap={{ scale: cart.length > 0 ? 0.98 : 1 }}
             onClick={openCheckout}
             disabled={cart.length === 0}
-            className={`w-full flex items-center justify-center gap-2 rounded-full py-4 text-lg font-bold shadow-sm transition-all ${
+            className={`w-full flex items-center justify-center gap-2 rounded-full py-4 text-base font-bold shadow-sm transition-all ${
               cart.length > 0 
-                ? 'bg-[#fb3c44] text-white hover:shadow-md' 
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-[#fb3c44] text-white hover:shadow-md shadow-red-500/20' 
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
             }`}
           >
-            <CalculatorIcon className="h-6 w-6" />
+            <CalculatorIcon className="h-5 w-5" />
             Proceder al Pago
           </motion.button>
         </div>
@@ -374,17 +405,16 @@ export default function POS() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-50 overflow-hidden"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl z-50 overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h3 className="text-lg font-semibold text-gray-900">Seleccionar Cliente</h3>
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-[#222222]">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Seleccionar Cliente</h3>
                 <button onClick={() => setIsClientModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              {/* Search Bar */}
-              <div className="p-4 border-b border-gray-100 bg-white">
+              <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-[#1a1a1a]">
                 <div className="relative">
                   <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
@@ -392,7 +422,7 @@ export default function POS() {
                     placeholder="Buscar por nombre o RNC/Cédula..."
                     value={clientSearchTerm}
                     onChange={(e) => setClientSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24] focus:border-transparent text-sm"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#222222] text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24] focus:border-transparent text-sm"
                   />
                 </div>
               </div>
@@ -406,9 +436,9 @@ export default function POS() {
                         setIsClientModalOpen(false); 
                         if(paymentMethod === 'Crédito') setPaymentMethod('Efectivo');
                       }}
-                      className="p-3 border rounded-lg hover:border-[#ED1C24] hover:bg-red-50 cursor-pointer transition-colors"
+                      className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-[#ED1C24] dark:hover:border-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer transition-colors"
                     >
-                      <p className="font-medium text-gray-900">Cliente de Contado</p>
+                      <p className="font-medium text-gray-900 dark:text-white">Cliente de Contado</p>
                       <p className="text-xs text-gray-500">Sin registro fiscal</p>
                     </div>
                   )}
@@ -417,10 +447,10 @@ export default function POS() {
                     <div 
                       key={client.id}
                       onClick={() => { setSelectedClient(client); setIsClientModalOpen(false); }}
-                      className="p-3 border rounded-lg hover:border-[#ED1C24] hover:bg-red-50 cursor-pointer transition-colors flex justify-between items-center"
+                      className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-[#ED1C24] dark:hover:border-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-900/30 cursor-pointer transition-colors flex justify-between items-center"
                     >
                       <div>
-                        <p className="font-medium text-gray-900">{client.name}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">{client.name}</p>
                         <p className="text-xs text-gray-500">RNC/Cédula: {client.rnc}</p>
                       </div>
                       {selectedClient?.id === client.id && <CheckCircleIcon className="h-5 w-5 text-[#ED1C24]" />}
@@ -454,10 +484,10 @@ export default function POS() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl bg-white rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-[#222222]">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                   <CalculatorIcon className="h-6 w-6 text-[#ED1C24]" />
                   Checkout y Facturación
                 </h3>
@@ -466,12 +496,12 @@ export default function POS() {
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 bg-white flex flex-col md:flex-row gap-8">
+              <div className="p-6 overflow-y-auto flex-1 bg-white dark:bg-[#1a1a1a] flex flex-col md:flex-row gap-8">
                 
                 {/* Left Col: Invoice & Client */}
                 <div className="flex-1 space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Comprobante (NCF)</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo de Comprobante (NCF)</label>
                     <div className="grid grid-cols-1 gap-2">
                       {['Consumidor Final', 'Crédito Fiscal', 'Gubernamental'].map(type => (
                         <button
@@ -479,8 +509,8 @@ export default function POS() {
                           onClick={() => setInvoiceType(type)}
                           className={`px-4 py-3 border rounded-lg text-left text-sm font-medium transition-colors flex items-center justify-between ${
                             invoiceType === type 
-                              ? 'border-[#ED1C24] bg-red-50 text-red-900' 
-                              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                              ? 'border-[#ED1C24] bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-400' 
+                              : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -499,16 +529,16 @@ export default function POS() {
                     </div>
                   )}
 
-                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                     <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Datos del Cliente</h4>
-                    <p className="font-medium text-gray-900">{selectedClient ? selectedClient.name : 'Cliente de Contado'}</p>
-                    {selectedClient && <p className="text-sm text-gray-600">RNC: {selectedClient.rnc}</p>}
+                    <p className="font-medium text-gray-900 dark:text-white">{selectedClient ? selectedClient.name : 'Cliente de Contado'}</p>
+                    {selectedClient && <p className="text-sm text-gray-600 dark:text-gray-400">RNC: {selectedClient.rnc}</p>}
                   </div>
                 </div>
 
                 {/* Right Col: Payment Details */}
                 <div className="flex-1 space-y-6">
-                  <div className="bg-gray-50 border border-gray-200 p-6 rounded-xl shadow-sm text-center">
+                  <div className="bg-gray-50 dark:bg-[#222222] border border-gray-200 dark:border-gray-700 p-6 rounded-xl shadow-sm text-center">
                     <p className="text-sm text-gray-500 uppercase tracking-wider font-semibold mb-1">Monto a Cobrar</p>
                     <p className="text-4xl font-bold text-[#ED1C24]">${total.toFixed(2)}</p>
                   </div>
@@ -527,14 +557,14 @@ export default function POS() {
                           exit={{ opacity: 0, height: 0 }}
                           className="pt-2"
                         >
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Monto Recibido ($)</label>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monto Recibido ($)</label>
                           <input 
                             autoFocus
                             type="number" 
                             value={amountReceived}
                             onChange={(e) => setAmountReceived(e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-[#ED1C24] focus:border-[#ED1C24] sm:text-lg font-semibold py-3 px-4" 
+                            className="block w-full border-gray-300 dark:border-gray-700 bg-white dark:bg-[#222222] text-gray-900 dark:text-white rounded-md shadow-sm focus:ring-[#ED1C24] focus:border-[#ED1C24] sm:text-lg font-semibold py-3 px-4" 
                             placeholder="0.00"
                           />
                         </motion.div>
@@ -546,7 +576,7 @@ export default function POS() {
               </div>
 
               {/* Footer Summary & Action */}
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#222222] flex items-center justify-between">
                 <div>
                   {paymentMethod === 'Efectivo' && (
                     <>
@@ -567,7 +597,7 @@ export default function POS() {
                   className={`px-8 py-3 rounded-md shadow-sm font-bold transition-colors ${
                     isPaymentValid
                       ? 'bg-[#ED1C24] text-white hover:bg-red-700'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
                   }`}
                 >
                   Confirmar Pago
@@ -592,14 +622,14 @@ export default function POS() {
                 initial={{ opacity: 0, scale: 0.8, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.8, y: 20 }}
-                className="bg-white rounded-2xl p-8 max-w-md w-full text-center shadow-2xl"
+                className="bg-white dark:bg-[#1a1a1a] rounded-2xl p-8 max-w-md w-full text-center shadow-2xl"
               >
-                <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-green-100 mb-6">
+                <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-6">
                   <CheckCircleIcon className="h-12 w-12 text-green-500" aria-hidden="true" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">¡Factura Emitida!</h3>
-                <p className="text-gray-500 mb-2">
-                  La venta por <span className="font-bold text-gray-900">${total.toFixed(2)}</span> fue procesada exitosamente en {paymentMethod}.
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">¡Factura Emitida!</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-2">
+                  La venta por <span className="font-bold text-gray-900 dark:text-white">${total.toFixed(2)}</span> fue procesada exitosamente en {paymentMethod}.
                 </p>
                 <p className="text-xs text-gray-400 mb-6 font-medium uppercase tracking-wider border border-gray-200 inline-block px-2 py-1 rounded">
                   {invoiceType}
@@ -608,30 +638,30 @@ export default function POS() {
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   <button
                     onClick={() => window.print()}
-                    className="flex flex-col items-center justify-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors group"
+                    className="flex flex-col items-center justify-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                   >
-                    <PrinterIcon className="h-6 w-6 text-gray-500 group-hover:text-gray-700 mb-1" />
-                    <span className="text-xs font-medium text-gray-600">Imprimir</span>
+                    <PrinterIcon className="h-6 w-6 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 mb-1" />
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Imprimir</span>
                   </button>
                   <button
                     onClick={() => window.print()}
-                    className="flex flex-col items-center justify-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors group"
+                    className="flex flex-col items-center justify-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                   >
                     <DocumentArrowDownIcon className="h-6 w-6 text-gray-500 group-hover:text-[#ED1C24] mb-1" />
-                    <span className="text-xs font-medium text-gray-600">Guardar PDF</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Guardar PDF</span>
                   </button>
                   <button
                     onClick={() => alert('Factura enviada por correo exitosamente.')}
-                    className="flex flex-col items-center justify-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors group"
+                    className="flex flex-col items-center justify-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
                   >
                     <EnvelopeIcon className="h-6 w-6 text-gray-500 group-hover:text-blue-600 mb-1" />
-                    <span className="text-xs font-medium text-gray-600">Por Correo</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Por Correo</span>
                   </button>
                 </div>
 
                 <button
                   onClick={resetPOS}
-                  className="w-full bg-[#111111] text-white rounded-lg py-3 font-medium hover:bg-gray-800 transition-colors"
+                  className="w-full bg-[#111111] dark:bg-white text-white dark:text-black rounded-lg py-3 font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                 >
                   Nueva Venta
                 </button>
@@ -717,6 +747,11 @@ export default function POS() {
         <p className="font-bold">¡Gracias por su compra!</p>
         <p className="text-xs mt-2 text-gray-500">Este documento sirve como comprobante de venta.</p>
       </div>
+      {/* Cierre de Caja Modal */}
+      <CashClosureModal
+        isOpen={isCashClosureOpen}
+        onClose={() => setIsCashClosureOpen(false)}
+      />
     </div>
   </div>
   );

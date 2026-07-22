@@ -14,7 +14,7 @@ export default function DashboardLayout() {
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
 
   return (
-    <div className="h-screen w-screen bg-[#f4f3f1] flex overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
+    <div className="h-screen w-screen bg-[#f4f3f1] dark:bg-[#09090b] text-gray-900 dark:text-zinc-100 flex overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white transition-colors duration-300">
       {!isPos && (
         <div className="print:hidden h-full z-20 shrink-0">
           <Sidebar onNewRequest={() => setIsNewRequestModalOpen(true)} />

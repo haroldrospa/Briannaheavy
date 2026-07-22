@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PlusIcon, BanknotesIcon, CalculatorIcon, XMarkIcon, ArrowLeftIcon, CheckCircleIcon, PrinterIcon, UserIcon, CalendarIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
+import CashClosureModal from '../components/finance/CashClosureModal';
 
 const DUMMY_FINANCINGS = [
   { id: 1, customer: 'Juan Pérez', item: 'Retroexcavadora Cat 320', amount: 85000, rate: 18, status: 'Al día', nextPayment: '2026-07-15' },
@@ -69,6 +70,7 @@ const generateReminderWhatsAppLink = (financing: any, installments: any[]) => {
 export default function Financing() {
   const [activeTab, setActiveTab] = useState<'financiamientos' | 'cobrar'>('financiamientos');
   const [showCalculator, setShowCalculator] = useState(false);
+  const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
   const [selectedFinancing, setSelectedFinancing] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -127,23 +129,30 @@ export default function Financing() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 print:hidden">
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => setIsCashClosureOpen(true)}
+            className="flex items-center justify-center gap-2 bg-[#fb3c44] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-600 transition-all shadow-md shadow-red-500/20 cursor-pointer"
+          >
+            <BanknotesIcon className="h-5 w-5" />
+            Cierre de Caja
+          </button>
           {activeTab === 'financiamientos' ? (
             <>
               <button 
                 onClick={() => setShowCalculator(!showCalculator)}
-                className="flex items-center justify-center gap-2 bg-white text-gray-700 px-5 py-2.5 rounded-full font-bold hover:bg-gray-50 transition-all shadow-sm"
+                className="flex items-center justify-center gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer"
               >
                 <CalculatorIcon className="h-5 w-5" />
                 Simulador
               </button>
-              <button className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md">
+              <button className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md cursor-pointer">
                 <PlusIcon className="h-5 w-5" />
                 Nuevo Financiamiento
               </button>
             </>
           ) : (
-            <button className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md">
+            <button className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md cursor-pointer">
               <PlusIcon className="h-5 w-5" />
               Nueva Cuenta por Cobrar
             </button>
@@ -152,16 +161,16 @@ export default function Financing() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-3 bg-white p-2 rounded-full w-fit shadow-sm print:hidden">
+      <div className="flex gap-3 bg-white dark:bg-[#1a1a1a] p-2 rounded-full w-fit shadow-sm print:hidden">
         <button
           onClick={() => setActiveTab('financiamientos')}
-          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'financiamientos' ? 'bg-[#f4f3f1] text-[#ED1C24] shadow-inner' : 'bg-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'financiamientos' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-[#ED1C24] shadow-inner' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
         >
           Financiamientos
         </button>
         <button
           onClick={() => setActiveTab('cobrar')}
-          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'cobrar' ? 'bg-[#f4f3f1] text-[#ED1C24] shadow-inner' : 'bg-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'cobrar' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-[#ED1C24] shadow-inner' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
         >
           Cuentas por Cobrar
         </button>
@@ -172,38 +181,38 @@ export default function Financing() {
         <>
 
       {showCalculator && (
-        <div className="bg-white p-8 shadow-sm rounded-[2rem] mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-            <div className="p-2.5 bg-red-50 rounded-full text-[#ED1C24]">
+        <div className="bg-white dark:bg-[#1a1a1a] p-8 shadow-sm rounded-[2rem] mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
+            <div className="p-2.5 bg-red-50 dark:bg-red-900/30 rounded-full text-[#ED1C24]">
               <CalculatorIcon className="h-6 w-6" />
             </div>
             Simulador de Cuotas (Método Francés)
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Monto del Vehículo/Equipo ($)</label>
-              <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Monto del Vehículo/Equipo ($)</label>
+              <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Inicial ($)</label>
-              <input type="number" value={downPayment} onChange={e => setDownPayment(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Inicial ($)</label>
+              <input type="number" value={downPayment} onChange={e => setDownPayment(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Tasa Anual (%)</label>
-              <input type="number" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tasa Anual (%)</label>
+              <input type="number" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Plazo (Meses)</label>
-              <input type="number" value={months} onChange={e => setMonths(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Plazo (Meses)</label>
+              <input type="number" value={months} onChange={e => setMonths(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
             </div>
           </div>
-          <div className="bg-[#f4f3f1] p-6 rounded-3xl flex justify-between items-center">
+          <div className="bg-[#f4f3f1] dark:bg-[#222222] p-6 rounded-3xl flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wider mb-1">Monto a Financiar</p>
-              <p className="text-xl font-bold text-gray-900">${financedAmount.toFixed(2)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-1">Monto a Financiar</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">${financedAmount.toFixed(2)}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wider mb-1">Cuota Mensual Estimada</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-1">Cuota Mensual Estimada</p>
               <p className="text-4xl font-black text-[#ED1C24]">${monthlyPayment.toFixed(2)}</p>
             </div>
           </div>
@@ -211,9 +220,9 @@ export default function Financing() {
       )}
 
       {/* Table */}
-      <div className="bg-white shadow-sm rounded-[2rem] overflow-hidden p-2">
+      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-[2rem] overflow-hidden p-2">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
+          <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
             <thead>
               <tr>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente</th>
@@ -224,25 +233,25 @@ export default function Financing() {
                 <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-50">
+            <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
               {DUMMY_FINANCINGS.map((item) => (
-                <tr key={item.id} onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                <tr key={item.id} onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors cursor-pointer">
                   <td className="px-6 py-5 whitespace-nowrap">
-                    <div className="text-sm font-bold text-gray-900">{item.customer}</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
                   </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500">{item.item}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900">${item.amount.toLocaleString()}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900">{item.nextPayment}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">{item.item}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">${item.amount.toLocaleString()}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.nextPayment}</td>
                   <td className="px-6 py-5 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
-                      item.status === 'Al día' ? 'bg-green-100 text-green-800' : 
-                      item.status === 'En mora' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                      item.status === 'Al día' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
+                      item.status === 'En mora' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                     }`}>
                       {item.status}
                     </span>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                    <button onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="text-[#ED1C24] hover:text-red-900 font-bold bg-red-50 px-4 py-2 rounded-full transition-colors hover:bg-red-100">Ver Detalles</button>
+                    <button onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="text-[#ED1C24] hover:text-red-900 dark:hover:text-[#ED1C24] font-bold bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Ver Detalles</button>
                   </td>
                 </tr>
               ))}
@@ -252,9 +261,9 @@ export default function Financing() {
       </div>
       </>
       ) : (
-      <div className="bg-white shadow-sm rounded-[2rem] overflow-hidden p-2">
+      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-[2rem] overflow-hidden p-2">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
+          <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
             <thead>
               <tr>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente</th>
@@ -265,25 +274,25 @@ export default function Financing() {
                 <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-50">
+            <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
               {DUMMY_RECEIVABLES.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors">
                   <td className="px-6 py-5 whitespace-nowrap">
-                    <div className="text-sm font-bold text-gray-900">{item.customer}</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
                   </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500">{item.invoice}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900">${item.amount.toLocaleString()}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900">{item.dueDate}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">{item.invoice}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">${item.amount.toLocaleString()}</td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.dueDate}</td>
                   <td className="px-6 py-5 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
-                      item.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 
-                      item.status === 'Atrasado' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                      item.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' : 
+                      item.status === 'Atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                     }`}>
                       {item.status}
                     </span>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-[#ED1C24] hover:text-red-900 font-bold bg-red-50 px-4 py-2 rounded-full transition-colors hover:bg-red-100">Registrar Pago</button>
+                    <button className="text-[#ED1C24] hover:text-red-900 dark:hover:text-[#ED1C24] font-bold bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Registrar Pago</button>
                   </td>
                 </tr>
               ))}
@@ -308,48 +317,48 @@ export default function Financing() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl flex flex-col max-h-[95vh] print:max-h-none print:flex-none print:max-w-none print:w-full print:shadow-none print:rounded-none"
+              className="bg-white dark:bg-[#1a1a1a] rounded-[2rem] shadow-2xl w-full max-w-5xl flex flex-col max-h-[95vh] print:max-h-none print:flex-none print:max-w-none print:w-full print:shadow-none print:rounded-none"
             >
               <div className="flex-none flex justify-between items-center p-8 pb-4 print:hidden">
                 <div className="flex items-center gap-4">
                   {showPaymentForm && !showReceipt && (
-                    <button onClick={() => setShowPaymentForm(false)} className="text-gray-400 hover:text-gray-900 bg-gray-50 p-2 rounded-full transition-all">
+                    <button onClick={() => setShowPaymentForm(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-2 rounded-full transition-all">
                       <ArrowLeftIcon className="h-6 w-6" />
                     </button>
                   )}
-                  <h3 className="text-2xl font-black text-gray-900">
+                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">
                     {showReceipt ? 'Recibo de Pago' : (showAccountStatement ? 'Estado de Cuenta' : (showPaymentForm ? 'Registrar Pago' : 'Detalles del Financiamiento'))}
                   </h3>
                 </div>
-                <button onClick={() => { setSelectedFinancing(null); setShowReceipt(false); setShowAccountStatement(false); }} className="text-gray-400 hover:text-gray-900 bg-gray-50 p-2 rounded-full transition-all">
+                <button onClick={() => { setSelectedFinancing(null); setShowReceipt(false); setShowAccountStatement(false); }} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-2 rounded-full transition-all">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-8 pt-4 print:overflow-visible print:p-0">
                 {showReceipt ? (
-                  <div className="max-w-2xl mx-auto bg-white p-8 border border-gray-200 rounded-lg shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-12">
+                  <div className="max-w-2xl mx-auto bg-white dark:bg-[#1a1a1a] p-8 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-12">
                     {/* Header */}
-                    <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
+                    <div className="flex justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-6 mb-6">
                       <div>
                         <h2 className="text-3xl font-black text-[#ED1C24] tracking-tight">BRIANNA HEAVY</h2>
                         <p className="text-sm text-gray-500 font-medium mt-1">Soluciones en Maquinaria Pesada</p>
                       </div>
                       <div className="text-right">
-                        <h3 className="text-xl font-bold text-gray-900 uppercase tracking-widest">Recibo de Pago</h3>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-widest">Recibo de Pago</h3>
                         <p className="text-sm font-medium text-gray-500 mt-1">#REC-2026-0001</p>
                         <p className="text-sm font-medium text-gray-500">{new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                       </div>
                     </div>
 
                     {/* Client Info */}
-                    <div className="grid grid-cols-2 gap-6 mb-8 bg-gray-50 p-4 rounded-xl print:bg-transparent print:p-0">
+                    <div className="grid grid-cols-2 gap-6 mb-8 bg-gray-50 dark:bg-[#222222] p-4 rounded-xl print:bg-transparent print:p-0">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
-                        <p className="font-bold text-gray-900 text-base">{selectedFinancing.customer}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.customer}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Artículo Financiado</p>
-                        <p className="font-bold text-gray-900 text-base">{selectedFinancing.item}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.item}</p>
                       </div>
                     </div>
 
@@ -358,7 +367,7 @@ export default function Financing() {
                       <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Cuotas Pagadas</p>
                       <table className="w-full text-left text-sm">
                         <thead>
-                          <tr className="border-b border-gray-200 text-gray-500">
+                          <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             <th className="py-2 font-bold">Cuota</th>
                             <th className="py-2 font-bold text-right">Capital</th>
                             <th className="py-2 font-bold text-right">Interés</th>
@@ -366,14 +375,14 @@ export default function Financing() {
                             <th className="py-2 font-bold text-right">Total</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                           {selectedInsts.map(inst => (
                             <tr key={inst.id}>
-                              <td className="py-3 font-bold text-gray-900">#{inst.id}/{currentInstallments.length}</td>
-                              <td className="py-3 text-right text-gray-500">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                              <td className="py-3 text-right text-gray-500">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                              <td className="py-3 text-right text-gray-500">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                              <td className="py-3 text-right font-bold text-gray-900">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 font-bold text-gray-900 dark:text-white">#{inst.id}/{currentInstallments.length}</td>
+                              <td className="py-3 text-right text-gray-500 dark:text-gray-400">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-right text-gray-500 dark:text-gray-400">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-right text-gray-500 dark:text-gray-400">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-right font-bold text-gray-900 dark:text-white">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -381,7 +390,7 @@ export default function Financing() {
                     </div>
 
                     {/* Totals */}
-                    <div className="border-t-2 border-gray-900 pt-4 mb-8 flex justify-end">
+                    <div className="border-t-2 border-gray-900 dark:border-gray-600 pt-4 mb-8 flex justify-end">
                       <div className="w-1/2">
                         <div className="flex justify-between items-center mb-2">
                           <span className="font-bold text-gray-500 text-sm">Total Pagado:</span>
@@ -389,65 +398,65 @@ export default function Financing() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="font-bold text-gray-500 text-sm">Balance Restante:</span>
-                          <span className="font-bold text-gray-900 text-sm">${(selectedFinancing.amount - totalSelectedCapital).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white text-sm">${(selectedFinancing.amount - totalSelectedCapital).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Signatures */}
-                    <div className="grid grid-cols-2 gap-8 mt-16 pt-8 border-t border-gray-200">
+                    <div className="grid grid-cols-2 gap-8 mt-16 pt-8 border-t border-gray-200 dark:border-gray-800">
                       <div className="text-center">
-                        <div className="border-b border-gray-400 w-full mb-2"></div>
+                        <div className="border-b border-gray-400 dark:border-gray-600 w-full mb-2"></div>
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Firma Autorizada</p>
                       </div>
                       <div className="text-center">
-                        <div className="border-b border-gray-400 w-full mb-2"></div>
+                        <div className="border-b border-gray-400 dark:border-gray-600 w-full mb-2"></div>
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Firma Cliente</p>
                       </div>
                     </div>
 
                     {/* Actions (Hidden on Print) */}
                     <div className="mt-8 flex gap-4 print:hidden">
-                      <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white py-3 px-4 rounded-full font-bold hover:bg-black transition-colors shadow-sm">
+                      <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black py-3 px-4 rounded-full font-bold hover:bg-black dark:hover:bg-gray-200 transition-colors shadow-sm">
                         <PrinterIcon className="h-5 w-5" />
                         Imprimir Factura
                       </button>
-                      <button onClick={() => { setShowReceipt(false); setShowAccountStatement(false); setSelectedFinancing(null); setSelectedInstallmentIds([]); }} className="flex-1 bg-white text-gray-700 py-3 px-4 rounded-full font-bold hover:bg-gray-50 transition-colors shadow-sm border border-gray-200">
+                      <button onClick={() => { setShowReceipt(false); setShowAccountStatement(false); setSelectedFinancing(null); setSelectedInstallmentIds([]); }} className="flex-1 bg-white dark:bg-[#222222] text-gray-700 dark:text-gray-300 py-3 px-4 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#333333] transition-colors shadow-sm border border-gray-200 dark:border-gray-700">
                         Volver al Inicio
                       </button>
                     </div>
                   </div>
                 ) : showAccountStatement ? (
-                  <div className="max-w-3xl mx-auto bg-white p-8 border border-gray-200 rounded-lg shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-12">
+                  <div className="max-w-3xl mx-auto bg-white dark:bg-[#1a1a1a] p-8 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-12">
                     {/* Header */}
-                    <div className="flex justify-between items-start border-b border-gray-200 pb-6 mb-6">
+                    <div className="flex justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-6 mb-6">
                       <div>
                         <h2 className="text-3xl font-black text-[#ED1C24] tracking-tight">BRIANNA HEAVY</h2>
                         <p className="text-sm text-gray-500 font-medium mt-1">Soluciones en Maquinaria Pesada</p>
                       </div>
                       <div className="text-right">
-                        <h3 className="text-xl font-bold text-gray-900 uppercase tracking-widest">Estado de Cuenta</h3>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white uppercase tracking-widest">Estado de Cuenta</h3>
                         <p className="text-sm font-medium text-gray-500 mt-1">Al {new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                       </div>
                     </div>
 
                     {/* Client Info */}
-                    <div className="grid grid-cols-2 gap-6 mb-8 bg-gray-50 p-4 rounded-xl print:bg-transparent print:p-0 print:border print:border-gray-200">
+                    <div className="grid grid-cols-2 gap-6 mb-8 bg-gray-50 dark:bg-[#222222] p-4 rounded-xl print:bg-transparent print:p-0 print:border print:border-gray-200">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
-                        <p className="font-bold text-gray-900 text-base">{selectedFinancing.customer}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.customer}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Artículo Financiado</p>
-                        <p className="font-bold text-gray-900 text-base">{selectedFinancing.item}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.item}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Monto Financiado</p>
-                        <p className="font-bold text-gray-900 text-base">${selectedFinancing.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">${selectedFinancing.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Tasa de Interés</p>
-                        <p className="font-bold text-gray-900 text-base">{selectedFinancing.rate}% Anual</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.rate}% Anual</p>
                       </div>
                     </div>
 
@@ -456,7 +465,7 @@ export default function Financing() {
                       <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2">Detalle de Cuotas</p>
                       <table className="w-full text-left text-[11px] sm:text-sm">
                         <thead>
-                          <tr className="border-b border-gray-200 text-gray-500">
+                          <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                             <th className="py-2 font-bold">Cuota</th>
                             <th className="py-2 font-bold">Fecha</th>
                             <th className="py-2 font-bold text-right">Capital</th>
@@ -466,9 +475,9 @@ export default function Financing() {
                             <th className="py-2 font-bold text-right">Estado</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                           {currentInstallments.map(inst => (
-                            <tr key={inst.id} className={inst.status === 'Pagado' ? 'text-gray-400' : 'text-gray-900'}>
+                            <tr key={inst.id} className={inst.status === 'Pagado' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}>
                               <td className="py-2.5 font-bold">#{inst.id}/{currentInstallments.length}</td>
                               <td className="py-2.5">{inst.dueDate}</td>
                               <td className="py-2.5 text-right">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -487,7 +496,7 @@ export default function Financing() {
                     </div>
 
                     {/* Totals Summary */}
-                    <div className="border-t-2 border-gray-900 pt-4 mb-8 flex flex-col items-end">
+                    <div className="border-t-2 border-gray-900 dark:border-gray-600 pt-4 mb-8 flex flex-col items-end">
                       <div className="w-full sm:w-1/2 space-y-2">
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Total Pagado:</span>
@@ -495,10 +504,10 @@ export default function Financing() {
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Total Pendiente:</span>
-                          <span className="font-bold text-gray-900 text-base">${currentInstallments.filter(i => i.status !== 'Pagado').reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white text-base">${currentInstallments.filter(i => i.status !== 'Pagado').reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm border-t border-gray-200 pt-2 mt-2">
-                          <span className="font-bold text-gray-900 uppercase">Balance Total (con intereses):</span>
+                        <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-800 pt-2 mt-2">
+                          <span className="font-bold text-gray-900 dark:text-white uppercase">Balance Total (con intereses):</span>
                           <span className="font-black text-[#ED1C24] text-xl">${currentInstallments.reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                       </div>
@@ -506,7 +515,7 @@ export default function Financing() {
 
                     {/* Actions (Hidden on Print) */}
                     <div className="mt-8 flex gap-4 print:hidden">
-                      <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-2 bg-gray-900 text-white py-3 px-4 rounded-full font-bold hover:bg-black transition-colors shadow-sm">
+                      <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-black py-3 px-4 rounded-full font-bold hover:bg-black dark:hover:bg-gray-200 transition-colors shadow-sm">
                         <PrinterIcon className="h-5 w-5" />
                         Imprimir / PDF
                       </button>
@@ -514,7 +523,7 @@ export default function Financing() {
                         <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564c.173.087.289.129.332.202.043.073.043.423-.101.827z"/></svg>
                         WhatsApp
                       </button>
-                      <button onClick={() => setShowAccountStatement(false)} className="flex-none bg-white text-gray-700 py-3 px-6 rounded-full font-bold hover:bg-gray-50 transition-colors shadow-sm border border-gray-200">
+                      <button onClick={() => setShowAccountStatement(false)} className="flex-none bg-white dark:bg-[#222222] text-gray-700 dark:text-gray-300 py-3 px-6 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#333333] transition-colors shadow-sm border border-gray-200 dark:border-gray-700">
                         Volver
                       </button>
                     </div>
@@ -523,18 +532,18 @@ export default function Financing() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-8">
                       {/* Client & Item (7 cols) */}
-                      <div className="md:col-span-7 bg-white border border-gray-200 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                        <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-gray-50 to-transparent pointer-events-none"></div>
+                      <div className="md:col-span-7 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                        <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-gray-50 dark:from-[#222222] to-transparent pointer-events-none"></div>
                         <div>
                           <div className="flex items-center gap-2 mb-3">
-                            <div className="bg-gray-100 p-2 rounded-full text-gray-500"><UserIcon className="w-4 h-4" /></div>
+                            <div className="bg-gray-100 dark:bg-[#222222] p-2 rounded-full text-gray-500"><UserIcon className="w-4 h-4" /></div>
                             <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Cliente</p>
                           </div>
-                          <p className="font-black text-gray-900 text-3xl tracking-tight">{selectedFinancing.customer}</p>
+                          <p className="font-black text-gray-900 dark:text-white text-3xl tracking-tight">{selectedFinancing.customer}</p>
                         </div>
-                        <div className="mt-6 pt-6 border-t border-gray-100">
+                        <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Artículo Financiado</p>
-                          <p className="font-bold text-gray-700 text-lg">{selectedFinancing.item}</p>
+                          <p className="font-bold text-gray-700 dark:text-gray-300 text-lg">{selectedFinancing.item}</p>
                         </div>
                       </div>
 
@@ -562,12 +571,12 @@ export default function Financing() {
 
                       {/* Small details row (12 cols) */}
                       <div className="md:col-span-12 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-[#f4f3f1] rounded-[1.5rem] p-4 flex justify-between items-center gap-4">
+                        <div className="bg-[#f4f3f1] dark:bg-[#222222] rounded-[1.5rem] p-4 flex justify-between items-center gap-4">
                           <div className="flex items-center gap-4">
-                            <div className="bg-white p-3 rounded-xl shadow-sm text-gray-400"><CalendarIcon className="w-5 h-5"/></div>
+                            <div className="bg-white dark:bg-[#1a1a1a] p-3 rounded-xl shadow-sm text-gray-400"><CalendarIcon className="w-5 h-5"/></div>
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Próximo Pago</p>
-                              <p className="font-bold text-gray-900 text-base">{selectedFinancing.nextPayment}</p>
+                              <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.nextPayment}</p>
                             </div>
                           </div>
                           <button 
@@ -578,11 +587,11 @@ export default function Financing() {
                             <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564c.173.087.289.129.332.202.043.073.043.423-.101.827z"/></svg>
                           </button>
                         </div>
-                        <div className="bg-[#f4f3f1] rounded-[1.5rem] p-4 flex items-center gap-4">
-                          <div className="bg-white p-3 rounded-xl shadow-sm text-gray-400"><ChartBarIcon className="w-5 h-5"/></div>
+                        <div className="bg-[#f4f3f1] dark:bg-[#222222] rounded-[1.5rem] p-4 flex items-center gap-4">
+                          <div className="bg-white dark:bg-[#1a1a1a] p-3 rounded-xl shadow-sm text-gray-400"><ChartBarIcon className="w-5 h-5"/></div>
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Tasa de Interés</p>
-                            <p className="font-bold text-gray-900 text-base">{selectedFinancing.rate}% Anual</p>
+                            <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.rate}% Anual</p>
                           </div>
                         </div>
                       </div>
@@ -591,20 +600,20 @@ export default function Financing() {
                     <div className="mb-8">
                       <div className="flex flex-col gap-4 mb-4">
                         <div className="flex justify-between items-center">
-                          <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-4">
+                          <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-4">
                             Plan de Pagos (Amortización)
                           </h4>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => setFilterStatus('Todos')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Todos' ? 'bg-gray-800 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Todos</button>
-                          <button onClick={() => setFilterStatus('Pendientes')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Pendientes' ? 'bg-[#ED1C24] text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Pendientes</button>
-                          <button onClick={() => setFilterStatus('Pagados')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Pagados' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>Pagados</button>
+                          <button onClick={() => setFilterStatus('Todos')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Todos' ? 'bg-gray-800 text-white dark:bg-gray-300 dark:text-black shadow-sm' : 'bg-gray-100 dark:bg-[#222222] text-gray-500 hover:bg-gray-200 dark:hover:bg-[#333333]'}`}>Todos</button>
+                          <button onClick={() => setFilterStatus('Pendientes')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Pendientes' ? 'bg-[#ED1C24] text-white shadow-sm' : 'bg-gray-100 dark:bg-[#222222] text-gray-500 hover:bg-gray-200 dark:hover:bg-[#333333]'}`}>Pendientes</button>
+                          <button onClick={() => setFilterStatus('Pagados')} className={`px-4 py-1.5 text-[11px] font-bold rounded-full uppercase tracking-wider transition-all ${filterStatus === 'Pagados' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-100 dark:bg-[#222222] text-gray-500 hover:bg-gray-200 dark:hover:bg-[#333333]'}`}>Pagados</button>
                         </div>
                       </div>
-                      <div className="bg-white border border-gray-100 rounded-3xl overflow-hidden">
+                      <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 rounded-3xl overflow-hidden">
                         <div className="max-h-96 overflow-y-auto">
-                          <table className="min-w-full divide-y divide-gray-100 relative">
-                            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                          <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800 relative">
+                            <thead className="bg-gray-50 dark:bg-[#222222] sticky top-0 z-10 shadow-sm">
                               <tr>
                                 <th className="px-4 py-3 text-center text-[10px] font-black text-gray-400 uppercase tracking-wider w-10"><span className="sr-only">Seleccionar</span></th>
                                 <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Cuota</th>
@@ -616,7 +625,7 @@ export default function Financing() {
                                 <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
                               {displayedInstallments.map((inst) => (
                                 <tr 
                                   key={inst.id} 
@@ -629,7 +638,7 @@ export default function Financing() {
                                       }
                                     }
                                   }}
-                                  className={`transition-colors ${inst.status !== 'Pagado' ? 'cursor-pointer hover:bg-gray-50' : ''} ${selectedInstallmentIds.includes(inst.id) ? 'bg-red-50/50' : ''}`}
+                                  className={`transition-colors ${inst.status !== 'Pagado' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-[#333333]' : ''} ${selectedInstallmentIds.includes(inst.id) ? 'bg-red-50/50 dark:bg-red-900/20' : ''}`}
                                 >
                                   <td className="px-4 py-3 text-center text-xs w-10">
                                     {inst.status !== 'Pagado' && (
@@ -641,7 +650,7 @@ export default function Financing() {
                                       </div>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3 text-xs font-bold text-gray-900">#{inst.id}/{currentInstallments.length}</td>
+                                  <td className="px-4 py-3 text-xs font-bold text-gray-900 dark:text-white">#{inst.id}/{currentInstallments.length}</td>
                                   <td className="px-4 py-3 text-xs font-medium text-gray-500">{inst.dueDate}</td>
                                   <td className="px-4 py-3 text-xs font-medium text-gray-500">${inst.capital.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
                                   <td className="px-4 py-3 text-xs font-medium text-gray-500">
@@ -649,7 +658,7 @@ export default function Financing() {
                                       {inst.interest === 0 && !inst.isPaid && inst.isInterestWaived ? (
                                         <span className="text-gray-400 line-through">${inst.originalInterest.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                       ) : (
-                                        <span className="text-gray-900 font-bold">${inst.interest.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
+                                        <span className="text-gray-900 dark:text-white font-bold">${inst.interest.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                       )}
                                       {!inst.isPaid && (
                                         <label 
@@ -670,7 +679,7 @@ export default function Financing() {
                                       {inst.penalty === 0 && inst.status === 'Atrasado' && inst.isPenaltyWaived ? (
                                         <span className="text-gray-400 line-through">${inst.originalPenalty.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                       ) : (
-                                        <span className="text-gray-900 font-bold">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
+                                        <span className="text-gray-900 dark:text-white font-bold">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                       )}
                                       {inst.status === 'Atrasado' && (
                                         <label 
@@ -688,7 +697,7 @@ export default function Financing() {
                                   </td>
                                   <td className="px-4 py-3 text-xs font-black text-[#ED1C24]">${inst.total.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
                                   <td className="px-4 py-3 text-xs">
-                                    <span className={`font-bold px-2 py-1 rounded-full ${inst.status === 'Pagado' ? 'text-green-600 bg-green-50' : inst.status === 'Atrasado' ? 'text-red-600 bg-red-50' : 'text-gray-600 bg-gray-100'}`}>
+                                    <span className={`font-bold px-2 py-1 rounded-full ${inst.status === 'Pagado' ? 'text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400' : inst.status === 'Atrasado' ? 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400' : 'text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300'}`}>
                                       {inst.status}
                                     </span>
                                   </td>
@@ -701,16 +710,16 @@ export default function Financing() {
                     </div>
 
                     <div className="pt-2">
-                      <h4 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Acciones Rápidas</h4>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Acciones Rápidas</h4>
                       <div className="flex gap-4">
                         <button 
                           onClick={() => setShowPaymentForm(true)} 
                           disabled={selectedInstallmentIds.length === 0}
-                          className={`flex-1 text-white py-3 px-4 rounded-full font-bold transition-all shadow-sm ${selectedInstallmentIds.length > 0 ? 'bg-[#ED1C24] hover:bg-red-700 hover:shadow-md' : 'bg-gray-300 cursor-not-allowed'}`}
+                          className={`flex-1 text-white py-3 px-4 rounded-full font-bold transition-all shadow-sm ${selectedInstallmentIds.length > 0 ? 'bg-[#ED1C24] hover:bg-red-700 hover:shadow-md' : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'}`}
                         >
                           Registrar Pago {selectedInstallmentIds.length > 0 ? `($${totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})` : ''}
                         </button>
-                        <button onClick={() => setShowAccountStatement(true)} className="flex-1 bg-white text-gray-700 py-3 px-4 rounded-full font-bold hover:bg-gray-50 transition-colors shadow-sm border border-gray-200">
+                        <button onClick={() => setShowAccountStatement(true)} className="flex-1 bg-white dark:bg-[#222222] text-gray-700 dark:text-gray-300 py-3 px-4 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#333333] transition-colors shadow-sm border border-gray-200 dark:border-gray-700">
                           Estado de Cuenta
                         </button>
                       </div>
@@ -718,23 +727,23 @@ export default function Financing() {
                   </>
                 ) : (
                   <div className="space-y-6">
-                    <div className="bg-[#f4f3f1] p-6 rounded-3xl">
-                      <h4 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider">Desglose de Pago</h4>
+                    <div className="bg-[#f4f3f1] dark:bg-[#222222] p-6 rounded-3xl">
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">Desglose de Pago</h4>
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Capital</span>
-                          <span className="font-bold text-gray-900">${totalSelectedCapital.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white">${totalSelectedCapital.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Intereses Ordinarios</span>
-                          <span className="font-bold text-gray-900">${totalSelectedInterest.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white">${totalSelectedInterest.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Cargos por Mora</span>
-                          <span className="font-bold text-gray-900">${totalSelectedPenalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white">${totalSelectedPenalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
-                        <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between items-center">
-                          <span className="font-black text-gray-900 uppercase tracking-wider text-sm">Total a Pagar</span>
+                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                          <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">Total a Pagar</span>
                           <span className="font-black text-[#ED1C24] text-2xl">
                             ${totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
@@ -755,6 +764,12 @@ export default function Financing() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Cierre de Caja Modal */}
+      <CashClosureModal 
+        isOpen={isCashClosureOpen} 
+        onClose={() => setIsCashClosureOpen(false)} 
+      />
     </div>
   );
 }

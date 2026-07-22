@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoadingSpinner from './components/LoadingSpinner';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Lazy loaded pages
 const Login = React.lazy(() => import('./pages/Login'));
@@ -28,8 +29,9 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <Router>
         <Suspense fallback={<LoadingSpinner />}>
           <Routes>
             {/* Rutas Públicas */}
@@ -54,6 +56,7 @@ function App() {
         </Suspense>
       </Router>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
