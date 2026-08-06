@@ -1,35 +1,58 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlusIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import ItemModal from '../components/inventory/ItemModal';
+import type { InventoryItem } from '../components/inventory/ItemModal';
 
 const INVENTORY_TABS = ['Todos', 'Camiones', 'Equipos Pesados', 'Piezas'];
 
-const DUMMY_INVENTORY = [
-  { id: 1, type: 'Piezas', brand: 'Goodyear', model: '22.5"', stock: 45, price: 350, status: 'Disponible' },
-  { id: 2, type: 'Camiones', brand: 'Mack', model: 'Anthem 2024', stock: 1, price: 145000, status: 'Disponible' },
-  { id: 3, type: 'Equipos Pesados', brand: 'Caterpillar', model: '320D', stock: 2, price: 85000, status: 'Alquilado' },
+const INITIAL_INVENTORY: InventoryItem[] = [
+  { id: 1, type: 'Piezas', brand: 'Goodyear', model: '22.5"', stock: 45, minStock: 10, cost: 200, price: 350, status: 'Disponible', department: 'Mantenimiento' },
+  { id: 2, type: 'Camiones', brand: 'Mack', model: 'Anthem 2024', stock: 1, minStock: 2, cost: 110000, price: 145000, status: 'Disponible', department: 'Operaciones' },
+  { id: 3, type: 'Equipos Pesados', brand: 'Caterpillar', model: '320D', stock: 2, minStock: 1, cost: 65000, price: 85000, status: 'Alquilado', department: 'Operaciones' },
 ];
 
 export default function Inventory() {
+  const [inventory, setInventory] = useState(INITIAL_INVENTORY);
   const [activeTab, setActiveTab] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
+  const [stockFilter, setStockFilter] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [itemToEdit, setItemToEdit] = useState<InventoryItem | null>(null);
 
-  const filteredInventory = DUMMY_INVENTORY.filter(item => {
-    const matchesTab = activeTab === 'Todos' || item.type === activeTab;
-    const matchesSearch = item.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.model.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
+  const handleSaveItem = useCallback((item: InventoryItem) => {
+    if (itemToEdit) {
+      setInventory(prev => prev.map(i => i.id === item.id ? item : i));
+    } else {
+      setInventory(prev => [...prev, item]);
+    }
+    setIsModalOpen(false);
+  }, [itemToEdit]);
+
+  const updateStock = useCallback((id: number, newStock: number) => {
+    if (newStock < 0) return;
+    setInventory(prev => prev.map(item => item.id === id ? { ...item, stock: newStock } : item));
+  }, []);
+
+  const filteredInventory = useMemo(() => {
+    return inventory.filter(item => {
+      const matchesTab = activeTab === 'Todos' || item.type === activeTab;
+      const matchesSearch = item.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            item.model.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStock = stockFilter === 'Todos' || (stockFilter === 'Bajo' && item.stock <= item.minStock);
+      
+      return matchesTab && matchesSearch && matchesStock;
+    });
+  }, [inventory, activeTab, searchTerm, stockFilter]);
 
   return (
     <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4">
         <motion.button 
-          whileHover={{ scale: 1.05 }} 
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md"
+          whileHover={{ scale: 1.03 }} 
+          whileTap={{ scale: 0.97 }}
+          onClick={() => { setItemToEdit(null); setIsModalOpen(true); }}
+          className="flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-6 py-3 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer"
         >
           <PlusIcon className="h-5 w-5" />
           Agregar Artículo
@@ -45,7 +68,7 @@ export default function Inventory() {
                 onClick={() => setActiveTab(tab)}
                 className={`px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all ${
                   activeTab === tab 
-                    ? 'bg-[#f4f3f1] dark:bg-zinc-800/80 text-[#ED1C24] shadow-inner' 
+                    ? 'bg-[#ED1C24] text-white shadow-sm font-black' 
                     : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-50 dark:hover:bg-zinc-800/50'
                 }`}
               >
@@ -66,6 +89,17 @@ export default function Inventory() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          
+          <div className="w-full sm:w-auto">
+            <select 
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value)}
+              className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-sm font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all cursor-pointer"
+            >
+              <option value="Todos">Todo el inventario</option>
+              <option value="Bajo">Stock Bajo</option>
+            </select>
+          </div>
         </div>
         
         <div className="overflow-x-auto mt-2">
@@ -73,7 +107,7 @@ export default function Inventory() {
             <thead>
               <tr>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Tipo</th>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Marca / Modelo</th>
+                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Nombre / Modelo</th>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Stock</th>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Precio</th>
                 <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Estado</th>
@@ -85,11 +119,36 @@ export default function Inventory() {
                 <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors">
                   <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-400 dark:text-zinc-500">{item.type}</td>
                   <td className="px-6 py-5 whitespace-nowrap">
-                    <div className="text-sm font-bold text-gray-900 dark:text-zinc-100">{item.brand}</div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 mt-1">{item.model}</div>
+                    <div className="flex items-center gap-4">
+                      <div className="shrink-0 h-12 w-12 rounded-xl border border-gray-200 dark:border-zinc-700/50 overflow-hidden bg-gray-50 dark:bg-zinc-800 flex items-center justify-center">
+                        {item.image ? (
+                          <img src={item.image} alt={item.brand} className="h-full w-full object-cover" />
+                        ) : (
+                          <PhotoIcon className="h-5 w-5 text-gray-400 dark:text-zinc-500" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-900 dark:text-zinc-100">{item.brand}</div>
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 mt-1">{item.model}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-zinc-100">{item.stock}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-black text-[#ED1C24]">${item.price.toLocaleString()}</td>
+                  <td className="px-6 py-5 whitespace-nowrap">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 bg-gray-50 dark:bg-zinc-800/80 rounded-full px-1.5 py-1 shadow-sm border border-gray-100 dark:border-zinc-700/50">
+                        <button onClick={() => updateStock(item.id, item.stock - 1)} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors shadow-sm hover:shadow cursor-pointer font-medium">-</button>
+                        <span className="text-sm font-black text-gray-900 dark:text-zinc-100 w-8 text-center">{item.stock}</span>
+                        <button onClick={() => updateStock(item.id, item.stock + 1)} className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-white dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors shadow-sm hover:shadow cursor-pointer font-medium">+</button>
+                      </div>
+                      {item.stock <= item.minStock && (
+                        <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-full" title="Stock Bajo">
+                          <ExclamationTriangleIcon className="h-3 w-3 stroke-[2.5]" />
+                          Bajo
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-white">${item.price.toLocaleString()}</td>
                   <td className="px-6 py-5 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
                       item.status === 'Disponible' ? 'bg-green-100 dark:bg-green-950/50 text-green-800 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-950/50 text-yellow-800 dark:text-yellow-400'
@@ -98,7 +157,7 @@ export default function Inventory() {
                     </span>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-[#ED1C24] hover:text-red-900 dark:hover:text-[#ED1C24] font-bold bg-red-50 dark:bg-red-950/40 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Editar</button>
+                    <button onClick={() => { setItemToEdit(item); setIsModalOpen(true); }} className="text-gray-900 dark:text-white hover:text-red-900 dark:hover:text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-950/40 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50 cursor-pointer">Editar</button>
                   </td>
                 </tr>
               ))}
@@ -107,112 +166,13 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* Add Item Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
-            />
-            
-            {/* Modal Panel */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white dark:bg-[#16171d] rounded-[2rem] shadow-2xl border border-transparent dark:border-zinc-800 z-50 overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              {/* Header */}
-              <div className="px-8 py-6 flex justify-between items-center">
-                <h3 className="text-2xl font-black text-gray-900 dark:text-zinc-100">Agregar Nuevo Artículo</h3>
-                <button 
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-900 dark:hover:text-zinc-100 bg-gray-50 dark:bg-zinc-800 p-2 rounded-full transition-all"
-                >
-                  <XMarkIcon className="h-6 w-6" />
-                </button>
-              </div>
-
-              {/* Form Body */}
-              <div className="px-8 py-4 overflow-y-auto">
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2 md:grid-cols-3">
-                    <div className="sm:col-span-2 md:col-span-3">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Tipo de Artículo</label>
-                      <select defaultValue="Piezas y Repuestos" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-gray-900 dark:text-zinc-100 focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium appearance-none cursor-pointer">
-                        <option value="Piezas y Repuestos" className="dark:bg-[#16171d]">Piezas y Repuestos</option>
-                        <option value="Camiones" className="dark:bg-[#16171d]">Camiones</option>
-                        <option value="Equipos Pesados" className="dark:bg-[#16171d]">Equipos Pesados</option>
-                      </select>
-                    </div>
-
-                    <div className="sm:col-span-1 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Marca</label>
-                      <input type="text" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" placeholder="Ej. Caterpillar" />
-                    </div>
-
-                    <div className="sm:col-span-1 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Modelo</label>
-                      <input type="text" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" placeholder="Ej. 320D" />
-                    </div>
-
-                    <div className="sm:col-span-2 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Cantidad (Stock)</label>
-                      <input type="number" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" placeholder="0" />
-                    </div>
-
-                    {/* Financial Information */}
-                    <div className="sm:col-span-1 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Costo ($)</label>
-                      <input type="number" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" placeholder="0.00" />
-                    </div>
-
-                    <div className="sm:col-span-1 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Precio de Venta ($)</label>
-                      <input type="number" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" placeholder="0.00" />
-                    </div>
-
-                    <div className="sm:col-span-2 md:col-span-1">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">% de ITBIS</label>
-                      <select className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium appearance-none cursor-pointer">
-                        <option value="18" className="dark:bg-[#16171d]">18% (General)</option>
-                        <option value="16" className="dark:bg-[#16171d]">16% (Reducido)</option>
-                        <option value="0" className="dark:bg-[#16171d]">0% (Exento)</option>
-                      </select>
-                    </div>
-
-                    <div className="sm:col-span-2 md:col-span-3">
-                      <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Descripción / Notas</label>
-                      <textarea rows={3} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-[1rem] focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium resize-none" placeholder="Detalles adicionales del artículo..."></textarea>
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-              {/* Footer Actions */}
-              <div className="px-8 py-6 mt-4 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="bg-[#f4f3f1] dark:bg-zinc-800 rounded-full py-3 px-6 text-sm font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-200 dark:hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="bg-[#ED1C24] rounded-full py-3 px-6 text-sm font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ED1C24] transition-colors shadow-sm hover:shadow-md"
-                >
-                  Guardar Artículo
-                </button>
-              </div>
-            </motion.div>
-          </>
+          <ItemModal 
+            item={itemToEdit} 
+            onClose={() => setIsModalOpen(false)} 
+            onSave={handleSaveItem} 
+          />
         )}
       </AnimatePresence>
     </div>

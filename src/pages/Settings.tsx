@@ -1,15 +1,20 @@
 import { useState } from 'react';
+import logo from '../assets/logo.png';
 import { 
   BuildingOfficeIcon, 
   UsersIcon, 
-  DocumentCheckIcon, 
   CloudArrowUpIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
   XMarkIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  CheckCircleIcon,
+  TruckIcon,
+  WrenchScrewdriverIcon,
+  DocumentChartBarIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
+import { loadSequenceSettings, saveSequenceSettings } from '../utils/sequenceStorage';
 
 const TABS = [
   { id: 'empresa', name: 'Empresa', icon: BuildingOfficeIcon },
@@ -17,12 +22,19 @@ const TABS = [
   { id: 'comprobantes', name: 'Secuencias NCF', icon: DocumentTextIcon },
   { id: 'usuarios', name: 'Usuarios & Roles', icon: UsersIcon },
   { id: 'permisos', name: 'Permisos', icon: ShieldCheckIcon },
-  { id: 'sucursales', name: 'Sucursales', icon: DocumentCheckIcon },
   { id: 'respaldos', name: 'Respaldos', icon: CloudArrowUpIcon },
 ];
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('empresa');
+  const [sequences, setSequences] = useState(loadSequenceSettings);
+  const [showSaveToast, setShowSaveToast] = useState(false);
+
+  const handleSaveSequences = () => {
+    saveSequenceSettings(sequences);
+    setShowSaveToast(true);
+    setTimeout(() => setShowSaveToast(false), 3500);
+  };
 
   type PermissionAction = 'ver' | 'crear' | 'editar' | 'eliminar';
   type PermissionsRecord = Record<string, Record<PermissionAction, boolean>>;
@@ -37,19 +49,19 @@ export default function Settings() {
       'Reportes': { ver: true, crear: true, editar: true, eliminar: true },
       'Configuración': { ver: true, crear: true, editar: true, eliminar: true },
     },
-    'Vendedor': {
-      'Dashboard': { ver: true, crear: false, editar: false, eliminar: false },
-      'POS': { ver: true, crear: true, editar: true, eliminar: false },
-      'Clientes': { ver: true, crear: true, editar: true, eliminar: false },
-      'Inventario': { ver: true, crear: false, editar: false, eliminar: false },
-      'Financiamientos': { ver: true, crear: true, editar: true, eliminar: false },
-      'Reportes': { ver: false, crear: false, editar: false, eliminar: false },
-      'Configuración': { ver: false, crear: false, editar: false, eliminar: false },
-    },
-    'Inventario': {
-      'Dashboard': { ver: true, crear: false, editar: false, eliminar: false },
+    'Oficina': {
+      'Dashboard': { ver: true, crear: true, editar: true, eliminar: false },
       'POS': { ver: false, crear: false, editar: false, eliminar: false },
       'Clientes': { ver: false, crear: false, editar: false, eliminar: false },
+      'Inventario': { ver: false, crear: false, editar: false, eliminar: false },
+      'Financiamientos': { ver: true, crear: true, editar: true, eliminar: false },
+      'Reportes': { ver: true, crear: true, editar: true, eliminar: false },
+      'Configuración': { ver: true, crear: true, editar: true, eliminar: false },
+    },
+    'Repuestos': {
+      'Dashboard': { ver: false, crear: false, editar: false, eliminar: false },
+      'POS': { ver: true, crear: true, editar: true, eliminar: false },
+      'Clientes': { ver: true, crear: true, editar: true, eliminar: false },
       'Inventario': { ver: true, crear: true, editar: true, eliminar: false },
       'Financiamientos': { ver: false, crear: false, editar: false, eliminar: false },
       'Reportes': { ver: false, crear: false, editar: false, eliminar: false },
@@ -74,8 +86,9 @@ export default function Settings() {
 
   // Users State
   const [users, setUsers] = useState([
-    { id: 1, name: 'Admin Principal', role: 'Administrador', status: 'Activo' },
-    { id: 2, name: 'Carlos Vendedor', role: 'Vendedor', status: 'Activo' },
+    { id: 1, name: 'Harold Rodríguez (Admin)', role: 'Administrador', status: 'Activo' },
+    { id: 2, name: 'Carlos Díaz (Oficina)', role: 'Oficina', status: 'Activo' },
+    { id: 3, name: 'Ana Gómez (Repuestos)', role: 'Repuestos', status: 'Activo' },
   ]);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -123,13 +136,13 @@ export default function Settings() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center px-6 py-3 text-sm font-bold rounded-full transition-all ${
                   isActive
-                    ? 'bg-[#f4f3f1] text-[#ED1C24] shadow-inner'
+                    ? 'bg-gray-900 text-white shadow-sm'
                     : 'bg-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
                 <tab.icon
                   className={`flex-shrink-0 mr-2.5 h-5 w-5 transition-colors ${
-                    isActive ? 'text-[#ED1C24]' : 'text-gray-400 group-hover:text-gray-500'
+                    isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-500'
                   }`}
                   aria-hidden="true"
                 />
@@ -154,13 +167,13 @@ export default function Settings() {
                 
                 <div className="grid grid-cols-1 gap-y-8 gap-x-6 sm:grid-cols-6">
                   <div className="sm:col-span-6">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Logotipo</label>
-                    <div className="mt-1 flex items-center space-x-6">
-                      <span className="inline-block h-20 w-40 rounded-[1rem] overflow-hidden bg-[#f4f3f1] flex items-center justify-center">
-                        <img src="/src/assets/logo.png" alt="Logo" className="h-full object-contain p-2" />
-                      </span>
-                      <button type="button" className="bg-[#f4f3f1] py-3 px-6 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all">
-                        Cambiar
+                    <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Logotipo</label>
+                    <div className="mt-1 flex items-center gap-6">
+                      <div className="h-24 w-48 rounded-2xl bg-[#f4f3f1] dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-3 shadow-xs">
+                        <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
+                      </div>
+                      <button type="button" className="bg-[#ED1C24] hover:bg-red-700 text-white py-3 px-6 rounded-full text-sm font-black transition-all cursor-pointer shadow-md shadow-red-900/20">
+                        Cambiar Logotipo
                       </button>
                     </div>
                   </div>
@@ -185,7 +198,7 @@ export default function Settings() {
                   <button type="button" className="bg-[#f4f3f1] py-3 px-6 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all">
                     Cancelar
                   </button>
-                  <button type="submit" className="bg-[#ED1C24] py-3 px-8 rounded-full text-sm font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ED1C24] transition-all shadow-sm hover:shadow-md">
+                  <button type="submit" className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white">
                     Guardar Cambios
                   </button>
                 </div>
@@ -203,7 +216,7 @@ export default function Settings() {
                     <button 
                       type="button" 
                       onClick={() => openUserModal()}
-                      className="inline-flex items-center justify-center rounded-full bg-[#ED1C24] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-[#ED1C24] focus:ring-offset-2 sm:w-auto transition-all hover:shadow-md"
+                      className="inline-flex items-center justify-center rounded-full bg-gray-900 text-white hover:bg-black px-6 py-3 text-sm font-bold shadow-sm transition-all sm:w-auto"
                     >
                       Agregar usuario
                     </button>
@@ -230,12 +243,12 @@ export default function Settings() {
                                 <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm font-bold text-gray-900">{user.name}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-500">{user.role}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-500">
-                                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${user.status === 'Activo' ? 'bg-green-200/50 text-green-800' : 'bg-red-200/50 text-red-800'}`}>
+                                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${user.status === 'Activo' ? 'bg-green-200/50 text-green-800' : 'bg-amber-200/50 text-amber-800'}`}>
                                     {user.status}
                                   </span>
                                 </td>
                                 <td className="relative whitespace-nowrap py-4 pl-3 pr-6 text-right text-sm font-medium">
-                                  <button onClick={() => openUserModal(user)} className="text-[#ED1C24] hover:text-red-900 font-bold bg-red-100/50 px-4 py-2 rounded-full transition-colors hover:bg-red-200/50">Editar</button>
+                                  <button onClick={() => openUserModal(user)} className="text-gray-900 font-bold bg-gray-200/60 px-4 py-2 rounded-full transition-colors hover:bg-gray-300">Editar</button>
                                 </td>
                               </tr>
                             ))}
@@ -299,7 +312,7 @@ export default function Settings() {
                   <button type="button" className="bg-[#f4f3f1] py-3 px-6 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all">
                     Restablecer
                   </button>
-                  <button type="button" className="bg-[#ED1C24] py-3 px-8 rounded-full text-sm font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ED1C24] transition-all shadow-sm hover:shadow-md">
+                  <button type="button" className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white">
                     Guardar Configuración
                   </button>
                 </div>
@@ -393,7 +406,7 @@ export default function Settings() {
                   <button type="button" className="bg-[#f4f3f1] py-3 px-6 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-200 transition-all">
                     Descartar Cambios
                   </button>
-                  <button type="button" className="bg-[#ED1C24] py-3 px-8 rounded-full text-sm font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ED1C24] transition-all shadow-sm hover:shadow-md">
+                  <button type="button" className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white">
                     Guardar Permisos
                   </button>
                 </div>
@@ -402,180 +415,224 @@ export default function Settings() {
 
             {activeTab === 'comprobantes' && (
               <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 pb-6 mb-6">
-                  <h3 className="text-2xl font-black text-gray-900">Secuencias de Comprobantes (NCF)</h3>
-                  <p className="mt-2 text-sm font-medium text-gray-500">
-                    Configura los prefijos y secuencias numéricas de facturación autorizados por la DGII.
+                <div className="border-b border-gray-100 dark:border-zinc-800 pb-6 mb-6">
+                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">Secuencias de Comprobantes & Reportes</h3>
+                  <p className="mt-2 text-sm font-medium text-gray-500 dark:text-zinc-400">
+                    Configura los prefijos y secuencias numéricas de facturación (NCF - DGII) y correlativos para reportes e inspecciones.
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* Crédito Fiscal */}
-                  <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                      Crédito Fiscal (B01)
-                    </h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Prefijo</label>
-                        <input type="text" defaultValue="B01" readOnly className="w-full px-4 py-2 bg-gray-100 border-none rounded-xl text-sm font-bold text-gray-700" />
+                {/* Toast Notification */}
+                {showSaveToast && (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in slide-in-from-top-2">
+                    <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
+                    <span className="text-sm font-bold">¡Secuencias actualizadas y guardadas con éxito en el sistema!</span>
+                  </div>
+                )}
+
+                {/* Section 1: NCF */}
+                <div>
+                  <h4 className="text-base font-bold text-gray-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
+                    <DocumentTextIcon className="w-5 h-5 text-gray-700 dark:text-zinc-300" />
+                    Comprobantes Fiscales (NCF - DGII)
+                  </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Crédito Fiscal */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                        Crédito Fiscal (B01)
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo</label>
+                          <input type="text" defaultValue="B01" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqB01} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqB01: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <input 
+                            type="date" 
+                            value={sequences.expiryB01} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, expiryB01: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Próxima Secuencia</label>
-                        <input type="text" defaultValue="000000150" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" />
+                    </div>
+
+                    {/* Consumidor Final */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                        Consumidor Final (B02)
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo</label>
+                          <input type="text" defaultValue="B02" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqB02} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqB02: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <input 
+                            type="date" 
+                            value={sequences.expiryB02} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, expiryB02: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Fecha de Vencimiento</label>
-                        <input type="date" defaultValue="2027-12-31" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" />
+                    </div>
+
+                    {/* Gubernamental */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                        Gubernamental (B15)
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo</label>
+                          <input type="text" defaultValue="B15" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqB15} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqB15: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <input 
+                            type="date" 
+                            value={sequences.expiryB15} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, expiryB15: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Consumidor Final */}
-                  <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                      Consumidor Final (B02)
-                    </h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Prefijo</label>
-                        <input type="text" defaultValue="B02" readOnly className="w-full px-4 py-2 bg-gray-100 border-none rounded-xl text-sm font-bold text-gray-700" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Próxima Secuencia</label>
-                        <input type="text" defaultValue="000004520" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Fecha de Vencimiento</label>
-                        <input type="date" defaultValue="2027-12-31" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Gubernamental */}
-                  <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-                    <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                      Gubernamental (B15)
-                    </h4>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Prefijo</label>
-                        <input type="text" defaultValue="B15" readOnly className="w-full px-4 py-2 bg-gray-100 border-none rounded-xl text-sm font-bold text-gray-700" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Próxima Secuencia</label>
-                        <input type="text" defaultValue="000000010" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">Fecha de Vencimiento</label>
-                        <input type="date" defaultValue="2027-12-31" className="w-full px-4 py-2.5 bg-[#f4f3f1] border-none rounded-xl text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" />
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
 
-                <div className="pt-8 flex justify-end gap-3 border-t border-gray-100 mt-8">
-                  <button type="button" className="bg-[#ED1C24] py-3 px-8 rounded-full text-sm font-bold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#ED1C24] transition-all shadow-sm hover:shadow-md">
+                {/* Section 2: Reportes & Formularios */}
+                <div className="pt-6 border-t border-gray-100 dark:border-zinc-800">
+                  <h4 className="text-base font-bold text-gray-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
+                    <DocumentChartBarIcon className="w-5 h-5 text-gray-700 dark:text-zinc-300" />
+                    Secuencias de Reportes & Formularios de Mantenimiento
+                  </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Inspección de Camiones */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <TruckIcon className="w-5 h-5 text-red-500" />
+                        Inspección de Camiones
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo / Etiqueta</label>
+                          <input type="text" defaultValue="Nº de Reporte" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Nº de Reporte</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqInspection} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqInspection: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            placeholder="0004"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-zinc-500">Número impreso en la esquina superior derecha del reporte de inspección.</p>
+                      </div>
+                    </div>
+
+                    {/* Orden de Trabajo */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <WrenchScrewdriverIcon className="w-5 h-5 text-amber-500" />
+                        Orden de Trabajo
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo / Etiqueta</label>
+                          <input type="text" defaultValue="Nº de Control" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Nº de Control</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqWorkOrder} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqWorkOrder: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            placeholder="0016"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-zinc-500">Número de control utilizado para órdenes de servicio y talleres.</p>
+                      </div>
+                    </div>
+
+                    {/* Reportes Ejecutivos */}
+                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <DocumentChartBarIcon className="w-5 h-5 text-blue-500" />
+                        Reportes Ejecutivos (NCF)
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo NCF</label>
+                          <input type="text" defaultValue="B01" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Correlativo</label>
+                          <input 
+                            type="text" 
+                            value={sequences.seqReport} 
+                            onChange={(e) => setSequences(prev => ({ ...prev, seqReport: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            placeholder="4"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-zinc-500">Correlativo para descargas y exportaciones de reportes generales.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-8 flex justify-end gap-3 border-t border-gray-100 dark:border-zinc-800 mt-8">
+                  <button 
+                    type="button" 
+                    onClick={handleSaveSequences}
+                    className="bg-[#ED1C24] text-white hover:bg-[#d91920] font-bold px-6 py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer"
+                  >
                     Guardar Secuencias
                   </button>
                 </div>
               </div>
             )}
 
-            {activeTab === 'sucursales' && (
-              <div className="p-6 md:p-8 animate-in fade-in duration-300">
-                <div className="sm:flex sm:items-center border-b border-gray-100 pb-6 mb-6">
-                  <div className="sm:flex-auto">
-                    <h3 className="text-2xl font-black text-gray-900">Sucursales</h3>
-                    <p className="mt-2 text-sm font-medium text-gray-500">
-                      Administra las ubicaciones físicas de tu negocio.
-                    </p>
-                  </div>
-                  <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-                    <button type="button" className="inline-flex items-center justify-center rounded-full bg-[#ED1C24] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-[#ED1C24] focus:ring-offset-2 sm:w-auto transition-all hover:shadow-md">
-                      Agregar sucursal
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* Sucursal Principal */}
-                  <div className="bg-[#f4f3f1] overflow-hidden rounded-3xl p-6 transition-all hover:shadow-md border border-transparent hover:border-gray-200">
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-xl font-black text-gray-900">Sede Principal</h4>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-200/50 text-green-800">
-                          Activa
-                        </span>
-                      </div>
-                      <div className="space-y-3">
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Dirección:</span> 
-                          Av. 27 de Febrero #45, Distrito Nacional
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Teléfono:</span> 
-                          809-555-0123
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Gerente:</span> 
-                          Admin Principal
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3 pt-6 border-t border-gray-200/50">
-                      <button type="button" className="text-sm font-bold text-gray-500 hover:text-gray-900 px-4 py-2 bg-white rounded-full transition-colors">
-                        Configurar
-                      </button>
-                      <button type="button" className="text-sm font-bold text-[#ED1C24] hover:text-red-900 px-4 py-2 bg-red-100/50 rounded-full transition-colors">
-                        Editar
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Sucursal Santiago */}
-                  <div className="bg-[#f4f3f1] overflow-hidden rounded-3xl p-6 transition-all hover:shadow-md border border-transparent hover:border-gray-200">
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-xl font-black text-gray-900">Sucursal Norte</h4>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-200/50 text-green-800">
-                          Activa
-                        </span>
-                      </div>
-                      <div className="space-y-3">
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Dirección:</span> 
-                          Autopista Duarte Km 9, Santiago
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Teléfono:</span> 
-                          809-555-0124
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-bold text-gray-900 block mb-1">Gerente:</span> 
-                          Carlos Vendedor
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3 pt-6 border-t border-gray-200/50">
-                      <button type="button" className="text-sm font-bold text-gray-500 hover:text-gray-900 px-4 py-2 bg-white rounded-full transition-colors">
-                        Configurar
-                      </button>
-                      <button type="button" className="text-sm font-bold text-[#ED1C24] hover:text-red-900 px-4 py-2 bg-red-100/50 rounded-full transition-colors">
-                        Editar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Placeholders for other tabs */}
-            {activeTab !== 'empresa' && activeTab !== 'usuarios' && activeTab !== 'impuestos' && activeTab !== 'permisos' && activeTab !== 'sucursales' && (
+            {activeTab !== 'empresa' && activeTab !== 'usuarios' && activeTab !== 'impuestos' && activeTab !== 'permisos' && activeTab !== 'comprobantes' && (
               <div className="p-8 flex items-center justify-center h-full text-gray-400">
                 [Módulo de {TABS.find(t => t.id === activeTab)?.name} en construcción]
               </div>
@@ -613,10 +670,10 @@ export default function Settings() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Rol</label>
-                  <select name="role" defaultValue={editingUser?.role || 'Vendedor'} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium appearance-none cursor-pointer">
+                  <select name="role" defaultValue={editingUser?.role || 'Oficina'} className="block w-full px-4 py-3 bg-[#f4f3f1] border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium appearance-none cursor-pointer">
                     <option value="Administrador">Administrador</option>
-                    <option value="Vendedor">Vendedor</option>
-                    <option value="Inventario">Inventario</option>
+                    <option value="Oficina">Oficina</option>
+                    <option value="Repuestos">Repuestos</option>
                   </select>
                 </div>
                 <div>
@@ -631,8 +688,8 @@ export default function Settings() {
                   <button type="button" onClick={closeUserModal} className="bg-[#f4f3f1] rounded-full py-3 px-6 text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors">
                     Cancelar
                   </button>
-                  <button type="submit" className="bg-[#ED1C24] rounded-full py-3 px-8 text-sm font-bold text-white hover:bg-red-700 transition-colors shadow-sm hover:shadow-md">
-                    Guardar
+                  <button type="submit" className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-full py-3 px-8 text-sm font-bold transition-colors shadow-sm">
+                    Guardar Usuario
                   </button>
                 </div>
               </form>

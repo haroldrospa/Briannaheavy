@@ -1,8 +1,15 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
+import CashMovementModal from '../components/finance/CashMovementModal';
+import OpenShiftModal from '../components/finance/OpenShiftModal';
+import SessionSalesModal from '../components/finance/SessionSalesModal';
+import type { SessionSale } from '../components/finance/SessionSalesModal';
+import { loadSequenceSettings } from '../utils/sequenceStorage';
 import { 
+  ReceiptPercentIcon,
   MagnifyingGlassIcon, 
   QrCodeIcon, 
   TrashIcon, 
@@ -40,7 +47,11 @@ type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
 
 export default function POS() {
   const navigate = useNavigate();
-  const [cart, setCart] = useState<{product: typeof DUMMY_PRODUCTS[0], quantity: number}[]>([]);
+  const [cart, setCart] = useState<{product: typeof DUMMY_PRODUCTS[0], quantity: number, discount?: number, discountType?: '%' | '$'}[]>([]);
+  const [globalDiscount, setGlobalDiscount] = useState<number>(0);
+  const [globalDiscountType, setGlobalDiscountType] = useState<'%' | '$'>('%');
+  const [isEditingGlobalDiscount, setIsEditingGlobalDiscount] = useState(false);
+  const [editingDiscountId, setEditingDiscountId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   
@@ -49,6 +60,39 @@ export default function POS() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
+  const [isCashMovementOpen, setIsCashMovementOpen] = useState(false);
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
+  const [isSessionSalesOpen, setIsSessionSalesOpen] = useState(false);
+
+  const [sessionSales] = useState<SessionSale[]>([
+    {
+      id: 'FAC-00103',
+      ncf: 'B02000004518',
+      time: '01:45 PM',
+      client: 'Transporte Royal',
+      paymentMethod: 'Transferencia',
+      invoiceType: 'Consumidor Final',
+      total: 548.70,
+    },
+    {
+      id: 'FAC-00102',
+      ncf: 'B01000000149',
+      time: '11:30 AM',
+      client: 'Constructora Lora SRL',
+      paymentMethod: 'Tarjeta',
+      invoiceType: 'Crédito Fiscal',
+      total: 1652.00,
+    },
+    {
+      id: 'FAC-00101',
+      ncf: 'B02000004517',
+      time: '09:15 AM',
+      client: 'Venta de Contado',
+      paymentMethod: 'Efectivo',
+      invoiceType: 'Consumidor Final',
+      total: 247.80,
+    },
+  ]);
 
   // States
   const [selectedClient, setSelectedClient] = useState<typeof DUMMY_CLIENTS[0] | null>(null);
@@ -57,6 +101,7 @@ export default function POS() {
   // Single Payment Logic
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
   const [amountReceived, setAmountReceived] = useState<string>('');
+  const [transferReference, setTransferReference] = useState<string>('');
 
   const addToCart = (product: typeof DUMMY_PRODUCTS[0]) => {
     setCart(prev => {
@@ -72,16 +117,47 @@ export default function POS() {
     setCart(prev => prev.filter(item => item.product.id !== id));
   };
 
-  const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
-  const tax = subtotal * 0.18; // 18% ITBIS
-  const total = subtotal + tax;
+  const setItemDiscount = (id: number, discount: number, type: '%' | '$') => {
+    setCart(prev => prev.map(item => 
+      item.product.id === id ? { ...item, discount, discountType: type } : item
+    ));
+  };
+
+  const calculateItemTotal = (item: {product: typeof DUMMY_PRODUCTS[0], quantity: number, discount?: number, discountType?: '%' | '$'}) => {
+    let itemTotal = item.product.price * item.quantity;
+    if (item.discount && item.discount > 0) {
+      if (item.discountType === '%') {
+        itemTotal -= itemTotal * (item.discount / 100);
+      } else {
+        itemTotal -= item.discount;
+      }
+    }
+    return Math.max(0, itemTotal);
+  };
+
+  const subtotal = cart.reduce((acc, item) => acc + calculateItemTotal(item), 0);
+  
+  let globalDiscountAmount = 0;
+  if (globalDiscount > 0) {
+    if (globalDiscountType === '%') {
+      globalDiscountAmount = subtotal * (globalDiscount / 100);
+    } else {
+      globalDiscountAmount = globalDiscount;
+    }
+  }
+
+  const subtotalAfterGlobalDiscount = Math.max(0, subtotal - globalDiscountAmount);
+  const tax = subtotalAfterGlobalDiscount * 0.18; // 18% ITBIS
+  const total = subtotalAfterGlobalDiscount + tax;
 
   // Derived Payment Math
   const numReceived = parseFloat(amountReceived) || 0;
   
   // We only care about change if paying in cash
   const change = (paymentMethod === 'Efectivo' && numReceived > total) ? (numReceived - total) : 0;
-  const isPaymentValid = paymentMethod !== 'Efectivo' || numReceived >= total;
+  const isPaymentValid = 
+    (paymentMethod === 'Efectivo' ? numReceived >= total : true) &&
+    (paymentMethod === 'Transferencia' ? transferReference.trim().length > 0 : true);
   
   // Credit validation
   const canUseCredit = !!selectedClient;
@@ -114,6 +190,7 @@ export default function POS() {
     setCart([]);
     setSelectedClient(null);
     setAmountReceived('');
+    setTransferReference('');
     setPaymentMethod('Efectivo');
     setInvoiceType('Consumidor Final');
   };
@@ -145,21 +222,38 @@ export default function POS() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto">
+          {/* Ventas de la Sesión Button */}
+          <button
+            onClick={() => setIsSessionSalesOpen(true)}
+            className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 rounded-full bg-white dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-200/90 dark:border-zinc-700 shadow-sm whitespace-nowrap"
+          >
+            <ReceiptPercentIcon className="h-4 w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
+            <span>Ventas Sesión</span>
+            <span className="bg-[#ED1C24] text-white text-[10px] font-black px-2 py-0.5 rounded-full ml-0.5">
+              {sessionSales.length}
+            </span>
+          </button>
+
+          {/* Movimiento de Caja Button */}
+          <button
+            onClick={() => setIsCashMovementOpen(true)}
+            className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 rounded-full bg-white dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-200/90 dark:border-zinc-700 shadow-sm whitespace-nowrap"
+          >
+            <BanknotesIcon className="h-4 w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
+            <span>Movimientos</span>
+          </button>
+
           {/* Cierre de Caja Button */}
           <button
             onClick={() => setIsCashClosureOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#fb3c44] hover:bg-[#e03138] active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-red-500/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-red-900/20 transition-all cursor-pointer whitespace-nowrap"
           >
             <CalculatorIcon className="h-4 w-4 stroke-[2.5]" />
             <span>Cierre de Caja</span>
           </button>
 
-          {/* Status badge */}
-          <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Sistema en línea</span>
-          </div>
+
           
           <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800 hidden md:block"></div>
 
@@ -286,18 +380,75 @@ export default function POS() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     key={item.product.id} 
-                    className="flex justify-between items-start gap-3 bg-gray-50/70 dark:bg-zinc-800/40 border border-gray-100 dark:border-zinc-800/60 p-4 rounded-2xl"
+                    className="flex flex-col gap-3 bg-gray-50/70 dark:bg-zinc-800/40 border border-gray-100 dark:border-zinc-800/60 p-4 rounded-2xl"
                   >
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900 dark:text-zinc-100">{item.product.name}</p>
-                      <p className="text-sm font-semibold text-gray-500 dark:text-zinc-400 mt-1">${item.product.price.toFixed(2)} <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium">x {item.quantity}</span></p>
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-gray-900 dark:text-zinc-100">{item.product.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-sm font-semibold text-gray-500 dark:text-zinc-400">${item.product.price.toFixed(2)} <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium">x {item.quantity}</span></p>
+                          {item.discount && item.discount > 0 ? (
+                            <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-md">
+                              -{item.discountType === '%' ? `${item.discount}%` : `$${item.discount}`}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <p className="text-sm font-black text-gray-900 dark:text-zinc-100">${calculateItemTotal(item).toFixed(2)}</p>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => setEditingDiscountId(editingDiscountId === item.product.id ? null : item.product.id)}
+                            className="bg-white dark:bg-zinc-800 text-gray-500 hover:text-[#ED1C24] p-1.5 rounded-full transition-colors shadow-sm text-[10px] font-black border border-gray-200 dark:border-zinc-700 px-2"
+                            title="Aplicar Descuento a este producto"
+                          >
+                            % DESC
+                          </button>
+                          <button onClick={() => removeFromCart(item.product.id)} className="bg-white dark:bg-zinc-800 text-gray-400 hover:text-red-500 p-1.5 rounded-full transition-colors shadow-sm border border-gray-200 dark:border-zinc-700">
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <p className="text-sm font-black text-[#fb3c44]">${(item.product.price * item.quantity).toFixed(2)}</p>
-                      <button onClick={() => removeFromCart(item.product.id)} className="bg-white dark:bg-zinc-800 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 p-1.5 rounded-full transition-colors shadow-sm">
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    </div>
+                    
+                    {/* Panel de Descuento de Artículo */}
+                    {editingDiscountId === item.product.id && (
+                      <div className="pt-2 border-t border-dashed border-gray-200 dark:border-zinc-700/80 flex items-center gap-2">
+                        <div className="flex shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => setItemDiscount(item.product.id, item.discount || 0, '%')}
+                            className={`px-3 py-1 text-xs font-bold transition-colors ${item.discountType === '%' || !item.discountType ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setItemDiscount(item.product.id, item.discount || 0, '$')}
+                            className={`px-3 py-1 text-xs font-bold transition-colors ${item.discountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                          >
+                            $
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="Valor descuento"
+                          className="w-full min-w-0 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                          value={item.discount || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setItemDiscount(item.product.id, val, item.discountType || '%');
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditingDiscountId(null)}
+                          className="ml-auto text-xs font-bold text-[#ED1C24] hover:underline whitespace-nowrap"
+                        >
+                          Listo
+                        </button>
+                      </div>
+                    )}
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -312,14 +463,106 @@ export default function POS() {
                 <span className="font-medium">Subtotal</span>
                 <span className="font-medium">${subtotal.toFixed(2)}</span>
               </div>
+
+              {/* Descuento Global Panel */}
+              <div className="flex flex-col gap-2">
+                {!isEditingGlobalDiscount && globalDiscount === 0 ? (
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={() => setIsEditingGlobalDiscount(true)}
+                      className="text-xs font-bold text-[#ED1C24] hover:underline transition-colors"
+                    >
+                      + Añadir Descuento General
+                    </button>
+                  </div>
+                ) : !isEditingGlobalDiscount && globalDiscount > 0 ? (
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-zinc-400 items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Descuento General</span>
+                      <button 
+                        onClick={() => setIsEditingGlobalDiscount(true)}
+                        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      >
+                        <span className="text-[10px] bg-gray-200 dark:bg-zinc-700 px-1.5 py-0.5 rounded font-bold text-gray-700 dark:text-zinc-300">Editar</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-green-600 dark:text-green-400">
+                        -{globalDiscountType === '%' ? `${globalDiscount}%` : `$${globalDiscount.toFixed(2)}`} 
+                        <span className="text-xs text-gray-400 font-medium ml-1">(-${globalDiscountAmount.toFixed(2)})</span>
+                      </span>
+                      <button 
+                        onClick={() => {
+                          setGlobalDiscount(0);
+                          setIsEditingGlobalDiscount(false);
+                        }}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 p-3 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Descuento General</span>
+                      <button 
+                        onClick={() => setIsEditingGlobalDiscount(false)}
+                        className="text-xs font-bold text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                        <button
+                          type="button"
+                          onClick={() => setGlobalDiscountType('%')}
+                          className={`shrink-0 px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '%' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                        >
+                          %
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGlobalDiscountType('$')}
+                          className={`shrink-0 px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                        >
+                          $
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        placeholder="Monto / %"
+                        className="w-full min-w-0 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                        value={globalDiscount || ''}
+                        onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') setIsEditingGlobalDiscount(false);
+                        }}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setIsEditingGlobalDiscount(false)}
+                        className="shrink-0 px-3 py-1 bg-gray-900 hover:bg-gray-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-bold transition-colors"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-between text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-medium">ITBIS (18%)</span>
                 <span className="font-medium">${tax.toFixed(2)}</span>
               </div>
             </div>
             <div className="flex justify-between items-end pt-4 border-t border-dashed border-gray-200 dark:border-zinc-700/80">
-              <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 uppercase tracking-wider">Total</span>
-              <span className="text-3xl font-black text-[#fb3c44]">${total.toFixed(2)}</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Factura</span>
+                <span className="text-[10px] text-gray-400 font-medium">Impuestos incluidos</span>
+              </div>
+              <span className="text-3xl font-black text-[#ED1C24]">${total.toFixed(2)}</span>
             </div>
           </div>
           
@@ -569,6 +812,33 @@ export default function POS() {
                           />
                         </motion.div>
                       )}
+
+                      {paymentMethod === 'Transferencia' && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="pt-2 space-y-2"
+                        >
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                            Nº de Referencia / Comprobante de Transferencia <span className="text-red-500">*</span>
+                          </label>
+                          <input 
+                            autoFocus
+                            type="text" 
+                            value={transferReference}
+                            onChange={(e) => setTransferReference(e.target.value)}
+                            className="block w-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#222222] text-gray-900 dark:text-white rounded-xl shadow-sm focus:ring-[#ED1C24] focus:border-[#ED1C24] text-sm font-bold py-3 px-4 uppercase" 
+                            placeholder="EJ. TRN-948201 / 001928"
+                            required
+                          />
+                          {transferReference.trim() === '' && (
+                            <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                              ⚠️ Debe ingresar el número de referencia de la transferencia para proceder.
+                            </p>
+                          )}
+                        </motion.div>
+                      )}
                     </AnimatePresence>
                   </div>
                 </div>
@@ -587,7 +857,16 @@ export default function POS() {
                       )}
                     </>
                   )}
-                  {paymentMethod !== 'Efectivo' && (
+                  {paymentMethod === 'Transferencia' && (
+                    <>
+                      {!transferReference.trim() ? (
+                        <p className="text-sm font-bold text-red-600">Referencia de transferencia requerida</p>
+                      ) : (
+                        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Ref: <span className="font-bold uppercase">{transferReference}</span></p>
+                      )}
+                    </>
+                  )}
+                  {paymentMethod !== 'Efectivo' && paymentMethod !== 'Transferencia' && (
                     <p className="text-sm font-medium text-gray-600">Pago exacto requerido mediante {paymentMethod}.</p>
                   )}
                 </div>
@@ -629,7 +908,8 @@ export default function POS() {
                 </div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">¡Factura Emitida!</h3>
                 <p className="text-gray-500 dark:text-gray-400 mb-2">
-                  La venta por <span className="font-bold text-gray-900 dark:text-white">${total.toFixed(2)}</span> fue procesada exitosamente en {paymentMethod}.
+                  La venta por <span className="font-bold text-gray-900 dark:text-white">${total.toFixed(2)}</span> fue procesada exitosamente en {paymentMethod}
+                  {paymentMethod === 'Transferencia' && transferReference ? ` (Ref: ${transferReference.toUpperCase()})` : ''}.
                 </p>
                 <p className="text-xs text-gray-400 mb-6 font-medium uppercase tracking-wider border border-gray-200 inline-block px-2 py-1 rounded">
                   {invoiceType}
@@ -673,86 +953,188 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Printable Receipt */}
-    <div className="hidden print:block font-mono text-sm bg-white text-black p-8 max-w-2xl mx-auto">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold uppercase mb-1">Brianna Heavy Equipment</h1>
-        <p>RNC: 132456789</p>
-        <p>Av. Principal #123, Santo Domingo</p>
-        <p>Tel: 809-555-5555</p>
-      </div>
-      
-      <div className="border-b border-dashed border-gray-400 pb-4 mb-4">
-        <p><span className="font-bold">Fecha:</span> {new Date().toLocaleString()}</p>
-        <p><span className="font-bold">Factura:</span> #{(Math.random() * 100000).toFixed(0).padStart(6, '0')}</p>
-        <p><span className="font-bold">NCF:</span> {invoiceType}</p>
-        <p><span className="font-bold">Cliente:</span> {selectedClient ? selectedClient.name : 'Consumidor Final'}</p>
-        {selectedClient && <p><span className="font-bold">RNC/Cédula:</span> {selectedClient.rnc}</p>}
-      </div>
-
-      <table className="w-full mb-4">
-        <thead>
-          <tr className="border-b border-dashed border-gray-400">
-            <th className="text-left py-2 font-bold">Cant.</th>
-            <th className="text-left py-2 font-bold">Descripción</th>
-            <th className="text-right py-2 font-bold">Monto</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cart.map(item => (
-            <tr key={item.product.id}>
-              <td className="py-2">{item.quantity}</td>
-              <td className="py-2 pr-2">{item.product.name}</td>
-              <td className="text-right py-2">${(item.product.price * item.quantity).toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="border-t border-dashed border-gray-400 pt-4 space-y-2">
-        <div className="flex justify-between">
-          <span>Subtotal:</span>
-          <span>${subtotal.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>ITBIS (18%):</span>
-          <span>${tax.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between font-bold text-lg pt-2 border-t border-dashed border-gray-400">
-          <span>Total:</span>
-          <span>${total.toFixed(2)}</span>
-        </div>
-      </div>
-
-      <div className="border-t border-dashed border-gray-400 pt-4 mt-4 space-y-2">
-        <div className="flex justify-between">
-          <span>Método de Pago:</span>
-          <span className="uppercase">{paymentMethod}</span>
-        </div>
-        {paymentMethod === 'Efectivo' && (
-          <>
-            <div className="flex justify-between">
-              <span>Recibido:</span>
-              <span>${numReceived.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Devuelta:</span>
-              <span>${change.toFixed(2)}</span>
-            </div>
-          </>
+      {/* Session Sales Modal */}
+      <AnimatePresence>
+        {isSessionSalesOpen && (
+          <SessionSalesModal
+            isOpen={isSessionSalesOpen}
+            onClose={() => setIsSessionSalesOpen(false)}
+            sales={sessionSales}
+          />
         )}
-      </div>
+      </AnimatePresence>
 
-      <div className="text-center mt-8 pt-4 border-t border-dashed border-gray-400">
-        <p className="font-bold">¡Gracias por su compra!</p>
-        <p className="text-xs mt-2 text-gray-500">Este documento sirve como comprobante de venta.</p>
-      </div>
       {/* Cierre de Caja Modal */}
-      <CashClosureModal
-        isOpen={isCashClosureOpen}
-        onClose={() => setIsCashClosureOpen(false)}
-      />
-    </div>
+      <AnimatePresence>
+        {isCashClosureOpen && (
+          <CashClosureModal
+            isOpen={isCashClosureOpen}
+            onClose={(didCloseShift) => {
+              setIsCashClosureOpen(false);
+              if (didCloseShift) {
+                setIsOpenShiftModalOpen(true);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Cash Movement Modal */}
+      <AnimatePresence>
+        {isCashMovementOpen && (
+          <CashMovementModal
+            isOpen={isCashMovementOpen}
+            onClose={() => setIsCashMovementOpen(false)}
+            onSuccess={() => setIsCashMovementOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Open Shift Modal */}
+      <AnimatePresence>
+        {isOpenShiftModalOpen && (
+          <OpenShiftModal
+            isOpen={isOpenShiftModalOpen}
+            onClose={() => setIsOpenShiftModalOpen(false)}
+            onSuccess={(initialAmount) => {
+              console.log('Turno abierto con:', initialAmount);
+              setIsOpenShiftModalOpen(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Ultra Modern 80mm Thermal Receipt Portal */}
+      {createPortal(
+        <div className="hidden print:block printable-receipt bg-white text-black font-sans text-[11px] leading-tight p-2 w-full max-w-full">
+          {/* Executive Logo Header */}
+          <div className="text-center pb-3 mb-2 border-b-2 border-black">
+            <div className="inline-block bg-black text-white font-black text-xs px-2.5 py-0.5 rounded tracking-widest uppercase mb-1">
+              BH HEAVY
+            </div>
+            <h1 className="text-sm font-black tracking-tight uppercase leading-none mt-1">BRIANNA HEAVY EQUIPMENT</h1>
+            <p className="text-[9px] font-bold text-gray-700 tracking-wider uppercase mt-0.5">Equipos Pesados & Repuestos</p>
+            <p className="text-[9px] text-gray-600 mt-1">RNC: 131-48841-7 | Tel: (809) 555-5555</p>
+            <p className="text-[9px] text-gray-600">Av. Principal #123, Santo Domingo, R.D.</p>
+          </div>
+
+          {/* Document Header & NCF Badge */}
+          <div className="py-2 mb-2 border-b border-gray-400 space-y-1 text-[10px]">
+            <div className="flex justify-between items-center bg-gray-100 p-1.5 rounded border border-gray-300">
+              <span className="font-extrabold text-[10px] uppercase text-gray-900">COMPROBANTE DE VENTA</span>
+              {(() => {
+                const seqs = loadSequenceSettings();
+                const formattedNCF = invoiceType === 'Crédito Fiscal' ? `B01${seqs.seqB01}` :
+                                     invoiceType === 'Gubernamental' ? `B15${seqs.seqB15}` :
+                                     `B02${seqs.seqB02}`;
+                return <span className="font-mono text-xs font-black text-black">{formattedNCF}</span>;
+              })()}
+            </div>
+            <div className="grid grid-cols-2 gap-1 pt-1">
+              <div>
+                <p className="text-[9px] text-gray-500 font-bold uppercase">FACTURA / TIPO</p>
+                <p className="font-bold text-gray-900">#FAC-00104 ({invoiceType})</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-gray-500 font-bold uppercase">FECHA Y HORA</p>
+                <p className="font-bold text-gray-900">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({new Date().toLocaleDateString()})</p>
+              </div>
+            </div>
+            <div className="pt-1 border-t border-gray-200">
+              <p><span className="font-bold text-gray-700">CLIENTE:</span> <span className="font-extrabold uppercase">{selectedClient ? selectedClient.name : 'CONSUMIDOR FINAL'}</span></p>
+              {selectedClient?.rnc && <p><span className="font-bold text-gray-700">RNC/CÉDULA:</span> {selectedClient.rnc}</p>}
+              <p><span className="font-bold text-gray-700">CAJERO:</span> <span className="uppercase">{localStorage.getItem('brianna_user_name') || 'HAROLD RODRÍGUEZ'}</span></p>
+            </div>
+          </div>
+
+          {/* Itemized Table */}
+          <div className="mb-2">
+            <div className="flex justify-between text-[9px] font-black uppercase tracking-wider bg-gray-900 text-white p-1 rounded-t">
+              <span>CANT / DESCRIPCIÓN</span>
+              <span>TOTAL</span>
+            </div>
+            <div className="divide-y divide-gray-200 border-x border-b border-gray-300">
+              {cart.map((item, idx) => {
+                const itemTot = calculateItemTotal(item);
+                return (
+                  <div key={idx} className="p-1.5 flex justify-between items-start text-[10px]">
+                    <div className="pr-2">
+                      <p className="font-extrabold text-black leading-tight">
+                        <span className="bg-gray-200 px-1 py-0.2 rounded font-black mr-1 text-[9px]">{item.quantity}x</span>
+                        {item.product.name}
+                      </p>
+                      <p className="text-[9px] text-gray-500 mt-0.5">
+                        ${item.product.price.toFixed(2)} c/u
+                        {item.discount ? ` (Desc. ${item.discount}${item.discountType || '%'})` : ''}
+                      </p>
+                    </div>
+                    <span className="font-black text-xs text-black whitespace-nowrap">${itemTot.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Financial Totals Card */}
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-300 space-y-1 text-[11px] mb-2">
+            <div className="flex justify-between text-gray-700 font-medium">
+              <span>Subtotal:</span>
+              <span className="font-bold text-black">${subtotal.toFixed(2)}</span>
+            </div>
+            {globalDiscountAmount > 0 && (
+              <div className="flex justify-between text-red-600 font-medium">
+                <span>Descuento Global:</span>
+                <span className="font-bold">-${globalDiscountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-gray-700 font-medium">
+              <span>ITBIS (18%):</span>
+              <span className="font-bold text-black">${tax.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-xs font-black pt-1.5 border-t border-gray-400 text-black">
+              <span>TOTAL A PAGAR:</span>
+              <span className="text-sm font-black text-black">${total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Payment Method Badge & Reference */}
+          <div className="p-2 border border-gray-300 rounded-lg space-y-1 text-[10px] mb-3">
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-gray-700">MÉTODO DE PAGO:</span>
+              <span className="font-black px-2 py-0.5 bg-black text-white rounded text-[10px] uppercase">{paymentMethod}</span>
+            </div>
+            {paymentMethod === 'Transferencia' && (
+              <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                <span className="font-bold text-gray-900">Nº DE REFERENCIA:</span>
+                <span className="font-mono font-black text-xs uppercase">{transferReference || 'N/A'}</span>
+              </div>
+            )}
+            {paymentMethod === 'Efectivo' && (
+              <div className="pt-1 border-t border-gray-200 space-y-0.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-600 font-medium">Monto Recibido:</span>
+                  <span className="font-bold">${numReceived.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600 font-medium">Devuelta:</span>
+                  <span className="font-black text-green-700">${change.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Modern Footer with Barcode Simulation */}
+          <div className="text-center pt-2 border-t-2 border-black space-y-1 text-[10px]">
+            <div className="font-mono text-[9px] font-bold text-gray-800 tracking-widest my-1 uppercase">
+              ||| | |||| ||| ||||| || |||| || |||
+            </div>
+            <p className="font-extrabold uppercase tracking-wide text-black text-[11px]">¡Gracias por su compra!</p>
+            <p className="text-[9px] font-medium text-gray-600">Garantía de repuestos 30 días presentando este comprobante.</p>
+            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest pt-1">Brianna Heavy POS</p>
+          </div>
+        </div>,
+        document.body
+      )}
   </div>
   );
 }

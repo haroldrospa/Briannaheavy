@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { PrinterIcon, WrenchScrewdriverIcon, CheckCircleIcon, CalendarDaysIcon, UserIcon, CheckBadgeIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect } from 'react';
+import { WrenchScrewdriverIcon, CheckCircleIcon, CalendarDaysIcon, UserIcon, CheckBadgeIcon } from '@heroicons/react/24/outline';
 
 const getCurrentDate = () => {
   const now = new Date();
@@ -11,28 +11,29 @@ const getCurrentDate = () => {
 
 export default function MaintenanceWorkOrderForm() {
   const [workOrderDate, setWorkOrderDate] = useState(getCurrentDate);
+  const [workOrderSeq, setWorkOrderSeq] = useState<string>(() => {
+    return localStorage.getItem('brianna_workorder_seq') || '0016';
+  });
+
+  useEffect(() => {
+    const handleSeqUpdate = () => {
+      const saved = localStorage.getItem('brianna_workorder_seq');
+      if (saved) setWorkOrderSeq(saved);
+    };
+    window.addEventListener('brianna_seq_updated', handleSeqUpdate);
+    return () => window.removeEventListener('brianna_seq_updated', handleSeqUpdate);
+  }, []);
 
   return (
     <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[900px] flex flex-col rounded-[2.5rem] print:rounded-none overflow-hidden">
       
-      {/* Header Actions */}
-      <div className="flex justify-end p-6 border-b border-gray-200/60 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] print:hidden shrink-0">
-        <button 
-          onClick={() => window.print()}
-          className="flex items-center gap-2 bg-[#ED1C24] text-white px-6 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md"
-        >
-          <PrinterIcon className="h-5 w-5" />
-          Imprimir / Guardar PDF
-        </button>
-      </div>
-
       <div className="w-full max-w-none p-6 sm:p-10 font-sans flex-1 flex flex-col print:max-w-none print:p-0">
         
         {/* Document Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 pb-8 border-b border-gray-200 dark:border-gray-800 print:border-gray-900">
           <div className="flex items-center gap-4 mb-4 sm:mb-0">
-            <div className="h-14 w-14 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent">
-              <WrenchScrewdriverIcon className="h-8 w-8 text-[#ED1C24] print:text-black" />
+            <div className="h-14 w-14 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent">
+              <WrenchScrewdriverIcon className="h-8 w-8 text-gray-900 dark:text-white print:text-black" />
             </div>
             <div>
               <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
@@ -45,11 +46,9 @@ export default function MaintenanceWorkOrderForm() {
           
           <div className="flex items-center gap-3 bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 print:shadow-none print:border-none print:p-0">
             <span className="text-sm font-bold text-gray-500 dark:text-gray-400">Nº de Control</span>
-            <input 
-              type="text" 
-              className="text-xl font-black text-[#ED1C24] outline-none w-24 text-right bg-transparent placeholder-red-200 print:text-black" 
-              placeholder="0016" 
-            />
+            <span className="text-xl font-black text-gray-900 dark:text-white font-mono tracking-tight print:text-black min-w-[3.5rem] text-right select-none">
+              {workOrderSeq}
+            </span>
           </div>
         </div>
 
@@ -87,7 +86,7 @@ export default function MaintenanceWorkOrderForm() {
                 </label>
                 <input 
                   type="text" 
-                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
+                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
                   placeholder="Ej. Cambio de Aceite"
                 />
               </div>
@@ -99,7 +98,7 @@ export default function MaintenanceWorkOrderForm() {
                 </label>
                 <input 
                   type="text" 
-                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
+                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
                   placeholder="Nombre del Técnico"
                 />
               </div>
@@ -113,7 +112,7 @@ export default function MaintenanceWorkOrderForm() {
                   type="date" 
                   value={workOrderDate}
                   onChange={(e) => setWorkOrderDate(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
+                  className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0" 
                 />
               </div>
 
@@ -124,11 +123,11 @@ export default function MaintenanceWorkOrderForm() {
           <div className="lg:col-span-2 flex flex-col gap-8">
             <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex-1 flex flex-col print:shadow-none print:border-gray-900 print:rounded-none">
               <label className="flex items-center gap-2 text-base font-black text-gray-900 dark:text-white mb-4">
-                <CheckBadgeIcon className="h-5 w-5 text-[#ED1C24] print:text-black" />
+                <CheckBadgeIcon className="h-5 w-5 text-gray-900 dark:text-white print:text-black" />
                 Trabajo Realizado
               </label>
               <textarea 
-                className="flex-1 w-full bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl p-6 outline-none resize-none font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 transition-all print:bg-transparent print:border print:border-gray-400 print:rounded-none print:p-4 min-h-[300px]"
+                className="flex-1 w-full bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl p-6 outline-none resize-none font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 transition-all print:bg-transparent print:border print:border-gray-400 print:rounded-none print:p-4 min-h-[300px]"
                 placeholder="Describa detalladamente el trabajo realizado..."
               ></textarea>
             </div>

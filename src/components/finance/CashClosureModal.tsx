@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import logo from '../../assets/logo.png';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   XMarkIcon, 
@@ -18,7 +19,7 @@ import {
 
 interface CashClosureModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (didCloseShift?: boolean) => void;
 }
 
 const DENOMINATIONS = [
@@ -95,10 +96,11 @@ export default function CashClosureModal({ isOpen, onClose }: CashClosureModalPr
   };
 
   const handleCloseAll = () => {
+    const isSuccess = showCompletionOptions;
     setShowCompletionOptions(false);
     setShowEmailInput(false);
     setEmailStatus('idle');
-    onClose();
+    onClose(isSuccess);
   };
 
   const now = new Date();
@@ -184,7 +186,7 @@ export default function CashClosureModal({ isOpen, onClose }: CashClosureModalPr
 
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => onClose()}
                 className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
               >
                 <XMarkIcon className="h-5 w-5" />
@@ -196,17 +198,20 @@ export default function CashClosureModal({ isOpen, onClose }: CashClosureModalPr
           <div id="closure-printable-area" className="flex-1 overflow-y-auto p-6 space-y-6 print:p-0 print:space-y-3 print:overflow-visible">
             
             {/* Header Document (Visible ONLY in Print View) */}
-            <div className="hidden print:flex justify-between items-start pb-3 border-b-2 border-gray-900 mb-3">
-              <div>
-                <p className="text-[10px] font-black text-[#fb3c44] uppercase tracking-wider">
-                  BRIANNA HEAVY EQUIPMENT • RNC: 132610362
-                </p>
-                <h1 className="text-lg font-black text-gray-900 mt-0.5">
-                  Reporte de Cierre & Arqueo de Caja
-                </h1>
-                <p className="text-[10px] text-gray-600">
-                  Comprobante oficial de conciliación de turno y ventas
-                </p>
+            <div className="hidden print:flex justify-between items-center pb-3 border-b-2 border-gray-900 mb-3">
+              <div className="flex items-center gap-3">
+                <img src={logo} alt="Brianna Heavy Logo" className="h-10 object-contain" />
+                <div>
+                  <p className="text-[10px] font-black text-[#ED1C24] uppercase tracking-wider">
+                    BRIANNA HEAVY EQUIPMENT • RNC: 132610362
+                  </p>
+                  <h1 className="text-lg font-black text-gray-900 mt-0.5">
+                    Reporte de Cierre & Arqueo de Caja
+                  </h1>
+                  <p className="text-[10px] text-gray-600">
+                    Comprobante oficial de conciliación de turno y ventas
+                  </p>
+                </div>
               </div>
 
               <div className="text-right text-[10px] space-y-0.5 text-gray-800 border-l border-gray-300 pl-4">

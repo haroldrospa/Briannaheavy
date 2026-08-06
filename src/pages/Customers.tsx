@@ -38,9 +38,9 @@ export default function Customers() {
       {/* Header Actions */}
       <motion.div variants={itemVariants} className="flex justify-end gap-4">
         <motion.button 
-          whileHover={{ scale: 1.05 }} 
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center justify-center gap-2 bg-[#ED1C24] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md"
+          whileHover={{ scale: 1.03 }} 
+          whileTap={{ scale: 0.97 }}
+          className="flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-6 py-3 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer"
         >
           <PlusIcon className="h-5 w-5" />
           Nuevo Cliente
@@ -56,11 +56,11 @@ export default function Customers() {
           <input 
             type="text" 
             placeholder="Buscar por nombre, email o teléfono..." 
-            className="block w-full pl-11 pr-4 py-3 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 border border-transparent dark:border-zinc-800 rounded-full shadow-sm text-sm font-medium focus:ring-2 focus:ring-[#ED1C24]/20 transition-all dark:placeholder-zinc-500" 
+            className="block w-full pl-11 pr-4 py-3 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 border border-transparent dark:border-zinc-800 rounded-full shadow-sm text-sm font-medium focus:ring-2 focus:ring-gray-900/20 transition-all dark:placeholder-zinc-500" 
           />
         </div>
         <div className="w-full sm:w-56">
-          <select className="block w-full px-4 py-3 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 border border-transparent dark:border-zinc-800 rounded-full shadow-sm text-sm font-medium focus:ring-2 focus:ring-[#ED1C24]/20 transition-all appearance-none cursor-pointer">
+          <select className="block w-full px-4 py-3 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 border border-transparent dark:border-zinc-800 rounded-full shadow-sm text-sm font-medium focus:ring-2 focus:ring-gray-900/20 transition-all appearance-none cursor-pointer">
             <option className="dark:bg-[#121318]">Todos los Estados</option>
             <option className="dark:bg-[#121318]">Activos</option>
             <option className="dark:bg-[#121318]">En Mora</option>
@@ -118,13 +118,13 @@ export default function Customers() {
                   <td className="px-6 py-5 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
                       customer.status === 'Activo' ? 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-400' : 
-                      customer.status === 'En Mora' ? 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-400' : 'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300'
+                      customer.status === 'En Mora' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300'
                     }`}>
                       {customer.status}
                     </span>
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-[#ED1C24] hover:text-red-900 dark:hover:text-[#ED1C24] font-bold bg-red-50 dark:bg-red-950/40 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Ver Perfil</button>
+                    <button className="text-gray-900 dark:text-zinc-100 font-bold bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 px-4 py-2 rounded-full transition-colors">Ver Perfil</button>
                   </td>
                 </tr>
               ))}

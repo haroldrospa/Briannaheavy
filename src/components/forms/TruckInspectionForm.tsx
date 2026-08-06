@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
-  PrinterIcon, 
   TruckIcon, 
   DocumentCheckIcon, 
   UserIcon, 
@@ -63,7 +62,7 @@ interface InspectionItemRowProps {
 const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, onObsChange }: InspectionItemRowProps) => {
   return (
     <div className="flex border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-[#222] transition-colors group print:border-gray-300">
-      <div className="w-1/3 p-3 text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center print:text-[10px] print:p-1">
+      <div className="w-1/3 p-3 text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center print:text-[9.5px] print:p-1 print:text-black">
         {item}
       </div>
       <div className="w-28 flex border-x border-gray-100 dark:border-gray-800 print:border-gray-300">
@@ -73,8 +72,9 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
             name={`status-${idx}`} 
             checked={status === 'B'}
             onChange={() => onStatusChange(item, 'B')}
-            className="w-4 h-4 text-green-500 focus:ring-green-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-green-500" 
+            className="w-4 h-4 text-green-500 focus:ring-green-500 cursor-pointer print:hidden" 
           />
+          <span className="hidden print:inline-block text-xs font-black text-green-700">{status === 'B' ? '✓' : ''}</span>
         </div>
         <div className="w-1/3 flex items-center justify-center border-r border-gray-100 dark:border-gray-800 hover:bg-yellow-50/50 dark:hover:bg-yellow-900/30 transition-colors print:border-gray-300">
           <input 
@@ -82,8 +82,9 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
             name={`status-${idx}`} 
             checked={status === 'R'}
             onChange={() => onStatusChange(item, 'R')}
-            className="w-4 h-4 text-yellow-400 focus:ring-yellow-400 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-yellow-400" 
+            className="w-4 h-4 text-yellow-400 focus:ring-yellow-400 cursor-pointer print:hidden" 
           />
+          <span className="hidden print:inline-block text-xs font-black text-amber-700">{status === 'R' ? '✓' : ''}</span>
         </div>
         <div className="w-1/3 flex items-center justify-center hover:bg-red-50/50 dark:hover:bg-red-900/30 transition-colors">
           <input 
@@ -91,18 +92,20 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
             name={`status-${idx}`} 
             checked={status === 'D'}
             onChange={() => onStatusChange(item, 'D')}
-            className="w-4 h-4 text-red-500 focus:ring-red-500 cursor-pointer print:appearance-none print:w-full print:h-full print:checked:bg-red-500" 
+            className="w-4 h-4 text-red-500 focus:ring-red-500 cursor-pointer print:hidden" 
           />
+          <span className="hidden print:inline-block text-xs font-black text-red-700">{status === 'D' ? '✓' : ''}</span>
         </div>
       </div>
-      <div className="flex-1 p-2">
+      <div className="flex-1 p-2 print:p-1">
         <input 
           type="text" 
           value={obs}
           onChange={(e) => onObsChange(item, e.target.value)}
           placeholder="Añadir observación..."
-          className="w-full h-full p-2 bg-transparent border-none rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#333] focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:text-[10px] print:p-0 print:placeholder-transparent" 
+          className="w-full h-full p-2 bg-transparent border-none rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#333] focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:hidden" 
         />
+        <span className="hidden print:block text-[9.5px] font-medium text-black">{obs || '—'}</span>
       </div>
     </div>
   );
@@ -123,18 +126,79 @@ const getCurrentTime = () => {
   return `${hours}:${minutes}`;
 };
 
-export default function TruckInspectionForm() {
-  const [formData, setFormData] = useState<Record<string, { status: 'B'|'R'|'D'|'', obs: string }>>({});
-  
-  const [inspectionDate, setInspectionDate] = useState(getCurrentDate);
-  const [inspectionTime, setInspectionTime] = useState(getCurrentTime);
+interface TruckInspectionFormProps {
+  initialData?: {
+    code?: string;
+    date?: string;
+    vehicle?: string;
+    vin?: string;
+    inspector?: string;
+    mileage?: string;
+    goodItems?: number;
+    regItems?: number;
+    defItems?: number;
+    status?: string;
+  };
+}
 
-  const [vehicleInfo, setVehicleInfo] = useState({
-    brand: '',
-    model: '',
-    year: '',
-    mileage: '',
-    vin: ''
+export default function TruckInspectionForm({ initialData }: TruckInspectionFormProps = {}) {
+  const [formData, setFormData] = useState<Record<string, { status: 'B'|'R'|'D'|'', obs: string }>>(() => {
+    if (!initialData) return {};
+    const data: Record<string, { status: 'B'|'R'|'D'|'', obs: string }> = {};
+    const good = initialData.goodItems ?? 38;
+    const reg = initialData.regItems ?? 2;
+    const def = initialData.defItems ?? 1;
+
+    INSPECTION_ITEMS.forEach((item, idx) => {
+      if (idx < good) {
+        data[item] = { status: 'B', obs: '' };
+      } else if (idx < good + reg) {
+        data[item] = { status: 'R', obs: 'Revisión preventiva en taller' };
+      } else if (idx < good + reg + def) {
+        data[item] = { status: 'D', obs: 'Requiere sustitución o reparación' };
+      } else {
+        data[item] = { status: 'B', obs: '' };
+      }
+    });
+    return data;
+  });
+  
+  const [inspectionDate, setInspectionDate] = useState(() => initialData?.date ? initialData.date.split('/').reverse().join('-') : getCurrentDate());
+  const [inspectionTime, setInspectionTime] = useState(getCurrentTime);
+  const [inspectorName, setInspectorName] = useState(() => {
+    if (initialData?.inspector) return initialData.inspector;
+    const sessionUser = localStorage.getItem('brianna_user_name') || localStorage.getItem('brianna_active_user');
+    return sessionUser || 'HAROLD RODRÍGUEZ';
+  });
+
+  const [reportSeq, setReportSeq] = useState<string>(() => {
+    return initialData?.code || localStorage.getItem('brianna_inspection_seq') || '0004';
+  });
+
+  useEffect(() => {
+    const handleSeqUpdate = () => {
+      const saved = localStorage.getItem('brianna_inspection_seq');
+      if (saved) setReportSeq(saved);
+    };
+    window.addEventListener('brianna_seq_updated', handleSeqUpdate);
+    return () => window.removeEventListener('brianna_seq_updated', handleSeqUpdate);
+  }, []);
+
+  const [vehicleInfo, setVehicleInfo] = useState(() => {
+    let brand = '';
+    let model = '';
+    if (initialData?.vehicle) {
+      const parts = initialData.vehicle.split(' ');
+      brand = parts[0] || '';
+      model = parts.slice(1).join(' ') || '';
+    }
+    return {
+      brand,
+      model,
+      year: '2024',
+      mileage: initialData?.mileage || '',
+      vin: initialData?.vin || ''
+    };
   });
 
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
@@ -204,27 +268,16 @@ export default function TruckInspectionForm() {
   return (
     <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[900px] flex flex-col rounded-[2.5rem] print:rounded-none overflow-hidden">
       
-      {/* Header Actions */}
-      <div className="flex justify-end p-6 border-b border-gray-200/60 dark:border-gray-800 bg-white dark:bg-[#1a1a1a] print:hidden shrink-0">
-        <button 
-          onClick={() => window.print()}
-          className="flex items-center gap-2 bg-[#ED1C24] text-white px-6 py-2.5 rounded-full font-bold hover:bg-red-700 transition-all shadow-sm hover:shadow-md cursor-pointer"
-        >
-          <PrinterIcon className="h-5 w-5" />
-          Imprimir / Guardar PDF
-        </button>
-      </div>
-
       <div className="w-full max-w-none p-6 sm:p-10 font-sans flex-1 flex flex-col print:max-w-none print:p-0 gap-8">
         
         {/* Document Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-[#1a1a1a] p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 print:shadow-none print:border-none print:p-0 print:rounded-none gap-6">
           <div className="flex items-center gap-6">
-            <div className="h-16 w-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent shrink-0">
-              <DocumentCheckIcon className="h-8 w-8 text-[#ED1C24] print:text-black" />
+            <div className="h-16 w-16 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent shrink-0">
+              <DocumentCheckIcon className="h-8 w-8 text-gray-900 dark:text-white print:text-black" />
             </div>
             <div>
-              <div className="text-sm font-black tracking-tight text-[#ED1C24] mb-1 print:text-gray-500 uppercase">
+              <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white mb-1 print:text-gray-500 uppercase">
                 Brianna Heavy Equipment • RNC: 132610362
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none mb-2">
@@ -236,11 +289,9 @@ export default function TruckInspectionForm() {
           
           <div className="flex items-center gap-3 bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 print:bg-transparent print:border-none print:p-0">
             <span className="text-sm font-bold text-gray-500 dark:text-gray-400">Nº de Reporte</span>
-            <input 
-              type="text" 
-              className="text-xl font-black text-[#ED1C24] outline-none w-24 text-right bg-transparent placeholder-red-200 print:text-black" 
-              placeholder="0004" 
-            />
+            <span className="text-xl font-black text-gray-900 dark:text-white font-mono tracking-tight print:text-black min-w-[3.5rem] text-right select-none">
+              {reportSeq}
+            </span>
           </div>
         </div>
 
@@ -251,14 +302,14 @@ export default function TruckInspectionForm() {
             <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4 print:shadow-none print:border-gray-900 print:rounded-none">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-                  <TruckIcon className="h-5 w-5 text-[#ED1C24] print:text-black" />
+                  <TruckIcon className="h-5 w-5 text-gray-900 dark:text-white print:text-black" />
                   Datos del Vehículo
                 </h3>
                 {(vehicleInfo.brand || vehicleInfo.model || vehicleInfo.vin) && (
                   <button 
                     type="button" 
                     onClick={handleClearVehicle}
-                    className="text-xs font-bold text-[#ED1C24] hover:underline print:hidden cursor-pointer"
+                    className="text-xs font-bold text-gray-900 dark:text-white hover:underline print:hidden cursor-pointer"
                   >
                     Limpiar
                   </button>
@@ -295,7 +346,7 @@ export default function TruckInspectionForm() {
                             key={b.brand}
                             type="button"
                             onClick={() => handleSelectBrand(b.brand)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-[#ED1C24] dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
+                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-gray-900 dark:text-white dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
                           >
                             <span>{b.brand}</span>
                             <span className="text-[10px] text-gray-400 font-normal">({b.models.length} modelos)</span>
@@ -339,10 +390,10 @@ export default function TruckInspectionForm() {
                             key={m}
                             type="button"
                             onClick={() => handleSelectModel(m)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-[#ED1C24] dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
+                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-gray-900 dark:text-white dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
                           >
                             <span>{m}</span>
-                            <CheckIcon className="h-4 w-4 text-[#ED1C24] opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <CheckIcon className="h-4 w-4 text-gray-900 dark:text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
                         ))
                       ) : (
@@ -362,7 +413,7 @@ export default function TruckInspectionForm() {
                       value={vehicleInfo.year}
                       onChange={(e) => setVehicleInfo(prev => ({ ...prev, year: e.target.value }))}
                       placeholder="2024"
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
+                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
                     />
                   </div>
                   <div>
@@ -372,7 +423,7 @@ export default function TruckInspectionForm() {
                       value={vehicleInfo.mileage}
                       onChange={(e) => setVehicleInfo(prev => ({ ...prev, mileage: e.target.value }))}
                       placeholder="45,200"
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
+                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
                     />
                   </div>
                 </div>
@@ -383,7 +434,7 @@ export default function TruckInspectionForm() {
                     value={vehicleInfo.vin}
                     onChange={(e) => setVehicleInfo(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
                     placeholder="1M2AX13C5PM001892"
-                    className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" 
+                    className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" 
                   />
                 </div>
               </div>
@@ -392,14 +443,20 @@ export default function TruckInspectionForm() {
             {/* Inspector Info */}
             <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4 print:shadow-none print:border-gray-900 print:rounded-none">
               <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-                <UserIcon className="h-5 w-5 text-[#ED1C24] print:text-black" />
+                <UserIcon className="h-5 w-5 text-gray-900 dark:text-white print:text-black" />
                 Detalles de Inspección
               </h3>
               
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Nombre del Inspector</label>
-                  <input type="text" className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" />
+                  <input 
+                    type="text" 
+                    value={inspectorName}
+                    onChange={(e) => setInspectorName(e.target.value.toUpperCase())}
+                    placeholder="EJ. HAROLD RODRÍGUEZ"
+                    className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" 
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -410,7 +467,7 @@ export default function TruckInspectionForm() {
                       type="date" 
                       value={inspectionDate}
                       onChange={(e) => setInspectionDate(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
+                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
                     />
                   </div>
                   <div>
@@ -419,7 +476,7 @@ export default function TruckInspectionForm() {
                       type="time" 
                       value={inspectionTime}
                       onChange={(e) => setInspectionTime(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
+                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
                     />
                   </div>
                 </div>
@@ -431,7 +488,7 @@ export default function TruckInspectionForm() {
                 <div className="flex flex-wrap gap-3">
                   {['Vacio', '1/4', '1/2', '3/4', 'Lleno'].map(level => (
                     <label key={level} className="flex items-center gap-1.5 cursor-pointer bg-gray-50 dark:bg-[#222222] px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 transition-colors print:bg-transparent print:border-none print:p-0">
-                      <input type="radio" name="fuel" className="w-3.5 h-3.5 text-[#ED1C24] focus:ring-[#ED1C24]" />
+                      <input type="radio" name="fuel" className="w-3.5 h-3.5 text-gray-900 dark:text-white focus:ring-[#ED1C24]" />
                       <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{level}</span>
                     </label>
                   ))}
@@ -441,13 +498,13 @@ export default function TruckInspectionForm() {
             
             {/* Truck Silhouette */}
             <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center opacity-80 print:shadow-none print:border-gray-900 print:rounded-none">
-              <svg viewBox="0 0 600 200" className="w-full max-w-[200px] h-auto" fill="none" stroke="#ED1C24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 600 200" className="w-full max-w-[200px] h-auto stroke-gray-700 dark:stroke-zinc-300" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="50" y="40" width="120" height="120" rx="15" />
                 <rect x="180" y="50" width="80" height="100" />
                 <rect x="270" y="40" width="280" height="120" rx="10" />
                 <line x1="120" y1="40" x2="120" y2="160" />
                 <circle cx="100" cy="100" r="15" />
-                <text x="100" y="105" textAnchor="middle" fontSize="16" fontWeight="bold" stroke="none" fill="#ED1C24">D</text>
+                <text x="100" y="105" textAnchor="middle" fontSize="16" fontWeight="bold" stroke="none" className="fill-gray-700 dark:fill-zinc-300">D</text>
                 <line x1="180" y1="100" x2="270" y2="100" strokeDasharray="4 4" />
                 <line x1="270" y1="50" x2="550" y2="50" />
                 <line x1="270" y1="150" x2="550" y2="150" />
@@ -457,25 +514,25 @@ export default function TruckInspectionForm() {
           </div>
 
           {/* Right Column (Checklist) */}
-          <div className="lg:col-span-2 flex flex-col h-full max-h-[1200px]">
+          <div className="lg:col-span-2 flex flex-col h-full max-h-[1200px] print:max-h-none print:h-auto">
             <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex-1 flex flex-col overflow-hidden print:shadow-none print:border-gray-900 print:rounded-none">
               
               {/* Table Header */}
               <div className="flex bg-gray-50 dark:bg-[#222222] border-b border-gray-200 dark:border-gray-800 font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider print:border-gray-900 shrink-0">
-                <div className="w-1/3 p-4 flex items-center">Descripción</div>
+                <div className="w-1/3 p-4 print:p-1.5 flex items-center print:text-black">Descripción</div>
                 <div className="w-28 border-x border-gray-200 dark:border-gray-800 flex flex-col print:border-gray-900">
-                  <div className="border-b border-gray-200 dark:border-gray-800 p-1 text-center text-[10px] print:border-gray-900">Estado</div>
+                  <div className="border-b border-gray-200 dark:border-gray-800 p-1 text-center text-[10px] print:border-gray-900 print:text-black font-bold">Estado</div>
                   <div className="flex flex-1 text-[10px]">
-                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-green-600">B</div>
-                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-yellow-500">R</div>
-                    <div className="w-1/3 p-1 flex items-center justify-center text-red-500">D</div>
+                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-green-600 font-black">B</div>
+                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-yellow-500 font-black">R</div>
+                    <div className="w-1/3 p-1 flex items-center justify-center text-red-500 font-black">D</div>
                   </div>
                 </div>
-                <div className="flex-1 p-4 flex items-center justify-center">Observaciones</div>
+                <div className="flex-1 p-4 print:p-1.5 flex items-center justify-center print:text-black">Observaciones</div>
               </div>
 
               {/* Table Body */}
-              <div className="flex flex-col flex-1 overflow-y-auto">
+              <div className="flex flex-col flex-1 overflow-y-auto print:overflow-visible print:h-auto">
                 {INSPECTION_ITEMS.map((item, idx) => (
                   <InspectionItemRow
                     key={item}
@@ -499,6 +556,20 @@ export default function TruckInspectionForm() {
 
         </div>
         
+        {/* Printed Document Signatures */}
+        <div className="hidden print:grid grid-cols-2 gap-12 pt-8 border-t-2 border-gray-900 mt-6 avoid-break">
+          <div className="text-center">
+            <div className="border-b border-gray-400 mb-2 h-10"></div>
+            <p className="text-xs font-bold uppercase text-gray-900">Firma del Inspector / Técnico</p>
+            <p className="text-[10px] text-gray-500">Brianna Heavy Equipment SRL</p>
+          </div>
+          <div className="text-center">
+            <div className="border-b border-gray-400 mb-2 h-10"></div>
+            <p className="text-xs font-bold uppercase text-gray-900">Firma del Conductor / Recibido</p>
+            <p className="text-[10px] text-gray-500">Conformidad de Entrega</p>
+          </div>
+        </div>
+
       </div>
     </div>
   );

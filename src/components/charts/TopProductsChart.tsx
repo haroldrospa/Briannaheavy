@@ -1,81 +1,69 @@
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  Cell
-} from 'recharts';
-import { useTheme } from '../../contexts/ThemeContext';
+import { TagIcon } from '@heroicons/react/24/outline';
 
-const data = [
-  { name: 'Filtro Aceite', sales: 400 },
-  { name: 'Neumático 22.5', sales: 300 },
-  { name: 'Batería 12V', sales: 250 },
-  { name: 'Retroexcavadora', sales: 15 },
-  { name: 'Frenos', sales: 210 },
+const topProducts = [
+  { name: 'Filtro de Aceite XJ-9', category: 'Piezas', sales: 120, revenue: 5400, percent: 85 },
+  { name: 'Neumático 22.5 Goodyear', category: 'Piezas', sales: 45, revenue: 15750, percent: 70 },
+  { name: 'Batería 12V 100Ah', category: 'Baterías', sales: 32, revenue: 3840, percent: 55 },
+  { name: 'Kit de Frenos Delanteros', category: 'Frenos', sales: 24, revenue: 5040, percent: 42 },
+  { name: 'Aceite Hidráulico ISO 46', category: 'Lubricantes', sales: 18, revenue: 2160, percent: 30 },
 ];
 
 export default function TopProductsChart() {
-  const { isDark } = useTheme();
-
-  const gridColor = isDark ? '#27272a' : '#E2E8F0';
-  const textColor = isDark ? '#a1a1aa' : '#64748B';
-  const yTextColor = isDark ? '#d4d4d8' : '#475569';
-  const tooltipBg = isDark ? '#18181b' : '#ffffff';
-  const tooltipBorder = isDark ? '#27272a' : '#E2E8F0';
-  const tooltipText = isDark ? '#f4f4f5' : '#0F172A';
-  const cursorFill = isDark ? 'rgba(255, 255, 255, 0.05)' : '#F8FAFC';
-
-  const slateStop1 = isDark ? '#52525b' : '#475569';
-  const slateStop2 = isDark ? '#3f3f46' : '#334155';
-
   return (
-    <div className="h-full w-full flex flex-col">
-      <div className="flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-          >
-            <defs>
-              <linearGradient id="barGradientRed" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#ED1C24" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="#990F18" stopOpacity={1} />
-              </linearGradient>
-              <linearGradient id="barGradientSlate" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor={slateStop1} stopOpacity={0.9} />
-                <stop offset="100%" stopColor={slateStop2} stopOpacity={1} />
-              </linearGradient>
-              <filter id="barShadow" height="200%">
-                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000" floodOpacity={isDark ? '0.4' : '0.1'}/>
-              </filter>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={gridColor} />
-            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: textColor, fontSize: 12, fontWeight: 500 }} dy={10} />
-            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: yTextColor, fontSize: 12, fontWeight: 500 }} width={120} />
-            <Tooltip 
-              cursor={{ fill: cursorFill }}
-              contentStyle={{ 
-                borderRadius: '12px', 
-                border: `1px solid ${tooltipBorder}`, 
-                boxShadow: isDark ? '0 10px 25px -5px rgba(0, 0, 0, 0.5)' : '0 4px 6px -1px rgb(0 0 0 / 0.1)', 
-                backgroundColor: tooltipBg, 
-                fontWeight: 500, 
-                color: tooltipText 
-              }}
-              itemStyle={{ fontWeight: 600, color: tooltipText }}
-            />
-            <Bar dataKey="sales" name="Ventas" radius={[0, 4, 4, 0]} barSize={24} style={{ filter: 'url(#barShadow)' }}>
-              {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={index === 0 ? 'url(#barGradientRed)' : 'url(#barGradientSlate)'} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+    <div className="bg-white dark:bg-[#121318] rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 dark:border-zinc-800/80 flex flex-col h-full justify-between">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h3 className="text-lg font-black text-gray-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
+            <TagIcon className="h-5 w-5 text-[#ED1C24]" />
+            Productos Más Vendidos
+          </h3>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">Líderes de demanda en esta sesión</p>
+        </div>
+        <span className="text-xs font-bold text-[#ED1C24] bg-red-50 dark:bg-red-950/40 border border-red-200/40 dark:border-red-900/30 px-3 py-1 rounded-full">
+          Top 5
+        </span>
+      </div>
+
+      <div className="space-y-4 my-auto">
+        {topProducts.map((prod, idx) => (
+          <div key={prod.name} className="space-y-1.5">
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
+                  idx === 0 ? 'bg-[#ED1C24] text-white shadow-sm' :
+                  idx === 1 ? 'bg-gray-900 text-white dark:bg-zinc-800 dark:text-zinc-200' :
+                  'bg-gray-100 text-gray-500 dark:bg-zinc-800/50 dark:text-zinc-400'
+                }`}>
+                  #{idx + 1}
+                </span>
+                <span className="font-bold text-gray-900 dark:text-zinc-100 truncate">{prod.name}</span>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="font-black text-gray-900 dark:text-white font-mono">${prod.revenue.toLocaleString('en-US')}</span>
+                <span className="text-[11px] text-gray-400 font-normal ml-1">({prod.sales} uds)</span>
+              </div>
+            </div>
+
+            {/* Custom progress bar */}
+            <div className="h-2 w-full bg-gray-100 dark:bg-zinc-800/80 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  idx === 0 
+                    ? 'bg-gradient-to-r from-[#ED1C24] to-red-600' 
+                    : idx === 1 
+                      ? 'bg-gradient-to-r from-gray-900 to-slate-700 dark:from-zinc-400 dark:to-zinc-600' 
+                      : 'bg-gradient-to-r from-slate-400 to-gray-300 dark:from-zinc-600 dark:to-zinc-700'
+                }`}
+                style={{ width: `${prod.percent}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="pt-4 mt-4 border-t border-gray-100 dark:border-zinc-800/60 flex items-center justify-between text-xs font-semibold text-gray-400 dark:text-zinc-500">
+        <span>Artículos en inventario: <strong className="text-gray-900 dark:text-white">124 cat.</strong></span>
+        <a href="/inventario" className="text-[#ED1C24] hover:underline font-bold">Ver todo</a>
       </div>
     </div>
   );

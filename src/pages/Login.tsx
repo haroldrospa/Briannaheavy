@@ -14,27 +14,38 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import loginBg from '../assets/login-bg.png';
 import logo from '../assets/logo.png';
+import { setActiveRole, type UserRole } from '../utils/rolePermissions';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('Administrador');
   const navigate = useNavigate();
   const { setTheme, isDark } = useTheme();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    const nameFromEmail = email.split('@')[0]?.replace('.', ' ').toUpperCase();
+    const activeName = (nameFromEmail && nameFromEmail.length > 2) ? nameFromEmail : 'HAROLD RODRÍGUEZ';
+    localStorage.setItem('brianna_user_name', activeName);
+    setActiveRole(selectedRole);
     setTimeout(() => {
       setIsLoading(false);
-      navigate('/dashboard');
+      if (selectedRole === 'Repuestos') {
+        navigate('/pos');
+      } else {
+        navigate('/dashboard');
+      }
     }, 900);
   };
 
-  const handleQuickFill = () => {
-    setEmail('admin@briannaheavy.com');
+  const handlePreset = (role: UserRole, emailStr: string) => {
+    setEmail(emailStr);
     setPassword('••••••••');
+    setSelectedRole(role);
   };
 
   return (
@@ -91,15 +102,34 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Quick Fill Preset */}
-        <div className="mt-6 text-center">
-          <button 
-            type="button"
-            onClick={handleQuickFill}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#fb3c44] hover:text-red-600 hover:underline bg-[#fb3c44]/10 dark:bg-[#fb3c44]/15 px-3.5 py-1.5 rounded-full border border-[#fb3c44]/25 transition-all cursor-pointer shadow-sm"
-          >
-            <span>Autocompletar acceso de prueba</span>
-          </button>
+        {/* Quick Role Fill Presets */}
+        <div className="mt-5 space-y-2">
+          <label className="block text-[11px] font-extrabold uppercase text-gray-400 dark:text-zinc-500 text-center tracking-wider">
+            Accesos Rápidos por Rol
+          </label>
+          <div className="flex justify-center gap-2">
+            <button 
+              type="button"
+              onClick={() => handlePreset('Administrador', 'admin@briannaheavy.com')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${selectedRole === 'Administrador' ? 'bg-[#fb3c44] text-white border-[#fb3c44] shadow-sm' : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700'}`}
+            >
+              👑 Admin Total
+            </button>
+            <button 
+              type="button"
+              onClick={() => handlePreset('Oficina', 'oficina@briannaheavy.com')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${selectedRole === 'Oficina' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700'}`}
+            >
+              👔 Oficina
+            </button>
+            <button 
+              type="button"
+              onClick={() => handlePreset('Repuestos', 'repuestos@briannaheavy.com')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer border ${selectedRole === 'Repuestos' ? 'bg-amber-600 text-white border-amber-600 shadow-sm' : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700'}`}
+            >
+              🔧 Repuestos
+            </button>
+          </div>
         </div>
 
         {/* Login Form */}

@@ -6,7 +6,7 @@ import AuthLayout from './layouts/AuthLayout';
 import LoadingSpinner from './components/LoadingSpinner';
 import { ThemeProvider } from './contexts/ThemeContext';
 
-// Lazy loaded pages
+// Páginas Lazy Loaded
 const Login = React.lazy(() => import('./pages/Login'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const POS = React.lazy(() => import('./pages/POS'));
@@ -15,6 +15,7 @@ const Financing = React.lazy(() => import('./pages/Financing'));
 const Settings = React.lazy(() => import('./pages/Settings'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const Customers = React.lazy(() => import('./pages/Customers'));
+const Invoices = React.lazy(() => import('./pages/Invoices'));
 const Users = React.lazy(() => import('./pages/Users'));
 
 // Configuración de React Query
@@ -44,6 +45,7 @@ function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/clientes" element={<Customers />} />
+              <Route path="/facturas" element={<Invoices />} />
               <Route path="/usuarios" element={<Users />} />
               <Route path="/pos" element={<POS />} />
               <Route path="/inventario" element={<Inventory />} />
