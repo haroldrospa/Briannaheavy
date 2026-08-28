@@ -21,6 +21,8 @@ export interface InventoryItem {
   description?: string;
   image_url?: string;
   department?: string;
+  includes_itbis?: boolean;
+  itbis_type?: string;
   created_at?: string;
 }
 

@@ -33,6 +33,8 @@ export interface InventoryItem {
   part_number?: string;
   compatibility?: string;
   description?: string;
+  includes_itbis?: boolean;
+  itbis_type?: 'incluido' | 'adicional' | 'exento';
 }
 
 interface ItemModalProps {
@@ -60,7 +62,9 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
     department: 'Lote 1',
     barcode: '',
     partNumber: '',
-    compatibility: ''
+    compatibility: '',
+    includes_itbis: true,
+    itbis_type: 'incluido'
   });
 
   const [marginPercent, setMarginPercent] = useState<string>('30');
@@ -100,7 +104,11 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
         serialNumber: (targetItem as any).vin ?? (targetItem as any).serialNumber ?? '',
         compatibility: (targetItem as any).description ?? (targetItem as any).compatibility ?? '',
         status: targetItem.status || 'Disponible',
-        department: (targetItem as any).department || 'Lote 1'
+        department: (targetItem as any).department || 'Lote 1',
+        includes_itbis: (targetItem as any).includes_itbis !== undefined 
+          ? Boolean((targetItem as any).includes_itbis) 
+          : ((targetItem as any).itbis_type === 'adicional' ? false : true),
+        itbis_type: (targetItem as any).itbis_type || ((targetItem as any).includes_itbis === false ? 'adicional' : 'incluido')
       });
     } else {
       setMarginPercent('30');
@@ -118,7 +126,9 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
         department: 'Lote 1',
         barcode: '',
         partNumber: '',
-        compatibility: ''
+        compatibility: '',
+        includes_itbis: true,
+        itbis_type: 'incluido'
       });
     }
   }, [targetItem]);
@@ -220,6 +230,8 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
         year: formData.year ? parseInt(String(formData.year), 10) : undefined,
         mileage: formData.mileage ? parseFloat(String(formData.mileage)) : undefined,
         hours: formData.hours ? parseFloat(String(formData.hours)) : undefined,
+        includes_itbis: formData.includes_itbis ?? (formData.itbis_type !== 'adicional'),
+        itbis_type: formData.itbis_type || 'incluido'
       });
       onClose();
     } catch (err) {
@@ -587,6 +599,91 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
                   </div>
 
                 </div>
+
+                {/* 4. Selector de Inclusión de ITBIS (18%) */}
+                <div className="mt-3.5 pt-3 border-t border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-800 dark:text-zinc-200 uppercase tracking-tight">
+                      ¿El Precio de Venta incluye ITBIS (18%)?
+                    </label>
+                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium">
+                      Configura si el precio fijado ya contiene el impuesto o se calculará adicional al facturar.
+                    </p>
+                  </div>
+
+                  {/* Toggle / Segmented Buttons */}
+                  <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#16171d] rounded-xl border border-gray-200 dark:border-zinc-700/80 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, includes_itbis: true, itbis_type: 'incluido' }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        formData.includes_itbis !== false && formData.itbis_type !== 'exento' && formData.itbis_type !== 'adicional'
+                          ? 'bg-[#ED1C24] text-white shadow-xs font-black'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <span>✓</span>
+                      <span>Sí, Incluye ITBIS</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, includes_itbis: false, itbis_type: 'adicional' }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        formData.includes_itbis === false || formData.itbis_type === 'adicional'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs font-black'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <span>+</span>
+                      <span>No incluye (+18%)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, includes_itbis: true, itbis_type: 'exento' }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        formData.itbis_type === 'exento'
+                          ? 'bg-amber-600 text-white shadow-xs font-black'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <span>0%</span>
+                      <span>Exento</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Desglose visual en tiempo real */}
+                {currentPrice > 0 && (
+                  <div className="mt-2.5 px-3 py-2 bg-white/80 dark:bg-[#16171d]/80 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                    {formData.itbis_type === 'exento' ? (
+                      <div className="flex items-center gap-3 text-amber-700 dark:text-amber-400 font-bold">
+                        <span>🏷️ Precio Exento: RD$ {currentPrice.toFixed(2)}</span>
+                        <span>•</span>
+                        <span>ITBIS: RD$ 0.00 (0%)</span>
+                        <span>•</span>
+                        <span>Total Factura: RD$ {currentPrice.toFixed(2)}</span>
+                      </div>
+                    ) : (formData.includes_itbis === false || formData.itbis_type === 'adicional') ? (
+                      <div className="flex items-center gap-3 text-gray-700 dark:text-zinc-300 font-bold">
+                        <span>💵 Precio Neto: RD$ {currentPrice.toFixed(2)}</span>
+                        <span className="text-gray-400">+</span>
+                        <span className="text-[#ED1C24]">ITBIS (+18%): RD$ {(currentPrice * 0.18).toFixed(2)}</span>
+                        <span className="text-gray-400">=</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-black">Total Factura: RD$ {(currentPrice * 1.18).toFixed(2)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 text-gray-700 dark:text-zinc-300 font-bold">
+                        <span>📦 Base Imponible: RD$ {(currentPrice / 1.18).toFixed(2)}</span>
+                        <span className="text-gray-400">+</span>
+                        <span className="text-[#ED1C24]">ITBIS Incluido (18%): RD$ {(currentPrice - (currentPrice / 1.18)).toFixed(2)}</span>
+                        <span className="text-gray-400">=</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-black">PVP Total: RD$ {currentPrice.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Campos Opcionales para Piezas */}

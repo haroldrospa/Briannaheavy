@@ -275,7 +275,16 @@ export default function Inventory() {
                         RD$ {(item.cost || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-4 px-6 font-black text-gray-900 dark:text-zinc-100 text-sm">
-                        RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        <div>RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-[10px] font-bold mt-0.5">
+                          {item.itbis_type === 'exento' ? (
+                            <span className="text-amber-600 dark:text-amber-400">Exento</span>
+                          ) : item.includes_itbis === false || item.itbis_type === 'adicional' ? (
+                            <span className="text-blue-600 dark:text-blue-400">+ 18% ITBIS</span>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400">ITBIS incl.</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2">

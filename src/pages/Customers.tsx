@@ -7,9 +7,12 @@ import {
   EnvelopeIcon,
   BuildingOfficeIcon,
   XMarkIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  CheckCircleIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer, deleteCustomer, type Customer } from '../services/customersService';
+import { searchDgiiRnc } from '../services/dgiiService';
 import { useConfirm } from '../contexts/ConfirmContext';
 
 // Defined outside component — stable reference, never recreated on re-render
@@ -33,6 +36,9 @@ export default function Customers() {
   const [statusFilter, setStatusFilter] = useState('Todos');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSearchingDgii, setIsSearchingDgii] = useState(false);
+  const [dgiiMessage, setDgiiMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     document_id: '',
@@ -51,12 +57,58 @@ export default function Customers() {
     loadData();
   }, [loadData]);
 
+  const handleSearchDgii = async (rncInput?: string) => {
+    const raw = rncInput !== undefined ? rncInput : newCustomer.document_id;
+    const clean = raw.replace(/\D/g, '').trim();
+
+    if (clean.length !== 9 && clean.length !== 11) {
+      setDgiiMessage({
+        type: 'info',
+        text: 'Ingrese 9 dígitos para RNC o 11 para Cédula para consultar en DGII.'
+      });
+      return;
+    }
+
+    setIsSearchingDgii(true);
+    setDgiiMessage(null);
+
+    try {
+      const res = await searchDgiiRnc(clean);
+      if (res.success && res.name) {
+        setNewCustomer(prev => ({
+          ...prev,
+          name: res.name,
+          document_id: clean.length === 9
+            ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
+            : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+        }));
+        setDgiiMessage({
+          type: 'success',
+          text: `DGII: ${res.name} (${res.status})`
+        });
+      } else {
+        setDgiiMessage({
+          type: 'error',
+          text: res.error || 'No se encontró en DGII. Puede escribir el nombre manualmente.'
+        });
+      }
+    } catch {
+      setDgiiMessage({
+        type: 'error',
+        text: 'Error consultando DGII. Ingrese los datos manualmente.'
+      });
+    } finally {
+      setIsSearchingDgii(false);
+    }
+  };
+
   const handleCreateCustomer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.name || !newCustomer.document_id) return;
     await createCustomer(newCustomer);
     setIsModalOpen(false);
     setNewCustomer({ name: '', document_id: '', email: '', phone: '', address: '', status: 'Activo' });
+    setDgiiMessage(null);
     loadData();
   }, [newCustomer, loadData]);
 
@@ -243,27 +295,94 @@ export default function Customers() {
               </div>
 
               <form onSubmit={handleCreateCustomer} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto">
+                {/* 1. RNC / Cédula (Primer campo con búsqueda DGII) */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">Nombre Completo / Razón Social *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300">
+                      RNC / Cédula <span className="text-[#ED1C24]">*</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
+                      Consulta Automática DGII
+                    </span>
+                  </div>
+                  <div className="relative flex gap-2">
+                    <div className="relative flex-1">
+                      <input 
+                        type="text" 
+                        required 
+                        autoFocus
+                        value={newCustomer.document_id} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewCustomer({ ...newCustomer, document_id: val });
+                          const clean = val.replace(/\D/g, '').trim();
+                          if (clean.length === 9 || clean.length === 11) {
+                            handleSearchDgii(clean);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSearchDgii();
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none font-mono focus:ring-2 focus:ring-[#ED1C24]/30" 
+                        placeholder="Ej. 131-45678-9 o 402-2384910-1"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSearchingDgii}
+                      onClick={() => handleSearchDgii()}
+                      className="px-4 py-3 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-gray-900 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                      title="Consultar Razón Social en DGII"
+                    >
+                      {isSearchingDgii ? (
+                        <>
+                          <ArrowPathIcon className="w-4 h-4 animate-spin text-[#ED1C24]" />
+                          <span>Buscando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MagnifyingGlassIcon className="w-4 h-4" />
+                          <span>Buscar en DGII</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* DGII Feedback Message */}
+                  {dgiiMessage && (
+                    <div className={`mt-1.5 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 ${
+                      dgiiMessage.type === 'success'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                        : dgiiMessage.type === 'error'
+                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                        : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                    }`}>
+                      {dgiiMessage.type === 'success' && <CheckCircleIcon className="w-4 h-4 shrink-0 text-emerald-600" />}
+                      <span>{dgiiMessage.text}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Nombre Completo / Razón Social (Auto-poblado por DGII) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300">
+                      Nombre Completo / Razón Social <span className="text-[#ED1C24]">*</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
+                      Oficial DGII
+                    </span>
+                  </div>
                   <input 
                     type="text" 
                     required 
                     value={newCustomer.name} 
                     onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none" 
+                    className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 uppercase" 
                     placeholder="Ej. Construcciones del Este SRL"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">RNC / Cédula *</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newCustomer.document_id} 
-                    onChange={(e) => setNewCustomer({ ...newCustomer, document_id: e.target.value })}
-                    className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none font-mono" 
-                    placeholder="Ej. 131-45678-9"
                   />
                 </div>
 
@@ -274,7 +393,7 @@ export default function Customers() {
                       type="text" 
                       value={newCustomer.phone} 
                       onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                      className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none" 
+                      className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30" 
                       placeholder="809-555-0100"
                     />
                   </div>
@@ -285,7 +404,7 @@ export default function Customers() {
                       type="email" 
                       value={newCustomer.email} 
                       onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                      className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none" 
+                      className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30" 
                       placeholder="contacto@empresa.com"
                     />
                   </div>
