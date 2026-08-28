@@ -643,6 +643,19 @@ export default function POS() {
         // Opción 1: Facturación Electrónica Oficial (DGII vía Alanube / e-CF Resiliente)
         finalNcfType = electronicDocType; // 'E31' | 'E32' | 'E46'
 
+        if (electronicDocType === 'E31') {
+          const cleanBuyerRnc = (selectedClient?.rnc || '').replace(/\D/g, '');
+          if (!selectedClient || (cleanBuyerRnc.length !== 9 && cleanBuyerRnc.length !== 11)) {
+            showAlert({
+              title: 'Cliente Requerido para Crédito Fiscal (E31)',
+              description: 'Para emitir un comprobante de Crédito Fiscal (E31), es obligatorio seleccionar un cliente con RNC (9 dígitos) o Cédula (11 dígitos) registrado.',
+              variant: 'warning'
+            });
+            setIsTransmitting(false);
+            return;
+          }
+        }
+
         ecfRes = await transmitElectronicInvoice({
           invoiceNumber: `FAC-E-${Date.now().toString().slice(-6)}`,
           eNcfType: electronicDocType,

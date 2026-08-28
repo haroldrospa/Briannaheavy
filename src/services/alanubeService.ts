@@ -143,15 +143,18 @@ const buildAlanubePayload = (
   eNcf: string,
 ) => {
   const today = new Date().toISOString().split('T')[0];
+  const nextYearEnd = `${new Date().getFullYear() + 1}-12-31`;
   const hasTax = payload.taxAmount > 0;
   const dgiiPaymentMethod = mapPaymentMethodToDGII(payload.paymentMethod);
+  const cleanCompanyRnc = (config.companyRnc || '131488417').replace(/\D/g, '').trim();
 
   const body: Record<string, any> = {
     company: {
       id: config.companyId || '01M0TYXY3TC2KMKWHTNAEW643R',
     },
     idDoc: {
-      encf: eNcf,                          // 13 caracteres: ej. E320000000014
+      encf: eNcf,                          // 13 caracteres: ej. E310000000001
+      sequenceDueDate: nextYearEnd,        // Requerido por DGII: YYYY-MM-DD
       paymentType: 1,                      // 1=Contado
       incomeType: 1,                       // 1=Ingresos por operaciones
       taxAmountIndicator: 0,               // 0=montos sin ITBIS incluido en líneas
@@ -163,8 +166,8 @@ const buildAlanubePayload = (
       ],
     },
     sender: {
-      rnc: config.companyRnc,
-      companyName: config.companyName,
+      rnc: cleanCompanyRnc,
+      companyName: config.companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
       address: 'REPÚBLICA DOMINICANA',
       stampDate: today,
       economicActivity: 'Equipos y Maquinaria Pesada',
@@ -193,10 +196,13 @@ const buildAlanubePayload = (
   };
 
   if (payload.customerRnc && payload.customerRnc.trim()) {
-    body.buyer = {
-      rnc: payload.customerRnc.trim(),
-      companyName: payload.customerName || 'Cliente',
-    };
+    const cleanBuyerRnc = payload.customerRnc.replace(/\D/g, '').trim();
+    if (cleanBuyerRnc) {
+      body.buyer = {
+        rnc: cleanBuyerRnc,
+        companyName: (payload.customerName || 'Cliente').trim().substring(0, 150),
+      };
+    }
   }
 
   return body;
@@ -221,7 +227,21 @@ export const buildDgiiVerificationUrl = (
 export const formatAlanubeError = (data: any, status: number): string => {
   if (!data) return `Error ${status} del servidor fiscal Alanube / DGII`;
 
-  // 1. Array de errores (pueden ser strings u objetos con { message, code, valor, etc. })
+  // 1. Array de errores de validación JSON Schema de Alanube
+  if (Array.isArray(data.message) && data.message.length > 0) {
+    return data.message
+      .map((msg: any) => {
+        if (typeof msg === 'string') {
+          return msg
+            .replace(/instance\.idDoc requires property "sequenceDueDate"/, 'Falta la fecha de vencimiento de secuencia (sequenceDueDate)')
+            .replace(/instance\.buyer\.rnc does not match pattern "\^\[0-9\]\+\$"/, 'El RNC/Cédula del comprador debe contener únicamente números');
+        }
+        return String(msg);
+      })
+      .join('\n');
+  }
+
+  // 2. Array de errores
   if (Array.isArray(data.errors) && data.errors.length > 0) {
     return data.errors
       .map((e: any) => {
@@ -234,14 +254,14 @@ export const formatAlanubeError = (data: any, status: number): string => {
       .join('\n');
   }
 
-  // 2. Objeto con mapa de errores { field: "error" }
+  // 3. Objeto con mapa de errores { field: "error" }
   if (data.errors && typeof data.errors === 'object') {
     return Object.entries(data.errors)
       .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : (typeof (v as any)?.message === 'string' ? (v as any).message : JSON.stringify(v))}`)
       .join('\n');
   }
 
-  // 3. Array de respuestas de la DGII / Alanube ({ code, message })
+  // 4. Array de respuestas de la DGII / Alanube ({ code, message })
   if (Array.isArray(data.response) && data.response.length > 0) {
     return data.response
       .map((r: any) => {
@@ -254,14 +274,14 @@ export const formatAlanubeError = (data: any, status: number): string => {
       .join('\n');
   }
 
-  // 4. governmentResponse ({ value: [{ valor, codigo }] })
+  // 5. governmentResponse ({ value: [{ valor, codigo }] })
   if (data.governmentResponse?.value && Array.isArray(data.governmentResponse.value)) {
     return data.governmentResponse.value
       .map((v: any) => v?.valor || v?.message || JSON.stringify(v))
       .join('\n');
   }
 
-  // 5. Propiedades de texto directo
+  // 6. Propiedades de texto directo
   if (typeof data.message === 'string') return data.message;
   if (typeof data.error === 'string') return data.error;
   if (typeof data.description === 'string') return data.description;
