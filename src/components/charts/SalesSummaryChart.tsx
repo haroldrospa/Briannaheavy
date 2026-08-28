@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, 
   Bar, 
-  Cell,
+  Cell, 
   XAxis, 
   YAxis, 
   Tooltip, 
@@ -11,34 +11,34 @@ import {
 import { 
   ChartBarIcon, 
   TrophyIcon, 
-  CalendarDaysIcon,
-  ArrowTrendingUpIcon
+  CalendarDaysIcon, 
+  ArrowTrendingUpIcon 
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../../contexts/ThemeContext';
-
-const weeklyData = [
-  { name: 'Jue 30', sales: 1500 },
-  { name: 'Vie 31', sales: 6200 },
-  { name: 'Sáb 01', sales: 11200 },
-  { name: 'Dom 02', sales: 8200 },
-  { name: 'Lun 03', sales: 0 },
-  { name: 'Mar 04', sales: 0 },
-  { name: 'Mié 05', sales: 0 },
-];
-
-const monthlyData = [
-  { name: 'Sem 1', sales: 27321 },
-  { name: 'Sem 2', sales: 0 },
-  { name: 'Sem 3', sales: 0 },
-  { name: 'Sem 4', sales: 0 },
-];
-
+import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 
 export default function SalesSummaryChart() {
   const { isDark } = useTheme();
   const [period, setPeriod] = useState<'week' | 'month' | 'calendar'>('week');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 1)); // Iniciamos en Agosto 2026 como mock
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [invoices, setInvoices] = useState<Invoice[]>(getLocalStorageInvoices);
+
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      try {
+        const data = await fetchInvoices();
+        if (isMounted && data && data.length > 0) {
+          setInvoices(data);
+        }
+      } catch (e) {
+        console.error('Error fetching invoices in chart:', e);
+      }
+    };
+    load();
+    return () => { isMounted = false; };
+  }, []);
 
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -48,15 +48,90 @@ export default function SalesSummaryChart() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
+  // 1. Weekly Data (Past 7 days)
+  const weeklyData = useMemo(() => {
+    const daysName = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const result = [];
+    const today = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayLabel = `${daysName[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}`;
+
+      // Sum sales for this day
+      const daySales = invoices
+        .filter(inv => {
+          if (!inv.created_at) return false;
+          return inv.created_at.startsWith(dateStr);
+        })
+        .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+
+      result.push({
+        name: dayLabel,
+        dateKey: dateStr,
+        sales: daySales
+      });
+    }
+    return result;
+  }, [invoices]);
+
+  // 2. Monthly Data (Weeks of current month)
+  const monthlyData = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const weeks = [
+      { name: 'Sem 1', sales: 0 },
+      { name: 'Sem 2', sales: 0 },
+      { name: 'Sem 3', sales: 0 },
+      { name: 'Sem 4', sales: 0 },
+    ];
+
+    invoices.forEach(inv => {
+      if (!inv.created_at) return;
+      const invDate = new Date(inv.created_at);
+      if (invDate.getFullYear() === year && invDate.getMonth() === month) {
+        const day = invDate.getDate();
+        const weekIndex = Math.min(3, Math.floor((day - 1) / 7));
+        weeks[weekIndex].sales += Number(inv.total_amount) || 0;
+      }
+    });
+
+    return weeks;
+  }, [invoices, currentDate]);
+
+  // Totals & Best Day
+  const totalWeekly = useMemo(() => weeklyData.reduce((acc, d) => acc + d.sales, 0), [weeklyData]);
+  
+  const totalMonthly = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    return invoices
+      .filter(inv => {
+        if (!inv.created_at) return false;
+        const invDate = new Date(inv.created_at);
+        return invDate.getFullYear() === year && invDate.getMonth() === month;
+      })
+      .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+  }, [invoices, currentDate]);
+
+  const bestDay = useMemo(() => {
+    if (weeklyData.length === 0) return { name: 'Hoy', sales: 0 };
+    const sorted = [...weeklyData].sort((a, b) => b.sales - a.sales);
+    return sorted[0].sales > 0 ? sorted[0] : { name: 'Hoy', sales: 0 };
+  }, [weeklyData]);
+
+  // Calendar Days Grid
   const getCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
     
     // Lunes = inicio de semana (0=Lun, 6=Dom)
     const startOffset = firstDay === 0 ? 6 : firstDay - 1;
-    
     const days = [];
     
     for (let i = 0; i < startOffset; i++) {
@@ -64,19 +139,19 @@ export default function SalesSummaryChart() {
     }
     
     for (let i = 1; i <= daysInMonth; i++) {
-      const isAug2026 = year === 2026 && month === 7;
-      let sales = null;
-      let weekTotal = null;
-      let isToday = false;
+      const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === i;
       
-      // Mock data sólo para Agosto 2026
-      if (isAug2026) {
-        if (i === 1) sales = 11200;
-        if (i === 2) { sales = 8200; weekTotal = 19400; }
-        if (i === 5) isToday = true;
-      }
-      
-      days.push({ date: i.toString(), sales, weekTotal, isToday });
+      const daySales = invoices
+        .filter(inv => inv.created_at && inv.created_at.startsWith(dStr))
+        .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+
+      days.push({ 
+        date: i.toString(), 
+        sales: daySales > 0 ? daySales : null, 
+        weekTotal: null, 
+        isToday 
+      });
     }
     
     const totalSlots = 42;
@@ -183,7 +258,7 @@ export default function SalesSummaryChart() {
                     axisLine={false} 
                     tickLine={false} 
                     tick={{ fill: isDark ? '#8b949e' : '#64748b', fontSize: 10, fontWeight: 700 }} 
-                    tickFormatter={(val) => `$${val / 1000}k`} 
+                    tickFormatter={(val) => `$${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val}`} 
                   />
                   <Tooltip 
                     cursor={false}
@@ -195,7 +270,7 @@ export default function SalesSummaryChart() {
                       fontWeight: 'bold',
                       fontSize: '12px'
                     }}
-                    formatter={(val: any) => [`$${Number(val || 0).toLocaleString()}`, 'Ventas']}
+                    formatter={(val: any) => [`RD$ ${Number(val || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`, 'Ventas']}
                   />
                   
                   <Bar 
@@ -236,7 +311,7 @@ export default function SalesSummaryChart() {
               <div className="grid grid-rows-6 gap-1 flex-1">
                 {Array.from({ length: 6 }).map((_, rowIndex) => {
                   const weekDays = calendarDays.slice(rowIndex * 7, (rowIndex + 1) * 7);
-                  const weekTotal = weekDays.find(d => d.weekTotal !== null)?.weekTotal;
+                  const weekTotal = weekDays.reduce((sum, d) => sum + (d.sales || 0), 0);
 
                   return (
                     <div key={`row-${rowIndex}`} className="grid grid-cols-8 gap-1">
@@ -272,7 +347,7 @@ export default function SalesSummaryChart() {
                       })}
                       {/* Week Total Column */}
                       <div className={`flex flex-col items-center justify-center rounded-xl border ${isDark ? 'border-[#303842]' : 'border-gray-200'} bg-transparent h-[42px] sm:h-[55px]`}>
-                        {weekTotal && (
+                        {weekTotal > 0 && (
                           <>
                             <span className={`text-[8px] sm:text-[9px] font-bold ${isDark ? 'text-gray-500' : 'text-gray-400'} uppercase`}>Total</span>
                             <span className="text-[9px] sm:text-[10px] font-bold text-[#ED1C24]">
@@ -288,7 +363,9 @@ export default function SalesSummaryChart() {
               
               <div className={`flex justify-between items-center px-4 pt-3 border-t ${isDark ? 'border-[#303842]' : 'border-gray-200'}`}>
                 <span className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total del mes</span>
-                <span className="text-xs sm:text-sm font-bold text-[#ED1C24]">$19,441.00</span>
+                <span className="text-xs sm:text-sm font-bold text-[#ED1C24]">
+                  RD$ {totalMonthly.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           )}
@@ -302,7 +379,9 @@ export default function SalesSummaryChart() {
             </div>
             <div>
               <p className={`text-[10px] sm:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} font-semibold mb-0.5`}>Total Semanal</p>
-              <h3 className={`text-xs sm:text-base lg:text-xl font-bold font-mono tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>$27,321.00</h3>
+              <h3 className={`text-xs sm:text-base lg:text-lg font-black font-mono tracking-tight ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>
+                RD$ {totalWeekly.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </h3>
             </div>
           </div>
 
@@ -312,7 +391,9 @@ export default function SalesSummaryChart() {
             </div>
             <div>
               <p className={`text-[10px] sm:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} font-semibold mb-0.5`}>Total Mensual</p>
-              <h3 className={`text-xs sm:text-base lg:text-xl font-bold font-mono tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>$25,761.00</h3>
+              <h3 className={`text-xs sm:text-base lg:text-lg font-black font-mono tracking-tight ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>
+                RD$ {totalMonthly.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </h3>
             </div>
           </div>
 
@@ -322,8 +403,12 @@ export default function SalesSummaryChart() {
             </div>
             <div>
               <p className={`text-[10px] sm:text-xs ${isDark ? 'text-[#ED1C24]' : 'text-red-700'} font-semibold mb-0.5`}>Mejor Día</p>
-              <h3 className={`text-xs sm:text-base lg:text-xl font-bold font-mono tracking-tight ${isDark ? 'text-[#ED1C24]' : 'text-red-600'}`}>Sáb 01</h3>
-              <p className={`text-[9px] sm:text-[10px] ${isDark ? 'text-gray-400' : 'text-red-500'} font-bold mt-0.5`}>$11,200.00</p>
+              <h3 className={`text-xs sm:text-base lg:text-lg font-black font-mono tracking-tight ${isDark ? 'text-[#ED1C24]' : 'text-red-600'} truncate`}>
+                {bestDay.name}
+              </h3>
+              <p className={`text-[9px] sm:text-[10px] ${isDark ? 'text-gray-400' : 'text-red-500'} font-bold mt-0.5`}>
+                RD$ {bestDay.sales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </p>
             </div>
           </div>
         </div>

@@ -37,6 +37,51 @@ export interface Invoice {
 
 const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 
+export const DEFAULT_INVOICES: Invoice[] = [
+  {
+    id: 'inv-seed-1',
+    invoice_number: 'FAC-0001',
+    ncf: 'E310000000012',
+    ncf_type: 'E31',
+    customer_name: 'Construcciones & Maquinarias del Caribe SRL',
+    customer_rnc: '101-54321-8',
+    subtotal: 439481.36,
+    tax_amount: 79106.64,
+    total_amount: 518588.76,
+    payment_method: 'Transferencia',
+    cashier_name: 'Harold Rosado',
+    status: 'Pagada',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    is_electronic: true,
+    billing_mode: 'electronic',
+    items: [
+      { description: 'Inyector Diésel Bosch Common Rail', quantity: 6, unit_price: 22000, total_price: 132000 },
+      { description: 'Bomba de Agua Caterpillar C15', quantity: 2, unit_price: 28500, total_price: 57000 },
+      { description: 'Mantenimiento y Calibración Inyectores', quantity: 1, unit_price: 250481.36, total_price: 250481.36 }
+    ]
+  },
+  {
+    id: 'inv-seed-2',
+    invoice_number: 'FAC-0002',
+    ncf: 'B0100000045',
+    ncf_type: 'B01',
+    customer_name: 'Transports & Logistics RD SRL',
+    customer_rnc: '130-99881-2',
+    subtotal: 71610.17,
+    tax_amount: 12889.83,
+    total_amount: 84500.00,
+    payment_method: 'Tarjeta',
+    cashier_name: 'Harold Rosado',
+    status: 'Pagada',
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    items: [
+      { description: 'Disco de Freno Heavy Duty Meritor', quantity: 4, unit_price: 8500, total_price: 34000 },
+      { description: 'Filtro de Aceite Heavy Duty Donaldson', quantity: 10, unit_price: 1850, total_price: 18500 },
+      { description: 'Kit de Empacaduras Superior Cummins ISX', quantity: 1, unit_price: 34000, total_price: 34000 }
+    ]
+  }
+];
+
 // In-memory cache + deduplication + TTL
 let inMemoryInvoices: Invoice[] | null = null;
 let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
@@ -44,15 +89,24 @@ let lastInvoicesFetch = 0;
 const INVOICES_CACHE_TTL = 60_000; // 60 seconds TTL
 
 export const getLocalStorageInvoices = (): Invoice[] => {
-  if (inMemoryInvoices !== null) return inMemoryInvoices;
+  if (inMemoryInvoices !== null && inMemoryInvoices.length > 0) return inMemoryInvoices;
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      inMemoryInvoices = DEFAULT_INVOICES;
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_INVOICES));
+      return DEFAULT_INVOICES;
+    }
     const parsed = JSON.parse(raw);
-    inMemoryInvoices = Array.isArray(parsed) ? parsed : [];
-    return inMemoryInvoices;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      inMemoryInvoices = parsed;
+      return parsed;
+    }
+    inMemoryInvoices = DEFAULT_INVOICES;
+    return DEFAULT_INVOICES;
   } catch {
-    return [];
+    inMemoryInvoices = DEFAULT_INVOICES;
+    return DEFAULT_INVOICES;
   }
 };
 
