@@ -37,30 +37,7 @@ export interface Invoice {
 
 const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 
-export const DEFAULT_INVOICES: Invoice[] = [
-  {
-    id: 'inv-seed-1',
-    invoice_number: 'FAC-0001',
-    ncf: 'E310000000012',
-    ncf_type: 'E31',
-    customer_name: 'Construcciones & Maquinarias del Caribe SRL',
-    customer_rnc: '101-54321-8',
-    subtotal: 439481.36,
-    tax_amount: 79106.64,
-    total_amount: 518588.76,
-    payment_method: 'Transferencia',
-    cashier_name: 'Harold Rosado',
-    status: 'Pagada',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
-    is_electronic: true,
-    billing_mode: 'electronic',
-    items: [
-      { description: 'Inyector Diésel Bosch Common Rail', quantity: 6, unit_price: 22000, total_price: 132000 },
-      { description: 'Bomba de Agua Caterpillar C15', quantity: 2, unit_price: 28500, total_price: 57000 },
-      { description: 'Mantenimiento y Calibración Inyectores', quantity: 1, unit_price: 250481.36, total_price: 250481.36 }
-    ]
-  }
-];
+export const DEFAULT_INVOICES: Invoice[] = [];
 
 // In-memory cache + deduplication + TTL
 let inMemoryInvoices: Invoice[] | null = null;
@@ -69,24 +46,18 @@ let lastInvoicesFetch = 0;
 const INVOICES_CACHE_TTL = 60_000; // 60 seconds TTL
 
 export const getLocalStorageInvoices = (): Invoice[] => {
-  if (inMemoryInvoices !== null && inMemoryInvoices.length > 0) return inMemoryInvoices;
+  if (inMemoryInvoices !== null) return inMemoryInvoices;
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) {
-      inMemoryInvoices = DEFAULT_INVOICES;
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_INVOICES));
-      return DEFAULT_INVOICES;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       inMemoryInvoices = parsed;
       return parsed;
     }
-    inMemoryInvoices = DEFAULT_INVOICES;
-    return DEFAULT_INVOICES;
+    return [];
   } catch {
-    inMemoryInvoices = DEFAULT_INVOICES;
-    return DEFAULT_INVOICES;
+    return [];
   }
 };
 

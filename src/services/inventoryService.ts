@@ -28,147 +28,7 @@ export interface InventoryItem {
 
 const LOCAL_STORAGE_KEY = 'brianna_local_inventory';
 
-export const DEFAULT_INVENTORY: InventoryItem[] = [
-  {
-    id: 'inv-1',
-    name: 'Volteo Mack Granite 400',
-    type: 'Camión',
-    brand: 'Mack',
-    model: 'Granite 400',
-    year: 2019,
-    price: 4850000,
-    cost: 4100000,
-    status: 'Disponible',
-    vin: '1M2K189C8KM001928',
-    engine_number: 'CAT-C13-8821',
-    barcode: 'MACK-GRA-400',
-    stock: 1,
-    min_stock: 1,
-    department: 'Camiones',
-    description: 'Volteo de 14 metros cúbicos, motor Mack MP8, transmisión Eaton Fuller de 10 velocidades.'
-  },
-  {
-    id: 'inv-2',
-    name: 'Tractor de Oruga Caterpillar D6T',
-    type: 'Equipo_Pesado',
-    brand: 'Caterpillar',
-    model: 'D6T XL',
-    year: 2018,
-    price: 9200000,
-    cost: 8100000,
-    status: 'Disponible',
-    vin: 'CAT00D6TKJ8912301',
-    engine_number: 'CAT-C9-9912',
-    barcode: 'CAT-D6T-XL',
-    stock: 1,
-    min_stock: 1,
-    department: 'Equipos Pesados',
-    description: 'Tractor bulldózer con hoja semi-U y descarificador de 3 vástagos.'
-  },
-  {
-    id: 'inv-3',
-    name: 'Excavadora Hidráulica Komatsu PC200',
-    type: 'Equipo_Pesado',
-    brand: 'Komatsu',
-    model: 'PC200-8',
-    year: 2020,
-    price: 7500000,
-    cost: 6400000,
-    status: 'Disponible',
-    vin: 'KMTPC200H08912388',
-    engine_number: 'KMT-SAA6D107',
-    barcode: 'KOM-PC200',
-    stock: 1,
-    min_stock: 1,
-    department: 'Equipos Pesados',
-    description: 'Excavadora de 20 toneladas con balde de 1.2 m3 y líneas auxiliares para martillo.'
-  },
-  {
-    id: 'inv-4',
-    name: 'Filtro de Aceite Heavy Duty Donaldson',
-    type: 'Pieza',
-    brand: 'Donaldson',
-    model: 'P551808',
-    year: 2024,
-    price: 1850,
-    cost: 1100,
-    status: 'Disponible',
-    part_number: 'P551808',
-    barcode: '74233000192',
-    stock: 35,
-    min_stock: 10,
-    department: 'Filtros y Lubricantes',
-    description: 'Filtro para motores Mack MP7/MP8 y Volvo D13.'
-  },
-  {
-    id: 'inv-5',
-    name: 'Bomba de Agua Caterpillar C15',
-    type: 'Pieza',
-    brand: 'Caterpillar',
-    model: 'C15 Heavy',
-    year: 2024,
-    price: 28500,
-    cost: 19000,
-    status: 'Disponible',
-    part_number: '161-5719',
-    barcode: '74233000551',
-    stock: 6,
-    min_stock: 2,
-    department: 'Sistema de Enfriamiento',
-    description: 'Bomba de agua de reemplazo OEM para motor Caterpillar C15 Diésel.'
-  },
-  {
-    id: 'inv-6',
-    name: 'Inyector Diésel Bosch Common Rail',
-    type: 'Pieza',
-    brand: 'Bosch',
-    model: 'CRIN2-16',
-    year: 2024,
-    price: 22000,
-    cost: 15500,
-    status: 'Disponible',
-    part_number: '0445120067',
-    barcode: '74233000889',
-    stock: 12,
-    min_stock: 3,
-    department: 'Inyección Diésel',
-    description: 'Inyector diésel para camiones diésel pesados.'
-  },
-  {
-    id: 'inv-7',
-    name: 'Kit de Empacaduras Superior Cummins ISX',
-    type: 'Pieza',
-    brand: 'Cummins',
-    model: 'ISX15',
-    year: 2024,
-    price: 34000,
-    cost: 24000,
-    status: 'Disponible',
-    part_number: '4352145',
-    barcode: '74233000994',
-    stock: 4,
-    min_stock: 2,
-    department: 'Motor',
-    description: 'Juego de juntas y empaques superiores para motor Cummins ISX15.'
-  },
-  {
-    id: 'inv-8',
-    name: 'Disco de Freno Heavy Duty Meritor',
-    type: 'Pieza',
-    brand: 'Meritor',
-    model: 'M3297',
-    year: 2024,
-    price: 8500,
-    cost: 5800,
-    status: 'Disponible',
-    part_number: '23-12363-000',
-    barcode: '74233000331',
-    stock: 10,
-    min_stock: 4,
-    department: 'Frenos y Suspensión',
-    description: 'Disco de freno ventilado de alta resistencia para ejes Meritor.'
-  }
-];
+export const DEFAULT_INVENTORY: InventoryItem[] = [];
 
 let inMemoryInventory: InventoryItem[] | null = null;
 let inFlightInventoryPromise: Promise<InventoryItem[]> | null = null;
@@ -176,26 +36,20 @@ let lastInventoryFetch = 0;
 const INVENTORY_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageInventory = (): InventoryItem[] => {
-  if (inMemoryInventory !== null && inMemoryInventory.length > 0) {
+  if (inMemoryInventory !== null) {
     return inMemoryInventory;
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) {
-      inMemoryInventory = DEFAULT_INVENTORY;
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_INVENTORY));
-      return DEFAULT_INVENTORY;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       inMemoryInventory = parsed;
       return parsed;
     }
-    inMemoryInventory = DEFAULT_INVENTORY;
-    return DEFAULT_INVENTORY;
+    return [];
   } catch {
-    inMemoryInventory = DEFAULT_INVENTORY;
-    return DEFAULT_INVENTORY;
+    return [];
   }
 };
 

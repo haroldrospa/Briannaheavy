@@ -13,14 +13,7 @@ export interface Customer {
 
 const LOCAL_STORAGE_KEY = 'brianna_local_customers';
 
-export const DEFAULT_CUSTOMERS: Customer[] = [
-  { id: '1', name: 'Construcciones & Maquinarias del Caribe SRL', document_id: '101-54321-8', email: 'ventas@construcaribe.do', phone: '809-555-0192', address: 'Av. Luperón #45, Santo Domingo', status: 'Activo' },
-  { id: '2', name: 'Ing. Juan Pablo Gómez', document_id: '001-1234567-8', email: 'jgomez@gmail.com', phone: '829-555-8833', address: 'C/ Del Sol #12, Santiago', status: 'Activo' },
-  { id: '3', name: 'Transports & Logistics RD SRL', document_id: '130-99881-2', email: 'logistica@transports.do', phone: '809-555-4411', address: 'Zona Industrial de Haina', status: 'Activo' },
-  { id: '4', name: 'Agrícola El Valle SA', document_id: '102-77441-9', email: 'contacto@agricolavel.do', phone: '809-555-9900', address: 'Carretera Azua - Barahona Km 5', status: 'Activo' },
-  { id: '5', name: 'Constructora Metro RD', document_id: '131-44552-1', email: 'info@constructorametro.do', phone: '809-555-1234', address: 'Av. 27 de Febrero #204, Santo Domingo', status: 'Activo' },
-  { id: '6', name: 'Consumidor Final', document_id: '000-0000000-0', email: 'cliente@briannaheavy.com', phone: '809-555-0000', address: 'Santo Domingo', status: 'Activo' },
-];
+export const DEFAULT_CUSTOMERS: Customer[] = [];
 
 let inMemoryCustomers: Customer[] | null = null;
 let inFlightCustomersPromise: Promise<Customer[]> | null = null;
@@ -28,26 +21,20 @@ let lastCustomersFetch = 0;
 const CUSTOMERS_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageCustomers = (): Customer[] => {
-  if (inMemoryCustomers !== null && inMemoryCustomers.length > 0) {
+  if (inMemoryCustomers !== null) {
     return inMemoryCustomers;
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) {
-      inMemoryCustomers = DEFAULT_CUSTOMERS;
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_CUSTOMERS));
-      return DEFAULT_CUSTOMERS;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       inMemoryCustomers = parsed;
       return parsed;
     }
-    inMemoryCustomers = DEFAULT_CUSTOMERS;
-    return DEFAULT_CUSTOMERS;
+    return [];
   } catch {
-    inMemoryCustomers = DEFAULT_CUSTOMERS;
-    return DEFAULT_CUSTOMERS;
+    return [];
   }
 };
 

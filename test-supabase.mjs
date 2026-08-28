@@ -5,17 +5,14 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function test() {
-  const { data: invoices, error } = await supabase
-    .from('invoices')
-    .select('id, invoice_number, customer_name, total_amount, ncf, created_at')
-    .order('created_at', { ascending: false });
+async function testAll() {
+  console.log('--- CHECKING FINANCINGS TABLES ---');
+  
+  const { data: f, error: ef } = await supabase.from('financings').select('*');
+  console.log('financings table:', { count: f?.length, error: ef?.message });
 
-  console.log('Error:', error);
-  console.log('Total invoices in Supabase:', invoices?.length);
-  invoices?.forEach((inv, idx) => {
-    console.log(`${idx + 1}. [${inv.invoice_number}] ${inv.customer_name} - RD$ ${inv.total_amount} (${inv.ncf || 'Sin NCF'}) - ${inv.created_at}`);
-  });
+  const { data: inst, error: ei } = await supabase.from('installments').select('*');
+  console.log('installments table:', { count: inst?.length, error: ei?.message });
 }
 
-test();
+testAll();
