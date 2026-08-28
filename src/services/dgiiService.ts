@@ -93,7 +93,7 @@ export function cacheDgiiRnc(rawRnc: string, name: string, status: 'ACTIVO' | 'I
 }
 
 /**
- * Consulta un RNC (9 dígitos) o Cédula (11 dígitos) ante la DGII
+ * Consulta un RNC (9 dígitos) o Cédula (11 dígitos) ante la DGII / Padrón
  */
 export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
   const clean = (rawQuery || '').replace(/\D/g, '').trim();
@@ -164,7 +164,7 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
     console.warn('Error reading local RNC cache:', err);
   }
 
-  // 3. Si la estructura matemática es válida pero aún no tiene nombre asignado
+  // 3. Si la estructura matemática es válida pero aún no está en el directorio/historial
   if (isValidMath) {
     return {
       success: true,
@@ -182,7 +182,9 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
     name: '',
     status: 'NO_REGISTRADO',
     type: docType,
-    error: 'El RNC o Cédula no coincide con el algoritmo de verificación DGII.',
+    error: isFisico
+      ? 'Número de Cédula no válido según el algoritmo oficial.'
+      : 'Número de RNC no válido según el algoritmo oficial de la DGII.',
   };
 }
 

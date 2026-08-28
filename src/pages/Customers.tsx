@@ -74,9 +74,10 @@ export default function Customers() {
 
     try {
       const res = await searchDgiiRnc(clean);
-      const formattedDoc = clean.length === 9
-        ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
-        : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`;
+      const isFisico = clean.length === 11;
+      const formattedDoc = isFisico
+        ? `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+        : `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`;
 
       if (res.success && res.name) {
         setNewCustomer(prev => ({
@@ -86,21 +87,24 @@ export default function Customers() {
         }));
         setDgiiMessage({
           type: 'success',
-          text: `DGII Oficial: ${res.name} (${res.status})`
+          text: isFisico ? `Cédula Oficial: ${res.name}` : `DGII Oficial: ${res.name} (${res.status})`
         });
       } else if (res.success && res.isValidStructure) {
         setNewCustomer(prev => ({
           ...prev,
+          name: '',
           document_id: formattedDoc
         }));
         setDgiiMessage({
-          type: 'success',
-          text: `RNC Válido ante DGII (Módulo 11 Aprobado)`
+          type: 'info',
+          text: isFisico
+            ? `Cédula Válida (${formattedDoc}). Ingrese el nombre del cliente.`
+            : `RNC Válido (${formattedDoc}). Ingrese la Razón Social.`
         });
       } else {
         setDgiiMessage({
           type: 'error',
-          text: res.error || 'RNC no válido según algoritmo de DGII.'
+          text: res.error || 'Identificación no válida.'
         });
       }
     } catch {
