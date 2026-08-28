@@ -95,7 +95,7 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [
     status: 'Disponible',
     part_number: 'P551808',
     barcode: '74233000192',
-    stock: 45,
+    stock: 35,
     min_stock: 10,
     department: 'Filtros y Lubricantes',
     description: 'Filtro para motores Mack MP7/MP8 y Volvo D13.'
@@ -112,7 +112,7 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [
     status: 'Disponible',
     part_number: '161-5719',
     barcode: '74233000551',
-    stock: 8,
+    stock: 6,
     min_stock: 2,
     department: 'Sistema de Enfriamiento',
     description: 'Bomba de agua de reemplazo OEM para motor Caterpillar C15 Diésel.'
@@ -146,7 +146,7 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [
     status: 'Disponible',
     part_number: '4352145',
     barcode: '74233000994',
-    stock: 5,
+    stock: 4,
     min_stock: 2,
     department: 'Motor',
     description: 'Juego de juntas y empaques superiores para motor Cummins ISX15.'
@@ -163,7 +163,7 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [
     status: 'Disponible',
     part_number: '23-12363-000',
     barcode: '74233000331',
-    stock: 14,
+    stock: 10,
     min_stock: 4,
     department: 'Frenos y Suspensión',
     description: 'Disco de freno ventilado de alta resistencia para ejes Meritor.'

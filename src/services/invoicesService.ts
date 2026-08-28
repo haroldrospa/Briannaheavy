@@ -51,33 +51,13 @@ export const DEFAULT_INVOICES: Invoice[] = [
     payment_method: 'Transferencia',
     cashier_name: 'Harold Rosado',
     status: 'Pagada',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
     is_electronic: true,
     billing_mode: 'electronic',
     items: [
       { description: 'Inyector Diésel Bosch Common Rail', quantity: 6, unit_price: 22000, total_price: 132000 },
       { description: 'Bomba de Agua Caterpillar C15', quantity: 2, unit_price: 28500, total_price: 57000 },
       { description: 'Mantenimiento y Calibración Inyectores', quantity: 1, unit_price: 250481.36, total_price: 250481.36 }
-    ]
-  },
-  {
-    id: 'inv-seed-2',
-    invoice_number: 'FAC-0002',
-    ncf: 'B0100000045',
-    ncf_type: 'B01',
-    customer_name: 'Transports & Logistics RD SRL',
-    customer_rnc: '130-99881-2',
-    subtotal: 71610.17,
-    tax_amount: 12889.83,
-    total_amount: 84500.00,
-    payment_method: 'Tarjeta',
-    cashier_name: 'Harold Rosado',
-    status: 'Pagada',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    items: [
-      { description: 'Disco de Freno Heavy Duty Meritor', quantity: 4, unit_price: 8500, total_price: 34000 },
-      { description: 'Filtro de Aceite Heavy Duty Donaldson', quantity: 10, unit_price: 1850, total_price: 18500 },
-      { description: 'Kit de Empacaduras Superior Cummins ISX', quantity: 1, unit_price: 34000, total_price: 34000 }
     ]
   }
 ];
