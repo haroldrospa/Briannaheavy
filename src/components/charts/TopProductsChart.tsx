@@ -1,70 +1,99 @@
-import { TagIcon } from '@heroicons/react/24/outline';
+import { Link } from 'react-router-dom';
+import { 
+  ArrowRightIcon, 
+  TrophyIcon 
+} from '@heroicons/react/24/outline';
 
-const topProducts = [
-  { name: 'Filtro de Aceite XJ-9', category: 'Piezas', sales: 120, revenue: 5400, percent: 85 },
-  { name: 'Neumático 22.5 Goodyear', category: 'Piezas', sales: 45, revenue: 15750, percent: 70 },
-  { name: 'Batería 12V 100Ah', category: 'Baterías', sales: 32, revenue: 3840, percent: 55 },
-  { name: 'Kit de Frenos Delanteros', category: 'Frenos', sales: 24, revenue: 5040, percent: 42 },
-  { name: 'Aceite Hidráulico ISO 46', category: 'Lubricantes', sales: 18, revenue: 2160, percent: 30 },
-];
+const topProducts: any[] = [];
 
 export default function TopProductsChart() {
   return (
-    <div className="bg-white dark:bg-[#121318] rounded-[2rem] p-6 sm:p-8 shadow-sm border border-gray-100 dark:border-zinc-800/80 flex flex-col h-full justify-between">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-white dark:bg-[#121318] rounded-[2rem] p-6 sm:p-7 shadow-sm border border-gray-100 dark:border-zinc-800/80 flex flex-col h-full justify-between transition-colors duration-300">
+      
+      {/* Card Header */}
+      <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-lg font-black text-gray-900 dark:text-zinc-100 tracking-tight flex items-center gap-2">
-            <TagIcon className="h-5 w-5 text-[#ED1C24]" />
-            Productos Más Vendidos
-          </h3>
-          <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">Líderes de demanda en esta sesión</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight">
+              Productos Más Vendidos
+            </h3>
+          </div>
+          <p className="text-xs font-medium text-gray-400 dark:text-zinc-500 mt-0.5">
+            Líderes de demanda en esta sesión
+          </p>
         </div>
-        <span className="text-xs font-bold text-[#ED1C24] bg-red-50 dark:bg-red-950/40 border border-red-200/40 dark:border-red-900/30 px-3 py-1 rounded-full">
-          Top 5
+
+        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-3 py-1 rounded-full border border-red-200/60 dark:border-red-900/40">
+          <TrophyIcon className="h-3 w-3" />
+          <span>Top 5</span>
         </span>
       </div>
 
-      <div className="space-y-4 my-auto">
-        {topProducts.map((prod, idx) => (
-          <div key={prod.name} className="space-y-1.5">
-            <div className="flex justify-between items-center text-xs">
-              <div className="flex items-center gap-2 min-w-0 pr-2">
-                <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
-                  idx === 0 ? 'bg-[#ED1C24] text-white shadow-sm' :
-                  idx === 1 ? 'bg-gray-900 text-white dark:bg-zinc-800 dark:text-zinc-200' :
-                  'bg-gray-100 text-gray-500 dark:bg-zinc-800/50 dark:text-zinc-400'
-                }`}>
-                  #{idx + 1}
-                </span>
-                <span className="font-bold text-gray-900 dark:text-zinc-100 truncate">{prod.name}</span>
-              </div>
-              <div className="text-right shrink-0">
-                <span className="font-black text-gray-900 dark:text-white font-mono">${prod.revenue.toLocaleString('en-US')}</span>
-                <span className="text-[11px] text-gray-400 font-normal ml-1">({prod.sales} uds)</span>
-              </div>
-            </div>
-
-            {/* Custom progress bar */}
-            <div className="h-2 w-full bg-gray-100 dark:bg-zinc-800/80 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  idx === 0 
-                    ? 'bg-gradient-to-r from-[#ED1C24] to-red-600' 
-                    : idx === 1 
-                      ? 'bg-gradient-to-r from-gray-900 to-slate-700 dark:from-zinc-400 dark:to-zinc-600' 
-                      : 'bg-gradient-to-r from-slate-400 to-gray-300 dark:from-zinc-600 dark:to-zinc-700'
-                }`}
-                style={{ width: `${prod.percent}%` }}
-              />
-            </div>
+      {/* Product List */}
+      <div className="space-y-2.5 my-auto">
+        {topProducts.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 dark:text-zinc-500 font-medium text-xs">
+            <TrophyIcon className="h-8 w-8 mx-auto mb-2 opacity-40 text-gray-400" />
+            <p className="font-bold text-gray-600 dark:text-zinc-400">Sin datos de ventas aún</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Los productos más vendidos se calcularán automáticamente al realizar ventas.</p>
           </div>
-        ))}
+        ) : (
+          topProducts.map((prod) => (
+            <div 
+              key={prod.name}
+              className="p-3 rounded-2xl bg-gray-50/60 dark:bg-[#16171d]/60 hover:bg-gray-100/70 dark:hover:bg-[#181a20] border border-transparent hover:border-gray-200/80 dark:hover:border-zinc-800 transition-all duration-200 group"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`w-6 h-6 rounded-xl text-[10px] font-black flex items-center justify-center shrink-0 shadow-2xs ${prod.badgeBg}`}>
+                    #{prod.rank}
+                  </span>
+                  <div className="min-w-0">
+                    <h4 className="font-extrabold text-xs text-gray-900 dark:text-white truncate tracking-tight group-hover:text-[#ED1C24] transition-colors">
+                      {prod.name}
+                    </h4>
+                    <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 block truncate">
+                      {prod.category}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="font-black text-xs text-gray-900 dark:text-white font-mono">
+                    RD$ {prod.revenue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 block">
+                    {prod.sales} uds
+                  </span>
+                </div>
+              </div>
+
+              {/* Custom Progress Bar */}
+              <div className="h-1.5 w-full bg-gray-200/60 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full bg-gradient-to-r ${prod.barGradient} transition-all duration-500`}
+                  style={{ width: `${prod.percent}%` }}
+                />
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
-      <div className="pt-4 mt-4 border-t border-gray-100 dark:border-zinc-800/60 flex items-center justify-between text-xs font-semibold text-gray-400 dark:text-zinc-500">
-        <span>Artículos en inventario: <strong className="text-gray-900 dark:text-white">124 cat.</strong></span>
-        <a href="/inventario" className="text-[#ED1C24] hover:underline font-bold">Ver todo</a>
+      {/* Card Footer */}
+      <div className="pt-4 mt-3 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+        <span className="font-semibold text-gray-400 dark:text-zinc-500">
+          Catálogo total: <strong className="text-gray-900 dark:text-white font-extrabold">124 ítems</strong>
+        </span>
+        <Link 
+          to="/inventario" 
+          className="inline-flex items-center gap-1 text-xs font-black text-[#ED1C24] hover:text-red-700 transition-colors group"
+        >
+          <span>Ver Inventario</span>
+          <ArrowRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
       </div>
+
     </div>
   );
 }

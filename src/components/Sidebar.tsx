@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { 
@@ -10,7 +10,6 @@ import {
   DocumentChartBarIcon,
   DocumentTextIcon,
   Cog6ToothIcon,
-  ShieldCheckIcon,
   PlusIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon
@@ -26,7 +25,6 @@ const navigation = [
   { name: 'Inventario', href: '/inventario', icon: WrenchScrewdriverIcon },
   { name: 'Finanzas', href: '/financiamientos', icon: BanknotesIcon },
   { name: 'Reportes', href: '/reportes', icon: DocumentChartBarIcon, badge: '2' },
-  { name: 'Usuarios', href: '/usuarios', icon: ShieldCheckIcon },
   { name: 'Ajustes', href: '/configuracion', icon: Cog6ToothIcon },
 ];
 
@@ -40,55 +38,45 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
   const location = useLocation();
   const navigate = useNavigate();
   const [currentRole, setCurrentRole] = useState<UserRole>(getActiveRole);
+  const [permsVersion, setPermsVersion] = useState(0);
 
   useEffect(() => {
     const handleRoleUpdate = () => {
       setCurrentRole(getActiveRole());
+      setPermsVersion(v => v + 1);
     };
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
-    return () => window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+    window.addEventListener('brianna_permissions_updated', handleRoleUpdate);
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+      window.removeEventListener('brianna_permissions_updated', handleRoleUpdate);
+    };
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     navigate('/login');
-  };
+  }, [navigate]);
 
-  const filteredNavigation = navigation.filter(item => isRouteAllowed(item.href, currentRole));
+  // Recomputes when role or permissions change
+  const filteredNavigation = useMemo(
+    () => navigation.filter(item => isRouteAllowed(item.href, currentRole)),
+    [currentRole, permsVersion]
+  );
+
 
   const SidebarContent = (
-    <div className="w-[280px] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-6 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300">
+    <div className="w-[280px] max-w-[85vw] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-5 sm:p-6 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300 shadow-xl lg:shadow-none">
       {/* Header Mobile Close Button */}
-      <div className="flex lg:hidden items-center justify-between mb-4">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Menú Principal</span>
+      <div className="flex lg:hidden items-center justify-between mb-4 pb-2 border-b border-gray-200/60 dark:border-zinc-800/80">
+        <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Menú Principal</span>
         <button 
           onClick={onClose} 
-          className="p-2 rounded-full bg-gray-200 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300"
+          className="p-1.5 rounded-full bg-gray-200/80 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:bg-gray-300 cursor-pointer"
         >
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
 
-      {/* Company Profile & Role Badge */}
-      <div className="mb-6 lg:mb-8 flex items-center justify-between bg-white dark:bg-[#121318] rounded-full p-2 pr-4 shadow-sm border border-gray-100 dark:border-zinc-800 transition-all">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div className="h-10 w-10 shrink-0 rounded-full bg-[#ED1C24] text-white flex items-center justify-center font-black text-xs shadow-sm">
-            BH
-          </div>
-          <div className="flex flex-col min-w-0 flex-1">
-            <div className="flex items-center justify-between pr-1">
-              <span className="text-[10px] uppercase font-bold text-[#ED1C24] tracking-wider truncate">Empresa</span>
-              <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-md ${
-                currentRole === 'Oficina' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
-                currentRole === 'Repuestos' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
-                'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
-              }`}>
-                {currentRole}
-              </span>
-            </div>
-            <span className="text-sm font-black text-gray-900 dark:text-zinc-100 leading-none truncate">Brianna Heavy</span>
-          </div>
-        </div>
-      </div>
 
       {/* Navigation */}
       <nav className="flex-1 space-y-2">

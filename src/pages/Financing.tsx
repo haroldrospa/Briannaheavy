@@ -1,84 +1,50 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   PlusIcon, BanknotesIcon, CalculatorIcon, XMarkIcon, ArrowLeftIcon, CheckCircleIcon, 
   PrinterIcon, UserIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
-  PhoneIcon, IdentificationIcon, ShieldCheckIcon, ClockIcon, BriefcaseIcon, 
-  BuildingOfficeIcon, UserGroupIcon, SparklesIcon, TableCellsIcon, 
-  TruckIcon, HashtagIcon, MapPinIcon 
+  IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
+  TruckIcon, ExclamationTriangleIcon,
+  CheckIcon, BoltIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
-import CustomSelect from '../components/ui/CustomSelect';
-import type { SelectOption } from '../components/ui/CustomSelect';
+import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
+import { fetchInvoices, getLocalStorageInvoices } from '../services/invoicesService';
+import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
+import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 
-const INITIAL_FINANCINGS = [
-  { id: 1, customer: 'Juan Pérez', rnc: '001-1234567-8', item: 'Retroexcavadora Cat 320', amount: 85000, rate: 18, status: 'Al día', nextPayment: '2026-07-15' },
-  { id: 2, customer: 'Constructora Lora SRL', rnc: '130-49583-1', item: 'Mack Anthem 2024', amount: 125000, rate: 15, status: 'En mora', nextPayment: '2026-06-01' },
-  { id: 3, customer: 'Transportes Mella', rnc: '101-92384-1', item: 'Camión Volteo Shacman', amount: 95000, rate: 16, status: 'Al día', nextPayment: '2026-08-10' },
-  { id: 4, customer: 'Ferretería Central', rnc: '101-55442-1', item: 'Montacargas Toyota 3T', amount: 35000, rate: 14, status: 'Al día', nextPayment: '2026-08-06' },
-  { id: 5, customer: 'Agropecuaria del Norte SRL', rnc: '132-04958-2', item: 'Tractor John Deere 6125M', amount: 110000, rate: 16, status: 'Al día', nextPayment: '2026-08-06' },
-  { id: 6, customer: 'Transportes Vargas SRL', rnc: '131-88990-4', item: 'Camión Mack Granite 2023', amount: 140000, rate: 15, status: 'Al día', nextPayment: '2026-08-06' },
-];
+const mapFinancingsToState = (dbF: any[]) => {
+  if (!dbF || dbF.length === 0) return [];
+  return dbF.map((f, idx) => ({
+    id: f.id || idx + 1,
+    customer: f.customer_name,
+    rnc: f.customer_id || '101-00000-1',
+    item: f.item_name,
+    amount: f.financed_amount,
+    rate: f.interest_rate,
+    status: f.status === 'Activo' ? 'Al día' : f.status,
+    nextPayment: f.start_date || '2026-08-15',
+  }));
+};
 
-const DUMMY_RECEIVABLES = [
-  { 
-    id: 1, 
-    customer: 'Constructora Lora SRL', 
-    rnc: '130495831',
-    invoice: 'FAC-00102', 
-    ncf: 'B01000000149',
-    items: '4x Neumáticos 22.5" Goodyear', 
-    totalAmount: 1652.00, 
-    balance: 1652.00, 
-    issueDate: '2026-08-01', 
-    dueDate: '2026-08-31', 
-    creditDays: 30, 
-    status: 'Pendiente' 
-  },
-  { 
-    id: 2, 
-    customer: 'Transporte Royal', 
-    rnc: '101923841',
-    invoice: 'FAC-00098', 
-    ncf: 'B01000000142',
-    items: '2x Batería 12V 100Ah, 4x Filtro Aceite', 
-    totalAmount: 890.00, 
-    balance: 450.00, 
-    issueDate: '2026-07-15', 
-    dueDate: '2026-08-15', 
-    creditDays: 30, 
-    status: 'Con Abono' 
-  },
-  { 
-    id: 3, 
-    customer: 'Ingeniería Global', 
-    rnc: '132049582',
-    invoice: 'FAC-00085', 
-    ncf: 'B01000000130',
-    items: '1x Kit Frenos Delanteros', 
-    totalAmount: 247.80, 
-    balance: 247.80, 
-    issueDate: '2026-06-10', 
-    dueDate: '2026-07-10', 
-    creditDays: 30, 
-    status: 'Atrasado' 
-  },
-  { 
-    id: 4, 
-    customer: 'Ferretería Central', 
-    rnc: '101554421',
-    invoice: 'FAC-00074', 
-    ncf: 'B01000000118',
-    items: '10x Filtro de Aceite XJ-9', 
-    totalAmount: 531.00, 
-    balance: 531.00, 
-    issueDate: '2026-07-25', 
-    dueDate: '2026-08-25', 
-    creditDays: 30, 
-    status: 'Pendiente' 
-  },
-];
+const mapInvoicesToReceivables = (invs: any[]) => {
+  if (!invs || invs.length === 0) return [];
+  return invs.map((inv, idx) => ({
+    id: inv.id || idx + 1,
+    customer: inv.customer_name,
+    rnc: inv.customer_rnc || '101-00000-1',
+    invoice: inv.invoice_number,
+    ncf: inv.ncf || 'E3100000001',
+    items: inv.items ? inv.items.map((i: any) => i.description).join(', ') : 'Piezas & Equipos',
+    totalAmount: inv.total_amount,
+    balance: inv.status === 'Pagada' ? 0 : inv.total_amount,
+    issueDate: inv.created_at ? inv.created_at.slice(0, 10) : '2026-08-01',
+    dueDate: '2026-08-31',
+    creditDays: 30,
+    status: inv.status === 'Pagada' ? 'Pagado' : 'Pendiente',
+  }));
+};
 
 // Automatic grace period mora calculator with editable days limit
 const getInstallmentMoraAndStatus = (dueDateStr: string, isPaid: boolean, daysLimit: number = 15) => {
@@ -188,12 +154,45 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
 };
 
 export default function Financing() {
-  const [financingsList, setFinancingsList] = useState(INITIAL_FINANCINGS);
+  const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
+  const [dbReceivables, setDbReceivables] = useState<any[]>(() => mapInvoicesToReceivables(getLocalStorageInvoices()));
   const [activeTab, setActiveTab] = useState<'financiamientos' | 'cobrar'>('financiamientos');
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [isNewFormOpen, setIsNewFormOpen] = useState(false);
+  const [customersList, setCustomersList] = useState<Customer[]>(() => getLocalStorageCustomers());
+  const [inventoryList, setInventoryList] = useState<InventoryItem[]>(() => getLocalStorageInventory());
+  
+  useEffect(() => {
+    let isMounted = true;
+    const loadDbData = async () => {
+      const [dbF, invs, custs, invItems] = await Promise.all([
+        fetchFinancings(),
+        fetchInvoices(),
+        fetchCustomers(),
+        fetchInventory()
+      ]);
+      if (isMounted) {
+        if (dbF && dbF.length > 0) {
+          setFinancingsList(mapFinancingsToState(dbF));
+        }
+        if (invs && invs.length > 0) {
+          setDbReceivables(mapInvoicesToReceivables(invs));
+        }
+        if (custs && custs.length > 0) {
+          setCustomersList(custs);
+        }
+        if (invItems && invItems.length > 0) {
+          setInventoryList(invItems);
+        }
+      }
+    };
+    loadDbData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   
   // Main Financiamientos Status Filter State
   const [mainStatusFilter, setMainStatusFilter] = useState<'Todos' | 'En mora' | 'Vence 1 dia' | 'Al dia'>('Todos');
@@ -202,17 +201,44 @@ export default function Financing() {
   const [graceDays, setGraceDays] = useState<number>(15);
   const [showGraceDaysPopover, setShowGraceDaysPopover] = useState<boolean>(false);
   
-  // Comprehensive New Financing Form State
+  const defaultNextMonthDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  };
+
+  // Helper para formatear valores monetarios con separador de miles y decimales
+  const formatCurrencyInput = (value: string | number): string => {
+    if (value === '' || value === undefined || value === null) return '';
+    const clean = String(value).replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    if (parts.length > 2) {
+      parts.splice(2);
+    }
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  };
+
+  const parseCurrencyInput = (value: string | number): number => {
+    if (typeof value === 'number') return value;
+    if (!value) return 0;
+    const clean = String(value).replace(/,/g, '');
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  // Comprehensive New Financing Form State (Fast & Streamlined)
   const [newCustomer, setNewCustomer] = useState('');
   const [newRnc, setNewRnc] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newItem, setNewItem] = useState('');
   const [newChassis, setNewChassis] = useState('');
-  const [newTotalValue, setNewTotalValue] = useState('');
-  const [newDownPayment, setNewDownPayment] = useState('');
+  const [newTotalValue, setNewTotalValue] = useState('750,000');
+  const [newDownPayment, setNewDownPayment] = useState('150,000');
   const [newRate, setNewRate] = useState('16');
-  const [newMonths, setNewMonths] = useState('36');
-  const [newNextPayment, setNewNextPayment] = useState('');
+  const [newMonths, setNewMonths] = useState('24');
+  const [newNextPayment, setNewNextPayment] = useState(defaultNextMonthDate);
+  const [formValidationNotice, setFormValidationNotice] = useState(false);
   
   // Garante / Fiador Solidario Detailed State
   const [newGuarantorName, setNewGuarantorName] = useState('');
@@ -220,79 +246,44 @@ export default function Financing() {
   const [newGuarantorPhone, setNewGuarantorPhone] = useState('');
   const [newGuarantorRelation, setNewGuarantorRelation] = useState('Socio / Propietario');
   const [newGuarantorAddress, setNewGuarantorAddress] = useState('');
-  const [showGuarantorSection, setShowGuarantorSection] = useState(true);
+  const [showGuarantorSection, setShowGuarantorSection] = useState(false);
   const [showAmortizationSchedule, setShowAmortizationSchedule] = useState(false);
 
-  // Custom Select Dropdown Options
-  const guarantorRelationOptions: SelectOption[] = useMemo(() => [
-    {
-      value: 'Socio / Propietario',
-      label: 'Socio / Propietario',
-      sublabel: 'Socio principal o co-propietario',
-      icon: <UserGroupIcon className="h-4 w-4 text-[#ED1C24]" />
-    },
-    {
-      value: 'Gerente / Representante',
-      label: 'Gerente / Representante',
-      sublabel: 'Representante legal autorizado',
-      icon: <BriefcaseIcon className="h-4 w-4 text-amber-500" />
-    },
-    {
-      value: 'Esposo(a)',
-      label: 'Esposo(a)',
-      sublabel: 'Cónyuge legal fiador',
-      icon: <UserIcon className="h-4 w-4 text-pink-500" />
-    },
-    {
-      value: 'Familiar Directo',
-      label: 'Familiar Directo',
-      sublabel: 'Padre, madre, hermano(a) o hijo(a)',
-      icon: <UserIcon className="h-4 w-4 text-blue-500" />
-    },
-    {
-      value: 'Empresa Garante',
-      label: 'Empresa Garante',
-      sublabel: 'Persona jurídica fiadora solidaria',
-      icon: <BuildingOfficeIcon className="h-4 w-4 text-emerald-500" />
-    }
-  ], []);
+  // Fast Auto-fill Handlers (1-Click)
+  const handleSelectCustomer = (c: Customer) => {
+    setNewCustomer(c.name);
+    setNewRnc(c.document_id || '');
+    setNewPhone(c.phone || '');
+    if (formValidationNotice) setFormValidationNotice(false);
+  };
 
-  const termOptions: SelectOption[] = useMemo(() => [
-    {
-      value: '12',
-      label: '12 Meses (1 Año)',
-      sublabel: '12 cuotas fijas mensuales',
-      icon: <ClockIcon className="h-4 w-4 text-blue-500" />
-    },
-    {
-      value: '24',
-      label: '24 Meses (2 Años)',
-      sublabel: '24 cuotas fijas mensuales',
-      icon: <ClockIcon className="h-4 w-4 text-cyan-500" />
-    },
-    {
-      value: '36',
-      label: '36 Meses (3 Años)',
-      sublabel: '36 cuotas fijas mensuales',
-      icon: <ClockIcon className="h-4 w-4 text-emerald-500" />
-    },
-    {
-      value: '48',
-      label: '48 Meses (4 Años)',
-      sublabel: '48 cuotas fijas mensuales',
-      icon: <ClockIcon className="h-4 w-4 text-amber-500" />
-    },
-    {
-      value: '60',
-      label: '60 Meses (5 Años)',
-      sublabel: '60 cuotas fijas mensuales',
-      icon: <ClockIcon className="h-4 w-4 text-[#ED1C24]" />
+  const handleSelectInventoryItem = (item: InventoryItem) => {
+    setNewItem(item.name);
+    setNewChassis(item.vin || item.chassis_number || item.part_number || '');
+    if (item.price > 0) {
+      setNewTotalValue(formatCurrencyInput(item.price));
+      setNewDownPayment(formatCurrencyInput(Math.round(item.price * 0.2)));
     }
-  ], []);
+    if (formValidationNotice) setFormValidationNotice(false);
+  };
+
+  const handleFillQuickExample = () => {
+    setNewCustomer('Constructora del Caribe S.R.L.');
+    setNewRnc('131-48841-7');
+    setNewPhone('809-555-0142');
+    setNewItem('Camión Volquete Mack Granite 2024');
+    setNewChassis('1M8GDM9A2KP09812');
+    setNewTotalValue('1,200,000');
+    setNewDownPayment('240,000');
+    setNewRate('16');
+    setNewMonths('36');
+    setNewNextPayment(defaultNextMonthDate());
+    if (formValidationNotice) setFormValidationNotice(false);
+  };
 
   // Live Calculations for Modal Form
-  const modalValTotal = parseFloat(newTotalValue) || 0;
-  const modalInicial = parseFloat(newDownPayment) || 0;
+  const modalValTotal = parseCurrencyInput(newTotalValue);
+  const modalInicial = parseCurrencyInput(newDownPayment);
   const modalFinancedAmount = Math.max(0, modalValTotal - modalInicial);
   const modalAnnualRate = parseFloat(newRate) || 0;
   const modalNumMonths = parseInt(newMonths) || 36;
@@ -314,7 +305,7 @@ export default function Financing() {
   const handleSetPercentDownPayment = (percent: number) => {
     if (modalValTotal > 0) {
       const val = Math.round((modalValTotal * percent) / 100);
-      setNewDownPayment(val.toString());
+      setNewDownPayment(formatCurrencyInput(val));
     }
   };
 
@@ -371,21 +362,23 @@ export default function Financing() {
     };
 
     setFinancingsList([newEntry, ...financingsList]);
-    setIsNewModalOpen(false);
+    setIsNewFormOpen(false);
     
     // Reset Form
+    setFormValidationNotice(false);
     setNewCustomer('');
     setNewRnc('');
     setNewPhone('');
     setNewItem('');
     setNewChassis('');
-    setNewTotalValue('');
-    setNewDownPayment('');
+    setNewTotalValue('750,000');
+    setNewDownPayment('150,000');
     setNewGuarantorName('');
     setNewGuarantorRnc('');
     setNewGuarantorPhone('');
     setNewGuarantorRelation('Socio / Propietario');
     setNewGuarantorAddress('');
+    setShowGuarantorSection(false);
   };
   const [selectedFinancing, setSelectedFinancing] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -456,11 +449,11 @@ export default function Financing() {
 
   const filteredReceivables = useMemo(() => {
     const rawQ = searchCustomer.trim().toLowerCase();
-    if (!rawQ) return DUMMY_RECEIVABLES;
+    if (!rawQ) return dbReceivables;
 
     const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
 
-    return DUMMY_RECEIVABLES.filter(r => {
+    return dbReceivables.filter(r => {
       const nameMatch = r.customer.toLowerCase().includes(rawQ);
       const invMatch = r.invoice.toLowerCase().includes(rawQ);
       const itemsMatch = r.items.toLowerCase().includes(rawQ);
@@ -469,7 +462,7 @@ export default function Financing() {
 
       return nameMatch || invMatch || itemsMatch || rncRawMatch || rncCleanMatch;
     });
-  }, [searchCustomer]);
+  }, [dbReceivables, searchCustomer]);
 
   const currentInstallments = useMemo(() => {
     return dummyInstallments.map(inst => {
@@ -524,7 +517,7 @@ export default function Financing() {
   const totalSelectedPenalty = selectedInsts.reduce((sum, inst) => sum + inst.penalty, 0);
   const totalSelectedAmount = selectedInsts.reduce((sum, inst) => sum + inst.total, 0);
 
-  const numAbono = parseFloat(abonoAmount) || 0;
+  const numAbono = parseCurrencyInput(abonoAmount);
   const effectivePayAmount = paymentType === 'abono' ? numAbono : totalSelectedAmount;
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
@@ -549,12 +542,14 @@ export default function Financing() {
   };
 
   // Calculator State
-  const [amount, setAmount] = useState(100000);
-  const [downPayment, setDownPayment] = useState(20000);
+  const [amountStr, setAmountStr] = useState('100,000');
+  const [downPaymentStr, setDownPaymentStr] = useState('20,000');
   const [rate, setRate] = useState(18);
   const [months, setMonths] = useState(36);
 
-  const financedAmount = amount - downPayment;
+  const amount = parseCurrencyInput(amountStr);
+  const downPayment = parseCurrencyInput(downPaymentStr);
+  const financedAmount = Math.max(0, amount - downPayment);
   const monthlyRate = (rate / 100) / 12;
   const monthlyPayment = financedAmount > 0 
     ? (financedAmount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
@@ -665,47 +660,537 @@ export default function Financing() {
                 Simulador
               </button>
               <button 
-                onClick={() => setIsNewModalOpen(true)}
-                className="flex items-center justify-center gap-2 bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer"
+                onClick={() => setIsNewFormOpen(!isNewFormOpen)}
+                className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer ${
+                  isNewFormOpen 
+                    ? 'bg-red-600 text-white hover:bg-red-700' 
+                    : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
+                }`}
               >
-                <PlusIcon className="h-5 w-5" />
-                Nuevo Financiamiento
+                {isNewFormOpen ? (
+                  <>
+                    <XMarkIcon className="h-5 w-5" />
+                    <span>Cerrar Formulario</span>
+                  </>
+                ) : (
+                  <>
+                    <PlusIcon className="h-5 w-5" />
+                    <span>Nuevo Financiamiento</span>
+                  </>
+                )}
               </button>
             </>
           ) : (
             <button 
-              onClick={() => setIsNewModalOpen(true)}
-              className="flex items-center justify-center gap-2 bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer"
+              onClick={() => setIsNewFormOpen(!isNewFormOpen)}
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer ${
+                isNewFormOpen 
+                  ? 'bg-red-600 text-white hover:bg-red-700' 
+                  : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
+              }`}
             >
-              <PlusIcon className="h-5 w-5" />
-              Nueva Cuenta por Cobrar
+              {isNewFormOpen ? (
+                <>
+                  <XMarkIcon className="h-5 w-5" />
+                  <span>Cerrar Formulario</span>
+                </>
+              ) : (
+                <>
+                  <PlusIcon className="h-5 w-5" />
+                  <span>Nueva Cuenta por Cobrar</span>
+                </>
+              )}
             </button>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-3 bg-white dark:bg-[#1a1a1a] p-2 rounded-full w-fit shadow-sm print:hidden">
+      <div className="flex gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] p-1 sm:p-1.5 rounded-full w-full sm:w-fit overflow-x-auto scrollbar-hide shadow-xs print:hidden">
         <button
           onClick={() => setActiveTab('financiamientos')}
-          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'financiamientos' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-inner' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
+          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold rounded-full transition-all whitespace-nowrap cursor-pointer ${activeTab === 'financiamientos' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-xs font-black' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
         >
           Financiamientos
         </button>
         <button
           onClick={() => setActiveTab('cobrar')}
-          className={`px-6 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === 'cobrar' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-inner' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
+          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold rounded-full transition-all whitespace-nowrap cursor-pointer ${activeTab === 'cobrar' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-xs font-black' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
         >
           Cobros de Repuestos (POS)
         </button>
       </div>
+
+      {/* Panel En Página: Nuevo Financiamiento (Directo en Pantalla, Sin Ventana Emergente) */}
+      {isNewFormOpen && (
+        <div className="bg-white dark:bg-[#15161c] rounded-3xl p-5 sm:p-7 shadow-sm border border-gray-200/90 dark:border-zinc-800 mb-6 transition-all animate-in fade-in duration-150 print:hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-gray-100 dark:border-zinc-800/80 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-red-50 dark:bg-red-950/50 text-[#ED1C24]">
+                <DocumentTextIcon className="h-5 w-5 stroke-2" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-zinc-100 tracking-tight">
+                  {activeTab === 'financiamientos' ? 'Nuevo Contrato de Financiamiento' : 'Nueva Cuenta por Cobrar POS'}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                  Registro directo en página • Sin ventanas emergentes y con cálculo en tiempo real
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleFillQuickExample}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                title="Llenar datos de prueba en 1 clic"
+              >
+                <BoltIcon className="w-3.5 h-3.5 text-amber-500" />
+                <span>Llenar Rápido</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsNewFormOpen(false)}
+                className="px-3.5 py-2 text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <XMarkIcon className="h-4 w-4" />
+                <span>Cerrar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Form Content - Unified 2-Column Fast View */}
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newCustomer.trim() || !newItem.trim()) {
+                setFormValidationNotice(true);
+                return;
+              }
+              handleCreateFinancing(e);
+            }} 
+            className="space-y-4"
+          >
+            {formValidationNotice && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-xl text-xs font-semibold border border-red-200 dark:border-red-900/40 flex items-center gap-2">
+                <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-red-500" />
+                <span>Por favor complete el Nombre del Cliente y la Descripción del Equipo.</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left Column: Cliente & Equipo (Span 6) */}
+              <div className="lg:col-span-6 space-y-3.5">
+                {/* Bloque Cliente */}
+                <div className="p-3.5 bg-gray-50/70 dark:bg-zinc-800/30 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-gray-200/60 dark:border-zinc-700/60">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <UserIcon className="w-4 h-4 text-[#ED1C24]" />
+                      1. Datos del Cliente
+                    </span>
+                    {customersList.length > 0 && (
+                      <select
+                        onChange={(e) => {
+                          const c = customersList.find(x => x.id === e.target.value);
+                          if (c) handleSelectCustomer(c);
+                        }}
+                        defaultValue=""
+                        className="text-[11px] font-medium text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800/90 border border-gray-200/90 dark:border-zinc-700 rounded-xl px-2.5 py-1 outline-none cursor-pointer hover:border-gray-400 dark:hover:border-zinc-500 shadow-2xs max-w-[190px] truncate transition-all"
+                      >
+                        <option value="" disabled>Cargar cliente registrado...</option>
+                        {customersList.map(c => (
+                          <option key={c.id} value={c.id} className="text-gray-900 dark:text-white bg-white dark:bg-zinc-900">
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                      Nombre / Razón Social *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. Agropecuaria del Norte SRL"
+                      value={newCustomer}
+                      onChange={(e) => {
+                        setNewCustomer(e.target.value);
+                        if (formValidationNotice) setFormValidationNotice(false);
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        RNC / Cédula
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="130-12345-6"
+                        value={newRnc}
+                        onChange={(e) => setNewRnc(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Teléfono / WhatsApp
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="809-555-0199"
+                        value={newPhone}
+                        onChange={(e) => setNewPhone(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloque Equipo */}
+                <div className="p-3.5 bg-gray-50/70 dark:bg-zinc-800/30 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-gray-200/60 dark:border-zinc-700/60">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                      2. Datos del Equipo / Maquinaria
+                    </span>
+                    {inventoryList.length > 0 && (
+                      <select
+                        onChange={(e) => {
+                          const it = inventoryList.find(x => x.id === e.target.value);
+                          if (it) handleSelectInventoryItem(it);
+                        }}
+                        defaultValue=""
+                        className="text-[11px] font-medium text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800/90 border border-gray-200/90 dark:border-zinc-700 rounded-xl px-2.5 py-1 outline-none cursor-pointer hover:border-gray-400 dark:hover:border-zinc-500 shadow-2xs max-w-[190px] truncate transition-all"
+                      >
+                        <option value="" disabled>Seleccionar del inventario...</option>
+                        {inventoryList.map(it => (
+                          <option key={it.id} value={it.id} className="text-gray-900 dark:text-white bg-white dark:bg-zinc-900">
+                            {it.name} {it.price ? `(RD$ ${it.price.toLocaleString()})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                      Descripción del Equipo *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. Tractor John Deere 6125M Modelo 2024"
+                      value={newItem}
+                      onChange={(e) => {
+                        setNewItem(e.target.value);
+                        if (formValidationNotice) setFormValidationNotice(false);
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                      Número de Chasis / VIN / Serie
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="1M8GDM9A2KP09812"
+                      value={newChassis}
+                      onChange={(e) => setNewChassis(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-zinc-100 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Garante Opcional Colapsable */}
+                <div className="p-3 bg-gray-50/50 dark:bg-zinc-800/20 rounded-2xl border border-gray-200/60 dark:border-zinc-800/60">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <ShieldCheckIcon className="w-4 h-4 text-gray-400" />
+                      Garante / Fiador Solidario
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowGuarantorSection(!showGuarantorSection)}
+                      className="text-xs font-bold text-gray-600 dark:text-zinc-300 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showGuarantorSection ? 'Ocultar campos' : '+ Agregar garante'}
+                    </button>
+                  </div>
+
+                  {showGuarantorSection && (
+                    <div className="grid grid-cols-2 gap-2 pt-3 mt-2 border-t border-gray-200/60 dark:border-zinc-700/60">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1">Nombre Garante</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Ing. Carlos Mendoza"
+                          value={newGuarantorName}
+                          onChange={(e) => setNewGuarantorName(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1">Cédula Garante</label>
+                        <input
+                          type="text"
+                          placeholder="001-9876543-2"
+                          value={newGuarantorRnc}
+                          onChange={(e) => setNewGuarantorRnc(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1">Teléfono Garante</label>
+                        <input
+                          type="text"
+                          placeholder="809-555-9876"
+                          value={newGuarantorPhone}
+                          onChange={(e) => setNewGuarantorPhone(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1">Relación</label>
+                        <select
+                          value={newGuarantorRelation}
+                          onChange={(e) => setNewGuarantorRelation(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none"
+                        >
+                          <option value="Socio / Propietario">Socio / Propietario</option>
+                          <option value="Gerente / Representante">Gerente / Representante</option>
+                          <option value="Esposo(a)">Esposo(a)</option>
+                          <option value="Familiar Directo">Familiar Directo</option>
+                          <option value="Fiador Comercial">Fiador Comercial</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Parámetros del Crédito & Resumen en Vivo (Span 6) */}
+              <div className="lg:col-span-6 flex flex-col justify-between space-y-3.5">
+                <div className="p-3.5 bg-gray-50/70 dark:bg-zinc-800/30 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80 space-y-3">
+                  <div className="flex items-center gap-1.5 pb-1.5 border-b border-gray-200/60 dark:border-zinc-700/60">
+                    <BanknotesIcon className="w-4 h-4 text-[#ED1C24]" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-zinc-200">
+                      3. Condiciones Financieras
+                    </span>
+                  </div>
+
+                  {/* Montos: Valor Total e Inicial con botones % */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Valor Total Equipo (RD$) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">RD$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          required
+                          placeholder="750,000.00"
+                          value={newTotalValue}
+                          onChange={(e) => setNewTotalValue(formatCurrencyInput(e.target.value))}
+                          className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400">
+                          Inicial / Enganche
+                        </label>
+                        <div className="flex gap-1">
+                          {[0, 10, 20, 30, 50].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => handleSetPercentDownPayment(pct)}
+                              className="text-[9px] font-bold px-1.5 py-0.5 bg-gray-200 dark:bg-zinc-700 hover:bg-gray-300 dark:hover:bg-zinc-600 text-gray-700 dark:text-zinc-300 rounded-md transition-all cursor-pointer"
+                            >
+                              {pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">RD$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="150,000.00"
+                          value={newDownPayment}
+                          onChange={(e) => setNewDownPayment(formatCurrencyInput(e.target.value))}
+                          className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Plazos y Tasa */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Plazo (Meses)
+                      </label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {['6', '12', '24', '36', '48'].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setNewMonths(m)}
+                            className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              newMonths === m
+                                ? 'bg-[#ED1C24] text-white shadow-2xs'
+                                : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                            }`}
+                          >
+                            {m}m
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400">
+                          Tasa Anual (%)
+                        </label>
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          {((parseFloat(newRate) || 0) / 12).toFixed(2)}%/mes
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        {['12', '14', '16', '18'].map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setNewRate(r)}
+                            className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              newRate === r
+                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
+                                : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                            }`}
+                          >
+                            {r}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fecha de Inicio */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                      Fecha Primer Pago / Vencimiento
+                    </label>
+                    <div className="relative">
+                      <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="date"
+                        value={newNextPayment}
+                        onChange={(e) => setNewNextPayment(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen Financiero en Vivo (Live Calculation Box) */}
+                <div className="p-4 bg-gray-900 text-white dark:bg-[#0e0f14] rounded-2xl border border-gray-800 dark:border-zinc-800/90 space-y-3 shadow-lg">
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-800 dark:border-zinc-800">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                      Resumen del Crédito
+                    </span>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/60">
+                      {modalNumMonths} cuotas fijas
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-white/5 dark:bg-zinc-900/60 rounded-xl border border-white/10 dark:border-zinc-800">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                        Cuota Mensual Estimada
+                      </p>
+                      <p className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">
+                        RD$ {modalMonthlyPayment.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAmortizationSchedule(true)}
+                      className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <TableCellsIcon className="w-3.5 h-3.5 text-gray-300" />
+                      <span className="hidden sm:inline">Amortización</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 bg-white/5 rounded-lg">
+                      <span className="text-[9.5px] text-gray-400 block font-semibold">Monto Financiado</span>
+                      <span className="font-bold text-white text-xs">
+                        RD$ {modalFinancedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-lg">
+                      <span className="text-[9.5px] text-gray-400 block font-semibold">Interés Total</span>
+                      <span className="font-bold text-amber-300 text-xs">
+                        RD$ {modalTotalInterest.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-lg">
+                      <span className="text-[9.5px] text-gray-400 block font-semibold">Total Contrato</span>
+                      <span className="font-bold text-white text-xs">
+                        RD$ {modalTotalContract.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Form Actions */}
+            <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 flex justify-end items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsNewFormOpen(false)}
+                className="py-2.5 px-5 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="py-2.5 px-6 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-black text-xs transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2"
+              >
+                <CheckIcon className="w-4 h-4 stroke-[3]" />
+                <span>Guardar y Crear Financiamiento</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <div className="print:hidden">
       {activeTab === 'financiamientos' ? (
         <>
 
       {showCalculator && (
-        <div className="bg-white dark:bg-[#1a1a1a] p-8 shadow-sm rounded-[2rem] mb-6">
+        <div className="bg-white dark:bg-[#1a1a1a] p-4 sm:p-6 md:p-8 shadow-xs rounded-2xl sm:rounded-[2rem] mb-4 sm:mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
             <div className="p-2.5 bg-red-50 dark:bg-red-900/30 rounded-full text-gray-900 dark:text-white">
               <CalculatorIcon className="h-6 w-6" />
@@ -715,11 +1200,23 @@ export default function Financing() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Monto del Vehículo/Equipo ($)</label>
-              <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <input 
+                type="text" 
+                inputMode="decimal" 
+                value={amountStr} 
+                onChange={e => setAmountStr(formatCurrencyInput(e.target.value))} 
+                className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-mono font-bold" 
+              />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Inicial ($)</label>
-              <input type="number" value={downPayment} onChange={e => setDownPayment(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <input 
+                type="text" 
+                inputMode="decimal" 
+                value={downPaymentStr} 
+                onChange={e => setDownPaymentStr(formatCurrencyInput(e.target.value))} 
+                className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-mono font-bold" 
+              />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tasa Anual (%)</label>
@@ -867,25 +1364,25 @@ export default function Financing() {
           <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
             <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Total Cartera Repuestos</p>
             <p className="text-xl font-black text-gray-900 dark:text-white mt-1">
-              RD$ {DUMMY_RECEIVABLES.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              RD$ {dbReceivables.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
             </p>
           </div>
           <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
             <p className="text-[11px] font-bold text-[#ED1C24] uppercase tracking-wider">Saldo Pendiente por Cobrar</p>
             <p className="text-xl font-black text-[#ED1C24] mt-1">
-              RD$ {DUMMY_RECEIVABLES.reduce((sum, r) => sum + r.balance, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              RD$ {dbReceivables.reduce((sum, r) => sum + r.balance, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
             </p>
           </div>
           <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
             <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Clientes a Crédito</p>
             <p className="text-xl font-black text-gray-900 dark:text-white mt-1">
-              {DUMMY_RECEIVABLES.length} Clientes Activos
+              {dbReceivables.length} Clientes Activos
             </p>
           </div>
           <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
             <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Facturas Atrasadas</p>
             <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">
-              {DUMMY_RECEIVABLES.filter(r => r.status === 'Atrasado').length} Facturas Vencidas
+              {dbReceivables.filter(r => r.status === 'Atrasado').length} Facturas Vencidas
             </p>
           </div>
         </div>
@@ -1309,11 +1806,12 @@ export default function Financing() {
                             <div className="relative">
                               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-xl text-gray-400">$</span>
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={abonoAmount}
-                                onChange={(e) => setAbonoAmount(e.target.value)}
+                                onChange={(e) => setAbonoAmount(formatCurrencyInput(e.target.value))}
                                 placeholder="0.00"
-                                className="w-full pl-9 pr-4 py-3.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-2xl font-black text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                                className="w-full pl-9 pr-4 py-3.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-2xl font-black font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                               />
                             </div>
                             <p className="text-[11px] text-gray-400 font-medium mt-2">
@@ -1552,8 +2050,9 @@ export default function Financing() {
                 ¿Salir sin imprimir la factura?
               </h3>
               
-              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium leading-relaxed mb-6">
-                ⚠️ <strong className="text-amber-600 dark:text-amber-400">Es obligatorio entregar la factura/recibo impreso al cliente</strong> como comprobante de pago. ¿Deseas imprimir primero o salir de todos modos?
+              <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium leading-relaxed mb-6 flex items-start gap-2">
+                <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <span><strong className="text-amber-600 dark:text-amber-400">Es obligatorio entregar la factura/recibo impreso al cliente</strong> como comprobante de pago. ¿Deseas imprimir primero o salir de todos modos?</span>
               </p>
 
               <div className="flex flex-col gap-2.5">
@@ -1582,498 +2081,6 @@ export default function Financing() {
         )}
       </AnimatePresence>
 
-      {/* Modal Nuevo Financiamiento / Nueva Cuenta por Cobrar Completo */}
-      <AnimatePresence>
-        {isNewModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsNewModalOpen(false)}
-              className="fixed inset-0 bg-black/70 z-50 backdrop-blur-md print:hidden"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-5xl bg-white dark:bg-[#14151b] rounded-[2.5rem] p-7 md:p-8 shadow-2xl z-50 border border-gray-200/90 dark:border-zinc-800 print:hidden max-h-[94vh] flex flex-col overflow-hidden"
-            >
-              {/* Modal Header */}
-              <div className="flex justify-between items-center pb-4 border-b border-gray-100 dark:border-zinc-800/80 mb-5 shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="bg-gradient-to-br from-[#ED1C24] via-[#d61820] to-[#990c12] p-3.5 rounded-2xl shadow-lg shadow-red-500/25 text-white ring-4 ring-red-500/10">
-                    <DocumentTextIcon className="h-6 w-6 stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <h3 className="text-xl font-black text-gray-900 dark:text-zinc-100 tracking-tight">
-                        {activeTab === 'financiamientos' ? 'Nuevo Contrato de Financiamiento' : 'Nueva Cuenta por Cobrar POS'}
-                      </h3>
-                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-red-100 text-[#ED1C24] dark:bg-red-950/80 dark:text-red-400 border border-red-200 dark:border-red-900/50">
-                        {activeTab === 'financiamientos' ? 'Crédito Comercial' : 'Venta POS'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
-                      Ingrese las condiciones legales del cliente, garantía y estructura de cuotas fijas
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsNewModalOpen(false)}
-                  className="p-2.5 text-gray-400 hover:text-gray-900 dark:hover:text-zinc-100 bg-gray-100 dark:bg-zinc-800/80 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-full transition-all cursor-pointer"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Form Content */}
-              <form onSubmit={handleCreateFinancing} className="overflow-y-auto space-y-6 pr-1 flex-1 custom-scrollbar">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  
-                  {/* Columna Izquierda: Datos del Cliente y Garantía (7 columnas) */}
-                  <div className="lg:col-span-7 space-y-5">
-                    
-                    {/* Sección 1 Header */}
-                    <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-zinc-800">
-                      <div className="flex items-center gap-2 text-xs font-black text-[#ED1C24] uppercase tracking-wider">
-                        <UserIcon className="h-4 w-4" />
-                        1. Información del Cliente y Vehículo
-                      </div>
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                        Campos requeridos *
-                      </span>
-                    </div>
-
-                    {/* Cliente */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                        Nombre / Razón Social del Cliente *
-                      </label>
-                      <div className="relative">
-                        <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Ej. Agropecuaria del Norte SRL"
-                          value={newCustomer}
-                          onChange={(e) => setNewCustomer(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    {/* RNC y Teléfono */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                          RNC / Cédula
-                        </label>
-                        <div className="relative">
-                          <IdentificationIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                          <input
-                            type="text"
-                            placeholder="130-12345-6"
-                            value={newRnc}
-                            onChange={(e) => setNewRnc(e.target.value)}
-                            className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                          Teléfono / WhatsApp
-                        </label>
-                        <div className="relative">
-                          <PhoneIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                          <input
-                            type="text"
-                            placeholder="809-555-0199"
-                            value={newPhone}
-                            onChange={(e) => setNewPhone(e.target.value)}
-                            className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Descripción de Equipo / Vehículo */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                        Descripción del Equipo / Vehículo *
-                      </label>
-                      <div className="relative">
-                        <TruckIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Ej. Tractor John Deere 6125M Modelo 2024"
-                          value={newItem}
-                          onChange={(e) => setNewItem(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Chasis / VIN */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                        Número de Chasis / VIN / Serie
-                      </label>
-                      <div className="relative">
-                        <HashtagIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                        <input
-                          type="text"
-                          placeholder="1M8GDM9A2KP09812"
-                          value={newChassis}
-                          onChange={(e) => setNewChassis(e.target.value.toUpperCase())}
-                          className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-mono font-bold text-gray-900 dark:text-zinc-100 uppercase focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all tracking-wider"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Bloque Profesional de Garante / Fiador Solidario */}
-                    <div className="bg-gradient-to-b from-gray-50 to-gray-100/60 dark:from-zinc-800/50 dark:to-zinc-900/60 border border-gray-200/90 dark:border-zinc-700/70 p-4 rounded-2xl space-y-3.5 shadow-sm">
-                      <div className="flex items-center justify-between border-b border-gray-200/80 dark:border-zinc-700/80 pb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-red-100 dark:bg-red-950/60 rounded-lg text-[#ED1C24]">
-                            <ShieldCheckIcon className="h-4 w-4 stroke-[2.5]" />
-                          </div>
-                          <div>
-                            <span className="text-xs font-black text-gray-800 dark:text-zinc-100 uppercase tracking-wider block">
-                              Garante / Fiador Solidario
-                            </span>
-                            <span className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium">
-                              Respaldo crediticio y vínculo legal
-                            </span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowGuarantorSection(!showGuarantorSection)}
-                          className="text-[10px] font-black uppercase text-[#ED1C24] bg-white dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900/40 shadow-xs hover:bg-red-50 dark:hover:bg-red-950/50 transition-all cursor-pointer"
-                        >
-                          {showGuarantorSection ? 'Ocultar' : 'Mostrar'}
-                        </button>
-                      </div>
-
-                      {showGuarantorSection && (
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="space-y-3 pt-1"
-                        >
-                          {/* Nombre del Garante */}
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                              Nombre Completo del Garante
-                            </label>
-                            <div className="relative">
-                              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
-                              <input
-                                type="text"
-                                placeholder="Ej. Ing. Carlos Mendoza"
-                                value={newGuarantorName}
-                                onChange={(e) => setNewGuarantorName(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Cédula y Teléfono del Garante */}
-                          <div className="grid grid-cols-2 gap-2.5">
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                                Cédula / RNC Garante
-                              </label>
-                              <div className="relative">
-                                <IdentificationIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
-                                <input
-                                  type="text"
-                                  placeholder="001-9876543-2"
-                                  value={newGuarantorRnc}
-                                  onChange={(e) => setNewGuarantorRnc(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                                Teléfono Garante
-                              </label>
-                              <div className="relative">
-                                <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
-                                <input
-                                  type="text"
-                                  placeholder="809-555-9876"
-                                  value={newGuarantorPhone}
-                                  onChange={(e) => setNewGuarantorPhone(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Relación con Cliente y Dirección */}
-                          <div className="grid grid-cols-2 gap-2.5">
-                            <div>
-                              {/* Custom Select para Vínculo / Relación */}
-                              <CustomSelect
-                                label="Vínculo / Relación *"
-                                options={guarantorRelationOptions}
-                                value={newGuarantorRelation}
-                                onChange={(val) => setNewGuarantorRelation(val)}
-                                placeholder="Seleccionar Vínculo"
-                                icon={<UserGroupIcon className="h-4 w-4 text-[#ED1C24]" />}
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                                Dirección / Provincia
-                              </label>
-                              <div className="relative">
-                                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
-                                <input
-                                  type="text"
-                                  placeholder="Santo Domingo / Santiago"
-                                  value={newGuarantorAddress}
-                                  onChange={(e) => setNewGuarantorAddress(e.target.value)}
-                                  className="w-full pl-9 pr-3 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Columna Derecha: Valores Financieros y Calculadora (5 columnas) */}
-                  <div className="lg:col-span-5 space-y-5">
-                    
-                    {/* Sección 2 Header */}
-                    <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-zinc-800">
-                      <div className="flex items-center gap-2 text-xs font-black text-[#ED1C24] uppercase tracking-wider">
-                        <BanknotesIcon className="h-4 w-4" />
-                        2. Condiciones Financieras
-                      </div>
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900/40">
-                        Cálculo Automático
-                      </span>
-                    </div>
-
-                    {/* Valor Total e Inicial */}
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                          Valor Total Equipo (RD$) *
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400 dark:text-zinc-500">
-                            RD$
-                          </span>
-                          <input
-                            type="number"
-                            required
-                            placeholder="800000"
-                            value={newTotalValue}
-                            onChange={(e) => setNewTotalValue(e.target.value)}
-                            className="w-full pl-12 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-black text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider">
-                            Monto Inicial / Enganche (RD$)
-                          </label>
-                          {/* Presets de Porcentaje */}
-                          <div className="flex items-center gap-1">
-                            {[10, 20, 30, 50].map((pct) => (
-                              <button
-                                key={pct}
-                                type="button"
-                                onClick={() => handleSetPercentDownPayment(pct)}
-                                className="text-[10px] font-extrabold px-1.5 py-0.5 bg-gray-100 hover:bg-red-100 dark:bg-zinc-800 dark:hover:bg-red-950 text-gray-600 dark:text-zinc-300 hover:text-[#ED1C24] dark:hover:text-red-400 rounded transition-all cursor-pointer"
-                              >
-                                {pct}%
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400 dark:text-zinc-500">
-                            RD$
-                          </span>
-                          <input
-                            type="number"
-                            placeholder="200000"
-                            value={newDownPayment}
-                            onChange={(e) => setNewDownPayment(e.target.value)}
-                            className="w-full pl-12 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-black text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tasa Anual y Plazo */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider">
-                            Tasa Anual (%)
-                          </label>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                            {((parseFloat(newRate) || 0) / 12).toFixed(2)}%/mes
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.5"
-                            placeholder="16"
-                            value={newRate}
-                            onChange={(e) => setNewRate(e.target.value)}
-                            className="w-full px-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-black text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400">
-                            %
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        {/* Custom Select para Plazo */}
-                        <CustomSelect
-                          label="Plazo (Meses)"
-                          options={termOptions}
-                          value={newMonths}
-                          onChange={(val) => setNewMonths(val)}
-                          placeholder="Seleccionar Plazo"
-                          icon={<ClockIcon className="h-4 w-4 text-[#ED1C24]" />}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Fecha de Próximo Pago */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
-                        Fecha Primer Pago / Vencimiento *
-                      </label>
-                      <div className="relative">
-                        <CalendarIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-zinc-500" />
-                        <input
-                          type="date"
-                          value={newNextPayment}
-                          onChange={(e) => setNewNextPayment(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2.5 bg-gray-50/50 dark:bg-zinc-800/60 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Dashboard de Cálculo Financiero Pro / Tarjeta Obsidiana */}
-                    <div className="bg-gradient-to-b from-[#181922] via-[#121319] to-[#0d0e13] border border-red-500/25 p-4 md:p-5 rounded-2xl space-y-3.5 shadow-2xl text-white relative overflow-hidden">
-                      {/* Ambient Glow background effect */}
-                      <div className="absolute -top-12 -right-12 w-32 h-32 bg-red-600/20 blur-3xl rounded-full pointer-events-none" />
-
-                      <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                          <SparklesIcon className="h-4 w-4 text-[#ED1C24]" />
-                          Resumen Financiero del Crédito
-                        </span>
-                      </div>
-
-                      {/* Highlight Principal Cuota */}
-                      <div className="bg-zinc-900/80 border border-zinc-800 p-3.5 rounded-xl flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                            Cuota Estimada Mensual
-                          </p>
-                          <p className="text-2xl font-black text-[#ED1C24] tracking-tight mt-0.5">
-                            RD$ {modalMonthlyPayment.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[10px] font-bold text-zinc-400 block">Plazo Total</span>
-                          <span className="text-xs font-black text-white">{modalNumMonths} Meses</span>
-                        </div>
-                      </div>
-
-                      {/* Mini Breakdown Grid */}
-                      <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400 pt-1">
-                        <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/80">
-                          <span className="text-[10px] block font-semibold text-zinc-500">Monto Financiado</span>
-                          <span className="font-bold text-white text-xs">
-                            RD$ {modalFinancedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-
-                        <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/80">
-                          <span className="text-[10px] block font-semibold text-zinc-500">Tasa Mensual</span>
-                          <span className="font-bold text-white text-xs">
-                            {(modalAnnualRate / 12).toFixed(2)}% / mes
-                          </span>
-                        </div>
-
-                        <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/80">
-                          <span className="text-[10px] block font-semibold text-zinc-500">Intereses Totales</span>
-                          <span className="font-bold text-amber-400 text-xs">
-                            RD$ {modalTotalInterest.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-
-                        <div className="bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/80">
-                          <span className="text-[10px] block font-semibold text-zinc-500">Total a Pagar</span>
-                          <span className="font-bold text-[#ED1C24] text-xs">
-                            RD$ {modalTotalContract.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Botón Ver Tabla Amortización */}
-                      <button
-                        type="button"
-                        onClick={() => setShowAmortizationSchedule(true)}
-                        className="w-full py-2 px-3 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-zinc-700/60 flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <TableCellsIcon className="h-4 w-4 text-[#ED1C24]" />
-                        Ver Tabla de Amortización Completa
-                      </button>
-                    </div>
-
-                  </div>
-
-                </div>
-
-                {/* Footer Submit Buttons */}
-                <div className="pt-4 border-t border-gray-100 dark:border-zinc-800 flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsNewModalOpen(false)}
-                    className="flex-1 py-3.5 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-2xl font-bold text-xs transition-all cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-3.5 bg-gradient-to-r from-[#ED1C24] via-[#d61820] to-[#b31219] hover:brightness-110 active:scale-[0.98] text-white rounded-2xl font-black text-xs transition-all shadow-lg shadow-red-500/25 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <CheckCircleIcon className="h-4 w-4 stroke-[2.5]" />
-                    Guardar Financiamiento
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Modal Sub-tabla de Amortización Previa */}
       <AnimatePresence>
@@ -2436,6 +2443,7 @@ export default function Financing() {
       <CashClosureModal 
         isOpen={isCashClosureOpen} 
         onClose={() => setIsCashClosureOpen(false)} 
+        defaultRegister="Caja Cobros & Financiamientos"
       />
     </div>
   );

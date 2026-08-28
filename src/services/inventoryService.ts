@@ -1,0 +1,227 @@
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  type: 'Pieza' | 'Camión' | 'Equipo_Pesado';
+  brand?: string;
+  model?: string;
+  year?: number;
+  price: number;
+  cost: number;
+  status: 'Disponible' | 'Vendido' | 'Reservado' | 'Alquilado' | 'En_Reparacion';
+  vin?: string;
+  engine_number?: string;
+  chassis_number?: string;
+  mileage_hours?: number;
+  part_number?: string;
+  barcode?: string;
+  stock?: number;
+  min_stock?: number;
+  description?: string;
+  image_url?: string;
+  department?: string;
+  created_at?: string;
+}
+
+const LOCAL_STORAGE_KEY = 'brianna_local_inventory';
+
+let inMemoryInventory: InventoryItem[] | null = null;
+let inFlightInventoryPromise: Promise<InventoryItem[]> | null = null;
+let lastInventoryFetch = 0;
+const INVENTORY_CACHE_TTL = 60_000; // 60 seconds
+
+export const getLocalStorageInventory = (): InventoryItem[] => {
+  if (inMemoryInventory !== null) {
+    return inMemoryInventory;
+  }
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    inMemoryInventory = parsed;
+    return parsed;
+  } catch {
+    return [];
+  }
+};
+
+const saveLocalStorageInventory = (items: InventoryItem[]): void => {
+  inMemoryInventory = items;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+  } catch (err) {
+    console.warn('LocalStorage quota exceeded. Cleaning heavy base64 images for offline cache...', err);
+    try {
+      const sanitized = items.map(item => ({
+        ...item,
+        image_url: item.image_url && item.image_url.length > 200000 ? '' : item.image_url
+      }));
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
+    } catch (innerErr) {
+      console.error('Failed to save to localStorage after sanitizing:', innerErr);
+    }
+  }
+};
+
+export const fetchInventory = async (forceRefresh = false): Promise<InventoryItem[]> => {
+  const now = Date.now();
+
+  // Return cached data if within TTL and not forced
+  if (!forceRefresh && inMemoryInventory !== null && (now - lastInventoryFetch) < INVENTORY_CACHE_TTL) {
+    return inMemoryInventory;
+  }
+
+  // Deduplicate in-flight requests
+  if (!forceRefresh && inFlightInventoryPromise) {
+    return inFlightInventoryPromise;
+  }
+
+  if (isSupabaseConfigured()) {
+    inFlightInventoryPromise = (async () => {
+      try {
+        const supabasePromise = supabase
+          .from('inventory_items')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300);
+        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2500)
+        );
+
+        const res = await Promise.race([supabasePromise, timeoutPromise]);
+        if (!res.error && res.data) {
+          const items = res.data as InventoryItem[];
+          saveLocalStorageInventory(items);
+          lastInventoryFetch = Date.now();
+          return items;
+        }
+      } catch (err) {
+        console.warn('Error fetching inventory from Supabase, fallback to local:', err);
+      } finally {
+        inFlightInventoryPromise = null;
+      }
+      return getLocalStorageInventory();
+    })();
+
+    return inFlightInventoryPromise;
+  }
+
+  return getLocalStorageInventory();
+};
+
+const isValidUUID = (str?: string): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+};
+
+const sanitizeForSupabase = (item: Partial<InventoryItem>): Record<string, any> => {
+  const payload: Record<string, any> = {};
+
+  if (item.name !== undefined) payload.name = item.name;
+  if (item.type !== undefined) {
+    const rawType = String(item.type).toLowerCase();
+    if (rawType.includes('camion') || rawType.includes('camión')) payload.type = 'Camión';
+    else if (rawType.includes('equipo') || rawType.includes('pesado')) payload.type = 'Equipo_Pesado';
+    else payload.type = 'Pieza';
+  }
+  if (item.brand !== undefined) payload.brand = item.brand || null;
+  if (item.model !== undefined) payload.model = item.model || null;
+  if (item.year !== undefined) payload.year = item.year ? Number(item.year) : null;
+  if (item.price !== undefined) payload.price = Number(item.price) || 0;
+  if (item.cost !== undefined) payload.cost = Number(item.cost) || 0;
+  if (item.status !== undefined) {
+    const validStatuses = ['Disponible', 'Vendido', 'Reservado', 'Alquilado', 'En_Reparacion'];
+    payload.status = validStatuses.includes(item.status) ? item.status : 'Disponible';
+  }
+  if (item.vin !== undefined) payload.vin = item.vin || null;
+  if (item.engine_number !== undefined) payload.engine_number = item.engine_number || null;
+  if (item.chassis_number !== undefined) payload.chassis_number = item.chassis_number || null;
+  if (item.mileage_hours !== undefined) payload.mileage_hours = item.mileage_hours ? Number(item.mileage_hours) : null;
+  if (item.part_number !== undefined) payload.part_number = item.part_number || null;
+  if (item.barcode !== undefined) payload.barcode = item.barcode || null;
+  if (item.stock !== undefined) payload.stock = Number(item.stock) || 0;
+  if (item.min_stock !== undefined) payload.min_stock = Number(item.min_stock) || 0;
+  if (item.description !== undefined) payload.description = item.description || null;
+  if (item.image_url !== undefined) payload.image_url = item.image_url || null;
+  if (item.department !== undefined) payload.location = item.department || null;
+
+  return payload;
+};
+
+export const createInventoryItem = async (item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> => {
+  const localId = Date.now().toString();
+  const newItem: InventoryItem = { ...item, id: localId, created_at: new Date().toISOString() };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const payload = sanitizeForSupabase(item);
+      const { data, error } = await supabase.from('inventory_items').insert([payload]).select().single();
+      if (!error && data) {
+        const current = getLocalStorageInventory();
+        const updated = [data as InventoryItem, ...current.filter(i => i.id !== localId && i.id !== data.id)];
+        saveLocalStorageInventory(updated);
+        return data as InventoryItem;
+      }
+    } catch (err) {
+      console.warn('Error inserting inventory item to Supabase:', err);
+    }
+  }
+
+  const current = getLocalStorageInventory();
+  const updated = [newItem, ...current.filter(i => i.id !== localId)];
+  saveLocalStorageInventory(updated);
+  return newItem;
+};
+
+export const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>): Promise<InventoryItem | null> => {
+  if (isSupabaseConfigured() && isValidUUID(id)) {
+    try {
+      const payload = sanitizeForSupabase(updates);
+      const { data, error } = await supabase.from('inventory_items').update(payload).eq('id', id).select().single();
+      if (!error && data) {
+        const current = getLocalStorageInventory();
+        const updatedList = current.map(item => item.id === id ? (data as InventoryItem) : item);
+        saveLocalStorageInventory(updatedList);
+        return data as InventoryItem;
+      }
+    } catch (err) {
+      console.warn('Error updating inventory item in Supabase:', err);
+    }
+  }
+
+  const current = getLocalStorageInventory();
+  let updatedItem: InventoryItem | null = null;
+  const updatedList = current.map(item => {
+    if (item.id === id) {
+      updatedItem = { ...item, ...updates };
+      return updatedItem;
+    }
+    return item;
+  });
+  saveLocalStorageInventory(updatedList);
+  return updatedItem;
+};
+
+export const deleteInventoryItem = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured() && isValidUUID(id)) {
+    try {
+      const { error } = await supabase.from('inventory_items').delete().eq('id', id);
+      if (!error) {
+        const current = getLocalStorageInventory();
+        const filtered = current.filter(item => item.id !== id);
+        saveLocalStorageInventory(filtered);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Error deleting inventory item in Supabase:', err);
+    }
+  }
+
+  const current = getLocalStorageInventory();
+  const filtered = current.filter(item => item.id !== id);
+  saveLocalStorageInventory(filtered);
+  return true;
+};

@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import logo from '../assets/logo.png';
-import { motion } from 'framer-motion';
 import { 
   DocumentChartBarIcon, 
   ArrowDownTrayIcon,
@@ -16,100 +15,264 @@ import {
   ArrowsRightLeftIcon,
   TruckIcon,
   XMarkIcon,
-  EyeIcon
+  EyeIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
+import { fetchInvoices, getLocalStorageInvoices } from '../services/invoicesService';
+import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
+import { fetchCustomers, getLocalStorageCustomers } from '../services/customersService';
+import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
+import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cashClosuresService';
 
-const REPORT_CATEGORIES = [
-  { id: 'todos', name: 'Todos los Reportes' },
-  { id: 'finanzas', name: '💼 Finanzas & Caja' },
-  { id: 'ventas', name: '🛒 Ventas & Clientes' },
-  { id: 'inventario', name: '📦 Inventario & Stock' },
-  { id: 'mantenimiento', name: '🔧 Mantenimiento e Inspecciones' },
-];
+const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], closures: any[] = []) => {
+  const mappedData: Record<string, any[]> = {};
 
-const REPORT_TYPES = [
-  // Finanzas & Caja
-  { id: 'caja', category: 'finanzas', name: 'Cuadre de Caja y Bancos', icon: DocumentChartBarIcon, description: 'Aperturas, cierres, balances y conciliación bancaria.' },
-  { id: 'movimientos_caja', category: 'finanzas', name: 'Movimientos de Caja (Ingresos/Egresos)', icon: ArrowsRightLeftIcon, description: 'Flujo detallado de entradas, gastos y retiros de caja.' },
-  { id: 'financiamientos', category: 'finanzas', name: 'Financiamientos', icon: BanknotesIcon, description: 'Estado de cuentas, cuotas pagadas y amortizaciones.' },
-  { id: 'moras', category: 'finanzas', name: 'Reporte de Moras', icon: ExclamationTriangleIcon, description: 'Clientes con atrasos y cálculo de recargos.' },
+  if (invs && invs.length > 0) {
+    mappedData.ventas = invs.map(inv => ({
+      code: inv.invoice_number || `FAC-${inv.id}`,
+      ncf: inv.ncf || 'N/A',
+      ncf_type: inv.ncf_type || (inv.ncf ? inv.ncf.substring(0, 3) : 'Interna'),
+      date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
+      client: inv.customer_name || 'Cliente General',
+      rnc: inv.customer_rnc || '000000000',
+      method: inv.payment_method || 'Efectivo',
+      status: inv.status || 'Pagada',
+      total: Number(inv.total_amount || 0),
+      is_electronic: Boolean(inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')))
+    }));
 
-  // Ventas & Clientes
-  { id: 'ventas', category: 'ventas', name: 'Ventas y POS', icon: ShoppingCartIcon, description: 'Historial de ventas, facturas y transacciones diarias.' },
-  { id: 'clientes', category: 'ventas', name: 'Rendimiento por Cliente', icon: UsersIcon, description: 'Clientes más rentables e historial de compras.' },
+    // Facturación Electrónica e-CF
+    const ecfList = invs.filter(inv => inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')));
+    mappedData.ecf = ecfList.map(inv => {
+      const ncfCode = inv.ncf || inv.invoice_number || `E3200000001`;
+      let prefix = 'E32';
+      if (ncfCode.startsWith('E31')) prefix = 'E31';
+      else if (ncfCode.startsWith('E32')) prefix = 'E32';
+      else if (ncfCode.startsWith('E33')) prefix = 'E33';
+      else if (ncfCode.startsWith('E34')) prefix = 'E34';
+      else if (ncfCode.startsWith('E44')) prefix = 'E44';
+      else if (ncfCode.startsWith('E45')) prefix = 'E45';
+      else if (ncfCode.startsWith('E46')) prefix = 'E46';
+      else if (ncfCode.startsWith('E47')) prefix = 'E47';
+      else if (inv.ncf_type?.startsWith('E')) prefix = inv.ncf_type.substring(0, 3).toUpperCase();
 
-  // Inventario & Stock
-  { id: 'inventario', category: 'inventario', name: 'Movimientos de Inventario', icon: WrenchScrewdriverIcon, description: 'Entradas, salidas y valorización actual del stock.' },
+      const TYPE_NAMES: Record<string, string> = {
+        'E31': 'E31 - Crédito Fiscal',
+        'E32': 'E32 - Factura de Consumo',
+        'E33': 'E33 - Nota de Débito',
+        'E34': 'E34 - Nota de Crédito',
+        'E44': 'E44 - Regímenes Especiales',
+        'E45': 'E45 - Gubernamental',
+        'E46': 'E46 - Exportación',
+        'E47': 'E47 - Pago al Exterior'
+      };
 
-  // Mantenimiento & Inspecciones
-  { id: 'inspecciones', category: 'mantenimiento', name: 'Inspecciones de Camiones & Equipos', icon: TruckIcon, description: 'Historial técnico de inspecciones de camiones y estado de componentes.' },
-  { id: 'ordenes_trabajo', category: 'mantenimiento', name: 'Órdenes de Trabajo de Mantenimiento', icon: WrenchScrewdriverIcon, description: 'Servicios técnicos de taller, repuestos y mantenimientos.' },
-];
+      const subtotalVal = Number(inv.subtotal || (inv.total_amount ? (inv.total_amount - (inv.tax_amount || 0)) : 0) || (inv.total_amount ? inv.total_amount / 1.18 : 0));
+      const taxVal = Number(inv.tax_amount || (inv.total_amount ? inv.total_amount - subtotalVal : 0));
+      const totalVal = Number(inv.total_amount || 0);
 
-const DUMMY_REPORT_DATA = {
-  ventas: [
-    { code: 'FAC-2026-0101', date: '21/07/2026', client: 'Constructora Lora SRL', rnc: '130495831', method: 'Transferencia', status: 'Pagada', total: 125000.00 },
-    { code: 'FAC-2026-0102', date: '21/07/2026', client: 'Juan Pérez', rnc: '001-0023423-1', method: 'Efectivo', status: 'Pagada', total: 8500.00 },
-    { code: 'FAC-2026-0103', date: '21/07/2026', client: 'Transportes Mella', rnc: '101923841', method: 'Tarjeta', status: 'Pagada', total: 35000.00 },
-    { code: 'FAC-2026-0104', date: '20/07/2026', client: 'Ingeniería Global SRL', rnc: '132049582', method: 'Crédito', status: 'Pendiente', total: 210000.00 },
-    { code: 'FAC-2026-0105', date: '20/07/2026', client: 'Ferretería Central', rnc: '102938472', method: 'Efectivo', status: 'Pagada', total: 14200.00 },
-  ],
-  financiamientos: [
-    { code: 'FIN-001', client: 'Juan Pérez', item: 'Retroexcavadora Cat 320', amount: 85000.00, rate: '18%', term: '36 meses', status: 'Al día', nextPayment: '15/08/2026' },
-    { code: 'FIN-002', client: 'Constructora Lora SRL', item: 'Mack Anthem 2024', amount: 125000.00, rate: '15%', term: '48 meses', status: 'En mora', nextPayment: '01/06/2026' },
-    { code: 'FIN-003', client: 'Transporte Royal', item: 'Kenworth T680', amount: 140000.00, rate: '16%', term: '36 meses', status: 'Al día', nextPayment: '20/08/2026' },
-  ],
-  moras: [
-    { code: 'MOR-2026-01', client: 'Constructora Lora SRL', invoice: 'FIN-002', daysOverdue: 51, unpaidInstallment: 2450.00, penalty: 120.00, totalDue: 2570.00 },
-    { code: 'MOR-2026-02', client: 'Ferretería Central', invoice: 'INV-2026-042', daysOverdue: 31, unpaidInstallment: 3200.00, penalty: 160.00, totalDue: 3360.00 },
-  ],
-  movimientos_caja: [
-    { id: 'MOV-1001', date: '21/07/2026 14:30', type: 'Ingreso', category: 'Cobro Financiamiento', description: 'Cobro de cuotas #3 y #4 - Juan Pérez (FIN-001)', method: 'Efectivo', amount: 5140.00 },
-    { id: 'MOV-1002', date: '21/07/2026 13:15', type: 'Egreso', category: 'Combustible', description: 'Combustible para camión de despacho Shacman', method: 'Efectivo', amount: 2500.00 },
-    { id: 'MOV-1003', date: '21/07/2026 11:45', type: 'Ingreso', category: 'Venta Repuestos (POS)', description: 'Venta FAC-2026-0103 - Transportes Mella', method: 'Tarjeta', amount: 35000.00 },
-    { id: 'MOV-1004', date: '21/07/2026 10:10', type: 'Egreso', category: 'Insumos Oficina', description: 'Compra de tóner y suministros de oficina', method: 'Efectivo', amount: 1700.00 },
-    { id: 'MOV-1005', date: '20/07/2026 16:00', type: 'Ingreso', category: 'Venta Repuestos (POS)', description: 'Venta FAC-2026-0105 - Ferretería Central', method: 'Efectivo', amount: 14200.00 },
-    { id: 'MOV-1006', date: '20/07/2026 12:30', type: 'Egreso', category: 'Servicios Públicos', description: 'Pago de servicio eléctrico e internet local', method: 'Transferencia', amount: 5800.00 },
-  ],
-  inventario: [
-    { code: 'PIE-001', name: 'Filtro de Aceite XJ-9', category: 'Filtros', stockInit: 150, in: 50, out: 30, stockCurrent: 170, unitPrice: 45.00, totalValue: 7650.00 },
-    { code: 'NEU-002', name: 'Neumático 22.5" Goodyear', category: 'Neumáticos', stockInit: 50, in: 20, out: 25, stockCurrent: 45, unitPrice: 350.00, totalValue: 15750.00 },
-    { code: 'BAT-003', name: 'Batería 12V 100Ah', category: 'Eléctrico', stockInit: 25, in: 10, out: 20, stockCurrent: 15, unitPrice: 120.00, totalValue: 1800.00 },
-    { code: 'FRE-004', name: 'Kit de Frenos Delanteros', category: 'Frenos', stockInit: 15, in: 5, out: 12, stockCurrent: 8, unitPrice: 210.00, totalValue: 1680.00 },
-  ],
-  clientes: [
-    { client: 'Constructora Lora SRL', rnc: '130495831', type: 'Empresarial', invoices: 12, totalSpent: 345000.00, creditLimit: 500000.00, status: 'Activo' },
-    { client: 'Transporte Royal', rnc: '101923841', type: 'Empresarial', invoices: 8, totalSpent: 198000.00, creditLimit: 300000.00, status: 'Activo' },
-    { client: 'Juan Pérez', rnc: '001-0023423-1', type: 'Físico', invoices: 5, totalSpent: 93500.00, creditLimit: 100000.00, status: 'Activo' },
-  ],
-  caja: [
-    { date: '21/07/2026', register: 'Caja 01', initialFund: 5000.00, incomes: 40140.00, expenses: 4200.00, netFlow: 35940.00, totalCash: 18450.00, totalCard: 12300.00, totalTransfer: 8900.00, totalCredit: 14500.00, counted: 39650.00, status: 'Cuadrado' },
-    { date: '20/07/2026', register: 'Caja 01', initialFund: 5000.00, incomes: 14200.00, expenses: 5800.00, netFlow: 8400.00, totalCash: 21100.00, totalCard: 9800.00, totalTransfer: 15400.00, totalCredit: 8200.00, counted: 40500.00, status: 'Cuadrado' },
-  ],
-  inspecciones: [
-    { code: 'REP-INSP-0005', date: '06/08/2026', vehicle: 'Mack Anthem 2024', vin: '1M2AX13C5PM001892', inspector: 'Carlos Ramos', mileage: '45,200 Km', goodItems: 38, regItems: 2, defItems: 1, status: 'Aprobado' },
-    { code: 'REP-INSP-0004', date: '04/08/2026', vehicle: 'Freightliner Cascadia 126', vin: '3AKJHHDR5LS90123', inspector: 'Mikel Rodríguez', mileage: '120,400 Km', goodItems: 41, regItems: 0, defItems: 0, status: 'Excelente' },
-    { code: 'REP-INSP-0003', date: '01/08/2026', vehicle: 'CAT 320 Excavadora', vin: 'CAT00320EX8912', inspector: 'Ing. Roberto Peña', mileage: '3,100 Horas', goodItems: 35, regItems: 4, defItems: 2, status: 'Mantenimiento Req.' },
-    { code: 'REP-INSP-0002', date: '28/07/2026', vehicle: 'Kenworth T680', vin: '1XKWD49X8JR10293', inspector: 'Carlos Ramos', mileage: '88,900 Km', goodItems: 40, regItems: 1, defItems: 0, status: 'Aprobado' },
-  ],
-  ordenes_trabajo: [
-    { code: 'OT-MNT-0016', date: '05/08/2026', equipment: 'Mack Anthem 2024', service: 'Cambio de Aceite & Filtros', technician: 'Juan Pérez', type: 'Interno', status: 'En Proceso', totalCost: 14500.00 },
-    { code: 'OT-MNT-0015', date: '03/08/2026', equipment: 'Freightliner Cascadia 126', service: 'Sustitución de Neumáticos Delanteros', technician: 'Manuel Castro', type: 'Externo', status: 'Completado', totalCost: 32000.00 },
-    { code: 'OT-MNT-0014', date: '29/07/2026', equipment: 'CAT 320 Excavadora', service: 'Mantenimiento Sistema Hidráulico', technician: 'Taller Cat Central', type: 'Externo', status: 'Completado', totalCost: 58000.00 },
-  ],
+      return {
+        code: ncfCode,
+        ncf_prefix: prefix,
+        ncf_type: TYPE_NAMES[prefix] || (inv.ncf_type || `${prefix} - Fiscal`),
+        date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
+        client: inv.customer_name || 'Cliente General',
+        rnc: inv.customer_rnc || '000000000',
+        method: inv.payment_method || 'Efectivo',
+        subtotal: subtotalVal,
+        tax_amount: taxVal,
+        total: totalVal,
+        securityCode: inv.ecf_security_code || '7A9F14',
+        dgiiStatus: inv.ecf_dgii_status || 'Aceptado'
+      };
+    });
+
+    // Facturación Interna
+    const internalList = invs.filter(inv => inv.billing_mode === 'internal' || (inv.ncf && inv.ncf.startsWith('INT')) || !inv.ncf || (!inv.is_electronic && !inv.ncf?.startsWith('E')));
+    mappedData.internas = internalList.map(inv => ({
+      code: inv.invoice_number || inv.ncf || `INT-${inv.id}`,
+      date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
+      client: inv.customer_name || 'Cliente General',
+      rnc: inv.customer_rnc || 'Consumidor Final',
+      method: inv.payment_method || 'Efectivo',
+      cashier: inv.cashier_name || 'Cajero Principal',
+      status: inv.status || 'Completada',
+      subtotal: Number(inv.subtotal || inv.total_amount),
+      total: Number(inv.total_amount || 0)
+    }));
+  }
+
+  if (fins && fins.length > 0) {
+    mappedData.financiamientos = fins.map(f => ({
+      code: f.id,
+      client: f.customer_name,
+      item: f.item_name,
+      amount: Number(f.financed_amount || 0),
+      rate: `${f.interest_rate}%`,
+      term: `${f.installments_count} meses`,
+      status: f.status === 'Activo' ? 'Al día' : f.status,
+      nextPayment: f.start_date ? f.start_date.slice(0, 10) : '2026-08-15'
+    }));
+  }
+
+  if (custs && custs.length > 0) {
+    mappedData.clientes = custs.map(c => ({
+      client: c.name,
+      rnc: c.document_id || c.rnc_cedula || '000000000',
+      type: c.type === 'Empresarial' ? 'Empresarial' : 'Físico',
+      invoices: 5,
+      totalSpent: Number(c.total_spent || 0),
+      creditLimit: Number(c.credit_limit || 0),
+      status: c.status || 'Activo'
+    }));
+  }
+
+  if (items && items.length > 0) {
+    mappedData.inventario = items.map(i => ({
+      code: i.part_number || i.barcode || i.id,
+      name: i.name,
+      category: i.type,
+      stockInit: i.stock || 10,
+      in: 5,
+      out: 2,
+      stockCurrent: i.stock || 10,
+      unitPrice: Number(i.price || 0),
+      totalValue: Number(i.price || 0) * Number(i.stock || 1)
+    }));
+  }
+
+  if (closures && closures.length > 0) {
+    mappedData.caja = closures.map((c: any) => ({
+      code: c.closure_number,
+      date: c.created_at ? c.created_at.slice(0, 10) : '2026-07-21',
+      register: c.register_name || 'Caja 1 - Repuestos',
+      cashier: c.cashier_name || 'Harold Rodríguez',
+      initialFund: Number(c.initial_fund || 0),
+      incomes: Number(c.cash_movements_in || 0),
+      expenses: Number(c.cash_movements_out || 0),
+      totalCash: Number(c.system_sales_cash || 0),
+      totalCard: Number(c.system_sales_card || 0),
+      totalTransfer: Number(c.system_sales_transfer || 0),
+      counted: Number(c.counted_cash || 0),
+      difference: Number(c.difference || 0),
+      status: c.status || 'Cuadrado'
+    }));
+  }
+
+  return mappedData;
 };
 
+const REPORT_TYPES = [
+  // Facturación & Ventas
+  { id: 'ecf', category: 'ventas', name: 'Facturación Electrónica (e-CF DGII)', icon: DocumentChartBarIcon, description: 'Comprobantes Fiscales Electrónicos (E31, E32, E34, E44, E45) divididos por tipo de comprobante.' },
+  { id: 'internas', category: 'ventas', name: 'Facturas de Venta Internas', icon: ShoppingCartIcon, description: 'Comprobantes de venta interna no fiscal (FAC-INT) y ventas de mostrador.' },
+  { id: 'ventas', category: 'ventas', name: 'Ventas y POS General', icon: ShoppingCartIcon, description: 'Historial consolidado de todas las ventas y facturas emitidas.' },
+
+  // Finanzas & Caja
+  { id: 'caja', category: 'finanzas', name: 'Cuadre de Caja y Bancos', icon: DocumentChartBarIcon, description: 'Aperturas, cierres, balances y conciliación bancaria.' },
+  { id: 'movimientos_caja', category: 'finanzas', name: 'Movimientos de Caja (Flujo)', icon: ArrowsRightLeftIcon, description: 'Flujo detallado de entradas, gastos y retiros de caja.' },
+  { id: 'financiamientos', category: 'finanzas', name: 'Financiamientos', icon: BanknotesIcon, description: 'Estado de cuentas, cuotas pagadas y amortizaciones.' },
+  { id: 'moras', category: 'finanzas', name: 'Reporte de Moras y Recargos', icon: ExclamationTriangleIcon, description: 'Clientes con atrasos y cálculo de recargos.' },
+
+  // Inventario & Clientes
+  { id: 'inventario', category: 'inventario', name: 'Movimientos de Inventario', icon: WrenchScrewdriverIcon, description: 'Entradas, salidas y valorización actual del stock.' },
+  { id: 'clientes', category: 'ventas', name: 'Rendimiento de Clientes', icon: UsersIcon, description: 'Clientes más rentables e historial de compras.' },
+
+  // Taller y Mantenimiento
+  { id: 'inspecciones', category: 'mantenimiento', name: 'Inspecciones de Camiones', icon: TruckIcon, description: 'Historial técnico de inspecciones de camiones y estado de componentes.' },
+  { id: 'ordenes_trabajo', category: 'mantenimiento', name: 'Órdenes de Trabajo', icon: WrenchScrewdriverIcon, description: 'Servicios técnicos de taller, repuestos y mantenimientos.' },
+];
+
+const DUMMY_REPORT_DATA: Record<string, any[]> = {
+  ecf: [
+    { code: 'E3100000041', ncf_prefix: 'E31', ncf_type: 'E31 - Crédito Fiscal', date: '2026-07-20', client: 'Constructora del Caribe S.R.L.', rnc: '131-48841-7', method: 'Transferencia', subtotal: 84745.76, tax_amount: 15254.24, total: 100000.00, securityCode: '8F2A19', dgiiStatus: 'Aceptado' },
+    { code: 'E3200000042', ncf_prefix: 'E32', ncf_type: 'E32 - Factura de Consumo', date: '2026-07-19', client: 'Juan Manuel Peralta', rnc: '402-2384910-1', method: 'Efectivo', subtotal: 12500.00, tax_amount: 2250.00, total: 14750.00, securityCode: '3C7B90', dgiiStatus: 'Aceptado' },
+    { code: 'E3100000043', ncf_prefix: 'E31', ncf_type: 'E31 - Crédito Fiscal', date: '2026-07-18', client: 'Transportes Cibao S.A.', rnc: '101-99882-3', method: 'Transferencia', subtotal: 45000.00, tax_amount: 8100.00, total: 53100.00, securityCode: '1A9F44', dgiiStatus: 'Aceptado' },
+    { code: 'E4500000005', ncf_prefix: 'E45', ncf_type: 'E45 - Gubernamental', date: '2026-07-17', client: 'Ministerio de Obras Públicas', rnc: '401-00234-9', method: 'Transferencia', subtotal: 120000.00, tax_amount: 0.00, total: 120000.00, securityCode: '9E3D82', dgiiStatus: 'Aceptado' },
+  ],
+  internas: [
+    { code: 'INT-000101', date: '2026-07-21', client: 'Taller San Cristóbal', rnc: 'Consumidor Final', method: 'Efectivo', cashier: 'Cajero Principal', status: 'Completada', total: 6450.00 },
+    { code: 'INT-000102', date: '2026-07-20', client: 'Carlos Rodríguez', rnc: 'Consumidor Final', method: 'Tarjeta', cashier: 'Cajero Principal', status: 'Completada', total: 3200.00 },
+    { code: 'INT-000103', date: '2026-07-19', client: 'Agregados del Sur', rnc: 'Consumidor Final', method: 'Transferencia', cashier: 'Cajero Principal', status: 'Completada', total: 18500.00 },
+    { code: 'INT-000104', date: '2026-07-18', client: 'Venta Rápida Mostrador', rnc: 'Consumidor Final', method: 'Efectivo', cashier: 'Cajero 2', status: 'Completada', total: 1150.00 },
+  ],
+  ventas: [
+    { code: 'FAC-000101', ncf: 'E3100000041', date: '2026-07-20', client: 'Constructora del Caribe S.R.L.', rnc: '131-48841-7', method: 'Transferencia', status: 'Pagada', total: 100000.00 },
+    { code: 'FAC-000102', ncf: 'INT-000101', date: '2026-07-21', client: 'Taller San Cristóbal', rnc: 'Consumidor Final', method: 'Efectivo', status: 'Pagada', total: 6450.00 },
+    { code: 'FAC-000103', ncf: 'E3200000042', date: '2026-07-19', client: 'Juan Manuel Peralta', rnc: '402-2384910-1', method: 'Efectivo', status: 'Pagada', total: 14750.00 },
+  ],
+  financiamientos: [],
+  moras: [],
+  movimientos_caja: [],
+  inventario: [],
+  clientes: [],
+  caja: [],
+  inspecciones: [],
+  ordenes_trabajo: [],
+};
+
+const REPORT_CATEGORIES = [
+  { id: 'todos', label: 'Todos', icon: Squares2X2Icon },
+  { id: 'ventas', label: 'Ventas & e-CF', icon: DocumentChartBarIcon },
+  { id: 'finanzas', label: 'Finanzas & Caja', icon: BanknotesIcon },
+  { id: 'inventario', label: 'Inventario & Taller', icon: WrenchScrewdriverIcon },
+] as const;
+
 export default function Reports() {
-  const [activeReport, setActiveReport] = useState('caja');
-  const [selectedCategory, setSelectedCategory] = useState('todos');
+  const [activeReport, setActiveReport] = useState('ecf');
+  const [selectedCategory, setSelectedCategory] = useState<string>('todos');
+  const [selectedNcfType, setSelectedNcfType] = useState<string>('todos');
   const [isGenerated, setIsGenerated] = useState(true);
   const [startDate, setStartDate] = useState('2026-07-01');
   const [endDate, setEndDate] = useState('2026-07-21');
-  const [branch, setBranch] = useState('Sede Principal');
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
-  
+  const [dbData, setDbData] = useState<Record<string, any[]>>(() => 
+    mapReportsData(
+      getLocalStorageInvoices(),
+      getLocalStorageFinancings(),
+      getLocalStorageCustomers(),
+      getLocalStorageInventory(),
+      getLocalStorageCashClosures()
+    )
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadRealData = async () => {
+      try {
+        const [invs, fins, custs, items, closures] = await Promise.all([
+          fetchInvoices(),
+          fetchFinancings(),
+          fetchCustomers(),
+          fetchInventory(),
+          fetchCashClosures()
+        ]);
+
+        if (isMounted) {
+          const mappedData = mapReportsData(invs, fins, custs, items, closures);
+          setDbData(mappedData);
+        }
+      } catch (err) {
+        console.warn('Error loading DB data for reports:', err);
+      }
+    };
+
+    loadRealData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredReportTypes = useMemo(() => {
+    if (selectedCategory === 'todos') return REPORT_TYPES;
+    if (selectedCategory === 'inventario') {
+      return REPORT_TYPES.filter(r => r.category === 'inventario' || r.category === 'mantenimiento');
+    }
+    return REPORT_TYPES.filter(r => r.category === selectedCategory);
+  }, [selectedCategory]);
+
   // Dominican NCF & Sequential Report Counter State
   const [reportSeqNumber, setReportSeqNumber] = useState<number>(() => {
     const saved = localStorage.getItem('brianna_report_seq');
@@ -126,7 +289,7 @@ export default function Reports() {
   }, []);
 
   const formattedReportNo = useMemo(() => String(reportSeqNumber).padStart(4, '0'), [reportSeqNumber]);
-  const formattedNCFNo = useMemo(() => 'B01' + String(reportSeqNumber).padStart(8, '0'), [reportSeqNumber]);
+  const formattedReportCode = useMemo(() => `REP-${formattedReportNo}`, [formattedReportNo]);
 
   const incrementSeqNumber = () => {
     setReportSeqNumber(prev => {
@@ -138,10 +301,65 @@ export default function Reports() {
   };
 
   const selectedReportInfo = REPORT_TYPES.find(r => r.id === activeReport) || REPORT_TYPES[0];
-  const reportData = DUMMY_REPORT_DATA[activeReport as keyof typeof DUMMY_REPORT_DATA] || [];
+
+  const reportData = useMemo(() => {
+    let list: any[] = [];
+    if (dbData[activeReport] && dbData[activeReport].length > 0) {
+      list = dbData[activeReport];
+    } else {
+      list = DUMMY_REPORT_DATA[activeReport as keyof typeof DUMMY_REPORT_DATA] || [];
+    }
+
+    if (activeReport === 'ecf' && selectedNcfType !== 'todos') {
+      return list.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
+    }
+
+    return list;
+  }, [dbData, activeReport, selectedNcfType]);
+
+  // Group e-CF data dynamically by Voucher Type (E31, E32, E33, E34, E44, E45, etc.)
+  const ecfGroupedByType = useMemo(() => {
+    const rawData = (dbData.ecf && dbData.ecf.length > 0) ? dbData.ecf : DUMMY_REPORT_DATA.ecf;
+    const groups: Record<string, { prefix: string; typeName: string; count: number; subtotal: number; tax: number; total: number; items: any[] }> = {};
+
+    const TYPE_LABELS: Record<string, string> = {
+      'E31': 'E31 • Facturas de Crédito Fiscal',
+      'E32': 'E32 • Facturas de Consumo',
+      'E33': 'E33 • Notas de Débito',
+      'E34': 'E34 • Notas de Crédito',
+      'E44': 'E44 • Regímenes Especiales de Tributación',
+      'E45': 'E45 • Comprobantes Gubernamentales',
+      'E46': 'E46 • Facturas para Exportación',
+      'E47': 'E47 • Pagos al Exterior'
+    };
+
+    rawData.forEach((item: any) => {
+      const prefix = item.ncf_prefix || (item.code?.startsWith('E') ? item.code.substring(0, 3) : 'E32');
+      if (!groups[prefix]) {
+        groups[prefix] = {
+          prefix,
+          typeName: TYPE_LABELS[prefix] || `${prefix} • Comprobantes ${prefix}`,
+          count: 0,
+          subtotal: 0,
+          tax: 0,
+          total: 0,
+          items: []
+        };
+      }
+      groups[prefix].items.push(item);
+      groups[prefix].count += 1;
+      groups[prefix].subtotal += Number(item.subtotal || 0);
+      groups[prefix].tax += Number(item.tax_amount || 0);
+      groups[prefix].total += Number(item.total || 0);
+    });
+
+    return groups;
+  }, [dbData.ecf]);
 
   // Calculate Report Totals
   const grandTotal = useMemo(() => {
+    if (activeReport === 'ecf') return reportData.reduce((sum: number, r: any) => sum + (r.total || 0), 0);
+    if (activeReport === 'internas') return reportData.reduce((sum: number, r: any) => sum + (r.total || 0), 0);
     if (activeReport === 'ventas') return reportData.reduce((sum: number, r: any) => sum + r.total, 0);
     if (activeReport === 'financiamientos') return reportData.reduce((sum: number, r: any) => sum + r.amount, 0);
     if (activeReport === 'moras') return reportData.reduce((sum: number, r: any) => sum + r.totalDue, 0);
@@ -153,6 +371,15 @@ export default function Reports() {
     if (activeReport === 'inspecciones') return reportData.length;
     return 0;
   }, [activeReport, reportData]);
+
+  const ecfTotals = useMemo(() => {
+    const data = (dbData.ecf && dbData.ecf.length > 0) ? dbData.ecf : DUMMY_REPORT_DATA.ecf;
+    const filtered = selectedNcfType === 'todos' ? data : data.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
+    const subtotal = filtered.reduce((sum: number, r: any) => sum + (r.subtotal || 0), 0);
+    const tax = filtered.reduce((sum: number, r: any) => sum + (r.tax_amount || 0), 0);
+    const total = filtered.reduce((sum: number, r: any) => sum + (r.total || 0), 0);
+    return { subtotal, tax, total, count: filtered.length, totalCount: data.length };
+  }, [dbData.ecf, selectedNcfType]);
 
   const cajaTotals = useMemo(() => {
     const incomes = DUMMY_REPORT_DATA.movimientos_caja.filter(m => m.type === 'Ingreso').reduce((sum, m) => sum + m.amount, 0);
@@ -176,40 +403,50 @@ export default function Reports() {
     let headers: string[] = [];
     let rows: string[][] = [];
 
-    if (activeReport === 'ventas') {
-      headers = ['NCF Reporte', 'Código Factura', 'Fecha', 'Cliente', 'Cédula/RNC', 'Método Pago', 'Estado', 'Total Facturado (RD$)'];
+    if (activeReport === 'ecf') {
+      headers = ['No. Reporte', 'e-NCF', 'Tipo e-CF', 'Fecha', 'Cliente', 'Cédula/RNC', 'Método Pago', 'Subtotal (RD$)', 'ITBIS 18% (RD$)', 'Total (RD$)', 'Cód. Seguridad', 'Estado DGII'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.code, r.date, `"${r.client}"`, `"${r.rnc}"`, r.method, r.status, r.total.toFixed(2)
+        formattedReportCode, r.code, `"${r.ncf_type}"`, r.date, `"${r.client}"`, `"${r.rnc}"`, r.method, (r.subtotal || 0).toFixed(2), (r.tax_amount || 0).toFixed(2), r.total.toFixed(2), `"${r.securityCode || ''}"`, `"${r.dgiiStatus || 'Aceptado'}"`
+      ]);
+    } else if (activeReport === 'internas') {
+      headers = ['No. Reporte', 'Código Factura', 'Fecha', 'Cliente', 'Cédula/RNC', 'Método Pago', 'Cajero', 'Estado', 'Total Facturado (RD$)'];
+      rows = reportData.map((r: any) => [
+        formattedReportCode, r.code, r.date, `"${r.client}"`, `"${r.rnc}"`, r.method, `"${r.cashier || ''}"`, `"${r.status || 'Completada'}"`, r.total.toFixed(2)
+      ]);
+    } else if (activeReport === 'ventas') {
+      headers = ['No. Reporte', 'Código Factura', 'e-NCF / Comprobante', 'Fecha', 'Cliente', 'Cédula/RNC', 'Método Pago', 'Estado', 'Total Facturado (RD$)'];
+      rows = reportData.map((r: any) => [
+        formattedReportCode, r.code, r.ncf || 'N/A', r.date, `"${r.client}"`, `"${r.rnc}"`, r.method, r.status, r.total.toFixed(2)
       ]);
     } else if (activeReport === 'financiamientos') {
-      headers = ['NCF Reporte', 'Código', 'Cliente', 'Artículo / Maquinaria', 'Monto (RD$)', 'Tasa', 'Plazo', 'Estado', 'Próximo Pago'];
+      headers = ['No. Reporte', 'Código', 'Cliente', 'Artículo / Maquinaria', 'Monto (RD$)', 'Tasa', 'Plazo', 'Estado', 'Próximo Pago'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.code, `"${r.client}"`, `"${r.item}"`, r.amount.toFixed(2), r.rate, r.term, r.status, r.nextPayment
+        formattedReportCode, r.code, `"${r.client}"`, `"${r.item}"`, r.amount.toFixed(2), r.rate, r.term, r.status, r.nextPayment
       ]);
     } else if (activeReport === 'moras') {
-      headers = ['NCF Reporte', 'Código Mora', 'Cliente', 'Contrato / Factura', 'Días en Mora', 'Cuota Pendiente (RD$)', 'Recargo (RD$)', 'Total Deuda (RD$)'];
+      headers = ['No. Reporte', 'Código Mora', 'Cliente', 'Contrato / Factura', 'Días en Mora', 'Cuota Pendiente (RD$)', 'Recargo (RD$)', 'Total Deuda (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.code, `"${r.client}"`, r.invoice, r.daysOverdue, r.unpaidInstallment.toFixed(2), r.penalty.toFixed(2), r.totalDue.toFixed(2)
+        formattedReportCode, r.code, `"${r.client}"`, r.invoice, r.daysOverdue, r.unpaidInstallment.toFixed(2), r.penalty.toFixed(2), r.totalDue.toFixed(2)
       ]);
     } else if (activeReport === 'movimientos_caja') {
-      headers = ['NCF Reporte', 'Código', 'Fecha', 'Tipo', 'Categoría', 'Concepto / Descripción', 'Método Pago', 'Monto (RD$)'];
+      headers = ['No. Reporte', 'Código', 'Fecha', 'Tipo', 'Categoría', 'Concepto / Descripción', 'Método Pago', 'Monto (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.id, r.date, r.type, r.category, `"${r.description}"`, r.method, (r.type === 'Ingreso' ? r.amount : -r.amount).toFixed(2)
+        formattedReportCode, r.id, r.date, r.type, r.category, `"${r.description}"`, r.method, (r.type === 'Ingreso' ? r.amount : -r.amount).toFixed(2)
       ]);
     } else if (activeReport === 'inventario') {
-      headers = ['NCF Reporte', 'Código', 'Artículo', 'Categoría', 'Stock Inicial', 'Entradas', 'Salidas', 'Stock Actual', 'Precio Unitario (RD$)', 'Valor Total (RD$)'];
+      headers = ['No. Reporte', 'Código', 'Artículo', 'Categoría', 'Stock Inicial', 'Entradas', 'Salidas', 'Stock Actual', 'Precio Unitario (RD$)', 'Valor Total (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.code, `"${r.name}"`, r.category, r.stockInit, r.in, r.out, r.stockCurrent, r.unitPrice.toFixed(2), r.totalValue.toFixed(2)
+        formattedReportCode, r.code, `"${r.name}"`, r.category, r.stockInit, r.in, r.out, r.stockCurrent, r.unitPrice.toFixed(2), r.totalValue.toFixed(2)
       ]);
     } else if (activeReport === 'clientes') {
-      headers = ['NCF Reporte', 'Cliente', 'Cédula/RNC', 'Tipo', 'Facturas', 'Límite Crédito (RD$)', 'Total Compras (RD$)'];
+      headers = ['No. Reporte', 'Cliente', 'Cédula/RNC', 'Tipo', 'Facturas', 'Límite Crédito (RD$)', 'Total Compras (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, `"${r.client}"`, `"${r.rnc}"`, r.type, r.invoices, r.creditLimit.toFixed(2), r.totalSpent.toFixed(2)
+        formattedReportCode, `"${r.client}"`, `"${r.rnc}"`, r.type, r.invoices, r.creditLimit.toFixed(2), r.totalSpent.toFixed(2)
       ]);
     } else if (activeReport === 'caja') {
-      headers = ['NCF Reporte', 'Fecha', 'Caja', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
+      headers = ['No. Reporte', 'Fecha', 'Caja', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedNCFNo, r.date, r.register, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
+        formattedReportCode, r.date, r.register, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
       ]);
     } else if (activeReport === 'inspecciones') {
       headers = ['Código Reporte', 'Fecha', 'Vehículo / Maquinaria', 'Chasis / VIN', 'Inspector', 'Millas / Km', 'Ítems Buenos', 'Ítems Regulares', 'Ítems Deficientes', 'Estado'];
@@ -227,14 +464,31 @@ export default function Reports() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+
+    // Construir nombre de archivo con tipo de comprobante y rango de fechas exacto
+    let docTypeTag = selectedReportInfo.id;
+    if (activeReport === 'ecf') {
+      docTypeTag = selectedNcfType === 'todos' ? 'eCF_Todos' : `eCF_${selectedNcfType}`;
+    } else if (activeReport === 'internas') {
+      docTypeTag = 'Facturas_Internas';
+    } else if (activeReport === 'ventas') {
+      docTypeTag = 'Ventas_Generales';
+    }
+
+    const dateRangeTag = `${startDate}_al_${endDate}`;
+    const fileName = `Reporte_${docTypeTag}_${dateRangeTag}.csv`;
+
     link.setAttribute('href', url);
-    link.setAttribute('download', `Reporte_${formattedNCFNo}_${selectedReportInfo.id}.csv`);
+    link.setAttribute('download', fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     incrementSeqNumber();
-    setDownloadNotice(`Reporte NCF ${formattedNCFNo} exportado exitosamente en CSV / Excel.`);
+    const typeLabel = activeReport === 'ecf' 
+      ? (selectedNcfType === 'todos' ? 'e-CF (Todos)' : `e-CF ${selectedNcfType}`)
+      : selectedReportInfo.name;
+    setDownloadNotice(`Reporte ${typeLabel} del ${startDate} al ${endDate} exportado exitosamente.`);
     setTimeout(() => setDownloadNotice(null), 4000);
   };
 
@@ -272,174 +526,163 @@ export default function Reports() {
         }
       `}</style>
 
-      {/* Header Actions (Screen Only) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+      {/* Clean Minimalist Header Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Módulo de Reportes & Informes
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
-            Genera e imprime reportes oficiales financieros, de ventas e inventario
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400">
+            Informes oficiales fiscales e-CF, ventas internas, cuadre de caja e inventario.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <motion.button 
-            whileHover={{ scale: 1.02 }} 
-            whileTap={{ scale: 0.98 }} 
+        <div className="flex items-center gap-2.5">
+          <button 
             onClick={handleExportCSV}
-            className="flex items-center justify-center gap-2 bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-200 px-5 py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-zinc-700 transition-all shadow-sm text-xs border border-gray-200 dark:border-zinc-700 cursor-pointer"
+            className="flex items-center justify-center gap-2 bg-white dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-100 dark:hover:bg-zinc-700 transition-all text-sm border border-gray-200 dark:border-zinc-700 cursor-pointer shadow-xs"
           >
             <ArrowDownTrayIcon className="h-4 w-4 text-emerald-600" />
-            Exportar Excel
-          </motion.button>
+            <span>Excel / CSV</span>
+          </button>
           
-          <motion.button 
-            whileHover={{ scale: 1.02 }} 
-            whileTap={{ scale: 0.98 }} 
+          <button 
             onClick={handlePrint}
-            className="flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white px-6 py-2.5 rounded-full font-black transition-all shadow-md shadow-red-900/20 text-xs cursor-pointer"
+            className="flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white px-5 py-2.5 rounded-xl font-black transition-all shadow-sm text-sm cursor-pointer"
           >
             <PrinterIcon className="h-4 w-4" />
-            Imprimir / Guardar PDF
-          </motion.button>
+            <span>Imprimir / PDF</span>
+          </button>
         </div>
       </div>
 
       {downloadNotice && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs font-bold text-emerald-700 dark:text-emerald-300 text-center flex items-center justify-center gap-2 print:hidden">
-          <CheckCircleIcon className="h-4 w-4" />
-          {downloadNotice}
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-sm font-bold text-emerald-800 dark:text-emerald-300 text-center flex items-center justify-center gap-2 print:hidden shadow-xs">
+          <CheckCircleIcon className="h-5 w-5 shrink-0" />
+          <span>{downloadNotice}</span>
         </div>
       )}
 
-      {/* Category Pills Bar (Screen Only) */}
-      <div className="flex flex-wrap items-center gap-2 print:hidden pb-1">
-        {REPORT_CATEGORIES.map(cat => {
-          const isCatActive = selectedCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isCatActive
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm scale-105'
-                  : 'bg-gray-100 dark:bg-zinc-800/80 text-gray-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700'
-              }`}
-            >
-              {cat.name}
-            </button>
-          );
-        })}
-      </div>
+      {/* Modern Executive Report Navigation & Category Filter */}
+      <div className="bg-white dark:bg-[#121318] p-4 sm:p-5 rounded-3xl border border-gray-200/80 dark:border-zinc-800 shadow-xs print:hidden space-y-4">
+        {/* Category Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-gray-100 dark:border-zinc-800/80">
+          <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 mr-1 hidden sm:inline">
+            Categoría:
+          </span>
+          {REPORT_CATEGORIES.map(cat => {
+            const isCatActive = selectedCategory === cat.id;
+            const CatIcon = cat.icon;
+            const count = cat.id === 'todos' 
+              ? REPORT_TYPES.length 
+              : cat.id === 'inventario'
+              ? REPORT_TYPES.filter(r => r.category === 'inventario' || r.category === 'mantenimiento').length
+              : REPORT_TYPES.filter(r => r.category === cat.id).length;
 
-      {/* Report Selection Grid (4 Columns Layout) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
-        {REPORT_TYPES
-          .filter(r => selectedCategory === 'todos' || r.category === selectedCategory)
-          .map((report) => {
-            const isActive = activeReport === report.id;
             return (
-              <motion.div 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  isCatActive
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs font-black'
+                    : 'bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <CatIcon className="w-3.5 h-3.5" />
+                <span>{cat.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
+                  isCatActive ? 'bg-white/20 dark:bg-black/20 text-white dark:text-gray-900' : 'bg-gray-200/80 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Report Types (Responsive Wrap Grid / Pills) */}
+        <div className="flex flex-wrap items-center gap-2">
+          {filteredReportTypes.map((report) => {
+            const isActive = activeReport === report.id;
+            const Icon = report.icon;
+            return (
+              <button
                 key={report.id}
+                type="button"
                 onClick={() => {
                   setActiveReport(report.id);
                   setIsGenerated(true);
                 }}
-                className={`cursor-pointer p-4 rounded-2xl transition-all relative overflow-hidden flex flex-col justify-between border ${
+                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                   isActive 
-                    ? 'bg-white dark:bg-[#16171d] border-[#ED1C24] ring-2 ring-[#ED1C24]/20 shadow-md' 
-                    : 'bg-white dark:bg-[#121318] border-gray-100 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700'
+                    ? 'bg-[#ED1C24] text-white shadow-md shadow-red-900/20 font-black ring-2 ring-[#ED1C24]/30' 
+                    : 'bg-[#f4f3f1] dark:bg-zinc-800/80 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
-                {isActive && (
-                  <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-[#ED1C24]" />
-                )}
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className={`p-2.5 rounded-xl transition-colors ${isActive ? 'bg-[#ED1C24] text-white' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'}`}>
-                      <report.icon className="h-5 w-5" />
-                    </div>
-                    {isActive && (
-                      <span className="text-[10px] font-black uppercase text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-md border border-red-200 dark:border-red-900/40">
-                        Activo
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-extrabold text-xs text-gray-900 dark:text-white leading-snug mb-1">{report.name}</h3>
-                  <p className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 leading-normal">{report.description}</p>
-                </div>
-              </motion.div>
+                <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-gray-500 dark:text-zinc-400'}`} />
+                <span>{report.name}</span>
+              </button>
             );
           })}
+        </div>
+
+        {/* Active Report Header Description Banner */}
+        <div className="pt-2 flex items-center justify-between text-xs text-gray-500 dark:text-zinc-400">
+          <div className="flex items-center gap-2 truncate">
+            <span className="w-2 h-2 rounded-full bg-[#ED1C24] shrink-0 animate-pulse"></span>
+            <span className="font-bold text-gray-700 dark:text-zinc-300">
+              {selectedReportInfo.name}:
+            </span>
+            <span className="truncate text-gray-500 dark:text-zinc-400">
+              {selectedReportInfo.description}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Report Viewer & Filters Container */}
-      <div className="bg-white dark:bg-[#121318] shadow-sm rounded-3xl border border-gray-100 dark:border-zinc-800 overflow-hidden flex flex-col print:border-none print:shadow-none print:bg-white print:text-black">
+      {/* Report Viewer Container */}
+      <div className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-3xl border border-gray-200/80 dark:border-zinc-800/80 overflow-hidden flex flex-col print:border-none print:shadow-none print:bg-white print:text-black">
         
-        {/* Filters Bar (Screen Only) */}
-        <div className="p-6 bg-gray-50/50 dark:bg-[#16171d] border-b border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row gap-4 items-end print:hidden">
-          <div className="w-full sm:w-auto">
-            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">Fecha Inicio</label>
-            <input 
-              type="date" 
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="block w-full px-4 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/10 outline-none" 
-            />
-          </div>
+        {/* Streamlined Filters Toolbar */}
+        <div className="p-4 sm:p-5 bg-gray-50/80 dark:bg-zinc-900/60 border-b border-gray-200/80 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-3.5 print:hidden">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-3.5 py-2 rounded-xl shadow-2xs">
+              <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">Desde:</span>
+              <input 
+                type="date" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer" 
+              />
+            </div>
 
-          <div className="w-full sm:w-auto">
-            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">Fecha Fin</label>
-            <input 
-              type="date" 
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="block w-full px-4 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/10 outline-none" 
-            />
-          </div>
-          
-          <div className="w-full sm:w-auto flex-1 max-w-xs">
-            <label className="block text-[11px] font-extrabold uppercase tracking-wider text-gray-400 mb-1.5">Sucursal</label>
-            <select 
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              className="block w-full px-4 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/10 outline-none cursor-pointer"
-            >
-              <option>Sede Principal</option>
-              <option>Sucursal Norte</option>
-            </select>
-          </div>
+            <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-3.5 py-2 rounded-xl shadow-2xs">
+              <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">Hasta:</span>
+              <input 
+                type="date" 
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer" 
+              />
+            </div>
 
-          <div className="w-full sm:w-auto flex items-center gap-2">
             <button 
               onClick={handleGenerateReport}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-2 bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-xs cursor-pointer"
             >
               <FunnelIcon className="h-4 w-4" />
-              Filtrar
+              <span>Filtrar</span>
             </button>
-            <button 
-              onClick={handlePrint}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-[#d91920] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-              Imprimir Reporte
-            </button>
-            <button 
-              onClick={handleExportCSV}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-            >
-              <ArrowDownTrayIcon className="h-4 w-4 stroke-[2.5]" />
-              Exportar CSV
-            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-black text-gray-600 dark:text-zinc-400 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-3 py-1.5 rounded-xl">
+              Reporte: #{formattedReportCode}
+            </span>
           </div>
         </div>
 
         {/* Screen Document Container */}
-        <div id="report-screen-area" className="p-6">
+        <div id="report-screen-area" className="p-4 sm:p-6">
           
           {/* Executive Corporate Print Header */}
           <div className="hidden print:block pb-4 border-b-2 border-gray-900 mb-4">
@@ -460,87 +703,90 @@ export default function Reports() {
               </div>
 
               <div className="text-right text-[10px] text-gray-800 space-y-0.5 border-l border-gray-300 pl-4">
+                <p><strong>Reporte:</strong> #{formattedReportCode}</p>
                 <p><strong>Período:</strong> {startDate} al {endDate}</p>
-                <p><strong>Sucursal:</strong> {branch}</p>
-                <p><strong>Generado:</strong> {currentDateStr} • {currentTimeStr}</p>
+                <p><strong>Emisión:</strong> {currentDateStr} • {currentTimeStr}</p>
               </div>
             </div>
           </div>
           
           {/* Table & KPI Container */}
           {isGenerated ? (
-            <div className="space-y-5 print:space-y-3">
+            <div className="space-y-4 print:space-y-3">
               
-              {/* Report Header Title & KPI Cards (Screen & Print) */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 dark:border-zinc-800 pb-4 print:border-none print:pb-0">
+              {/* Report Header Title & KPI Cards Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 dark:border-zinc-800/80 pb-4 print:border-none print:pb-0">
                 <div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-lg font-black text-gray-900 dark:text-white print:hidden">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight print:hidden">
                       {selectedReportInfo.name}
                     </h2>
-                    {/* Dominican Sequential NCF Report Badge */}
-                    <div className="bg-gray-50 dark:bg-zinc-800/80 px-3.5 py-1.5 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60 flex items-center gap-3 print:hidden">
-                      <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">Nº de Reporte</span>
-                      <span className="text-xs font-black text-gray-800 dark:text-zinc-200 tracking-wider font-mono">{formattedReportNo}</span>
-                      <span className="text-[10px] font-extrabold text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-lg border border-red-200 dark:border-red-900/40">
-                        {formattedNCFNo}
-                      </span>
-                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-600 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg print:hidden">
+                      #{formattedReportCode}
+                    </span>
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-zinc-400 print:hidden mt-1">
-                    Filtro: {startDate} al {endDate} • {branch}
+                  <p className="text-xs sm:text-sm font-medium text-gray-400 dark:text-zinc-500 print:hidden mt-0.5">
+                    Período: <strong className="text-gray-700 dark:text-zinc-300">{startDate}</strong> al <strong className="text-gray-700 dark:text-zinc-300">{endDate}</strong>
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 print:hidden">
-                  <button 
-                    onClick={handlePrint}
-                    className="flex items-center gap-2 bg-[#ED1C24] hover:bg-[#d91920] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-                  >
-                    <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Imprimir Reporte</span>
-                  </button>
-                  <button 
-                    onClick={handleExportCSV}
-                    className="flex items-center gap-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <ArrowDownTrayIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Exportar CSV</span>
-                  </button>
-
-                  {activeReport === 'caja' || activeReport === 'movimientos_caja' ? (
-                    <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div className="bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 print:bg-emerald-50 print:border-emerald-200">
-                        <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-400 block">Total Ingresos (+)</span>
-                        <span className="font-black text-emerald-700 dark:text-emerald-300 text-sm print:text-xs">
+                <div className="flex items-center gap-2.5 print:hidden">
+                  {activeReport === 'ecf' ? (
+                    <div className="flex flex-wrap items-center gap-2 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 text-xs sm:text-sm">
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Subtotal</span>
+                        <span className="font-bold text-gray-800 dark:text-zinc-200">
+                          RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">ITBIS (18%)</span>
+                        <span className="font-bold text-gray-800 dark:text-zinc-200">
+                          RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                      <div className="px-3.5 py-1 bg-white dark:bg-zinc-800 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xs">
+                        <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Total e-CF</span>
+                        <span className="font-black text-gray-900 dark:text-white text-sm sm:text-base">
+                          RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : activeReport === 'caja' || activeReport === 'movimientos_caja' ? (
+                    <div className="flex flex-wrap items-center gap-2 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 text-xs sm:text-sm">
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Ingresos</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-
-                      <div className="bg-red-50 dark:bg-red-950/40 px-4 py-2 rounded-2xl border border-red-200 dark:border-red-900/40 print:bg-red-50 print:border-red-200">
-                        <span className="text-[10px] font-bold text-red-800 dark:text-red-400 block">Total Egresos (-)</span>
-                        <span className="font-black text-red-700 dark:text-red-300 text-sm print:text-xs">
+                      <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Egresos</span>
+                        <span className="font-bold text-red-600 dark:text-red-400">
                           RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-
-                      <div className="bg-gray-900 dark:bg-zinc-800 text-white px-4 py-2 rounded-2xl print:bg-gray-100 print:text-black print:border print:border-gray-300">
-                        <span className="text-[10px] font-bold text-gray-300 dark:text-zinc-400 print:text-gray-600 block">Flujo Neto de Caja</span>
-                        <span className="font-black text-white dark:text-white print:text-black text-sm print:text-xs">
+                      <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                      <div className="px-3.5 py-1 bg-white dark:bg-zinc-800 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xs">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Flujo Neto</span>
+                        <span className="font-black text-gray-900 dark:text-white text-sm sm:text-base">
                           RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="bg-gray-50 dark:bg-zinc-800/60 px-4 py-2 rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-100 print:border-gray-300 print:py-1 print:px-3">
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-400 print:text-gray-600 block">Registros Totales</span>
-                        <span className="font-black text-gray-900 dark:text-white text-sm print:text-xs">{reportData.length} Elementos</span>
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 text-xs sm:text-sm">
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Registros</span>
+                        <span className="font-black text-gray-900 dark:text-white">{reportData.length}</span>
                       </div>
-
-                      <div className="bg-gray-900 dark:bg-zinc-800 text-white px-4 py-2 rounded-2xl print:bg-gray-100 print:text-black print:border print:border-gray-300 print:py-1 print:px-3">
-                        <span className="text-[10px] font-bold text-gray-300 dark:text-zinc-400 print:text-gray-600 block">Monto Acumulado</span>
-                        <span className="font-black text-white dark:text-white print:text-black text-sm print:text-xs">
+                      <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                      <div className="px-3.5 py-1 bg-white dark:bg-zinc-800 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xs">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Monto Total</span>
+                        <span className="font-black text-gray-900 dark:text-white text-sm sm:text-base">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -549,44 +795,268 @@ export default function Reports() {
                 </div>
               </div>
 
-              {/* Dynamic Report Table */}
-              <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-zinc-800 print:border-gray-400 print:rounded-none">
+
+              {/* e-CF Voucher Type Sub-Selector */}
+              {activeReport === 'ecf' && (
+                <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50/80 dark:bg-zinc-800/40 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 print:hidden">
+                  <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 px-2">
+                    Dividir por Comprobante:
+                  </span>
+
+                  <button
+                    onClick={() => setSelectedNcfType('todos')}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedNcfType === 'todos'
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs'
+                        : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700'
+                    }`}
+                  >
+                    <span>Todos los Comprobantes</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                      selectedNcfType === 'todos'
+                        ? 'bg-white/20 text-white dark:bg-black/10 dark:text-gray-900'
+                        : 'bg-gray-100 dark:bg-zinc-700 text-gray-800 dark:text-zinc-200'
+                    }`}>
+                      {ecfTotals.totalCount}
+                    </span>
+                  </button>
+
+                  {Object.values(ecfGroupedByType).map((group) => (
+                    <button
+                      key={group.prefix}
+                      onClick={() => setSelectedNcfType(group.prefix)}
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        selectedNcfType === group.prefix
+                          ? 'bg-[#ED1C24] text-white shadow-xs font-black'
+                          : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700'
+                      }`}
+                    >
+                      <span>{group.prefix}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                        selectedNcfType === group.prefix
+                          ? 'bg-white/20 text-white'
+                          : 'bg-red-50 dark:bg-red-950/60 text-[#ED1C24]'
+                      }`}>
+                        {group.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Dynamic Report Table / Grouped Sections */}
+              {activeReport === 'ecf' ? (
+                <div className="space-y-5">
+                  {Object.entries(ecfGroupedByType)
+                    .filter(([prefix]) => selectedNcfType === 'todos' || selectedNcfType === prefix)
+                    .map(([prefix, group]) => (
+                      <div key={prefix} className="rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden bg-white dark:bg-[#121318] shadow-xs">
+                        {/* Group Header */}
+                        <div className="bg-gray-50/90 dark:bg-zinc-800/80 px-4 py-3 border-b border-gray-200/80 dark:border-zinc-700/80 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-[#ED1C24] text-white shadow-2xs">
+                              {group.prefix}
+                            </span>
+                            <div>
+                              <h3 className="text-sm font-black text-gray-900 dark:text-white">
+                                {group.typeName}
+                              </h3>
+                              <p className="text-[11px] font-medium text-gray-500 dark:text-zinc-400">
+                                {group.items.length} {group.items.length === 1 ? 'comprobante emitido' : 'comprobantes emitidos'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 text-xs">
+                            <span className="text-gray-500 dark:text-zinc-400">
+                              Subtotal: <strong className="text-gray-900 dark:text-white font-mono font-bold">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                            </span>
+                            <div className="h-4 w-px bg-gray-300 dark:bg-zinc-700" />
+                            <span className="text-gray-500 dark:text-zinc-400">
+                              ITBIS (18%): <strong className="text-gray-900 dark:text-white font-mono font-bold">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                            </span>
+                            <div className="h-4 w-px bg-gray-300 dark:bg-zinc-700" />
+                            <div className="bg-white dark:bg-zinc-800 px-3 py-1 rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xs">
+                              <span className="text-gray-500 dark:text-zinc-400 mr-1.5 font-bold">Total {group.prefix}:</span>
+                              <span className="font-black text-gray-900 dark:text-white font-mono text-xs sm:text-sm">
+                                RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Table for this group */}
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100/60 dark:bg-zinc-900/60 border-b border-gray-200 dark:border-zinc-800 text-xs font-black uppercase text-gray-600 dark:text-zinc-300 tracking-wider">
+                              <th className="p-3.5">e-NCF</th>
+                              <th className="p-3.5">Fecha</th>
+                              <th className="p-3.5">Cliente</th>
+                              <th className="p-3.5">RNC / Cédula</th>
+                              <th className="p-3.5">Método</th>
+                              <th className="p-3.5">Subtotal</th>
+                              <th className="p-3.5">ITBIS (18%)</th>
+                              <th className="p-3.5 text-right">Total Factura</th>
+                              <th className="p-3.5 text-center">Estado DGII</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs sm:text-sm font-medium text-gray-800 dark:text-zinc-200">
+                            {group.items.map((row: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30">
+                                <td className="p-3.5 font-mono font-black text-gray-900 dark:text-white">{row.code}</td>
+                                <td className="p-3.5">{row.date}</td>
+                                <td className="p-3.5 font-bold">{row.client}</td>
+                                <td className="p-3.5 font-mono text-gray-500 dark:text-zinc-400">{row.rnc}</td>
+                                <td className="p-3.5">{row.method}</td>
+                                <td className="p-3.5 font-mono">RD$ {Number(row.subtotal || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                <td className="p-3.5 font-mono">RD$ {Number(row.tax_amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                <td className="p-3.5 text-right font-mono font-black text-gray-900 dark:text-white">
+                                  RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="p-3.5 text-center">
+                                  <span className="px-2.5 py-1 rounded-full text-xs font-bold border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                                    {row.dgiiStatus || 'Aceptado'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t border-gray-200 dark:border-zinc-700 text-xs sm:text-sm font-black text-gray-900 dark:text-white">
+                              <td colSpan={5} className="p-3.5 text-right uppercase tracking-wider">Subtotales {group.prefix}:</td>
+                              <td className="p-3.5 font-mono">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-3.5 font-mono">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-3.5 text-right font-mono font-black">RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ))}
+
+                  {/* Consolidated Grand Summary Box */}
+                  <div className="bg-gray-50 dark:bg-zinc-800/60 p-4 sm:p-5 rounded-2xl border-2 border-gray-900 dark:border-zinc-300 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <span className="text-xs uppercase font-black tracking-wider text-gray-500 dark:text-zinc-400 block">
+                        Resumen Consolidado Oficial
+                      </span>
+                      <h4 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                        Total General e-CF ({ecfTotals.count} comprobantes)
+                      </h4>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm">
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Subtotal Acumulado</span>
+                        <span className="font-mono font-bold text-gray-900 dark:text-white text-sm sm:text-base">
+                          RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="h-8 w-px bg-gray-300 dark:bg-zinc-700" />
+                      <div className="px-3 py-1">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">ITBIS Acumulado (18%)</span>
+                        <span className="font-mono font-bold text-gray-900 dark:text-white text-sm sm:text-base">
+                          RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="h-8 w-px bg-gray-300 dark:bg-zinc-700" />
+                      <div className="bg-white dark:bg-zinc-900 px-4 py-2 rounded-xl border border-gray-300 dark:border-zinc-700 shadow-xs">
+                        <span className="text-[10px] uppercase font-black text-emerald-600 dark:text-emerald-400 block">Gran Total e-CF</span>
+                        <span className="font-mono font-black text-gray-900 dark:text-white text-base sm:text-lg">
+                          RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-400 print:rounded-none">
+
+                {/* 2. Facturas de Venta Internas */}
+                {activeReport === 'internas' && (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-xs font-black uppercase text-gray-600 dark:text-zinc-300 tracking-wider print:bg-gray-200 print:text-black">
+                        <th className="p-3.5 print:py-1.5">Nº Factura</th>
+                        <th className="p-3.5 print:py-1.5">Fecha</th>
+                        <th className="p-3.5 print:py-1.5">Cliente</th>
+                        <th className="p-3.5 print:py-1.5">RNC / Cédula</th>
+                        <th className="p-3.5 print:py-1.5">Método Pago</th>
+                        <th className="p-3.5 print:py-1.5">Cajero</th>
+                        <th className="p-3.5 print:py-1.5">Estado</th>
+                        <th className="p-3.5 print:py-1.5 text-right">Monto Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs sm:text-sm font-medium text-gray-800 dark:text-zinc-200 print:divide-gray-300 print:text-[10px]">
+                      {reportData.map((row: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50">
+                          <td className="p-3.5 print:py-1.5 font-mono font-black text-gray-900 dark:text-white print:text-black">{row.code}</td>
+                          <td className="p-3.5 print:py-1.5">{row.date}</td>
+                          <td className="p-3.5 print:py-1.5 font-bold print:text-black">{row.client}</td>
+                          <td className="p-3.5 print:py-1.5 text-gray-500 dark:text-zinc-400 print:text-gray-700">{row.rnc}</td>
+                          <td className="p-3.5 print:py-1.5">{row.method}</td>
+                          <td className="p-3.5 print:py-1.5">{row.cashier || 'Cajero Principal'}</td>
+                          <td className="p-3.5 print:py-1.5">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
+                              {row.status || 'Completada'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 print:py-1.5 text-right font-mono font-black text-gray-900 dark:text-white print:text-black">
+                            RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs sm:text-sm print:border-black print:text-black print:text-[10px]">
+                        <td colSpan={7} className="p-3.5 print:py-1.5 text-right uppercase tracking-wider">Total Facturas Internas:</td>
+                        <td className="p-3.5 print:py-1.5 text-right font-mono font-black">
+                          RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                )}
+
+                {/* 3. Ventas y Facturación General */}
                 {activeReport === 'ventas' && (
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-[10px] font-black uppercase text-gray-500 dark:text-zinc-400 tracking-wider print:bg-gray-200 print:text-black">
-                        <th className="p-3 print:py-1.5">Factura</th>
-                        <th className="p-3 print:py-1.5">Fecha</th>
-                        <th className="p-3 print:py-1.5">Cliente</th>
-                        <th className="p-3 print:py-1.5">RNC</th>
-                        <th className="p-3 print:py-1.5">Método Pago</th>
-                        <th className="p-3 print:py-1.5">Estado</th>
-                        <th className="p-3 print:py-1.5 text-right">Monto Total</th>
+                      <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-xs font-black uppercase text-gray-600 dark:text-zinc-300 tracking-wider print:bg-gray-200 print:text-black">
+                        <th className="p-3.5 print:py-1.5">Factura</th>
+                        <th className="p-3.5 print:py-1.5">NCF / Comprobante</th>
+                        <th className="p-3.5 print:py-1.5">Fecha</th>
+                        <th className="p-3.5 print:py-1.5">Cliente</th>
+                        <th className="p-3.5 print:py-1.5">RNC</th>
+                        <th className="p-3.5 print:py-1.5">Método Pago</th>
+                        <th className="p-3.5 print:py-1.5">Estado</th>
+                        <th className="p-3.5 print:py-1.5 text-right">Monto Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs font-medium text-gray-800 dark:text-zinc-200 print:divide-gray-300 print:text-[10px]">
+                    <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs sm:text-sm font-medium text-gray-800 dark:text-zinc-200 print:divide-gray-300 print:text-[10px]">
                       {reportData.map((row: any, idx: number) => (
                         <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50">
-                          <td className="p-3 print:py-1.5 font-bold text-gray-900 dark:text-white print:text-black">{row.code}</td>
-                          <td className="p-3 print:py-1.5">{row.date}</td>
-                          <td className="p-3 print:py-1.5 font-bold print:text-black">{row.client}</td>
-                          <td className="p-3 print:py-1.5 text-gray-400 print:text-gray-600">{row.rnc}</td>
-                          <td className="p-3 print:py-1.5">{row.method}</td>
-                          <td className="p-3 print:py-1.5">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] print:text-[9px] font-bold ${row.status === 'Pagada' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 print:bg-emerald-50 print:text-emerald-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 print:bg-amber-50 print:text-amber-800'}`}>
+                          <td className="p-3.5 print:py-1.5 font-bold text-gray-900 dark:text-white print:text-black">{row.code}</td>
+                          <td className="p-3.5 print:py-1.5 font-mono font-bold text-gray-700 dark:text-zinc-300">{row.ncf || 'N/A'}</td>
+                          <td className="p-3.5 print:py-1.5">{row.date}</td>
+                          <td className="p-3.5 print:py-1.5 font-bold print:text-black">{row.client}</td>
+                          <td className="p-3.5 print:py-1.5 text-gray-500 print:text-gray-700">{row.rnc}</td>
+                          <td className="p-3.5 print:py-1.5">{row.method}</td>
+                          <td className="p-3.5 print:py-1.5">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${row.status === 'Pagada' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 print:bg-emerald-50 print:text-emerald-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 print:bg-amber-50 print:text-amber-800'}`}>
                               {row.status}
                             </span>
                           </td>
-                          <td className="p-3 print:py-1.5 text-right font-bold text-gray-900 dark:text-white print:text-black">
+                          <td className="p-3.5 print:py-1.5 text-right font-mono font-bold text-gray-900 dark:text-white print:text-black">
                             RD$ {row.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
-                        <td colSpan={6} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total General Facturado:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs sm:text-sm print:border-black print:text-black print:text-[10px]">
+                        <td colSpan={7} className="p-3.5 print:py-1.5 text-right uppercase tracking-wider">Total General Facturado:</td>
+                        <td className="p-3.5 print:py-1.5 text-right text-gray-900 dark:text-white font-mono font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -625,9 +1095,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={6} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total Financiaciones:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -662,9 +1132,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={5} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total Deuda Acumulada:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -701,9 +1171,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={7} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Valor Total del Stock:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -738,9 +1208,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={5} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total Facturado a Clientes:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -788,9 +1258,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={5} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Flujo Neto Total de Movimientos:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -835,9 +1305,9 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs print:bg-gray-900 print:text-white print:text-[10px]">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
                         <td colSpan={8} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total Acumulado en Caja:</td>
-                        <td className="p-3 print:py-1.5 text-right text-white font-bold">
+                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -893,7 +1363,7 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black">
                         <td colSpan={7} className="p-3 text-right uppercase tracking-wider">Total Inspecciones Registradas:</td>
                         <td className="p-3 text-right font-black">{reportData.length}</td>
                       </tr>
@@ -945,14 +1415,15 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-900 dark:bg-zinc-800 text-white font-black text-xs">
+                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black">
                         <td colSpan={8} className="p-3 text-right uppercase tracking-wider">Costo Total Mantenimientos:</td>
-                        <td className="p-3 text-right text-white font-black">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-3 text-right text-gray-900 dark:text-white font-black">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                       </tr>
                     </tfoot>
                   </table>
                 )}
               </div>
+              )}
 
 
 
@@ -991,18 +1462,23 @@ export default function Reports() {
             </div>
 
             <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-right text-[10px] text-gray-700 space-y-1">
-              <p><strong>Nº de Reporte (NCF):</strong> <span className="font-mono font-bold text-gray-900">{formattedNCFNo}</span> (#{formattedReportNo})</p>
+              <p><strong>Nº de Reporte:</strong> <span className="font-mono font-bold text-gray-900">#{formattedReportCode}</span></p>
               <p><strong>Período:</strong> {startDate} al {endDate}</p>
-              <p><strong>Sucursal:</strong> {branch}</p>
               <p><strong>Emisión:</strong> {currentDateStr} • {currentTimeStr}</p>
             </div>
           </div>
 
           {/* Report Summary KPI Header (Print) */}
           <div className="bg-gray-100 p-3 rounded-xl border border-gray-300 mb-5 flex justify-between items-center text-xs font-bold text-gray-900">
-            <div>Filtro: {startDate} al {endDate} • {branch}</div>
+            <div>Filtro: {startDate} al {endDate}</div>
             <div>
-              {activeReport === 'caja' || activeReport === 'movimientos_caja' ? (
+              {activeReport === 'ecf' ? (
+                <span className="flex items-center gap-3">
+                  <span>Subtotal: <strong>RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span> | 
+                  <span>ITBIS (18%): <strong>RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span> | 
+                  <span>Total e-CF: <strong className="text-[#ED1C24]">RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                </span>
+              ) : activeReport === 'caja' || activeReport === 'movimientos_caja' ? (
                 <span className="flex items-center gap-3">
                   <span className="text-emerald-700">Ingresos: RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span> | 
                   <span className="text-red-700">Egresos: RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span> | 
@@ -1016,6 +1492,127 @@ export default function Reports() {
 
           {/* Printable Data Table */}
           <div className="mt-2 overflow-hidden rounded-lg border border-gray-300">
+            
+            {/* 1. Facturación Electrónica e-CF Print Table (Dividida por Comprobante) */}
+            {activeReport === 'ecf' && (
+              <div className="space-y-4">
+                {Object.entries(ecfGroupedByType)
+                  .filter(([prefix]) => selectedNcfType === 'todos' || selectedNcfType === prefix)
+                  .map(([prefix, group]) => (
+                    <div key={prefix} className="overflow-hidden rounded-lg border border-gray-300">
+                      {/* Section Header (Print) */}
+                      <div className="bg-gray-100 p-2 border-b border-gray-300 flex justify-between items-center text-xs font-bold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-[#ED1C24] text-white px-2 py-0.5 rounded text-[10px] font-black">{group.prefix}</span>
+                          <span>{group.typeName} ({group.items.length} {group.items.length === 1 ? 'comprobante' : 'comprobantes'})</span>
+                        </div>
+                        <div className="space-x-3 text-[10.5px]">
+                          <span>Subtotal: <strong>RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                          <span>ITBIS: <strong>RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                          <span>Total {group.prefix}: <strong>RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                        </div>
+                      </div>
+
+                      <table className="w-full text-left border-collapse text-[10.5px]">
+                        <thead>
+                          <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                            <th className="p-2">e-NCF</th>
+                            <th className="p-2">Fecha</th>
+                            <th className="p-2">Cliente</th>
+                            <th className="p-2">RNC/Cédula</th>
+                            <th className="p-2">Método</th>
+                            <th className="p-2">Subtotal</th>
+                            <th className="p-2">ITBIS (18%)</th>
+                            <th className="p-2 text-right">Total Factura</th>
+                            <th className="p-2 text-center">Estado DGII</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 font-medium">
+                          {group.items.map((row: any, idx: number) => (
+                            <tr key={idx} className="even:bg-gray-50/80">
+                              <td className="p-2 font-bold font-mono text-gray-900">{row.code}</td>
+                              <td className="p-2">{row.date}</td>
+                              <td className="p-2 font-bold">{row.client}</td>
+                              <td className="p-2 font-mono text-gray-600">{row.rnc}</td>
+                              <td className="p-2">{row.method}</td>
+                              <td className="p-2 font-mono">RD$ {Number(row.subtotal || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-2 font-mono">RD$ {Number(row.tax_amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-2 text-right font-mono font-black text-gray-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                              <td className="p-2 text-center">
+                                <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800">
+                                  {row.dgiiStatus || 'Aceptado'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-100 text-gray-900 font-black text-[10.5px] border-t border-gray-300">
+                            <td colSpan={5} className="p-2 text-right uppercase tracking-wider">Subtotales {group.prefix}:</td>
+                            <td className="p-2 font-mono">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 font-mono">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2 text-right font-mono font-black">RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))}
+
+                {/* Print Grand Total Box */}
+                <div className="bg-gray-900 text-white p-3 rounded-lg flex justify-between items-center text-xs font-black">
+                  <span>TOTAL GENERAL CONSOLIDADO E-CF ({ecfTotals.count} COMPROBANTES):</span>
+                  <span className="space-x-4 font-mono">
+                    <span>Subtotal: RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    <span>ITBIS: RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-[#ED1C24] bg-white px-2.5 py-0.5 rounded font-black">Gran Total: RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Facturas Internas Print Table */}
+            {activeReport === 'internas' && (
+              <table className="w-full text-left border-collapse text-[10.5px]">
+                <thead>
+                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                    <th className="p-2.5">Nº Factura</th>
+                    <th className="p-2.5">Fecha</th>
+                    <th className="p-2.5">Cliente</th>
+                    <th className="p-2.5">RNC / Cédula</th>
+                    <th className="p-2.5">Método Pago</th>
+                    <th className="p-2.5">Cajero</th>
+                    <th className="p-2.5">Estado</th>
+                    <th className="p-2.5 text-right">Total Facturado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 font-medium">
+                  {reportData.map((row: any, idx: number) => (
+                    <tr key={idx} className="even:bg-gray-50/80">
+                      <td className="p-2.5 font-bold font-mono text-gray-900">{row.code}</td>
+                      <td className="p-2.5">{row.date}</td>
+                      <td className="p-2.5 font-bold">{row.client}</td>
+                      <td className="p-2.5 text-gray-600">{row.rnc}</td>
+                      <td className="p-2.5">{row.method}</td>
+                      <td className="p-2.5">{row.cashier || 'Cajero Principal'}</td>
+                      <td className="p-2.5">
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-zinc-300 bg-zinc-100 text-zinc-800">
+                          {row.status || 'Completada'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-right font-mono font-black text-gray-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-900 text-white font-black text-xs">
+                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider">Total Facturas Internas:</td>
+                    <td className="p-2.5 text-right font-mono font-black">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+
             {activeReport === 'ventas' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>

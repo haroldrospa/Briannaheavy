@@ -3,24 +3,15 @@ import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
 const pageVariants = {
-  initial: {
-    opacity: 0,
-    y: 10,
-  },
-  in: {
-    opacity: 1,
-    y: 0,
-  },
-  out: {
-    opacity: 0,
-    y: -10,
-  },
+  initial: { opacity: 0 },
+  in: { opacity: 1 },
+  out: { opacity: 0 },
 };
 
 const pageTransition = {
   type: 'tween' as const,
-  ease: 'anticipate' as const,
-  duration: 0.3,
+  ease: 'easeOut' as const,
+  duration: 0.12,
 };
 
 export default function PageTransition({ children }: { children: ReactNode }) {

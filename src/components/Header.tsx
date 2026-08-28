@@ -1,8 +1,16 @@
-import { useState, useEffect } from 'react';
-import { MagnifyingGlassIcon, SunIcon, MoonIcon, ArrowRightOnRectangleIcon, Bars3Icon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useCallback } from 'react';
+import { 
+  SunIcon, 
+  MoonIcon, 
+  ArrowRightOnRectangleIcon, 
+  Bars3Icon, 
+  ShieldCheckIcon,
+  BuildingOffice2Icon,
+  BuildingStorefrontIcon
+} from '@heroicons/react/24/outline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { getActiveRole, setActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermissions';
+import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 
 const routeNames: Record<string, string> = {
   '/dashboard': 'Panel Principal',
@@ -10,10 +18,40 @@ const routeNames: Record<string, string> = {
   '/clientes': 'Directorio de Clientes',
   '/inventario': 'Inventario',
   '/financiamientos': 'Financiamientos',
-  '/reportes': 'Reportes Ejecutivos',
+  '/reportes': 'Reportes & Informes',
   '/configuracion': 'Configuración del Sistema',
   '/usuarios': 'Gestión de Usuarios',
   '/facturas': 'Historial de Facturas',
+};
+
+const roleConfig: Record<UserRole, {
+  label: string;
+  icon: typeof ShieldCheckIcon;
+  colorClass: string;
+  badgeBg: string;
+  description: string;
+}> = {
+  Administrador: {
+    label: 'Administrador',
+    icon: ShieldCheckIcon,
+    colorClass: 'bg-red-50 dark:bg-red-950/40 text-[#ED1C24]',
+    badgeBg: 'bg-red-100/80 dark:bg-red-950/60 text-red-700 dark:text-red-300',
+    description: 'Acceso total y configuración del sistema'
+  },
+  Oficina: {
+    label: 'Oficina',
+    icon: BuildingOffice2Icon,
+    colorClass: 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400',
+    badgeBg: 'bg-blue-100/80 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300',
+    description: 'Gestión comercial, clientes y reportes'
+  },
+  Repuestos: {
+    label: 'Cajero',
+    icon: BuildingStorefrontIcon,
+    colorClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400',
+    badgeBg: 'bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300',
+    description: 'Punto de venta y facturación'
+  }
 };
 
 interface HeaderProps {
@@ -26,96 +64,100 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const currentName = routeNames[location.pathname] || 'Dashboard';
   const { setTheme, isDark } = useTheme();
 
+  const resolveUserName = () => {
+    const email = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
+    const stored = localStorage.getItem('brianna_user_name');
+    if (email.includes('cajer') || email.includes('caja')) {
+      return (stored && !stored.toLowerCase().includes('admin')) ? stored : 'Cajero 1';
+    }
+    return stored || 'Harold Rodríguez';
+  };
+
+  const resolveUserEmail = () => {
+    const email = localStorage.getItem('brianna_user_email');
+    return email || (getActiveRole() === 'Repuestos' ? 'cajero1@gmail.com' : 'Haroldrospa@gmail.com');
+  };
+
   const [activeRole, setRoleState] = useState<UserRole>(getActiveRole);
+  const [userName, setUserName] = useState<string>(resolveUserName);
+  const [userEmail, setUserEmail] = useState<string>(resolveUserEmail);
 
   useEffect(() => {
     const handleRoleUpdate = () => {
-      setRoleState(getActiveRole());
+      const current = getActiveRole();
+      setRoleState(current);
+      setUserName(resolveUserName());
+      setUserEmail(resolveUserEmail());
     };
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
     return () => window.removeEventListener('brianna_role_updated', handleRoleUpdate);
   }, []);
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newRole = e.target.value as UserRole;
-    setActiveRole(newRole);
-    if (!isRouteAllowed(location.pathname, newRole)) {
-      if (newRole === 'Repuestos') {
-        navigate('/pos');
-      } else {
-        navigate('/dashboard');
-      }
-    }
-  };
-
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     navigate('/login');
-  };
+  }, [navigate]);
+
+  const currentRoleConfig = roleConfig[activeRole];
+  const CurrentRoleIcon = currentRoleConfig?.icon || ShieldCheckIcon;
 
   return (
     <header className="bg-transparent relative z-20 pt-4 lg:pt-6 px-4 lg:px-6 pb-2 print:hidden">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="lg:hidden p-2.5 rounded-full bg-white dark:bg-[#121318] text-gray-700 dark:text-zinc-200 border border-gray-200/80 dark:border-zinc-800 shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+            className="lg:hidden p-2 rounded-xl bg-white dark:bg-[#121318] text-gray-700 dark:text-zinc-200 border border-gray-200/80 dark:border-zinc-800 shadow-xs hover:bg-gray-50 dark:hover:bg-zinc-800 transition-all cursor-pointer shrink-0"
             title="Abrir Menú"
           >
-            <Bars3Icon className="h-6 w-6" />
+            <Bars3Icon className="h-5 w-5" />
           </button>
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-gray-800 dark:text-zinc-100 tracking-tight truncate">
+          <h2 className="text-base sm:text-2xl font-bold text-gray-900 dark:text-zinc-100 tracking-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-none">
             {currentName}
           </h2>
         </div>
         
-        <div className="flex items-center gap-2 sm:gap-4">
-          {/* Active Role Selector Badge */}
-          <div className="flex items-center gap-2 bg-white dark:bg-[#121318] border border-gray-200 dark:border-zinc-800 px-3 py-1.5 sm:py-2 rounded-full shadow-sm">
-            <UserGroupIcon className="h-4 w-4 text-[#ED1C24]" />
-            <span className="text-[11px] font-bold text-gray-400 hidden sm:inline">Rol:</span>
-            <select
-              value={activeRole}
-              onChange={handleRoleChange}
-              className="bg-transparent text-xs font-black text-gray-900 dark:text-zinc-100 outline-none cursor-pointer pr-1"
-            >
-              <option value="Administrador" className="bg-white dark:bg-[#121318]">👑 Administrador</option>
-              <option value="Oficina" className="bg-white dark:bg-[#121318]">👔 Oficina</option>
-              <option value="Repuestos" className="bg-white dark:bg-[#121318]">🔧 Repuestos</option>
-            </select>
-          </div>
-
-          <div className="relative hidden md:block">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-zinc-500" />
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Static Professional User & Role Badge */}
+          <div className="flex items-center gap-2.5 bg-white dark:bg-[#121318] border border-gray-200/90 dark:border-zinc-800 px-3 py-1.5 sm:py-2 rounded-2xl shadow-xs">
+            <div className={`p-1.5 rounded-xl ${currentRoleConfig?.colorClass || 'bg-gray-100 text-gray-700'}`}>
+              <CurrentRoleIcon className="w-4 h-4 stroke-[2]" />
             </div>
-            <input 
-              type="text" 
-              placeholder="Buscar..." 
-              className="pl-11 pr-4 py-3 bg-white dark:bg-[#121318] border border-gray-100 dark:border-zinc-800 rounded-full text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/20 shadow-sm w-48 lg:w-64 transition-all text-gray-800 dark:text-zinc-100 dark:placeholder-zinc-500"
-            />
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black text-gray-900 dark:text-zinc-100 leading-tight">
+                  {userName}
+                </span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${currentRoleConfig?.badgeBg || 'bg-gray-100 text-gray-600'}`}>
+                  {currentRoleConfig?.label || activeRole}
+                </span>
+              </div>
+              <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 leading-none truncate max-w-[140px] hidden sm:inline">
+                {userEmail}
+              </span>
+            </div>
           </div>
           
           <button
             type="button"
             onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className="bg-white p-2.5 sm:p-3 rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-100 hover:shadow-md transition-all relative dark:bg-[#121318] dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-white dark:hover:border-zinc-700 cursor-pointer"
+            className="bg-white p-2 rounded-xl text-gray-500 hover:text-gray-900 shadow-xs border border-gray-200/90 hover:border-gray-300 dark:bg-[#121318] dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-white dark:hover:border-zinc-700 transition-all cursor-pointer"
             title="Cambiar Tema"
           >
             {isDark ? (
-              <SunIcon className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" aria-hidden="true" />
+              <SunIcon className="h-4 w-4 text-amber-400" aria-hidden="true" />
             ) : (
-              <MoonIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+              <MoonIcon className="h-4 w-4 text-zinc-600" aria-hidden="true" />
             )}
           </button>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="bg-white p-2.5 sm:p-3 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-100 hover:shadow-md transition-all relative dark:bg-[#121318] dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700 flex items-center justify-center group cursor-pointer"
+            className="bg-white p-2 rounded-xl text-gray-500 hover:text-red-600 dark:hover:text-red-400 shadow-xs border border-gray-200/90 hover:border-gray-300 dark:bg-[#121318] dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 flex items-center justify-center transition-all cursor-pointer"
             title="Cerrar Sesión"
           >
-            <ArrowRightOnRectangleIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600 dark:text-zinc-300 group-hover:scale-110 transition-transform" aria-hidden="true" />
+            <ArrowRightOnRectangleIcon className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>

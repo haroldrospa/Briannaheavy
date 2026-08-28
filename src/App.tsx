@@ -5,6 +5,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
 import LoadingSpinner from './components/LoadingSpinner';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 
 // Páginas Lazy Loaded
 const Login = React.lazy(() => import('./pages/Login'));
@@ -16,7 +17,6 @@ const Settings = React.lazy(() => import('./pages/Settings'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const Customers = React.lazy(() => import('./pages/Customers'));
 const Invoices = React.lazy(() => import('./pages/Invoices'));
-const Users = React.lazy(() => import('./pages/Users'));
 
 // Configuración de React Query
 const queryClient = new QueryClient({
@@ -32,32 +32,43 @@ function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <Router>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Routes>
-            {/* Rutas Públicas */}
-            <Route element={<AuthLayout />}>
-              <Route path="/login" element={<Login />} />
-            </Route>
+        <ConfirmProvider>
+          <Router>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                {/* Rutas Públicas */}
+                <Route element={<AuthLayout />}>
+                  <Route path="/login" element={<Login />} />
+                </Route>
 
-            {/* Rutas Protegidas */}
-            <Route element={<DashboardLayout />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/clientes" element={<Customers />} />
-              <Route path="/facturas" element={<Invoices />} />
-              <Route path="/usuarios" element={<Users />} />
-              <Route path="/pos" element={<POS />} />
-              <Route path="/inventario" element={<Inventory />} />
-              <Route path="/financiamientos" element={<Financing />} />
-              <Route path="/reportes" element={<Reports />} />
-              <Route path="/configuracion" element={<Settings />} />
-              {/* TODO: Add other routes here */}
-            </Route>
-          </Routes>
-        </Suspense>
-      </Router>
-    </QueryClientProvider>
+                {/* Rutas Protegidas */}
+                <Route element={<DashboardLayout />}>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/clientes" element={<Customers />} />
+                  <Route path="/facturas" element={<Invoices />} />
+                  <Route path="/usuarios" element={<Navigate to="/configuracion" replace />} />
+                  <Route path="/pos" element={<POS />} />
+                  <Route path="/inventario" element={<Inventory />} />
+                  <Route path="/financiamientos" element={<Financing />} />
+                  <Route path="/reportes" element={<Reports />} />
+                  <Route path="/configuracion" element={<Settings />} />
+
+                  {/* Alias en Inglés & Catch-all Fallback */}
+                  <Route path="/inventory" element={<Navigate to="/inventario" replace />} />
+                  <Route path="/customers" element={<Navigate to="/clientes" replace />} />
+                  <Route path="/invoices" element={<Navigate to="/facturas" replace />} />
+                  <Route path="/users" element={<Navigate to="/configuracion" replace />} />
+                  <Route path="/financing" element={<Navigate to="/financiamientos" replace />} />
+                  <Route path="/reports" element={<Navigate to="/reportes" replace />} />
+                  <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
+                  <Route path="*" element={<Navigate to="/inventario" replace />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </Router>
+        </ConfirmProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }
