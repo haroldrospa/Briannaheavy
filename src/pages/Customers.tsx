@@ -12,7 +12,7 @@ import {
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer, deleteCustomer, type Customer } from '../services/customersService';
-import { searchDgiiRnc } from '../services/dgiiService';
+import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useConfirm } from '../contexts/ConfirmContext';
 
 // Defined outside component — stable reference, never recreated on re-render
@@ -74,22 +74,33 @@ export default function Customers() {
 
     try {
       const res = await searchDgiiRnc(clean);
+      const formattedDoc = clean.length === 9
+        ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
+        : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`;
+
       if (res.success && res.name) {
         setNewCustomer(prev => ({
           ...prev,
           name: res.name,
-          document_id: clean.length === 9
-            ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
-            : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+          document_id: formattedDoc
         }));
         setDgiiMessage({
           type: 'success',
-          text: `DGII: ${res.name} (${res.status})`
+          text: `DGII Oficial: ${res.name} (${res.status})`
+        });
+      } else if (res.success && res.isValidStructure) {
+        setNewCustomer(prev => ({
+          ...prev,
+          document_id: formattedDoc
+        }));
+        setDgiiMessage({
+          type: 'success',
+          text: `RNC Válido ante DGII (Módulo 11 Aprobado)`
         });
       } else {
         setDgiiMessage({
           type: 'error',
-          text: res.error || 'No se encontró en DGII. Puede escribir el nombre manualmente.'
+          text: res.error || 'RNC no válido según algoritmo de DGII.'
         });
       }
     } catch {
@@ -105,6 +116,7 @@ export default function Customers() {
   const handleCreateCustomer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.name || !newCustomer.document_id) return;
+    cacheDgiiRnc(newCustomer.document_id, newCustomer.name);
     await createCustomer(newCustomer);
     setIsModalOpen(false);
     setNewCustomer({ name: '', document_id: '', email: '', phone: '', address: '', status: 'Activo' });

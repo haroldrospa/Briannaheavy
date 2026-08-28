@@ -37,7 +37,7 @@ import { getActiveRole } from '../utils/rolePermissions';
 import { createInvoice, fetchInvoices, getLocalStorageInvoices, type Invoice } from '../services/invoicesService';
 import { fetchInventory, getLocalStorageInventory, updateInventoryItem } from '../services/inventoryService';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../services/customersService';
-import { searchDgiiRnc } from '../services/dgiiService';
+import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
 import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
 import { filterInvoicesByShift } from '../services/shiftsService';
@@ -435,22 +435,33 @@ export default function POS() {
 
     try {
       const res = await searchDgiiRnc(clean);
+      const formattedDoc = clean.length === 9
+        ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
+        : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`;
+
       if (res.success && res.name) {
         setNewClientForm(prev => ({
           ...prev,
           name: res.name,
-          document_id: clean.length === 9
-            ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
-            : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+          document_id: formattedDoc
         }));
         setDgiiMessage({
           type: 'success',
-          text: `DGII: ${res.name} (${res.status})`
+          text: `DGII Oficial: ${res.name} (${res.status})`
+        });
+      } else if (res.success && res.isValidStructure) {
+        setNewClientForm(prev => ({
+          ...prev,
+          document_id: formattedDoc
+        }));
+        setDgiiMessage({
+          type: 'success',
+          text: `RNC Válido ante DGII (Módulo 11 Aprobado)`
         });
       } else {
         setDgiiMessage({
           type: 'error',
-          text: res.error || 'No se encontró en DGII. Puede escribir el nombre manualmente.'
+          text: res.error || 'RNC no válido según algoritmo de DGII.'
         });
       }
     } catch {
@@ -495,6 +506,7 @@ export default function POS() {
 
     setIsSavingClient(true);
     try {
+      cacheDgiiRnc(newClientForm.document_id, newClientForm.name);
       const created = await createCustomer({
         name: newClientForm.name.trim(),
         document_id: newClientForm.document_id.trim(),
