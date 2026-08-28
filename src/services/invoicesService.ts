@@ -35,9 +35,21 @@ export interface Invoice {
   ecf_dgii_status?: string;
 }
 
-const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
+export const formatInvoiceNumber = (num?: string): string => {
+  if (!num) return '000001';
+  if (num.startsWith('CT-')) {
+    const raw = num.replace(/\D/g, '') || '1';
+    return `CT-${raw.padStart(6, '0')}`;
+  }
+  const digits = num.replace(/^FAC(-INT|-E)?-?/i, '').replace(/\D/g, '');
+  if (digits) {
+    return digits.length <= 6 ? digits.padStart(6, '0') : digits;
+  }
+  return num;
+};
 
 export const DEFAULT_INVOICES: Invoice[] = [];
+const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 
 // In-memory cache + deduplication + TTL
 let inMemoryInvoices: Invoice[] | null = null;

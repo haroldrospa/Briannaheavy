@@ -5,14 +5,10 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function testAll() {
-  console.log('--- CHECKING FINANCINGS TABLES ---');
-  
-  const { data: f, error: ef } = await supabase.from('financings').select('*');
-  console.log('financings table:', { count: f?.length, error: ef?.message });
-
-  const { data: inst, error: ei } = await supabase.from('installments').select('*');
-  console.log('installments table:', { count: inst?.length, error: ei?.message });
+async function check() {
+  const { data, count, error } = await supabase.from('invoices').select('*', { count: 'exact' });
+  console.log('Invoices count:', count, 'Error:', error);
+  data?.forEach(d => console.log(d.id, d.invoice_number, d.customer_name));
 }
 
-testAll();
+check();

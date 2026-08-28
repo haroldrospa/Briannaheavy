@@ -11,6 +11,7 @@ import SalesSummaryChart from '../components/charts/SalesSummaryChart';
 import TopProductsChart from '../components/charts/TopProductsChart';
 import InStockProductsWidget from '../components/dashboard/InStockProductsWidget';
 import { fetchDashboardMetrics, getCachedDashboardMetrics, type DashboardMetrics } from '../services/dashboardService';
+import { formatInvoiceNumber } from '../services/invoicesService';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -194,7 +195,7 @@ export default function Dashboard() {
                 {filteredTransactions.map(trx => (
                   <tr key={trx.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-800/30 transition-colors">
                     <td className="py-3 px-3 font-mono text-xs font-medium text-gray-500 dark:text-zinc-400">
-                      {trx.invoice_number}
+                      {formatInvoiceNumber(trx.invoice_number)}
                     </td>
                     <td className="py-3 px-3 font-semibold text-xs text-gray-900 dark:text-zinc-100">
                       {trx.customer_name}

@@ -18,7 +18,7 @@ import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 
 
@@ -216,7 +216,7 @@ export default function Invoices() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-xs font-black text-gray-900 dark:text-white font-mono tracking-tight truncate">
-                          {invoice.invoice_number}
+                          {formatInvoiceNumber(invoice.invoice_number)}
                         </span>
                         {isElectronic ? (
                           <span className="inline-flex items-center text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200/50 dark:border-red-900/30 shrink-0">
@@ -325,7 +325,7 @@ export default function Invoices() {
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 font-mono tracking-tight">
-                              {invoice.invoice_number}
+                              {formatInvoiceNumber(invoice.invoice_number)}
                             </span>
                             {isElectronic ? (
                               <span className="inline-flex items-center text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-md border border-red-200/50 dark:border-red-900/30">

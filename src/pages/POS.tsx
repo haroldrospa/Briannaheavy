@@ -1599,8 +1599,13 @@ export default function POS() {
           }
         }
 
+        // 1. Get next numeric invoice sequence
+        const currentInvSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+        const formattedInvSeq = String(currentInvSeq).padStart(6, '0');
+        localStorage.setItem('brianna_seq_invoice', String(currentInvSeq + 1));
+
         ecfRes = await transmitElectronicInvoice({
-          invoiceNumber: `FAC-E-${Date.now().toString().slice(-6)}`,
+          invoiceNumber: formattedInvSeq,
           eNcfType: electronicDocType,
           customerName: selectedClient ? selectedClient.name : 'Consumidor Final (e-CF)',
           customerRnc: selectedClient ? selectedClient.rnc : '',
@@ -1617,7 +1622,7 @@ export default function POS() {
         });
 
         finalNcf = ecfRes.eNcf;
-        finalInvoiceNumber = `FAC-${finalNcf}`;
+        finalInvoiceNumber = formattedInvSeq;
         setLastEcfData(ecfRes);
       } else {
         // Opción 2: Factura del Sistema / Comprobante Interno / Cotización
@@ -1640,19 +1645,19 @@ export default function POS() {
             issuedAt: new Date().toISOString(),
           });
         } else {
-          const currentIntSeq = parseInt(localStorage.getItem('brianna_seq_internal') || '1', 10);
-          const formattedIntSeq = String(currentIntSeq).padStart(6, '0');
-          localStorage.setItem('brianna_seq_internal', String(currentIntSeq + 1));
+          const currentInvSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+          const formattedInvSeq = String(currentInvSeq).padStart(6, '0');
+          localStorage.setItem('brianna_seq_invoice', String(currentInvSeq + 1));
 
-          finalInvoiceNumber = `FAC-INT-${formattedIntSeq}`;
-          finalNcf = `INT-${formattedIntSeq}`;
+          finalInvoiceNumber = formattedInvSeq;
+          finalNcf = `INT-${formattedInvSeq}`;
 
           const internalSecurityCode = generateSecurityCode();
           const internalQrUrl = `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${internalSecurityCode}&monto=${total.toFixed(2)}`;
 
           setLastEcfData({
             success: true,
-            trackId: `${internalDocType}-${Date.now().toString().slice(-6)}`,
+            trackId: `INT-${Date.now().toString().slice(-6)}`,
             eNcf: finalNcf,
             securityCode: internalSecurityCode,
             qrCodeUrl: internalQrUrl,
