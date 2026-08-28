@@ -210,7 +210,7 @@ export default function Invoices() {
                 return (
                   <div
                     key={invoice.id}
-                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5"
+                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5"
                   >
                     {/* Top Row: Doc Number + Doc Type Badge + Status */}
                     <div className="flex items-center justify-between gap-2">

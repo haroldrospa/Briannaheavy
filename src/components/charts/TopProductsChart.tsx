@@ -62,7 +62,7 @@ export default function TopProductsChart() {
   }, [inventory, invoices]);
 
   return (
-    <div className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 shadow-2xs border border-gray-150/80 dark:border-zinc-800/80 flex flex-col justify-between transition-colors">
+    <div className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 shadow-2xs border border-gray-100 dark:border-zinc-800/80 flex flex-col justify-between transition-colors">
       
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-4">

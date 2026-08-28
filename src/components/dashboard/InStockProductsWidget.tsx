@@ -54,7 +54,7 @@ export default function InStockProductsWidget() {
   }, [inventory]);
 
   return (
-    <div className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 shadow-2xs border border-gray-150/80 dark:border-zinc-800/80 flex flex-col h-full justify-between transition-colors">
+    <div className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 shadow-2xs border border-gray-100 dark:border-zinc-800/80 flex flex-col h-full justify-between transition-colors">
       
       {/* Header */}
       <div>
@@ -82,7 +82,7 @@ export default function InStockProductsWidget() {
             placeholder="Buscar en stock..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 rounded-xl border border-gray-150 dark:border-zinc-800 focus:outline-none focus:border-gray-300 dark:focus:border-zinc-700 transition-colors font-medium"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 rounded-xl border border-gray-200/60 dark:border-zinc-800 focus:outline-none focus:border-gray-300 dark:focus:border-zinc-700 transition-colors font-medium"
           />
         </div>
       </div>
@@ -105,11 +105,11 @@ export default function InStockProductsWidget() {
             return (
               <div
                 key={item.id}
-                className="p-2.5 rounded-2xl bg-gray-50/50 dark:bg-zinc-900/40 hover:bg-gray-100/60 dark:hover:bg-zinc-800/50 border border-gray-100/70 dark:border-zinc-800/60 transition-all flex items-center justify-between gap-3 group"
+                className="p-2.5 rounded-2xl bg-gray-50/50 dark:bg-zinc-900/40 hover:bg-gray-100/60 dark:hover:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800/60 transition-all flex items-center justify-between gap-3 group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   {/* Minimalist Icon / Image */}
-                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 border border-gray-150 dark:border-zinc-700/60 flex items-center justify-center text-gray-500 dark:text-zinc-400 shrink-0 overflow-hidden shadow-2xs">
+                  <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700/60 flex items-center justify-center text-gray-500 dark:text-zinc-400 shrink-0 overflow-hidden shadow-2xs">
                     {item.image_url ? (
                       <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                     ) : item.type === 'Camión' || item.type === 'Equipo_Pesado' ? (

@@ -1296,7 +1296,7 @@ export default function Financing() {
       </div>
 
       {/* Financings Container */}
-      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-150 dark:border-gray-800">
+      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
         {filteredFinancings.length === 0 ? (
           <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
             No se encontraron financiamientos para la búsqueda.
@@ -1309,7 +1309,7 @@ export default function Financing() {
                 <div
                   key={item.id}
                   onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }}
-                  className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5 cursor-pointer hover:border-red-500/30 transition-all"
+                  className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5 cursor-pointer hover:border-red-500/30 transition-all"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -1448,7 +1448,7 @@ export default function Financing() {
         </div>
 
         {/* Receivables Container */}
-        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-150 dark:border-gray-800">
+        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
           {filteredReceivables.length === 0 ? (
             <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
               No se encontraron cuentas por cobrar de repuestos para la búsqueda.
@@ -1460,7 +1460,7 @@ export default function Financing() {
                 {filteredReceivables.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5"
+                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

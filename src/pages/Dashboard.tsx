@@ -156,7 +156,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Recent Invoices Table */}
-      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 md:p-7 border border-gray-150/80 dark:border-zinc-800/80 shadow-2xs">
+      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 md:p-7 border border-gray-100 dark:border-zinc-800/80 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-5">
           <div>
             <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white tracking-tight">Últimas Ventas Emitidas</h3>
@@ -170,7 +170,7 @@ export default function Dashboard() {
               placeholder="Buscar transacción..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-150 dark:border-zinc-800 focus:outline-none focus:border-gray-300 dark:focus:border-zinc-700 text-gray-900 dark:text-white w-full sm:w-56 transition-colors"
+              className="pl-8 pr-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-200/60 dark:border-zinc-800 focus:outline-none focus:border-gray-300 dark:focus:border-zinc-700 text-gray-900 dark:text-white w-full sm:w-56 transition-colors"
             />
           </div>
         </div>
@@ -200,7 +200,7 @@ export default function Dashboard() {
                       {trx.customer_name}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-mono text-[11px] font-medium text-gray-600 dark:text-zinc-400 bg-gray-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md border border-gray-150/60 dark:border-zinc-700/50">
+                      <span className="font-mono text-[11px] font-medium text-gray-600 dark:text-zinc-400 bg-gray-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md border border-gray-200/60 dark:border-zinc-700/50">
                         {trx.ncf || 'Sin NCF'}
                       </span>
                     </td>
