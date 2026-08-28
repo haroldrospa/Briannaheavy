@@ -156,60 +156,63 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Recent Invoices Table */}
-      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 md:p-8 border border-gray-100 dark:border-zinc-800/80 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 md:p-7 border border-gray-150/80 dark:border-zinc-800/80 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-5">
           <div>
-            <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Últimas Ventas Emitidas (Supabase)</h3>
-            <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 mt-0.5">Transacciones procesadas en tiempo real</p>
+            <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white tracking-tight">Últimas Ventas Emitidas</h3>
+            <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">Transacciones procesadas en tiempo real</p>
           </div>
 
           <div className="relative w-full sm:w-auto">
-            <MagnifyingGlassIcon className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <MagnifyingGlassIcon className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
               type="text" 
               placeholder="Buscar transacción..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-4 py-2 text-xs font-medium bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-full border-none focus:outline-none text-gray-900 dark:text-white w-full sm:w-56"
+              className="pl-8 pr-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-150 dark:border-zinc-800 focus:outline-none focus:border-gray-300 dark:focus:border-zinc-700 text-gray-900 dark:text-white w-full sm:w-56 transition-colors"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto scrollbar-hide">
           {filteredTransactions.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">No hay ventas registradas aún.</div>
+            <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs font-medium">No hay ventas registradas aún.</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-[11px] font-black uppercase tracking-wider">
-                  <th className="pb-3 px-4">Factura</th>
-                  <th className="pb-3 px-4">Cliente</th>
-                  <th className="pb-3 px-4">NCF</th>
-                  <th className="pb-3 px-4">Monto</th>
-                  <th className="pb-3 px-4">Método</th>
-                  <th className="pb-3 px-4">Estado</th>
+                <tr className="border-b border-gray-100 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-[10px] font-bold uppercase tracking-wider">
+                  <th className="pb-3 px-3">Factura</th>
+                  <th className="pb-3 px-3">Cliente</th>
+                  <th className="pb-3 px-3">NCF</th>
+                  <th className="pb-3 px-3">Monto</th>
+                  <th className="pb-3 px-3">Método</th>
+                  <th className="pb-3 px-3 text-right">Estado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-zinc-800/50">
+              <tbody className="divide-y divide-gray-50 dark:divide-zinc-800/40">
                 {filteredTransactions.map(trx => (
-                  <tr key={trx.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors">
-                    <td className="py-4 px-4 font-mono font-bold text-xs text-gray-900 dark:text-white">
+                  <tr key={trx.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-800/30 transition-colors">
+                    <td className="py-3 px-3 font-mono text-xs font-medium text-gray-500 dark:text-zinc-400">
                       {trx.invoice_number}
                     </td>
-                    <td className="py-4 px-4 font-bold text-sm text-gray-900 dark:text-white">
+                    <td className="py-3 px-3 font-semibold text-xs text-gray-900 dark:text-zinc-100">
                       {trx.customer_name}
                     </td>
-                    <td className="py-4 px-4 font-mono font-bold text-xs text-[#ED1C24]">
-                      {trx.ncf || 'Sin NCF'}
+                    <td className="py-3 px-3">
+                      <span className="font-mono text-[11px] font-medium text-gray-600 dark:text-zinc-400 bg-gray-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md border border-gray-150/60 dark:border-zinc-700/50">
+                        {trx.ncf || 'Sin NCF'}
+                      </span>
                     </td>
-                    <td className="py-4 px-4 font-black text-sm text-gray-900 dark:text-white">
+                    <td className="py-3 px-3 font-bold text-xs font-mono text-gray-900 dark:text-white">
                       RD$ {trx.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-4 text-xs font-bold text-gray-600 dark:text-zinc-400">
+                    <td className="py-3 px-3 text-xs text-gray-500 dark:text-zinc-400 font-medium">
                       {trx.payment_method}
                     </td>
-                    <td className="py-4 px-4">
-                      <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400">
+                    <td className="py-3 px-3 text-right">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                         {trx.status}
                       </span>
                     </td>

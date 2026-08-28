@@ -29,7 +29,6 @@ export default function TopProductsChart() {
   }, []);
 
   const topProducts = useMemo(() => {
-    // 1. Calculate sales count and revenue per product name from invoices
     const salesMap: Record<string, { count: number; revenue: number }> = {};
     invoices.forEach(inv => {
       inv.items?.forEach(item => {
@@ -40,7 +39,6 @@ export default function TopProductsChart() {
       });
     });
 
-    // 2. Map inventory items with real or calculated popularity
     const list = inventory.map(item => {
       const recorded = salesMap[item.name] || { count: 0, revenue: 0 };
       const fallbackRevenue = (Number(item.price) || 0) * (Number(item.stock) || 1);
@@ -52,79 +50,65 @@ export default function TopProductsChart() {
       };
     });
 
-    // Sort by revenue descending
     list.sort((a, b) => b.revenue - a.revenue);
     const top = list.slice(0, 5);
     const maxRev = top[0]?.revenue || 1;
 
-    const gradients = [
-      'from-amber-500 to-[#ED1C24]',
-      'from-blue-500 to-indigo-600',
-      'from-emerald-500 to-teal-600',
-      'from-purple-500 to-pink-600',
-      'from-rose-500 to-red-600'
-    ];
-
-    const badges = [
-      'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
-      'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
-      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
-      'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300',
-      'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-    ];
-
     return top.map((item, idx) => ({
       ...item,
       rank: idx + 1,
-      percent: Math.min(100, Math.max(15, Math.round((item.revenue / maxRev) * 100))),
-      barGradient: gradients[idx % gradients.length],
-      badgeBg: badges[idx % badges.length],
+      percent: Math.min(100, Math.max(12, Math.round((item.revenue / maxRev) * 100))),
     }));
   }, [inventory, invoices]);
 
   return (
-    <div className="bg-white dark:bg-[#121318] rounded-2xl sm:rounded-[2rem] p-4 sm:p-7 shadow-xs border border-gray-100 dark:border-zinc-800/80 flex flex-col h-full justify-between transition-colors duration-300">
+    <div className="bg-white dark:bg-[#121318] rounded-3xl p-5 sm:p-6 shadow-2xs border border-gray-150/80 dark:border-zinc-800/80 flex flex-col justify-between transition-colors">
       
-      {/* Card Header */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight">
-              Productos Más Vendidos
-            </h3>
-          </div>
-          <p className="text-xs font-medium text-gray-400 dark:text-zinc-500 mt-0.5">
+          <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white tracking-tight">
+            Productos Más Vendidos
+          </h3>
+          <p className="text-xs text-gray-400 dark:text-zinc-500 font-medium">
             Líderes de demanda en catálogo
           </p>
         </div>
 
-        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-3 py-1 rounded-full border border-red-200/60 dark:border-red-900/40">
-          <TrophyIcon className="h-3 w-3" />
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-600 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800/80 px-2.5 py-1 rounded-full border border-gray-200/60 dark:border-zinc-700/60">
+          <TrophyIcon className="h-3.5 w-3.5 text-amber-500" />
           <span>Top 5</span>
         </span>
       </div>
 
       {/* Product List */}
-      <div className="space-y-2.5 my-auto">
+      <div className="space-y-2.5 my-1">
         {topProducts.length === 0 ? (
           <div className="py-8 text-center text-gray-400 dark:text-zinc-500 font-medium text-xs">
-            <TrophyIcon className="h-8 w-8 mx-auto mb-2 opacity-40 text-gray-400" />
-            <p className="font-bold text-gray-600 dark:text-zinc-400">Sin datos aún</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">Los productos más vendidos se calcularán automáticamente.</p>
+            <TrophyIcon className="h-6 w-6 mx-auto mb-2 opacity-40 text-gray-400" />
+            <p className="font-semibold text-gray-600 dark:text-zinc-400">Sin datos aún</p>
           </div>
         ) : (
           topProducts.map((prod) => (
             <div 
               key={prod.name}
-              className="p-3 rounded-2xl bg-gray-50/60 dark:bg-[#16171d]/60 hover:bg-gray-100/70 dark:hover:bg-[#181a20] border border-transparent hover:border-gray-200/80 dark:hover:border-zinc-800 transition-all duration-200 group"
+              className="p-3 rounded-2xl bg-gray-50/50 dark:bg-zinc-900/40 hover:bg-gray-100/60 dark:hover:bg-zinc-800/50 border border-gray-100/70 dark:border-zinc-800/60 transition-all group"
             >
-              <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`w-6 h-6 rounded-xl text-[10px] font-black flex items-center justify-center shrink-0 shadow-2xs ${prod.badgeBg}`}>
-                    #{prod.rank}
+                  <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                    prod.rank === 1 
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                      : prod.rank === 2
+                      ? 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-300'
+                      : prod.rank === 3
+                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400'
+                      : 'bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400'
+                  }`}>
+                    {prod.rank}
                   </span>
                   <div className="min-w-0">
-                    <h4 className="font-extrabold text-xs text-gray-900 dark:text-white truncate tracking-tight group-hover:text-[#ED1C24] transition-colors">
+                    <h4 className="font-bold text-xs text-gray-900 dark:text-white truncate group-hover:text-[#ED1C24] transition-colors">
                       {prod.name}
                     </h4>
                     <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 block truncate">
@@ -134,19 +118,19 @@ export default function TopProductsChart() {
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="font-black text-xs text-gray-900 dark:text-white font-mono">
+                  <span className="font-bold text-xs text-gray-900 dark:text-white font-mono">
                     RD$ {prod.revenue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 block">
-                    {prod.sales} uds
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 block">
+                    {prod.sales} {prod.sales === 1 ? 'ud' : 'uds'}
                   </span>
                 </div>
               </div>
 
-              {/* Custom Progress Bar */}
-              <div className="h-1.5 w-full bg-gray-200/60 dark:bg-zinc-800 rounded-full overflow-hidden">
+              {/* Minimalist Progress Track */}
+              <div className="h-1 w-full bg-gray-200/60 dark:bg-zinc-800 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full bg-gradient-to-r ${prod.barGradient} transition-all duration-500`}
+                  className="h-full rounded-full bg-[#ED1C24] transition-all duration-500"
                   style={{ width: `${prod.percent}%` }}
                 />
               </div>
@@ -155,14 +139,14 @@ export default function TopProductsChart() {
         )}
       </div>
 
-      {/* Card Footer */}
-      <div className="pt-4 mt-3 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
-        <span className="font-semibold text-gray-400 dark:text-zinc-500">
-          Catálogo total: <strong className="text-gray-900 dark:text-white font-extrabold">{inventory.length} ítems</strong>
+      {/* Footer */}
+      <div className="pt-3 mt-3 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+        <span className="text-gray-400 dark:text-zinc-500 text-[11px] font-medium">
+          Catálogo total: <strong className="text-gray-900 dark:text-white font-bold">{inventory.length} ítems</strong>
         </span>
         <Link 
           to="/inventario" 
-          className="inline-flex items-center gap-1 text-xs font-black text-[#ED1C24] hover:text-red-700 transition-colors group"
+          className="inline-flex items-center gap-1 text-xs font-bold text-[#ED1C24] hover:text-red-700 transition-colors group"
         >
           <span>Ver Inventario</span>
           <ArrowRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
