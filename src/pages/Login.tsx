@@ -43,47 +43,45 @@ export default function Login() {
       return;
     }
     
-    let resolvedRole: UserRole = 'Administrador';
-    let resolvedName = 'Harold Rodríguez';
-    let resolvedEmail = SUPER_ADMIN_EMAIL;
+    const matchedUser = allUsers.find(
+      u => u.email?.trim().toLowerCase() === cleanEmail
+    );
 
-    if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
+    let resolvedRole: UserRole = 'Administrador';
+    let resolvedName = 'Harold Rosado';
+    let resolvedEmail = cleanEmail || SUPER_ADMIN_EMAIL;
+
+    if (matchedUser) {
+      if (matchedUser.status === 'Inactivo') {
+        setIsLoading(false);
+        setErrorMessage('Esta cuenta se encuentra inactiva. Contacte al administrador.');
+        return;
+      }
+      resolvedRole = matchedUser.role;
+      resolvedName = matchedUser.full_name || 'Usuario';
+      resolvedEmail = matchedUser.email || cleanEmail;
+    } else if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
       resolvedRole = 'Administrador';
-      resolvedName = 'Harold Rodríguez';
+      resolvedName = 'Harold Rosado';
       resolvedEmail = SUPER_ADMIN_EMAIL;
     } else {
-      const matchedUser = allUsers.find(
-        u => u.email?.trim().toLowerCase() === cleanEmail
-      );
+      // Fallback for typed email
+      const namePart = email.split('@')[0]?.replace('.', ' ').trim();
+      const formattedName = namePart ? namePart.charAt(0).toUpperCase() + namePart.slice(1) : 'Usuario';
 
-      if (matchedUser) {
-        if (matchedUser.status === 'Inactivo') {
-          setIsLoading(false);
-          setErrorMessage('Esta cuenta se encuentra inactiva. Contacte al administrador.');
-          return;
-        }
-        resolvedRole = matchedUser.role;
-        resolvedName = matchedUser.full_name;
-        resolvedEmail = matchedUser.email || cleanEmail;
+      if (
+        cleanEmail.includes('cajer') || 
+        cleanEmail.includes('pos') || 
+        cleanEmail.includes('repuesto') || 
+        cleanEmail.includes('caja')
+      ) {
+        resolvedRole = 'Repuestos';
+        resolvedName = formattedName.toLowerCase().includes('cajer') ? formattedName : `Cajero ${formattedName}`;
       } else {
-        // Fallback for typed email
-        const namePart = email.split('@')[0]?.replace('.', ' ').trim();
-        const formattedName = namePart ? namePart.charAt(0).toUpperCase() + namePart.slice(1) : 'Usuario';
-
-        if (
-          cleanEmail.includes('cajer') || 
-          cleanEmail.includes('pos') || 
-          cleanEmail.includes('repuesto') || 
-          cleanEmail.includes('caja')
-        ) {
-          resolvedRole = 'Repuestos';
-          resolvedName = formattedName.toLowerCase().includes('cajer') ? formattedName : `Cajero ${formattedName}`;
-        } else {
-          resolvedRole = 'Oficina';
-          resolvedName = formattedName;
-        }
-        resolvedEmail = email;
+        resolvedRole = 'Oficina';
+        resolvedName = formattedName;
       }
+      resolvedEmail = email;
     }
 
     localStorage.setItem('brianna_user_name', resolvedName);

@@ -11,6 +11,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
+import { getLocalStorageUsers, type UserProfile } from '../services/usersService';
 
 const routeNames: Record<string, string> = {
   '/dashboard': 'Panel Principal',
@@ -66,16 +67,31 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
 
   const resolveUserName = () => {
     const email = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
-    const stored = localStorage.getItem('brianna_user_name');
-    if (email.includes('cajer') || email.includes('caja')) {
-      return (stored && !stored.toLowerCase().includes('admin')) ? stored : 'Cajero 1';
+    const users = getLocalStorageUsers();
+    
+    // Always check actual registered profile in system
+    const matched = email 
+      ? users.find((u: UserProfile) => (u.email || '').toLowerCase() === email)
+      : users.find((u: UserProfile) => (u.email || '').toLowerCase() === 'haroldrospa@gmail.com');
+
+    if (matched?.full_name) {
+      localStorage.setItem('brianna_user_name', matched.full_name);
+      return matched.full_name;
     }
-    return stored || 'Harold Rodríguez';
+
+    const stored = localStorage.getItem('brianna_user_name');
+    if (stored && stored.trim() && stored !== 'Harold Rodríguez') {
+      return stored.trim();
+    }
+
+    localStorage.setItem('brianna_user_name', 'Harold Rosado');
+    return 'Harold Rosado';
   };
 
   const resolveUserEmail = () => {
     const email = localStorage.getItem('brianna_user_email');
-    return email || (getActiveRole() === 'Repuestos' ? 'cajero1@gmail.com' : 'Haroldrospa@gmail.com');
+    if (email && email.trim()) return email.trim();
+    return getActiveRole() === 'Repuestos' ? 'cajero1@gmail.com' : 'Haroldrospa@gmail.com';
   };
 
   const [activeRole, setRoleState] = useState<UserRole>(getActiveRole);
@@ -83,14 +99,19 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const [userEmail, setUserEmail] = useState<string>(resolveUserEmail);
 
   useEffect(() => {
-    const handleRoleUpdate = () => {
+    const handleSync = () => {
       const current = getActiveRole();
       setRoleState(current);
       setUserName(resolveUserName());
       setUserEmail(resolveUserEmail());
     };
-    window.addEventListener('brianna_role_updated', handleRoleUpdate);
-    return () => window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+
+    window.addEventListener('brianna_role_updated', handleSync);
+    window.addEventListener('brianna_user_updated', handleSync);
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleSync);
+      window.removeEventListener('brianna_user_updated', handleSync);
+    };
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -117,13 +138,16 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
           </h2>
         </div>
         
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-          {/* Static Professional User & Role Badge */}
-          <div className="flex items-center gap-2.5 bg-white dark:bg-[#121318] border border-gray-200/90 dark:border-zinc-800 px-3 py-1.5 sm:py-2 rounded-2xl shadow-xs">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Responsive Professional User & Role Badge */}
+          <div 
+            className="flex items-center gap-2 bg-white dark:bg-[#121318] border border-gray-200/90 dark:border-zinc-800 p-1 sm:px-3 sm:py-1.5 rounded-2xl shadow-xs"
+            title={`${userName} (${currentRoleConfig?.label || activeRole})`}
+          >
             <div className={`p-1.5 rounded-xl ${currentRoleConfig?.colorClass || 'bg-gray-100 text-gray-700'}`}>
               <CurrentRoleIcon className="w-4 h-4 stroke-[2]" />
             </div>
-            <div className="flex flex-col text-left">
+            <div className="hidden sm:flex flex-col text-left">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-black text-gray-900 dark:text-zinc-100 leading-tight">
                   {userName}
@@ -132,7 +156,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                   {currentRoleConfig?.label || activeRole}
                 </span>
               </div>
-              <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 leading-none truncate max-w-[140px] hidden sm:inline">
+              <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 leading-none truncate max-w-[140px]">
                 {userEmail}
               </span>
             </div>

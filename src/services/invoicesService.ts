@@ -152,8 +152,16 @@ export const createInvoice = async (
         tax_amount: Number(invoiceData.tax_amount),
         total_amount: Number(invoiceData.total_amount),
         payment_method: invoiceData.payment_method,
-        status: invoiceData.status || 'Pagada',
+        status: invoiceData.status || 'Emitida',
         cashier_name: invoiceData.cashier_name || 'Cajero POS',
+        register_name: invoiceData.register_name || 'Caja 1 - Repuestos',
+        shift_id: invoiceData.shift_id || null,
+        is_electronic: Boolean(invoiceData.is_electronic),
+        billing_mode: invoiceData.billing_mode || (invoiceData.is_electronic ? 'electronic' : 'internal'),
+        ecf_security_code: invoiceData.ecf_security_code || null,
+        ecf_track_id: invoiceData.ecf_track_id || null,
+        ecf_qr_url: invoiceData.ecf_qr_url || null,
+        ecf_dgii_status: invoiceData.ecf_dgii_status || null,
         created_at: nowIso
       };
       if (invoiceData.ncf) dbPayload.ncf = invoiceData.ncf;

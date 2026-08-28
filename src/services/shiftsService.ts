@@ -65,7 +65,7 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     register_name: registerName,
     opened_at: today.toISOString(),
     initial_fund: localFund,
-    cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rodríguez',
+    cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
     is_open: true,
   };
 
@@ -78,7 +78,7 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
 
 export const openShift = (
   initialFund: number, 
-  cashierName = 'Harold Rodríguez', 
+  cashierName = localStorage.getItem('brianna_user_name') || 'Harold Rosado', 
   registerName = 'Caja 1 - Repuestos'
 ): ActiveShift => {
   const newShift: ActiveShift = {

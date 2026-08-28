@@ -75,7 +75,7 @@ export default function CashClosureModal({
   const [tempFund, setTempFund] = useState('0');
 
   const [counts, setCounts] = useState<Record<number, number>>({});
-  const [cashierName, setCashierName] = useState('Harold Rodríguez');
+  const [cashierName, setCashierName] = useState(() => localStorage.getItem('brianna_user_name') || 'Harold Rosado');
   const [supervisorName, setSupervisorName] = useState('Carlos Díaz');
   const [notes, setNotes] = useState('');
 
@@ -94,8 +94,8 @@ export default function CashClosureModal({
     users.forEach(u => { if (u.full_name) list.add(u.full_name); });
     allInvoices.forEach(i => { if (i.cashier_name) list.add(i.cashier_name); });
     if (list.size === 0) {
-      list.add('Harold Rodríguez');
-      list.add('María Gómez');
+      list.add('Harold Rosado');
+      list.add('Harold Cajero');
       list.add('Carlos Díaz');
     }
     return Array.from(list);

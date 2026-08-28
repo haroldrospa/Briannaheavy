@@ -11,7 +11,6 @@ import {
   LockClosedIcon,
   ExclamationTriangleIcon,
   BoltIcon,
-  CheckCircleIcon,
   PrinterIcon,
   EyeIcon
 } from '@heroicons/react/24/outline';
@@ -193,122 +192,234 @@ export default function Invoices() {
       </motion.div>
 
       {/* Invoices List */}
-      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-[2rem] overflow-hidden p-2 border border-transparent dark:border-zinc-800/80">
-        <div className="overflow-x-auto scrollbar-hide">
-          {filteredInvoices.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 font-medium text-sm">
-              <DocumentTextIcon className="h-10 w-10 mx-auto mb-2 opacity-30 text-gray-400" />
-              No se encontraron facturas con el criterio seleccionado.
-            </div>
-          ) : (
-            <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
-              <thead>
-                <tr>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Factura / Comprobante</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Tipo Emisión</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Cliente</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fecha / Método</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Monto Total</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Estado</th>
-                  <th scope="col" className="px-6 py-5 text-right text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-[#121318] divide-y divide-gray-50 dark:divide-zinc-800/50">
-                {filteredInvoices.map((invoice) => {
-                  const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
-                  return (
-                    <tr key={invoice.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors group">
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className={`flex-shrink-0 h-10 w-10 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
-                            isElectronic 
-                              ? 'bg-red-500/10 dark:bg-red-500/15 border border-red-500/20 text-[#ED1C24] dark:text-red-400' 
-                              : 'bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300'
-                          }`}>
-                            {isElectronic ? <BoltIcon className="h-5 w-5 stroke-[2]" /> : <DocumentTextIcon className="h-5 w-5" />}
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-bold text-gray-900 dark:text-zinc-100">{invoice.invoice_number}</div>
-                            <div className={`text-xs font-mono font-bold ${isElectronic ? 'text-[#ED1C24] dark:text-red-400' : 'text-gray-500 dark:text-zinc-400'}`}>
-                              {invoice.ncf || 'Sin NCF'}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        {isElectronic ? (
-                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-                            <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
-                            <span>DGII e-CF ({invoice.ncf_type || 'E32'})</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 dark:text-zinc-300 bg-gray-100 dark:bg-zinc-800 px-2.5 py-1 rounded-full border border-gray-200 dark:border-zinc-700">
-                            <DocumentTextIcon className="w-3 h-3" />
-                            <span>Interno (No Fiscal)</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <div className="text-sm font-bold text-gray-900 dark:text-zinc-100">{invoice.customer_name}</div>
-                        <div className="text-xs text-gray-400 font-mono">{invoice.customer_rnc || 'Consumidor Final'}</div>
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <div className="text-xs font-medium text-gray-700 dark:text-zinc-300">
-                          {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString() : 'N/A'}
-                        </div>
-                        <div className="text-[11px] font-bold text-gray-400 uppercase">{invoice.payment_method}</div>
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-zinc-100">
-                        RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
-                          invoice.status.includes('Emitida') || invoice.status.includes('Pagada') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' :
-                          invoice.status === 'Pendiente' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400' : 
-                          'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-400'
-                        }`}>
-                          {invoice.status}
+      <motion.div variants={itemVariants} className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-transparent dark:border-zinc-800/80">
+        {filteredInvoices.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 font-medium text-sm">
+            <DocumentTextIcon className="h-10 w-10 mx-auto mb-2 opacity-30 text-gray-400" />
+            No se encontraron facturas con el criterio seleccionado.
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card List (md:hidden) */}
+            <div className="md:hidden space-y-3">
+              {filteredInvoices.map((invoice) => {
+                const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
+                const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada');
+                const isPending = invoice.status?.toLowerCase().includes('pendiente');
+
+                return (
+                  <div
+                    key={invoice.id}
+                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5"
+                  >
+                    {/* Top Row: Doc Number + Doc Type Badge + Status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-black text-gray-900 dark:text-white font-mono tracking-tight truncate">
+                          {invoice.invoice_number}
                         </span>
-                      </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-right text-xs font-medium">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setViewingInvoice(invoice)}
-                          className="p-2 rounded-xl bg-gray-100 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-gray-600 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
-                          title="Ver Comprobante Fiscal / Imprimir Recibo"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                        {isAdmin && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setEditingInvoice(invoice)}
-                              className="p-2 rounded-xl bg-gray-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 text-gray-600 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
-                              title="Editar factura (Solo Administrador)"
-                            >
-                              <PencilSquareIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingInvoice(invoice)}
-                              className="p-2 rounded-xl bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/50 text-gray-600 dark:text-zinc-300 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                              title="Eliminar factura (Solo Administrador)"
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </button>
-                          </>
+                        {isElectronic ? (
+                          <span className="inline-flex items-center text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200/50 dark:border-red-900/30 shrink-0">
+                            e-CF {invoice.ncf_type || 'E32'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center text-[9px] font-bold text-gray-600 dark:text-zinc-400 bg-gray-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
+                            Interna
+                          </span>
                         )}
                       </div>
-                    </td>
-                  </tr>
+
+                      {/* Status Badge */}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                        isPaid
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
+                          : isPending
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
+                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                        {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
+                      </span>
+                    </div>
+
+                    {/* Middle Row: Client info & Total */}
+                    <div className="flex items-start justify-between gap-3 pt-1 border-t border-gray-200/50 dark:border-zinc-800/60">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-black text-gray-900 dark:text-white truncate">
+                          {invoice.customer_name}
+                        </p>
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 font-mono truncate">
+                          {invoice.customer_rnc || 'Consumidor Final'}
+                        </p>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                          {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'} • <span className="uppercase font-semibold">{invoice.payment_method || 'Efectivo'}</span>
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <p className="text-[9px] font-bold uppercase text-gray-400 dark:text-zinc-500">Monto Total</p>
+                        <p className="text-sm font-black text-gray-900 dark:text-white font-mono">
+                          RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions Row */}
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-200/50 dark:border-zinc-800/60">
+                      <button
+                        type="button"
+                        onClick={() => setViewingInvoice(invoice)}
+                        className="flex-1 py-1.5 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-900 dark:text-white text-xs font-bold rounded-xl border border-gray-200/80 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <EyeIcon className="w-4 h-4 text-[#ED1C24]" />
+                        <span>Ver Factura</span>
+                      </button>
+
+                      {isAdmin && (
+                        <div className="flex items-center gap-1 pl-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingInvoice(invoice)}
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 transition-colors cursor-pointer"
+                            title="Editar factura"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingInvoice(invoice)}
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 transition-colors cursor-pointer"
+                            title="Eliminar factura"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
-              </tbody>
-            </table>
-          )}
-        </div>
+            </div>
+
+            {/* Desktop Table (hidden md:block) */}
+            <div className="hidden md:block overflow-x-auto scrollbar-hide">
+              <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
+                <thead className="bg-gray-50/50 dark:bg-zinc-900/30">
+                  <tr className="border-b border-gray-100 dark:border-zinc-800/80 text-gray-400 dark:text-zinc-500 text-[11px] font-bold uppercase tracking-wider">
+                    <th scope="col" className="px-5 py-3.5 text-left">Factura / Comprobante</th>
+                    <th scope="col" className="px-5 py-3.5 text-left">Cliente</th>
+                    <th scope="col" className="px-5 py-3.5 text-left">Fecha / Método</th>
+                    <th scope="col" className="px-5 py-3.5 text-left">Monto Total</th>
+                    <th scope="col" className="px-5 py-3.5 text-left">Estado</th>
+                    <th scope="col" className="px-5 py-3.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100/80 dark:divide-zinc-800/50">
+                  {filteredInvoices.map((invoice) => {
+                    const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
+                    const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada');
+                    const isPending = invoice.status?.toLowerCase().includes('pendiente');
+                    
+                    return (
+                      <tr key={invoice.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-800/30 transition-colors group">
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900 dark:text-zinc-100 font-mono tracking-tight">
+                              {invoice.invoice_number}
+                            </span>
+                            {isElectronic ? (
+                              <span className="inline-flex items-center text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-md border border-red-200/50 dark:border-red-900/30">
+                                e-CF {invoice.ncf_type || 'E32'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center text-[10px] font-medium text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md">
+                                Interna
+                              </span>
+                            )}
+                          </div>
+                          {invoice.ncf && invoice.ncf !== invoice.invoice_number && (
+                            <div className="text-xs text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
+                              NCF: {invoice.ncf}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-gray-900 dark:text-zinc-100 max-w-[240px] truncate">
+                            {invoice.customer_name}
+                          </div>
+                          <div className="text-xs text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
+                            {invoice.customer_rnc || 'Consumidor Final'}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="text-xs font-medium text-gray-800 dark:text-zinc-200">
+                            {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
+                          </div>
+                          <div className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase font-medium mt-0.5">
+                            {invoice.payment_method || 'Efectivo'}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-zinc-100 font-mono">
+                          RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          {isPaid ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              {invoice.status?.includes('Emitida') ? 'Emitida' : 'Pagada'}
+                            </span>
+                          ) : isPending ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              Pendiente
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                              {invoice.status || 'Anulada'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-right text-xs font-medium">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setViewingInvoice(invoice)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                              title="Ver Comprobante Fiscal / Imprimir Recibo"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingInvoice(invoice)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                                  title="Editar factura (Solo Administrador)"
+                                >
+                                  <PencilSquareIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingInvoice(invoice)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                  title="Eliminar factura (Solo Administrador)"
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </motion.div>
 
       {/* Edit Invoice Modal (Admin Only) */}

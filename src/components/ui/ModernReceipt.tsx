@@ -93,8 +93,9 @@ export default function ModernReceipt({
   const secCode = securityCode || '34F595';
   const qrVal = qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=${activeConfig.rnc || '131488417'}&ncf=${ncf || 'INT-000001'}`;
 
-  const isEcf = isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E');
-  const docTitle = isEcf ? 'FACTURA ELECTRÓNICA' : (invoiceType === 'REC-P' || invoiceType === 'COT' ? 'COTIZACIÓN' : 'FACTURA INTERNA');
+  const isCotizacion = (ncf && ncf.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
+  const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
+  const docTitle = isEcf ? 'FACTURA ELECTRÓNICA' : (isCotizacion ? 'COTIZACIÓN' : 'FACTURA INTERNA');
 
   return (
     <div 
@@ -142,7 +143,7 @@ export default function ModernReceipt({
             {docTitle} {isEcf ? '(e-CF)' : ''}
           </span>
           <span className="block font-mono font-black tracking-widest text-black mt-0.5" style={{ fontSize: '1.18em' }}>
-            {ncf || 'INT-000001'}
+            {ncf || 'CT-000001'}
           </span>
         </div>
 
@@ -154,9 +155,9 @@ export default function ModernReceipt({
           </div>
 
           <div className="flex justify-between items-center">
-            <span className="text-zinc-500 font-medium">Método de Pago:</span>
+            <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : 'Método de Pago:'}</span>
             <span className="bg-zinc-100 border border-zinc-300 text-black px-2 py-0.5 rounded font-bold uppercase" style={{ fontSize: '0.92em' }}>
-              {paymentMethod}
+              {isCotizacion ? 'Presupuesto' : paymentMethod}
             </span>
           </div>
 
@@ -215,7 +216,7 @@ export default function ModernReceipt({
             ))
           ) : (
             <div className="py-2 flex justify-between items-start" style={{ fontSize: '0.88em' }}>
-              <p className="font-bold text-black">Venta General</p>
+              <p className="font-bold text-black">{isCotizacion ? 'Cotización General' : 'Venta General'}</p>
               <span className="font-mono font-black text-black">{formatRD(total)}</span>
             </div>
           )}
@@ -242,14 +243,14 @@ export default function ModernReceipt({
           className="bg-white border-2 border-black rounded-xl px-3 py-2.5 flex justify-between items-center"
         >
           <span className="font-black uppercase tracking-wider text-black" style={{ fontSize: '0.85em' }}>
-            TOTAL FACTURA
+            {isCotizacion ? 'TOTAL COTIZACIÓN' : 'TOTAL FACTURA'}
           </span>
           <span className="font-mono font-black tracking-tight text-black" style={{ fontSize: '1.25em' }}>
             {formatRD(total)}
           </span>
         </div>
 
-        {paymentMethod === 'Efectivo' && receivedAmount !== undefined && receivedAmount > 0 && (
+        {!isCotizacion && paymentMethod === 'Efectivo' && receivedAmount !== undefined && receivedAmount > 0 && (
           <div className="bg-white rounded-xl p-2 border border-zinc-300 space-y-0.5 text-zinc-700" style={{ fontSize: '0.8em' }}>
             <div className="flex justify-between">
               <span>Efectivo Recibido:</span>
@@ -270,8 +271,8 @@ export default function ModernReceipt({
         )}
       </div>
 
-      {/* 5. Timbre Digital & QR Code */}
-      {activeConfig.showQrCode && (
+      {/* 5. Timbre Digital & QR Code (Omit for Cotizaciones) */}
+      {!isCotizacion && activeConfig.showQrCode && (
         <div className="mb-3 pt-2 pb-1 text-center">
           <div className="inline-block bg-white p-2 rounded-2xl border-2 border-zinc-200 shadow-xs">
             <QRCode value={qrVal} size={fontConf.qrSize} level="M" />
@@ -292,6 +293,13 @@ export default function ModernReceipt({
               {isEcf ? 'Consulte validez en dgii.gov.do/ecf' : 'Comprobante Válido • Brianna Heavy Equipment'}
             </p>
           </div>
+        </div>
+      )}
+
+      {isCotizacion && (
+        <div className="mb-3 p-2 bg-zinc-50 rounded-xl border border-zinc-200 text-center text-zinc-600" style={{ fontSize: '0.78em' }}>
+          <p className="font-bold text-black uppercase">Presupuesto Comercial Estimado</p>
+          <p className="text-zinc-500 mt-0.5">Válido por 15 días • Sin validez fiscal</p>
         </div>
       )}
 

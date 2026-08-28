@@ -12,7 +12,7 @@ interface OpenShiftModalProps {
 
 export default function OpenShiftModal({ isOpen, onClose, onSuccess }: OpenShiftModalProps) {
   const [initialAmount, setInitialAmount] = useState<string>('0');
-  const [cashierName, setCashierName] = useState('Harold Rodríguez');
+  const [cashierName, setCashierName] = useState(() => localStorage.getItem('brianna_user_name') || 'Harold Rosado');
 
   useEffect(() => {
     if (isOpen) {

@@ -127,6 +127,8 @@ export const createCashClosure = async (
         .from('cash_closures')
         .insert([{
           closure_number: newClosure.closure_number,
+          register_name: newClosure.register_name || 'Caja 1 - Repuestos',
+          shift_id: newClosure.shift_id || null,
           cashier_name: newClosure.cashier_name,
           supervisor_name: newClosure.supervisor_name,
           initial_fund: newClosure.initial_fund,
@@ -142,6 +144,7 @@ export const createCashClosure = async (
           difference: newClosure.difference,
           status: newClosure.status,
           denominations: newClosure.denominations,
+          movements: newClosure.movements || [],
           notes: newClosure.notes || '',
           created_at: newClosure.created_at,
         }])

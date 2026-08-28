@@ -2,9 +2,21 @@ import { type UserRole } from './rolePermissions';
 
 export interface OperatingSchedule {
   enabled: boolean;
+  // Lunes a Viernes
   startTime: string; // HH:mm format, e.g. "08:00"
   endTime: string;   // HH:mm format, e.g. "18:00"
-  allowWeekends: boolean;
+  
+  // Sábados (8:00 AM - 1:00 PM)
+  saturdayEnabled: boolean;
+  saturdayStartTime: string; // "08:00"
+  saturdayEndTime: string;   // "13:00"
+
+  // Domingos
+  sundayEnabled?: boolean;
+  sundayStartTime?: string;
+  sundayEndTime?: string;
+
+  allowWeekends?: boolean;
 }
 
 export const SCHEDULE_STORAGE_KEY = 'brianna_operating_schedule';
@@ -13,6 +25,12 @@ export const DEFAULT_SCHEDULE: OperatingSchedule = {
   enabled: true,
   startTime: '08:00',
   endTime: '18:00',
+  saturdayEnabled: true,
+  saturdayStartTime: '08:00',
+  saturdayEndTime: '13:00',
+  sundayEnabled: false,
+  sundayStartTime: '08:00',
+  sundayEndTime: '13:00',
   allowWeekends: false,
 };
 
@@ -26,6 +44,12 @@ export const loadScheduleConfig = (): OperatingSchedule => {
       enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_SCHEDULE.enabled,
       startTime: parsed.startTime || DEFAULT_SCHEDULE.startTime,
       endTime: parsed.endTime || DEFAULT_SCHEDULE.endTime,
+      saturdayEnabled: typeof parsed.saturdayEnabled === 'boolean' ? parsed.saturdayEnabled : (typeof parsed.allowWeekends === 'boolean' ? parsed.allowWeekends : DEFAULT_SCHEDULE.saturdayEnabled),
+      saturdayStartTime: parsed.saturdayStartTime || DEFAULT_SCHEDULE.saturdayStartTime,
+      saturdayEndTime: parsed.saturdayEndTime || DEFAULT_SCHEDULE.saturdayEndTime,
+      sundayEnabled: typeof parsed.sundayEnabled === 'boolean' ? parsed.sundayEnabled : (typeof parsed.allowWeekends === 'boolean' ? parsed.allowWeekends : DEFAULT_SCHEDULE.sundayEnabled),
+      sundayStartTime: parsed.sundayStartTime || DEFAULT_SCHEDULE.sundayStartTime,
+      sundayEndTime: parsed.sundayEndTime || DEFAULT_SCHEDULE.sundayEndTime,
       allowWeekends: typeof parsed.allowWeekends === 'boolean' ? parsed.allowWeekends : DEFAULT_SCHEDULE.allowWeekends,
     };
   } catch (error) {
@@ -73,27 +97,35 @@ export const isSystemUnlocked = (role: UserRole, config?: OperatingSchedule): bo
 
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
-
-  // If weekend restriction applies and today is Saturday (6) or Sunday (0)
-  if (!currentConfig.allowWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) {
-    return false;
-  }
-
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  const [startHour, startMinute] = currentConfig.startTime.split(':').map(Number);
-  const [endHour, endMinute] = currentConfig.endTime.split(':').map(Number);
+  const isWithinRange = (startStr: string, endStr: string): boolean => {
+    const [startHour, startMinute] = (startStr || '08:00').split(':').map(Number);
+    const [endHour, endMinute] = (endStr || '18:00').split(':').map(Number);
+    const startMins = (startHour || 0) * 60 + (startMinute || 0);
+    const endMins = (endHour || 0) * 60 + (endMinute || 0);
 
-  const startMinutes = (startHour || 0) * 60 + (startMinute || 0);
-  const endMinutes = (endHour || 0) * 60 + (endMinute || 0);
+    if (startMins <= endMins) {
+      return currentMinutes >= startMins && currentMinutes < endMins;
+    } else {
+      return currentMinutes >= startMins || currentMinutes < endMins;
+    }
+  };
 
-  // Normal schedule (e.g. 08:00 to 18:00)
-  if (startMinutes <= endMinutes) {
-    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
-  } else {
-    // Overnight schedule (e.g. 22:00 to 06:00)
-    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  // Sábado (6)
+  if (dayOfWeek === 6) {
+    if (!currentConfig.saturdayEnabled) return false;
+    return isWithinRange(currentConfig.saturdayStartTime || '08:00', currentConfig.saturdayEndTime || '13:00');
   }
+
+  // Domingo (0)
+  if (dayOfWeek === 0) {
+    if (!currentConfig.sundayEnabled && !currentConfig.allowWeekends) return false;
+    return isWithinRange(currentConfig.sundayStartTime || currentConfig.startTime, currentConfig.sundayEndTime || currentConfig.endTime);
+  }
+
+  // Lunes a Viernes (1 - 5)
+  return isWithinRange(currentConfig.startTime, currentConfig.endTime);
 };
 
 export const formatTime12h = (time24: string): string => {

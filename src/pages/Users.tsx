@@ -65,6 +65,12 @@ export default function Users() {
 
   useEffect(() => {
     loadData(true);
+
+    const handleUserUpdate = () => {
+      loadData(false);
+    };
+    window.addEventListener('brianna_user_updated', handleUserUpdate);
+    return () => window.removeEventListener('brianna_user_updated', handleUserUpdate);
   }, []);
 
   const toggleCardPassword = (userId: string) => {

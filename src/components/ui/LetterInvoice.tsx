@@ -63,10 +63,11 @@ export default function LetterInvoice({
   isPrintOnly = false,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
-  const isEcf = isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E');
+  const isCotizacion = (ncf && ncf.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
+  const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
 
   const getDocumentTypeName = () => {
-    if (invoiceType === 'REC-P' || invoiceType === 'COT') return 'COTIZACIÓN / PRESUPUESTO';
+    if (isCotizacion) return 'COTIZACIÓN / PRESUPUESTO';
     if (invoiceType === 'E31') return 'FACTURA ELECTRÓNICA DE CRÉDITO FISCAL (e-CF)';
     if (invoiceType === 'E32') return 'FACTURA ELECTRÓNICA DE CONSUMO (e-CF)';
     if (invoiceType === 'E45') return 'FACTURA ELECTRÓNICA GUBERNAMENTAL (e-CF)';
@@ -138,11 +139,11 @@ export default function LetterInvoice({
         {/* Tarjeta de NCF y Tipo de Documento */}
         <div className="w-[300px] border-2 border-zinc-900 rounded-2xl p-4 bg-zinc-50/50 text-right space-y-2">
           <div>
-            <span className="text-[10px] font-black tracking-wider text-red-600 uppercase block">
+            <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-blue-600' : 'text-red-600'}`}>
               {getDocumentTypeName()}
             </span>
             <div className="text-xl font-black font-mono tracking-wider text-zinc-950 mt-1">
-              {ncf || 'INT-000001'}
+              {ncf || 'CT-000001'}
             </div>
           </div>
 
@@ -156,13 +157,19 @@ export default function LetterInvoice({
               <strong className="font-mono text-zinc-900">{formattedTime}</strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500 font-medium">Término de Pago:</span>
-              <strong className="uppercase text-zinc-900">{paymentMethod}</strong>
+              <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : 'Término de Pago:'}</span>
+              <strong className="uppercase text-zinc-900">{isCotizacion ? 'Presupuesto' : paymentMethod}</strong>
             </div>
             {isEcf && (
               <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-zinc-300">
                 <span className="text-emerald-700 font-bold">Estado Fiscal:</span>
                 <span className="text-emerald-700 font-black">Certificado DGII</span>
+              </div>
+            )}
+            {isCotizacion && (
+              <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-zinc-300">
+                <span className="text-blue-700 font-bold">Validez:</span>
+                <span className="text-blue-700 font-black">15 Días</span>
               </div>
             )}
           </div>
@@ -196,27 +203,32 @@ export default function LetterInvoice({
 
         <div className="space-y-1 text-right">
           <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
-            Detalles de Transacción
+            {isCotizacion ? 'Datos de la Cotización' : 'Detalles de Transacción'}
           </span>
           <p className="text-zinc-700">
             <strong className="text-zinc-900 font-semibold">Atendido por:</strong> {cashierName}
           </p>
-          {transferReference && (
+          {!isCotizacion && transferReference && (
             <p className="text-zinc-700">
               <strong className="text-zinc-900 font-semibold">Referencia:</strong>{' '}
               <span className="font-mono font-bold">{transferReference}</span>
             </p>
           )}
-          {receivedAmount !== undefined && (
+          {!isCotizacion && receivedAmount !== undefined && (
             <p className="text-zinc-700">
               <strong className="text-zinc-900 font-semibold">Efectivo Recibido:</strong>{' '}
               <span className="font-mono">{formatRD(receivedAmount)}</span>
             </p>
           )}
-          {changeAmount !== undefined && changeAmount > 0 && (
+          {!isCotizacion && changeAmount !== undefined && changeAmount > 0 && (
             <p className="text-zinc-700">
               <strong className="text-zinc-900 font-semibold">Cambio Devuelto:</strong>{' '}
               <span className="font-mono">{formatRD(changeAmount)}</span>
+            </p>
+          )}
+          {isCotizacion && (
+            <p className="text-blue-700 font-medium pt-1">
+              <strong>Estado:</strong> Presupuesto Informativo
             </p>
           )}
         </div>
@@ -263,7 +275,7 @@ export default function LetterInvoice({
             ) : (
               <tr>
                 <td colSpan={6} className="py-4 text-center text-zinc-500">
-                  Venta General de Mercancía / Servicios
+                  {isCotizacion ? 'Cotización General' : 'Venta General de Mercancía / Servicios'}
                 </td>
               </tr>
             )}
@@ -271,38 +283,61 @@ export default function LetterInvoice({
         </table>
       </div>
 
-      {/* 4. Resumen Fiscal & Timbre de Validación DGII */}
+      {/* 4. Resumen & Bloque Informativo (Sin QR para Cotizaciones) */}
       <div className="grid grid-cols-12 gap-6 items-start border-t-2 border-zinc-900 pt-6 mb-6">
-        {/* Lado Izquierdo: Timbre Electrónico DGII & QR */}
-        <div className="col-span-7 flex items-start gap-4 p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200">
-          <div className="bg-white p-2 rounded-xl shadow-xs border border-zinc-200 shrink-0">
-            <QRCode value={defaultQrUrl} size={96} level="M" />
-          </div>
-          <div className="space-y-1 text-[11px] text-zinc-600">
-            <span className="font-black text-zinc-900 uppercase tracking-wide block">
-              Comprobante Fiscal Electrónico (DGII)
+        {/* Lado Izquierdo: Timbre o Nota de Cotización */}
+        {isCotizacion ? (
+          <div className="col-span-7 flex flex-col justify-center p-4 bg-blue-50/60 rounded-2xl border border-blue-200 text-left space-y-1.5">
+            <span className="font-black text-blue-950 uppercase tracking-wide text-xs">
+              Presupuesto Comercial Estimado
             </span>
-            {securityCode && (
-              <p>
-                <strong>Código de Seguridad:</strong>{' '}
-                <span className="font-mono font-black text-zinc-950 bg-zinc-200 px-1.5 py-0.5 rounded">
-                  {securityCode}
-                </span>
-              </p>
-            )}
-            {trackId && (
-              <p>
-                <strong>Track ID:</strong>{' '}
-                <span className="font-mono text-zinc-700">{trackId}</span>
-              </p>
-            )}
-            <p className="text-[10px] text-zinc-500 leading-tight pt-1">
-              Escanea el código QR con cualquier dispositivo móvil o la app de la DGII para verificar la autenticidad y validez de este comprobante electrónico.
+            <p className="text-[11px] text-blue-900 leading-snug">
+              Este documento es una cotización informativa y no constituye una factura fiscal ni un comprobante de pago. Los precios y la disponibilidad están sujetos a confirmación al momento de generar la orden de compra.
+            </p>
+            <p className="text-[10px] text-blue-700 font-bold">
+              Válido por 15 días calendario a partir de la fecha de emisión.
             </p>
           </div>
-        </div>
+        ) : isEcf ? (
+          <div className="col-span-7 flex items-start gap-4 p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200">
+            <div className="bg-white p-2 rounded-xl shadow-xs border border-zinc-200 shrink-0">
+              <QRCode value={defaultQrUrl} size={96} level="M" />
+            </div>
+            <div className="space-y-1 text-[11px] text-zinc-600">
+              <span className="font-black text-zinc-900 uppercase tracking-wide block">
+                Comprobante Fiscal Electrónico (DGII)
+              </span>
+              {securityCode && (
+                <p>
+                  <strong>Código de Seguridad:</strong>{' '}
+                  <span className="font-mono font-black text-zinc-950 bg-zinc-200 px-1.5 py-0.5 rounded">
+                    {securityCode}
+                  </span>
+                </p>
+              )}
+              {trackId && (
+                <p>
+                  <strong>Track ID:</strong>{' '}
+                  <span className="font-mono text-zinc-700">{trackId}</span>
+                </p>
+              )}
+              <p className="text-[10px] text-zinc-500 leading-tight pt-1">
+                Escanea el código QR con cualquier dispositivo móvil o la app de la DGII para verificar la autenticidad y validez de este comprobante electrónico.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="col-span-7 flex flex-col justify-center p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-left space-y-1">
+            <span className="font-black text-zinc-900 uppercase tracking-wide text-xs">
+              Documento Interno de Venta
+            </span>
+            <p className="text-[11px] text-zinc-600">
+              Comprobante comercial para control administrativo interno.
+            </p>
+          </div>
+        )}
 
-        {/* Lado Derecho: Totales de la Factura */}
+        {/* Lado Derecho: Totales */}
         <div className="col-span-5 space-y-2 text-xs">
           <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
             <div className="flex justify-between text-zinc-600 font-medium">
@@ -324,7 +359,7 @@ export default function LetterInvoice({
           <div className="p-3.5 bg-zinc-950 text-white rounded-2xl flex justify-between items-center shadow-md">
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
-                Total a Pagar
+                {isCotizacion ? 'Total Cotizado' : 'Total a Pagar'}
               </span>
               <span className="text-lg font-black font-mono tracking-tight text-white">
                 {formatRD(total)}
@@ -343,7 +378,11 @@ export default function LetterInvoice({
           ¡Gracias por su preferencia! BRIANNA HEAVY EQUIPMENT S.R.L.
         </p>
         <p>
-          Documento emitido conforme a las regulaciones de Facturación Electrónica de la Dirección General de Impuestos Internos (DGII).
+          {isCotizacion
+            ? 'Cotización informativa sin valor fiscal emitida por Brianna Heavy Equipment S.R.L.'
+            : isEcf
+            ? 'Documento emitido conforme a las regulaciones de Facturación Electrónica de la Dirección General de Impuestos Internos (DGII).'
+            : 'Documento interno de venta comercial.'}
         </p>
       </div>
     </div>

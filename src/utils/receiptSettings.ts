@@ -137,3 +137,68 @@ export const saveReceiptFontSize = (size: ReceiptFontSize): void => {
     // fallback
   }
 };
+
+export interface CompanyBankAccount {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountType: string;
+  currency: string;
+  holderName: string;
+  rnc: string;
+}
+
+export const DEFAULT_BANK_ACCOUNTS: CompanyBankAccount[] = [
+  {
+    id: 'bpd',
+    bankName: 'Banco Popular Dominicano',
+    accountNumber: '798-234156-2',
+    accountType: 'Cta. Corriente',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    rnc: '132-61036-2',
+  },
+  {
+    id: 'banreservas',
+    bankName: 'Banreservas',
+    accountNumber: '960-128453-1',
+    accountType: 'Cta. Corriente',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    rnc: '132-61036-2',
+  },
+  {
+    id: 'bhd',
+    bankName: 'Banco BHD',
+    accountNumber: '035-489201-9',
+    accountType: 'Cta. Corriente',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    rnc: '132-61036-2',
+  }
+];
+
+const BANK_STORAGE_KEY = 'brianna_company_bank_accounts';
+
+export const getCompanyBankAccounts = (): CompanyBankAccount[] => {
+  try {
+    const raw = localStorage.getItem(BANK_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error('Error loading company bank accounts:', err);
+  }
+  return DEFAULT_BANK_ACCOUNTS;
+};
+
+export const saveCompanyBankAccounts = (accounts: CompanyBankAccount[]): void => {
+  try {
+    localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(accounts));
+    window.dispatchEvent(new CustomEvent('brianna_bank_accounts_changed', { detail: accounts }));
+  } catch (err) {
+    console.error('Error saving company bank accounts:', err);
+  }
+};
+

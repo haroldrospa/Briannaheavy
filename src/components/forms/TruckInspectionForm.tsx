@@ -266,43 +266,43 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
   }, []);
 
   return (
-    <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[900px] flex flex-col rounded-[2.5rem] print:rounded-none overflow-hidden">
+    <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[700px] flex flex-col rounded-2xl sm:rounded-3xl print:rounded-none overflow-hidden">
       
-      <div className="w-full max-w-none p-6 sm:p-10 font-sans flex-1 flex flex-col print:max-w-none print:p-0 gap-8">
+      <div className="w-full max-w-none p-3.5 sm:p-6 font-sans flex-1 flex flex-col print:max-w-none print:p-0 gap-4 sm:gap-6">
         
-        {/* Document Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-[#1a1a1a] p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 print:shadow-none print:border-none print:p-0 print:rounded-none gap-6">
-          <div className="flex items-center gap-6">
-            <div className="h-16 w-16 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent shrink-0">
-              <DocumentCheckIcon className="h-8 w-8 text-gray-900 dark:text-white print:text-black" />
+        {/* Document Header (Compact & Minimalist) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-[#1a1a1a] p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-150 dark:border-gray-800 print:shadow-none print:border-none print:p-0 print:rounded-none gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent shrink-0">
+              <DocumentCheckIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-900 dark:text-white print:text-black" />
             </div>
             <div>
-              <div className="text-sm font-black tracking-tight text-gray-900 dark:text-white mb-1 print:text-gray-500 uppercase">
+              <div className="text-[10px] sm:text-xs font-bold tracking-wider text-gray-500 dark:text-zinc-400 print:text-gray-500 uppercase">
                 Brianna Heavy Equipment • RNC: 132610362
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight leading-none mb-2">
+              <h1 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight leading-tight">
                 Inspección de Camiones
               </h1>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Departamento de Mantenimiento</p>
+              <p className="text-[11px] font-medium text-gray-500 dark:text-zinc-400">Departamento de Mantenimiento</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-3 bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-gray-800 print:bg-transparent print:border-none print:p-0">
-            <span className="text-sm font-bold text-gray-500 dark:text-gray-400">Nº de Reporte</span>
-            <span className="text-xl font-black text-gray-900 dark:text-white font-mono tracking-tight print:text-black min-w-[3.5rem] text-right select-none">
+          <div className="flex items-center justify-between sm:justify-end gap-2.5 bg-gray-50 dark:bg-[#222222] px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-gray-200/60 dark:border-gray-800 print:bg-transparent print:border-none print:p-0 shrink-0">
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Nº de Reporte</span>
+            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight print:text-black select-none">
               {reportSeq}
             </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column (Metadata) */}
-          <div className="lg:col-span-1 flex flex-col gap-8">
+          <div className="lg:col-span-1 flex flex-col gap-4 sm:gap-6">
             {/* Vehicle Info */}
-            <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4 print:shadow-none print:border-gray-900 print:rounded-none">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-                  <TruckIcon className="h-5 w-5 text-gray-900 dark:text-white print:text-black" />
+            <div className="bg-white dark:bg-[#1a1a1a] p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-150 dark:border-gray-800 space-y-3.5 print:shadow-none print:border-gray-900 print:rounded-none">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
+                  <TruckIcon className="h-4 w-4 text-gray-900 dark:text-white print:text-black" />
                   Datos del Vehículo
                 </h3>
                 {(vehicleInfo.brand || vehicleInfo.model || vehicleInfo.vin) && (

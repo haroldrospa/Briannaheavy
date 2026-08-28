@@ -147,7 +147,7 @@ const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], cl
       code: c.closure_number,
       date: c.created_at ? c.created_at.slice(0, 10) : '2026-07-21',
       register: c.register_name || 'Caja 1 - Repuestos',
-      cashier: c.cashier_name || 'Harold Rodríguez',
+      cashier: c.cashier_name || 'Harold Rosado',
       initialFund: Number(c.initial_fund || 0),
       incomes: Number(c.cash_movements_in || 0),
       expenses: Number(c.cash_movements_out || 0),

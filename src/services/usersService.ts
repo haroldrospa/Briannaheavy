@@ -52,7 +52,7 @@ export const saveStoredPassword = async (email: string, password: string): Promi
 const initialLocalUsers: UserProfile[] = [
   { 
     id: '1', 
-    full_name: 'Harold Rodríguez', 
+    full_name: 'Harold Rosado', 
     role: 'Administrador', 
     status: 'Activo', 
     email: SUPER_ADMIN_EMAIL,
@@ -60,7 +60,7 @@ const initialLocalUsers: UserProfile[] = [
   },
   {
     id: '2',
-    full_name: 'Cajero 1',
+    full_name: 'Harold Cajero',
     role: 'Repuestos',
     status: 'Activo',
     email: 'cajero1@gmail.com',
@@ -79,6 +79,26 @@ const initialLocalUsers: UserProfile[] = [
 let inMemoryUsers: UserProfile[] | null = null;
 let inFlightUsersPromise: Promise<UserProfile[]> | null = null;
 
+const syncActiveSessionIfCurrent = (user: UserProfile) => {
+  if (typeof window === 'undefined') return;
+  const currentEmail = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
+  const isSuperAdmin = user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+  
+  if (user.email?.toLowerCase() === currentEmail || (isSuperAdmin && (!currentEmail || currentEmail === SUPER_ADMIN_EMAIL.toLowerCase()))) {
+    if (user.full_name) {
+      localStorage.setItem('brianna_user_name', user.full_name);
+    }
+    if (user.email) {
+      localStorage.setItem('brianna_user_email', user.email);
+    }
+    if (user.role) {
+      localStorage.setItem('brianna_user_role', user.role);
+    }
+    window.dispatchEvent(new Event('brianna_user_updated'));
+    window.dispatchEvent(new Event('brianna_role_updated'));
+  }
+};
+
 export const getLocalStorageUsers = (): UserProfile[] => {
   if (inMemoryUsers !== null) {
     return inMemoryUsers;
@@ -93,35 +113,18 @@ export const getLocalStorageUsers = (): UserProfile[] => {
     }
     let parsed = JSON.parse(raw) as UserProfile[];
     
-    // Clean and normalize passwords and super admin
+    // Clean and normalize passwords without overwriting user-configured names
     parsed = parsed.map(u => {
       const emailKey = (u.email || '').trim().toLowerCase();
       const userPass = u.password || passwords[emailKey] || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
       
-      // Only normalize if it is Harold's super admin account or legacy admin emails
-      if (
-        emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ||
-        emailKey === 'admin@brianna.com' ||
-        emailKey === 'admin@brianna.do' ||
-        (u.id === '1' && u.full_name.toLowerCase().includes('harold'))
-      ) {
+      if (emailKey === SUPER_ADMIN_EMAIL.toLowerCase()) {
         return {
           ...u,
-          full_name: 'Harold Rodríguez',
+          full_name: u.full_name || 'Harold Rosado',
           email: SUPER_ADMIN_EMAIL,
           role: 'Administrador' as UserRole,
           status: 'Activo',
-          password: userPass
-        };
-      }
-
-      // Guarantee cashier identity for cashier accounts
-      if (emailKey.includes('cajer') || emailKey.includes('caja') || u.full_name.toLowerCase().includes('cajer')) {
-        return {
-          ...u,
-          full_name: (u.full_name && !u.full_name.toLowerCase().includes('admin')) ? u.full_name : 'Cajero 1',
-          role: 'Repuestos' as UserRole,
-          status: u.status || 'Activo',
           password: userPass
         };
       }
@@ -140,15 +143,7 @@ export const getLocalStorageUsers = (): UserProfile[] => {
       parsed = [initialLocalUsers[0], ...parsed];
     }
 
-    // Ensure Cajero 1 exists
-    const hasCajero1 = parsed.some(
-      u => u.email?.toLowerCase() === 'cajero1@gmail.com'
-    );
-    if (!hasCajero1) {
-      parsed = [...parsed, initialLocalUsers[1]];
-    }
-
-    // Deduplicate by email
+    // Deduplicate by email/id
     const uniqueMap = new Map<string, UserProfile>();
     parsed.forEach(u => {
       const key = u.email ? u.email.toLowerCase() : u.id;
@@ -168,13 +163,16 @@ const saveLocalStorageUsers = (users: UserProfile[]): void => {
   inMemoryUsers = users;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(users));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('brianna_user_updated'));
+    }
   } catch (e) {
     console.warn('Error saving users to localStorage:', e);
   }
 };
 
 let lastUsersFetch = 0;
-const USERS_CACHE_TTL = 60_000; // 60 seconds
+const USERS_CACHE_TTL = 30_000; // 30 seconds
 
 export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> => {
   const now = Date.now();
@@ -189,7 +187,6 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
   if (isSupabaseConfigured()) {
     inFlightUsersPromise = (async () => {
       try {
-        // Parallel fetch profiles + remote passwords from Supabase
         const [profilesRes, passwordsRes] = await Promise.all([
           supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(100),
           supabase.from('system_settings').select('value').eq('key', 'user_passwords').maybeSingle()
@@ -205,14 +202,24 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
         localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(mergedPasswords));
 
         if (!profilesRes.error && profilesRes.data && profilesRes.data.length > 0) {
+          const localList = getLocalStorageUsers();
           const profiles = profilesRes.data.map((p: any) => {
             const emailKey = (p.email || '').trim().toLowerCase();
-            const userPass = p.password || mergedPasswords[emailKey] || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
+            const localMatch = localList.find(l => (l.email || '').toLowerCase() === emailKey || l.id === p.id);
+            const userPass = p.password || mergedPasswords[emailKey] || localMatch?.password || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
             return {
               ...p,
+              full_name: p.full_name || localMatch?.full_name || 'Usuario',
               password: userPass
             } as UserProfile;
           });
+
+          // Ensure super admin exists
+          const hasSuper = profiles.some(p => p.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+          if (!hasSuper) {
+            const superAdmin = localList.find(l => l.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) || initialLocalUsers[0];
+            profiles.unshift(superAdmin);
+          }
 
           saveLocalStorageUsers(profiles);
           lastUsersFetch = Date.now();
@@ -239,6 +246,8 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
     await saveStoredPassword(user.email, userPassword);
   }
 
+  let createdId = Date.now().toString();
+
   if (isSupabaseConfigured()) {
     try {
       const cleanUser: Record<string, any> = {
@@ -249,7 +258,7 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
       };
       const { data, error } = await supabase.from('profiles').insert([cleanUser]).select().single();
       if (!error && data) {
-        return { ...(data as UserProfile), password: userPassword };
+        createdId = data.id || createdId;
       }
     } catch (err) {
       console.warn('Profile insert notice (saved locally):', err);
@@ -257,9 +266,10 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
   }
 
   const current = getLocalStorageUsers();
-  const newUser: UserProfile = { ...user, id: Date.now().toString(), password: userPassword };
+  const newUser: UserProfile = { ...user, id: createdId, password: userPassword };
   const updated = [...current, newUser];
   saveLocalStorageUsers(updated);
+  lastUsersFetch = 0;
   return newUser;
 };
 
@@ -277,10 +287,7 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
       if (updates.status !== undefined) cleanUpdates.status = updates.status;
 
       if (Object.keys(cleanUpdates).length > 0) {
-        const { data, error } = await supabase.from('profiles').update(cleanUpdates).eq('id', id).select().single();
-        if (!error && data) {
-          return { ...(data as UserProfile), password: updates.password };
-        }
+        await supabase.from('profiles').update(cleanUpdates).eq('id', id);
       }
     } catch (err) {
       console.warn('Profile update notice (saved locally):', err);
@@ -290,9 +297,9 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
   const current = getLocalStorageUsers();
   let updatedUser: UserProfile | null = null;
   const updatedList = current.map(u => {
-    if (u.id === id) {
+    if (u.id === id || (u.email && updates.email && u.email.toLowerCase() === updates.email.toLowerCase())) {
       const finalUpdates = { ...updates };
-      if (u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      if (u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || updates.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
         finalUpdates.role = 'Administrador';
         finalUpdates.status = 'Activo';
       }
@@ -301,7 +308,14 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
     }
     return u;
   });
+
   saveLocalStorageUsers(updatedList);
+  lastUsersFetch = 0;
+
+  if (updatedUser) {
+    syncActiveSessionIfCurrent(updatedUser);
+  }
+
   return updatedUser;
 };
 
@@ -326,6 +340,7 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 
   const updatedList = current.filter(u => u.id !== id);
   saveLocalStorageUsers(updatedList);
+  lastUsersFetch = 0;
   return true;
 };
 

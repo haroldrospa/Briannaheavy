@@ -19,10 +19,14 @@ import {
   CheckCircleIcon,
   PrinterIcon,
   DocumentArrowDownIcon,
-  FunnelIcon,
+  DocumentTextIcon,
+  ChevronDownIcon,
   UserPlusIcon,
   CheckIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  WrenchScrewdriverIcon,
+  SunIcon,
+  MoonIcon
 } from '@heroicons/react/24/outline';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
@@ -32,8 +36,9 @@ import type { SessionSale } from '../components/finance/SessionSalesModal';
 import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
-import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
-import { getActiveRole } from '../utils/rolePermissions';
+import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
+import { getActiveRole, hasPermission } from '../utils/rolePermissions';
+import { useTheme } from '../contexts/ThemeContext';
 import { createInvoice, fetchInvoices, getLocalStorageInvoices, type Invoice } from '../services/invoicesService';
 import { fetchInventory, getLocalStorageInventory, updateInventoryItem } from '../services/inventoryService';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../services/customersService';
@@ -137,10 +142,1104 @@ const ProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) =>
             </p>
           )}
         </div>
-        <div className="mt-2.5 sm:mt-3 flex items-end justify-between gap-1">
-          <span className="text-sm sm:text-lg font-black text-gray-900 dark:text-white font-mono tracking-tight">${product.price.toFixed(2)}</span>
-          <span className="text-[10px] sm:text-xs font-bold px-2.5 py-0.5 sm:py-1 bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 rounded-full">Stock: {product.stock}</span>
+        <div className="mt-2 sm:mt-3 flex flex-wrap items-baseline justify-between gap-1">
+          <span className="text-xs sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
+            ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          </span>
+          <span className="text-[9px] sm:text-xs font-bold px-2 py-0.5 bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 rounded-full shrink-0 whitespace-nowrap">
+            Stock: {product.stock}
+          </span>
         </div>
+      </div>
+    </div>
+  );
+});
+
+// ─── Ultra-Fast Search Bar (0ms typing latency, isolated state) ───
+const POSSearchBar = memo(({
+  searchCriteria,
+  onSearchCriteriaChange,
+  onSearch,
+  onEnterMatch,
+  dbProductsRef,
+  filteredProducts
+}: {
+  searchCriteria: 'all' | 'barcode' | 'internal_code' | 'name';
+  onSearchCriteriaChange?: (crit: 'all' | 'barcode' | 'internal_code' | 'name') => void;
+  onSearch: (val: string) => void;
+  onEnterMatch: (product: any) => void;
+  dbProductsRef: React.MutableRefObject<any[]>;
+  filteredProducts: any[];
+}) => {
+  const [inputValue, setInputValue] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onSearch(val), 80);
+
+    const clean = val.trim().toLowerCase();
+    if (clean.length >= 4) {
+      let exactMatch = null;
+      if (searchCriteria === 'barcode') {
+        exactMatch = dbProductsRef.current.find(p => p.barcode && p.barcode.toLowerCase() === clean);
+      } else if (searchCriteria === 'internal_code') {
+        exactMatch = dbProductsRef.current.find(p =>
+          (p.part_number && p.part_number.toLowerCase() === clean) ||
+          (p.vin && p.vin.toLowerCase() === clean) ||
+          (p.id && String(p.id).toLowerCase() === clean)
+        );
+      } else if (searchCriteria === 'all') {
+        exactMatch = dbProductsRef.current.find(p =>
+          (p.barcode && p.barcode.toLowerCase() === clean) ||
+          (p.part_number && p.part_number.toLowerCase() === clean)
+        );
+      }
+
+      if (exactMatch) {
+        onEnterMatch(exactMatch);
+        setTimeout(() => {
+          inputRef.current?.focus();
+          inputRef.current?.select();
+        }, 15);
+      }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const clean = inputValue.trim().toLowerCase();
+      if (!clean) return;
+
+      let match = null;
+      const prods = dbProductsRef.current;
+      if (searchCriteria === 'barcode') {
+        match = prods.find(p => p.barcode && p.barcode.toLowerCase() === clean);
+      } else if (searchCriteria === 'internal_code') {
+        match = prods.find(p =>
+          (p.part_number && p.part_number.toLowerCase() === clean) ||
+          (p.vin && p.vin.toLowerCase() === clean) ||
+          (p.id && String(p.id).toLowerCase() === clean)
+        );
+      } else if (searchCriteria === 'name') {
+        match = prods.find(p =>
+          (p.name && p.name.toLowerCase() === clean) ||
+          (p.brand && p.brand.toLowerCase() === clean) ||
+          (p.model && p.model.toLowerCase() === clean)
+        );
+      } else {
+        match = prods.find(p =>
+          (p.barcode && p.barcode.toLowerCase() === clean) ||
+          (p.part_number && p.part_number.toLowerCase() === clean) ||
+          (p.vin && p.vin.toLowerCase() === clean) ||
+          (p.id && String(p.id).toLowerCase() === clean) ||
+          (p.name && p.name.toLowerCase() === clean)
+        );
+      }
+
+      if (!match && filteredProducts.length > 0) {
+        match = filteredProducts[0];
+      }
+
+      if (match) {
+        onEnterMatch(match);
+      }
+
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 15);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="relative flex-1 flex items-center bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-xs border border-gray-200/80 dark:border-zinc-800 p-1 sm:p-1.5 focus-within:ring-2 focus-within:ring-[#ED1C24]/30 transition-all">
+        {/* Compact Criteria Selector */}
+        {onSearchCriteriaChange && (
+          <div className="relative shrink-0 pr-1 border-r border-gray-200 dark:border-zinc-800 mr-1 sm:mr-2">
+            <select
+              value={searchCriteria}
+              onChange={(e) => onSearchCriteriaChange(e.target.value as any)}
+              className="appearance-none bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-[11px] sm:text-xs font-black py-1.5 sm:py-2 pl-2.5 sm:pl-3 pr-6 sm:pr-7 rounded-xl outline-none cursor-pointer border border-gray-200/70 dark:border-zinc-700 transition-colors"
+            >
+              <option value="all">🔍 Todo</option>
+              <option value="barcode">Código Barras</option>
+              <option value="internal_code">P/N / VIN</option>
+              <option value="name">Nombre</option>
+            </select>
+            <ChevronDownIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400 absolute right-2 top-2.5 sm:top-3 pointer-events-none" />
+          </div>
+        )}
+
+        <div className="relative flex-1 flex items-center">
+          <input
+            ref={inputRef}
+            type="text"
+            className="w-full bg-transparent px-2.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 outline-none"
+            placeholder={
+              searchCriteria === 'barcode'
+                ? 'Buscar por código de barras...'
+                : searchCriteria === 'internal_code'
+                ? 'Buscar por P/N, VIN, ID...'
+                : searchCriteria === 'name'
+                ? 'Buscar por nombre o marca...'
+                : 'Buscar repuesto, camión o código...'
+            }
+            value={inputValue}
+            onFocus={(e) => e.target.select()}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+          />
+          {inputValue && (
+            <button
+              type="button"
+              onClick={() => { setInputValue(''); onSearch(''); }}
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 cursor-pointer shrink-0"
+              title="Limpiar búsqueda"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <button className="bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 p-2.5 sm:p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:text-[#ED1C24] dark:hover:text-[#ED1C24] transition-all shadow-xs flex items-center justify-center cursor-pointer shrink-0" title="Escanear Código">
+        <QrCodeIcon className="h-5 w-5" />
+      </button>
+    </div>
+  );
+});
+
+// ─── Minimalist & Ultra-Fast Select Client Modal (0ms lag, isolated state) ───
+const SelectClientModal = memo(({
+  isOpen,
+  onClose,
+  clients,
+  selectedClient,
+  onSelectClient,
+  onCreateClient
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  clients: any[];
+  selectedClient: any;
+  onSelectClient: (c: any) => void;
+  onCreateClient: (c: any) => Promise<any>;
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [isSearchingDgii, setIsSearchingDgii] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dgiiMessage, setDgiiMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  const [newClient, setNewClient] = useState({
+    name: '',
+    document_id: '',
+    phone: '',
+    email: '',
+    address: ''
+  });
+
+  // Fast in-memory filter (0ms latency, zero parent POS re-renders)
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter(c => 
+      (c.name && c.name.toLowerCase().includes(term)) || 
+      (c.rnc && c.rnc.toLowerCase().includes(term)) ||
+      (c.phone && c.phone.includes(term))
+    );
+  }, [clients, searchTerm]);
+
+  if (!isOpen) return null;
+
+  const handleStartCreate = () => {
+    const term = searchTerm.trim();
+    const isNumeric = /^[0-9-]+$/.test(term);
+    const cleanDoc = isNumeric ? term : '';
+    setNewClient({
+      name: !isNumeric ? term : '',
+      document_id: cleanDoc,
+      phone: '',
+      email: '',
+      address: ''
+    });
+    setDgiiMessage(null);
+    setIsCreating(true);
+
+    const pureDigits = cleanDoc.replace(/\D/g, '');
+    if (pureDigits.length === 9 || pureDigits.length === 11) {
+      handleSearchDgii(pureDigits);
+    }
+  };
+
+  const handleSearchDgii = async (rncInput?: string) => {
+    const raw = rncInput !== undefined ? rncInput : newClient.document_id;
+    const clean = raw.replace(/\D/g, '').trim();
+
+    if (clean.length !== 9 && clean.length !== 11) {
+      setDgiiMessage({
+        type: 'info',
+        text: 'Ingrese 9 dígitos para RNC o 11 para Cédula.'
+      });
+      return;
+    }
+
+    setIsSearchingDgii(true);
+    setDgiiMessage(null);
+
+    try {
+      const res = await searchDgiiRnc(clean);
+      const isFisico = clean.length === 11;
+      const formattedDoc = isFisico
+        ? `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+        : `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`;
+
+      if (res.success && res.name) {
+        setNewClient(prev => ({
+          ...prev,
+          name: res.name,
+          document_id: formattedDoc
+        }));
+        setDgiiMessage({
+          type: 'success',
+          text: isFisico ? `Cédula: ${res.name}` : `DGII: ${res.name} (${res.status})`
+        });
+      } else if (res.success && res.isValidStructure) {
+        setNewClient(prev => ({
+          ...prev,
+          name: '',
+          document_id: formattedDoc
+        }));
+        setDgiiMessage({
+          type: 'info',
+          text: `Documento válido (${formattedDoc}). Ingrese el nombre.`
+        });
+      } else {
+        setDgiiMessage({
+          type: 'error',
+          text: res.error || 'Identificación no válida.'
+        });
+      }
+    } catch {
+      setDgiiMessage({
+        type: 'error',
+        text: 'Error consultando DGII. Ingrese los datos manualmente.'
+      });
+    } finally {
+      setIsSearchingDgii(false);
+    }
+  };
+
+  const handleSaveClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClient.name.trim() || !newClient.document_id.trim()) return;
+
+    setIsSaving(true);
+    try {
+      cacheDgiiRnc(newClient.document_id, newClient.name);
+      const isEmpresarial = newClient.document_id.replace(/\D/g, '').length === 9;
+      const created = await onCreateClient({
+        name: newClient.name.trim(),
+        document_id: newClient.document_id.trim(),
+        phone: newClient.phone.trim() || undefined,
+        email: newClient.email.trim() || undefined,
+        address: newClient.address.trim() || undefined,
+        type: isEmpresarial ? 'Empresarial' : 'Físico',
+      });
+
+      if (created) {
+        onSelectClient(created);
+        setIsCreating(false);
+        onClose();
+      }
+    } catch (err) {
+      console.error('Error creating client:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4">
+      {/* Lightweight backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/60" 
+        onClick={() => {
+          if (!isSaving) {
+            setIsCreating(false);
+            onClose();
+          }
+        }} 
+      />
+
+      {/* Modal Container */}
+      <div className="relative w-full max-w-md bg-white dark:bg-[#14151a] rounded-2xl shadow-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[85vh] z-10 animate-in fade-in zoom-in-95 duration-100">
+        
+        {/* Minimalist Header */}
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {isCreating && (
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500 dark:text-zinc-400 transition-colors cursor-pointer"
+                title="Volver a la lista"
+              >
+                <ArrowLeftIcon className="w-4 h-4" />
+              </button>
+            )}
+            <h3 className="text-sm font-black text-gray-900 dark:text-white">
+              {isCreating ? 'Registrar Nuevo Cliente' : 'Seleccionar Cliente'}
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isCreating && (
+              <button
+                type="button"
+                onClick={handleStartCreate}
+                className="px-2.5 py-1 bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+              >
+                <UserPlusIcon className="w-3.5 h-3.5" />
+                <span>Nuevo</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreating(false);
+                onClose();
+              }}
+              className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {!isCreating ? (
+          /* Search & List Mode */
+          <>
+            {/* Minimalist Search Bar */}
+            <div className="p-2.5 border-b border-gray-100 dark:border-zinc-800">
+              <div className="relative flex items-center">
+                <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 dark:text-zinc-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por nombre, RNC o teléfono..."
+                  className="w-full pl-9 pr-8 py-2 bg-gray-100 dark:bg-zinc-850 border-none rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 cursor-pointer"
+                  >
+                    <XMarkIcon className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {/* Quick Create Suggestion */}
+              {searchTerm.trim().length > 0 && !filteredClients.some(c => (c.name || '').toLowerCase() === searchTerm.trim().toLowerCase()) && (
+                <button
+                  type="button"
+                  onClick={handleStartCreate}
+                  className="w-full p-2.5 rounded-xl border border-dashed border-red-300 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 text-left hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors flex items-center justify-between cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserPlusIcon className="w-4 h-4 text-[#ED1C24]" />
+                    <span className="text-xs font-bold text-gray-900 dark:text-white">
+                      Registrar <span className="text-[#ED1C24]">"{searchTerm.trim()}"</span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-[#ED1C24] bg-white dark:bg-zinc-800 px-2 py-0.5 rounded-full shadow-2xs">
+                    + Registrar
+                  </span>
+                </button>
+              )}
+
+              {/* Cliente de Contado (Default) */}
+              {!searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectClient(null);
+                    onClose();
+                  }}
+                  className={`w-full p-2.5 rounded-xl text-left transition-colors flex items-center justify-between cursor-pointer ${
+                    !selectedClient
+                      ? 'bg-red-50/80 dark:bg-red-950/30 text-gray-900 dark:text-white'
+                      : 'hover:bg-gray-100/70 dark:hover:bg-zinc-850/50 text-gray-700 dark:text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-600 dark:text-zinc-400 shrink-0">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold leading-tight">Cliente de Contado</span>
+                      <span className="block text-[10px] text-gray-400 dark:text-zinc-500 font-normal">Venta rápida / sin registro</span>
+                    </div>
+                  </div>
+                  {!selectedClient && (
+                    <CheckIcon className="w-4 h-4 text-[#ED1C24] stroke-[3]" />
+                  )}
+                </button>
+              )}
+
+              {/* Client Items */}
+              {filteredClients.map((client) => {
+                const isSelected = selectedClient?.id === client.id;
+                return (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectClient(client);
+                      onClose();
+                    }}
+                    className={`w-full p-2.5 rounded-xl text-left transition-colors flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-red-50/80 dark:bg-red-950/30 text-gray-900 dark:text-white'
+                        : 'hover:bg-gray-100/70 dark:hover:bg-zinc-850/50 text-gray-700 dark:text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-600 dark:text-zinc-400 shrink-0">
+                        <BuildingLibraryIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="block text-xs font-bold leading-tight truncate text-gray-900 dark:text-white">
+                            {client.name}
+                          </span>
+                          {client.type && (
+                            <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-gray-200/60 dark:bg-zinc-700/60 text-gray-600 dark:text-zinc-300 shrink-0">
+                              {client.type}
+                            </span>
+                          )}
+                        </div>
+                        <span className="block text-[10px] text-gray-400 dark:text-zinc-500 font-mono font-medium truncate">
+                          {client.rnc ? `RNC: ${client.rnc}` : 'Sin RNC'}{client.phone ? ` • Tel: ${client.phone}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckIcon className="w-4 h-4 text-[#ED1C24] stroke-[3] shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+
+              {filteredClients.length === 0 && (
+                <div className="text-center py-8 text-gray-400 dark:text-zinc-500 text-xs font-medium">
+                  No se encontraron clientes con "{searchTerm}"
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          /* Fast Create Form */
+          <form onSubmit={handleSaveClient} className="p-4 space-y-3 overflow-y-auto">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400">
+                  RNC / Cédula <span className="text-[#ED1C24]">*</span>
+                </label>
+                <span className="text-[9px] font-bold text-gray-400">Búsqueda automática DGII</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={newClient.document_id}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewClient(prev => ({ ...prev, document_id: val }));
+                    const clean = val.replace(/\D/g, '').trim();
+                    if (clean.length === 9 || clean.length === 11) {
+                      handleSearchDgii(clean);
+                    }
+                  }}
+                  placeholder="Ej. 131-45678-9"
+                  className="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={isSearchingDgii}
+                  onClick={() => handleSearchDgii()}
+                  className="px-3 py-1.5 bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  {isSearchingDgii ? (
+                    <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+                  )}
+                  <span>DGII</span>
+                </button>
+              </div>
+
+              {dgiiMessage && (
+                <div className={`mt-1.5 p-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 ${
+                  dgiiMessage.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                    : dgiiMessage.type === 'error'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                    : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+                }`}>
+                  {dgiiMessage.type === 'success' && <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                  <span>{dgiiMessage.text}</span>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">
+                Nombre Completo / Razón Social <span className="text-[#ED1C24]">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={newClient.name}
+                onChange={(e) => setNewClient(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Nombre oficial o empresa"
+                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white uppercase focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">Teléfono</label>
+                <input
+                  type="text"
+                  value={newClient.phone}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(809) 555-5555"
+                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newClient.email}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-gray-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-4 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSaving && <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />}
+                <span>Guardar Cliente</span>
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ─── Minimalist & Ultra-Fast Checkout Modal (0ms lag, isolated state) ───
+const CheckoutModal = memo(({
+  isOpen,
+  onClose,
+  total,
+  selectedClient,
+  onOpenSelectClient,
+  onClearClient,
+  onCompleteSale,
+  isTransmitting
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  total: number;
+  selectedClient: any;
+  onOpenSelectClient: () => void;
+  onClearClient: () => void;
+  onCompleteSale: (params: {
+    billingMode: 'electronic' | 'internal';
+    electronicDocType: 'E31' | 'E32' | 'E45' | 'E46';
+    internalDocType: 'FAC-INT' | 'CT';
+    paymentMethod: PaymentMethodType;
+    amountReceived: string;
+    transferReference: string;
+  }) => Promise<void>;
+  isTransmitting: boolean;
+}) => {
+  const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');
+  const [electronicDocType, setElectronicDocType] = useState<'E31' | 'E32' | 'E45' | 'E46'>('E32');
+  const [internalDocType, setInternalDocType] = useState<'FAC-INT' | 'CT'>('FAC-INT');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
+  const [amountReceived, setAmountReceived] = useState<string>(() => total.toFixed(2));
+  const [transferReference, setTransferReference] = useState<string>('');
+  const [bankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setAmountReceived(total.toFixed(2));
+    }
+  }, [isOpen, total]);
+
+  const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
+
+  // Derived Payment Math
+  const numReceived = parseFloat(amountReceived) || 0;
+  const change = (paymentMethod === 'Efectivo' && numReceived > total) ? (numReceived - total) : 0;
+  
+  const isPaymentValid = isCotizacion ? true : (
+    (paymentMethod === 'Efectivo' ? numReceived >= total : true) &&
+    (paymentMethod === 'Transferencia' ? transferReference.trim().length > 0 : true) &&
+    (paymentMethod === 'Crédito' ? !!selectedClient : true)
+  );
+
+  const needsClient = !isCotizacion && (
+    paymentMethod === 'Crédito' ||
+    (billingMode === 'electronic' && (electronicDocType === 'E31' || electronicDocType === 'E45' || electronicDocType === 'E46'))
+  );
+
+  const clientMissing = needsClient && !selectedClient;
+  const canEmit = isPaymentValid && !isTransmitting && !clientMissing;
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEmit) return;
+    onCompleteSale({
+      billingMode,
+      electronicDocType,
+      internalDocType,
+      paymentMethod: isCotizacion ? 'Efectivo' : paymentMethod,
+      amountReceived: isCotizacion ? total.toFixed(2) : amountReceived,
+      transferReference: isCotizacion ? '' : transferReference
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      {/* Fast lightweight backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/60" 
+        onClick={() => !isTransmitting && onClose()} 
+      />
+
+      {/* Modal Card */}
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#15161b] rounded-2xl shadow-2xl border border-gray-200/80 dark:border-zinc-800 flex flex-col max-h-[92vh] overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-100">
+        {/* Header */}
+        <div className="px-5 py-3.5 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight">
+              {isCotizacion ? 'Generar Cotización' : 'Cobro de Factura'}
+            </h3>
+            <p className="text-[11px] text-gray-400 font-medium">
+              {isCotizacion ? 'Presupuesto para el cliente' : 'Selecciona comprobante y método de pago'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => !isTransmitting && onClose()}
+            disabled={isTransmitting}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
+          {/* 1. TIPO DE FACTURACIÓN */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
+                1. Tipo de Facturación
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                billingMode === 'electronic'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                  : isCotizacion
+                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                  : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+              }`}>
+                {billingMode === 'electronic' ? 'Fiscal DGII (e-CF)' : isCotizacion ? 'Cotización (Presupuesto)' : 'No Fiscal (Interno)'}
+              </span>
+            </div>
+
+            {/* Switch Mode */}
+            <div className="grid grid-cols-2 gap-1.5 bg-gray-100 dark:bg-zinc-850 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setBillingMode('electronic')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  billingMode === 'electronic'
+                    ? 'bg-white dark:bg-[#15161b] text-[#ED1C24] shadow-xs'
+                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <span>Factura Electrónica</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingMode('internal')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  billingMode === 'internal'
+                    ? 'bg-white dark:bg-[#15161b] text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                }`}
+              >
+                <span>📄 Documento Interno</span>
+              </button>
+            </div>
+
+            {/* Sub-types */}
+            <div className="pt-0.5">
+              {billingMode === 'electronic' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {([
+                    { id: 'E32', code: 'E32', title: 'Consumo', subtitle: 'Consumidor Final' },
+                    { id: 'E31', code: 'E31', title: 'Crédito Fiscal', subtitle: 'Para Deducir ITBIS' },
+                    { id: 'E46', code: 'E46', title: 'Gubernamental', subtitle: 'Entidades Públicas' },
+                    { id: 'E45', code: 'E45', title: 'Rég. Especial', subtitle: 'Zonas Francas/Turismo' },
+                  ] as const).map(c => {
+                    const isSelected = electronicDocType === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setElectronicDocType(c.id)}
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
+                            : 'bg-gray-50 dark:bg-zinc-850/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{c.code}</div>
+                        <div className="text-[10px] font-bold truncate">{c.title}</div>
+                        <div className={`text-[8px] truncate mt-0.5 ${isSelected ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500'}`}>
+                          {c.subtitle}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    { id: 'FAC-INT', code: 'FAC-INT', title: 'Factura Interna', subtitle: 'Venta comercial directa' },
+                    { id: 'CT', code: 'CT', title: 'Cotización', subtitle: 'Presupuesto para cliente' },
+                  ] as const).map(d => {
+                    const isSelected = internalDocType === d.id;
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setInternalDocType(d.id)}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
+                            : 'bg-gray-50 dark:bg-zinc-850/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        <p className="text-xs font-black">{d.title}</p>
+                        <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500'}`}>
+                          {d.subtitle}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. CLIENTE */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
+                2. Cliente {needsClient && <span className="text-[#ED1C24] font-bold">(* RNC Requerido)</span>}
+              </span>
+              <button
+                type="button"
+                onClick={onOpenSelectClient}
+                className="text-[11px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
+              >
+                {selectedClient ? 'Cambiar' : '+ Seleccionar Cliente'}
+              </button>
+            </div>
+            {selectedClient ? (
+              <div className="flex items-center justify-between bg-gray-100 dark:bg-zinc-850 rounded-xl px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white leading-tight truncate">{selectedClient.name}</p>
+                    {selectedClient.rnc && <p className="text-[10px] font-mono text-gray-500 font-medium">{selectedClient.rnc}</p>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClearClient}
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-zinc-300 p-1 cursor-pointer"
+                >
+                  <XMarkIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div 
+                onClick={onOpenSelectClient}
+                className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs cursor-pointer transition-all ${
+                  clientMissing
+                    ? 'border-[#ED1C24] bg-red-50/50 dark:bg-red-950/20 text-[#ED1C24] font-bold'
+                    : 'border-transparent bg-gray-100 dark:bg-zinc-850 text-gray-600 dark:text-zinc-400 font-bold hover:bg-gray-200 dark:hover:bg-zinc-800'
+                }`}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                  {clientMissing ? 'RNC / Cliente Requerido para este comprobante' : 'Consumidor Final (Venta de Contado)'}
+                </span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase shrink-0">Buscar ➔</span>
+              </div>
+            )}
+          </div>
+
+          {/* 3. MÉTODO DE PAGO (Omitido en Cotización) */}
+          {!isCotizacion && (
+            <>
+              {/* 3. MÉTODO DE PAGO */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
+                  3. Método de Pago
+                </span>
+                <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-zinc-850 p-1 rounded-xl">
+                  {([
+                    { id: 'Efectivo', label: 'Efectivo', icon: BanknotesIcon },
+                    { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCardIcon },
+                    { id: 'Transferencia', label: 'Transf.', icon: BuildingLibraryIcon },
+                    { id: 'Crédito', label: 'Crédito', icon: UserIcon },
+                  ] as const).map((m) => {
+                    const isActive = paymentMethod === m.id;
+                    const Icon = m.icon;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id as PaymentMethodType)}
+                        className={`py-2 px-1 rounded-lg text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                          isActive
+                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-2xs'
+                            : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="text-[10px] leading-none">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. Efectivo: Amount & Quick Presets */}
+              {paymentMethod === 'Efectivo' && (
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
+                      Monto Recibido
+                    </span>
+                    <span className={`text-xs font-bold font-mono ${change > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                      Devuelta: ${change.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="relative flex items-center bg-gray-100 dark:bg-zinc-850 rounded-xl px-3.5 py-2.5">
+                    <span className="text-base font-black text-gray-400 font-mono select-none mr-2">
+                      RD$
+                    </span>
+                    <input
+                      autoFocus
+                      type="number"
+                      step="any"
+                      value={amountReceived}
+                      onChange={e => setAmountReceived(e.target.value)}
+                      onFocus={e => e.target.select()}
+                      className="w-full bg-transparent text-lg font-black font-mono text-gray-900 dark:text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  {/* Quick Cash Presets */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setAmountReceived(String(total))}
+                      className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap"
+                    >
+                      Exacto
+                    </button>
+                    {([Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000, Math.ceil(total / 2000) * 2000])
+                      .filter((val, idx, arr) => val > total && arr.indexOf(val) === idx)
+                      .slice(0, 3)
+                      .map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setAmountReceived(String(val))}
+                          className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap font-mono"
+                        >
+                          ${val.toLocaleString('es-DO')}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === 'Transferencia' && (
+                <div className="space-y-2.5 pt-0.5">
+                  {/* Cuentas Bancarias de la Empresa */}
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-blue-100/80 dark:border-blue-900/40">
+                      <div className="flex items-center gap-1.5">
+                        <BuildingLibraryIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span className="text-[10px] font-black text-blue-950 dark:text-blue-200 uppercase tracking-wider">
+                          Cuentas para Transferencia
+                        </span>
+                      </div>
+                      <span className="text-[9px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                        RNC: 132-61036-2
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {bankAccounts.map((acc) => (
+                        <div
+                          key={acc.id}
+                          className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 rounded-xl border border-blue-100/80 dark:border-blue-950/80 shadow-2xs hover:border-blue-300 dark:hover:border-blue-700 transition-all"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-black text-gray-900 dark:text-white text-[11px] truncate">
+                                {acc.bankName}
+                              </p>
+                              <span className="text-[8px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded">
+                                {acc.accountType}
+                              </span>
+                            </div>
+                            <p className="font-mono text-blue-600 dark:text-blue-400 text-xs font-black tracking-wider mt-0.5">
+                              {acc.accountNumber}
+                            </p>
+                            <p className="text-[9px] text-gray-400 dark:text-zinc-500 truncate">
+                              Titular: {acc.holderName}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(acc.accountNumber);
+                              setCopiedBankId(acc.id);
+                              setTimeout(() => setCopiedBankId(null), 2000);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1 ${
+                              copiedBankId === acc.id
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60'
+                            }`}
+                            title="Copiar número de cuenta"
+                          >
+                            {copiedBankId === acc.id ? (
+                              <>
+                                <CheckIcon className="w-3 h-3 stroke-[2.5]" />
+                                <span>¡Copiado!</span>
+                              </>
+                            ) : (
+                              <span>Copiar</span>
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
+                      Número de Referencia / Comprobante
+                    </span>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={transferReference}
+                      onChange={e => setTransferReference(e.target.value)}
+                      className="w-full bg-gray-100 dark:bg-zinc-850 rounded-xl px-3.5 py-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 uppercase"
+                      placeholder="Nº Confirmación o Banco..."
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Action Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={!canEmit}
+              className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
+                canEmit
+                  ? isCotizacion
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-[0.99]'
+                    : 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
+                  : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed shadow-none'
+              }`}
+            >
+              {isTransmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>{isCotizacion ? 'Guardando Cotización...' : 'Emitiendo Comprobante...'}</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircleIcon className="w-4 h-4 stroke-[2.5]" />
+                  <span>
+                    {isCotizacion
+                      ? '📄 Guardar Cotización (CT)'
+                      : (billingMode === 'electronic'
+                          ? `Emitir Factura Electrónica (${electronicDocType})`
+                          : `Emitir Factura Interna (${internalDocType})`)}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -149,6 +1248,7 @@ const ProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) =>
 export default function POS() {
   const navigate = useNavigate();
   const showAlert = useAlert();
+  const { isDark, setTheme } = useTheme();
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const [dbClients, setDbClients] = useState<any[]>([]);
 
@@ -157,11 +1257,9 @@ export default function POS() {
   const [globalDiscountType, setGlobalDiscountType] = useState<'%' | '$'>('%');
   const [isEditingGlobalDiscount, setIsEditingGlobalDiscount] = useState(false);
   const [editingDiscountId, setEditingDiscountId] = useState<number | null>(null);
-  const [searchInputValue, setSearchInputValue] = useState(''); // display value (instant)
   const [searchTerm, setSearchTerm] = useState(''); // debounced filter value
   const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Piezas' | 'Camiones' | 'Equipos'>('Todas');
   const [searchCriteria, setSearchCriteria] = useState<'all' | 'barcode' | 'internal_code' | 'name'>('all');
-  const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [activeRegister] = useState<string>(() => {
     const role = getActiveRole();
@@ -182,15 +1280,17 @@ export default function POS() {
   const [currentUserName, setCurrentUserName] = useState<string>(() => {
     return localStorage.getItem('brianna_user_name') || 'Harold Cajero';
   });
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleUserUpdate = () => {
       setCurrentUserName(localStorage.getItem('brianna_user_name') || 'Harold Cajero');
     };
     window.addEventListener('brianna_role_updated', handleUserUpdate);
-    return () => window.removeEventListener('brianna_role_updated', handleUserUpdate);
+    window.addEventListener('brianna_user_updated', handleUserUpdate);
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleUserUpdate);
+      window.removeEventListener('brianna_user_updated', handleUserUpdate);
+    };
   }, []);
 
   const mapInventoryItemToProduct = useCallback((item: any) => ({
@@ -253,12 +1353,7 @@ export default function POS() {
             e.preventDefault();
             addToCart(match);
           }
-          setSearchInputValue(rawCode);
           setSearchTerm(rawCode);
-          setTimeout(() => {
-            searchInputRef.current?.focus();
-            searchInputRef.current?.select();
-          }, 20);
         }
         scanBuffer = '';
         return;
@@ -405,153 +1500,13 @@ export default function POS() {
   const [currentNCF, setCurrentNCF] = useState<string>('');
   const [receiptFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
   
-  // Client Management inside POS
-  const [isCreatingClient, setIsCreatingClient] = useState(false);
-  const [isSearchingDgii, setIsSearchingDgii] = useState(false);
-  const [dgiiMessage, setDgiiMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [newClientForm, setNewClientForm] = useState({
-    name: '',
-    document_id: '',
-    phone: '',
-    email: '',
-    address: ''
-  });
-  const [isSavingClient, setIsSavingClient] = useState(false);
-
-  const handleSearchDgiiPOS = async (rncInput?: string) => {
-    const raw = rncInput !== undefined ? rncInput : newClientForm.document_id;
-    const clean = raw.replace(/\D/g, '').trim();
-
-    if (clean.length !== 9 && clean.length !== 11) {
-      setDgiiMessage({
-        type: 'info',
-        text: 'Ingrese 9 dígitos para RNC o 11 para Cédula para consultar en DGII.'
-      });
-      return;
-    }
-
-    setIsSearchingDgii(true);
-    setDgiiMessage(null);
-
-    try {
-      const res = await searchDgiiRnc(clean);
-      const isFisico = clean.length === 11;
-      const formattedDoc = isFisico
-        ? `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
-        : `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`;
-
-      if (res.success && res.name) {
-        setNewClientForm(prev => ({
-          ...prev,
-          name: res.name,
-          document_id: formattedDoc
-        }));
-        setDgiiMessage({
-          type: 'success',
-          text: isFisico ? `Cédula Oficial: ${res.name}` : `DGII Oficial: ${res.name} (${res.status})`
-        });
-      } else if (res.success && res.isValidStructure) {
-        setNewClientForm(prev => ({
-          ...prev,
-          name: '',
-          document_id: formattedDoc
-        }));
-        setDgiiMessage({
-          type: 'info',
-          text: isFisico
-            ? `Cédula Válida (${formattedDoc}). Ingrese el nombre del cliente.`
-            : `RNC Válido (${formattedDoc}). Ingrese la Razón Social.`
-        });
-      } else {
-        setDgiiMessage({
-          type: 'error',
-          text: res.error || 'Identificación no válida.'
-        });
-      }
-    } catch {
-      setDgiiMessage({
-        type: 'error',
-        text: 'Error consultando DGII. Ingrese los datos manualmente.'
-      });
-    } finally {
-      setIsSearchingDgii(false);
-    }
-  };
-
-  const handleStartCreateClient = useCallback(() => {
-    const term = clientSearchTerm.trim();
-    const isNumeric = /^[0-9-]+$/.test(term);
-    const cleanDoc = isNumeric ? term : '';
-    setNewClientForm({
-      name: !isNumeric ? term : '',
-      document_id: cleanDoc,
-      phone: '',
-      email: '',
-      address: ''
-    });
-    setDgiiMessage(null);
-    setIsCreatingClient(true);
-
-    if (cleanDoc.replace(/\D/g, '').length === 9 || cleanDoc.replace(/\D/g, '').length === 11) {
-      handleSearchDgiiPOS(cleanDoc);
-    }
-  }, [clientSearchTerm]);
-
-  const handleSaveNewClient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newClientForm.name.trim() || !newClientForm.document_id.trim()) {
-      showAlert({
-        title: 'Campos requeridos',
-        description: 'Por favor complete el Nombre y el RNC/Cédula del cliente.',
-        variant: 'warning'
-      });
-      return;
-    }
-
-    setIsSavingClient(true);
-    try {
-      cacheDgiiRnc(newClientForm.document_id, newClientForm.name);
-      const created = await createCustomer({
-        name: newClientForm.name.trim(),
-        document_id: newClientForm.document_id.trim(),
-        phone: newClientForm.phone.trim() || undefined,
-        email: newClientForm.email.trim() || undefined,
-        address: newClientForm.address.trim() || undefined,
-        status: 'Activo'
-      });
-
-      const mappedClient = {
-        id: created.id,
-        name: created.name,
-        type: created.document_id && created.document_id.includes('-') && created.document_id.length > 11 ? 'Empresarial' : 'Físico',
-        rnc: created.document_id,
-        email: created.email || '',
-        phone: created.phone || '',
-        address: created.address || ''
-      };
-
-      setDbClients(prev => [mappedClient, ...prev]);
-      setSelectedClient(mappedClient);
-      setIsClientModalOpen(false);
-      setIsCreatingClient(false);
-      setNewClientForm({ name: '', document_id: '', phone: '', email: '', address: '' });
-      setClientSearchTerm('');
-    } catch (err) {
-      console.error('Error creating customer:', err);
-      showAlert({
-        title: 'Error al registrar cliente',
-        description: 'No se pudo guardar el cliente. Inténtelo de nuevo.',
-        variant: 'danger'
-      });
-    } finally {
-      setIsSavingClient(false);
-    }
-  };
-  
   // Single Payment Logic
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
-  const [amountReceived, setAmountReceived] = useState<string>('');
-  const [transferReference, setTransferReference] = useState<string>('');
+  const [lastPaymentInfo, setLastPaymentInfo] = useState<{
+    receivedAmount?: number;
+    changeAmount?: number;
+    transferReference?: string;
+  }>({});
 
   const removeFromCart = useCallback((id: number) => {
     setCart(prev => prev.filter(item => item.product.id !== id));
@@ -590,47 +1545,35 @@ export default function POS() {
   const tax = useMemo(() => subtotalAfterGlobalDiscount * 0.18, [subtotalAfterGlobalDiscount]);
   const total = useMemo(() => subtotalAfterGlobalDiscount + tax, [subtotalAfterGlobalDiscount, tax]);
 
-  // Derived Payment Math
-  const numReceived = useMemo(() => parseFloat(amountReceived) || 0, [amountReceived]);
-  
-  // We only care about change if paying in cash
-  const change = useMemo(() => (paymentMethod === 'Efectivo' && numReceived > total) ? (numReceived - total) : 0, [paymentMethod, numReceived, total]);
-  const isPaymentValid = useMemo(() => {
-    return (paymentMethod === 'Efectivo' ? numReceived >= total : true) &&
-           (paymentMethod === 'Transferencia' ? transferReference.trim().length > 0 : true);
-  }, [paymentMethod, numReceived, total, transferReference]);
-  
-  // Credit validation
-  const canUseCredit = useMemo(() => !!selectedClient, [selectedClient]);
-
-  // Checkout gate logic — computed once per render, not inside JSX IIFE
-  const needsClient = useMemo(() => {
-    return paymentMethod === 'Crédito' ||
-      (billingMode === 'electronic' && (electronicDocType === 'E31' || electronicDocType === 'E45' || electronicDocType === 'E46'));
-  }, [paymentMethod, billingMode, electronicDocType]);
-
-  const clientMissing = useMemo(() => needsClient && !selectedClient, [needsClient, selectedClient]);
-  const canEmit = useMemo(() => isPaymentValid && !isTransmitting && !clientMissing, [isPaymentValid, isTransmitting, clientMissing]);
-
-  // Memoized — only recomputes when dbClients or search term changes
-  const filteredClients = useMemo(() => dbClients.filter(client => 
-    client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || 
-    (client.rnc && client.rnc.includes(clientSearchTerm))
-  ), [dbClients, clientSearchTerm]);
-
   const openCheckout = useCallback(() => {
     if (cart.length === 0) return;
-    setAmountReceived(total.toFixed(2));
-    if (paymentMethod === 'Crédito' && !canUseCredit) {
-      setPaymentMethod('Efectivo');
-    }
     setIsCheckoutModalOpen(true);
-  }, [cart.length, total, paymentMethod, canUseCredit]);
+  }, [cart.length]);
 
-  const completeSale = async () => {
-    if (!isPaymentValid || isTransmitting) return;
+  const completeSale = async (saleParams: {
+    billingMode: 'electronic' | 'internal';
+    electronicDocType: 'E31' | 'E32' | 'E45' | 'E46';
+    internalDocType: 'FAC-INT' | 'CT';
+    paymentMethod: PaymentMethodType;
+    amountReceived: string;
+    transferReference: string;
+  }) => {
+    if (isTransmitting) return;
 
     setIsTransmitting(true);
+    const { billingMode, electronicDocType, internalDocType, paymentMethod, amountReceived, transferReference } = saleParams;
+    setBillingMode(billingMode);
+    setElectronicDocType(electronicDocType);
+    setInternalDocType(internalDocType);
+    setPaymentMethod(paymentMethod);
+
+    const numRec = parseFloat(amountReceived) || total;
+    const chg = (paymentMethod === 'Efectivo' && numRec > total) ? (numRec - total) : 0;
+    setLastPaymentInfo({
+      receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
+      changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
+      transferReference: transferReference || undefined,
+    });
 
     try {
       let finalInvoiceNumber = '';
@@ -686,6 +1629,16 @@ export default function POS() {
 
           finalInvoiceNumber = `CT-${formattedCtSeq}`;
           finalNcf = `CT-${formattedCtSeq}`;
+
+          setLastEcfData({
+            success: true,
+            trackId: `CT-${Date.now().toString().slice(-6)}`,
+            eNcf: finalNcf,
+            securityCode: '',
+            qrCodeUrl: '',
+            dgiiStatus: 'Emitido Localmente',
+            issuedAt: new Date().toISOString(),
+          });
         } else {
           const currentIntSeq = parseInt(localStorage.getItem('brianna_seq_internal') || '1', 10);
           const formattedIntSeq = String(currentIntSeq).padStart(6, '0');
@@ -693,40 +1646,42 @@ export default function POS() {
 
           finalInvoiceNumber = `FAC-INT-${formattedIntSeq}`;
           finalNcf = `INT-${formattedIntSeq}`;
+
+          const internalSecurityCode = generateSecurityCode();
+          const internalQrUrl = `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${internalSecurityCode}&monto=${total.toFixed(2)}`;
+
+          setLastEcfData({
+            success: true,
+            trackId: `${internalDocType}-${Date.now().toString().slice(-6)}`,
+            eNcf: finalNcf,
+            securityCode: internalSecurityCode,
+            qrCodeUrl: internalQrUrl,
+            dgiiStatus: 'Emitido Localmente',
+            issuedAt: new Date().toISOString(),
+          });
         }
-
-        const internalSecurityCode = generateSecurityCode();
-        const internalQrUrl = `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${internalSecurityCode}&monto=${total.toFixed(2)}`;
-
-        setLastEcfData({
-          success: true,
-          trackId: `${internalDocType}-${Date.now().toString().slice(-6)}`,
-          eNcf: finalNcf,
-          securityCode: internalSecurityCode,
-          qrCodeUrl: internalQrUrl,
-          dgiiStatus: 'Emitido Localmente',
-          issuedAt: new Date().toISOString(),
-        });
       }
 
       setCurrentNCF(finalNcf);
 
-      // 1. Optimistic Local Stock Update in Memory (0 ms latency)
-      setDbProducts(prev => prev.map(p => {
-        const cartItem = cart.find(ci => ci.product.id === p.id);
-        if (cartItem) {
-          const newStock = Math.max(0, p.stock - cartItem.quantity);
-          return { ...p, stock: newStock };
-        }
-        return p;
-      }));
+      // 1. Optimistic Local Stock Update in Memory (0 ms latency) - only for actual sales, not quotations
+      if (internalDocType !== 'CT') {
+        setDbProducts(prev => prev.map(p => {
+          const cartItem = cart.find(ci => ci.product.id === p.id);
+          if (cartItem) {
+            const newStock = Math.max(0, p.stock - cartItem.quantity);
+            return { ...p, stock: newStock };
+          }
+          return p;
+        }));
+      }
 
       // 2. Optimistic Session Sale Update (0 ms latency)
       const newSessionSale: SessionSale = {
         id: finalInvoiceNumber,
         ncf: finalNcf,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : 'Venta de Contado'),
+        client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : (internalDocType === 'CT' ? 'Cliente Cotización' : 'Venta de Contado')),
         paymentMethod: paymentMethod,
         invoiceType: finalNcfType,
         total: total,
@@ -751,21 +1706,21 @@ export default function POS() {
         invoice_number: finalInvoiceNumber,
         ncf: finalNcf,
         ncf_type: finalNcfType,
-        customer_name: selectedClient ? selectedClient.name : (isElectronic ? 'Venta de Contado (e-CF)' : 'Venta Interna (No Fiscal)'),
+        customer_name: selectedClient ? selectedClient.name : (isElectronic ? 'Venta de Contado (e-CF)' : (internalDocType === 'CT' ? 'Cliente Cotización' : 'Venta Interna (No Fiscal)')),
         customer_rnc: selectedClient ? selectedClient.rnc : '',
         subtotal,
         tax_amount: tax,
         total_amount: total,
-        payment_method: paymentMethod,
-        cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rodríguez',
+        payment_method: internalDocType === 'CT' ? 'Cotización' : paymentMethod,
+        cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
         register_name: activeRegister,
-        status: isElectronic ? 'Emitida e-CF (DGII)' : 'Pagada (No Fiscal)',
+        status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : 'Pagada (No Fiscal)'),
         is_electronic: isElectronic,
         billing_mode: billingMode,
         ecf_security_code: ecfRes?.securityCode || lastEcfData?.securityCode,
         ecf_track_id: ecfRes?.trackId || lastEcfData?.trackId,
         ecf_qr_url: ecfRes?.qrCodeUrl || lastEcfData?.qrCodeUrl,
-        ecf_dgii_status: isElectronic ? 'Aceptado' : 'Emitido Localmente',
+        ecf_dgii_status: isElectronic ? 'Aceptado' : (internalDocType === 'CT' ? 'Cotización' : 'Emitido Localmente'),
       };
 
       const invoiceItems = cart.map(item => ({
@@ -779,17 +1734,19 @@ export default function POS() {
       (async () => {
         try {
           await createInvoice(invoicePayload, invoiceItems);
-          await Promise.all(cart.map(item => {
-            if (item.product && item.product.id) {
-              const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
-              const newStock = Math.max(0, currentStock - item.quantity);
-              return updateInventoryItem(String(item.product.id), { 
-                stock: newStock,
-                status: newStock === 0 && item.product.category !== 'Piezas' ? 'Vendido' : undefined
-              });
-            }
-            return Promise.resolve(null);
-          }));
+          if (internalDocType !== 'CT') {
+            await Promise.all(cart.map(item => {
+              if (item.product && item.product.id) {
+                const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
+                const newStock = Math.max(0, currentStock - item.quantity);
+                return updateInventoryItem(String(item.product.id), { 
+                  stock: newStock,
+                  status: newStock === 0 && item.product.category !== 'Piezas' ? 'Vendido' : undefined
+                });
+              }
+              return Promise.resolve(null);
+            }));
+          }
         } catch (bgErr) {
           console.warn('Background sync warning:', bgErr);
         }
@@ -810,31 +1767,43 @@ export default function POS() {
     setIsSuccessModalOpen(false);
     setCart([]);
     setSelectedClient(null);
-    setAmountReceived('');
-    setTransferReference('');
     setPaymentMethod('Efectivo');
     setElectronicDocType('E32');
     setInternalDocType('FAC-INT');
     setBillingMode('internal');
     setLastEcfData(null);
+    setLastPaymentInfo({});
   };
 
   return (
     <div className="h-[100dvh] w-full max-w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] text-gray-900 dark:text-white flex flex-col transition-colors duration-300 overflow-hidden font-sans">
       <header className="min-h-16 md:h-20 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white flex flex-wrap items-center justify-between px-4 sm:px-8 py-3 shrink-0 print:hidden z-20 border-b border-gray-100 dark:border-zinc-800 shadow-xs transition-colors duration-300 gap-3">
         <div className="flex items-center gap-3 sm:gap-5 min-w-0">
-          {getActiveRole() !== 'Repuestos' && (
+          {/* Back button dynamically displayed if user has permission to other modules */}
+          {hasPermission(getActiveRole(), 'Dashboard', 'ver') ? (
             <>
               <Link 
                 to="/dashboard" 
                 className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
-                title="Volver al panel de administración"
+                title="Volver al panel principal"
               >
                 <ArrowLeftIcon className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
               </Link>
               <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800"></div>
             </>
-          )}
+          ) : hasPermission(getActiveRole(), 'Inventario', 'ver') ? (
+            <>
+              <Link 
+                to="/inventario" 
+                className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
+                title="Ir al módulo de Inventario"
+              >
+                <ArrowLeftIcon className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
+              </Link>
+              <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800"></div>
+            </>
+          ) : null}
+
           <div>
             <div className="text-[10px] sm:text-xs font-black tracking-tight text-gray-900 dark:text-white uppercase">
               Brianna Heavy Equipment • RNC: 132610362
@@ -845,14 +1814,29 @@ export default function POS() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto scrollbar-hide py-0.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto scrollbar-hide py-0.5">
+          {/* Direct Access to Inventario if permitted for this role */}
+          {hasPermission(getActiveRole(), 'Inventario', 'ver') && (
+            <Link
+              to="/inventario"
+              className="flex items-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-[#ED1C24] dark:text-red-300 active:scale-[0.98] text-xs font-black transition-all cursor-pointer border border-red-200/60 dark:border-red-900/60 shadow-2xs whitespace-nowrap"
+              title="Abrir módulo de inventario de repuestos"
+            >
+              <WrenchScrewdriverIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
+              <span className="hidden xs:inline">Inventario</span>
+            </Link>
+          )}
+
           {/* User Name & Profile Badge */}
-          <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#222222] pl-1.5 pr-3.5 py-1.5 rounded-full border border-gray-100 dark:border-zinc-800 shadow-xs">
-            <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-950/60 text-[#ED1C24] font-black text-xs flex items-center justify-center">
+          <div 
+            className="flex items-center gap-1.5 bg-gray-50 dark:bg-[#222222] p-1 sm:pl-1.5 sm:pr-3 sm:py-1.5 rounded-full border border-gray-100 dark:border-zinc-800 shadow-2xs"
+            title={`${currentUserName} (${getActiveRole() === 'Repuestos' ? 'Cajero' : getActiveRole()})`}
+          >
+            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-100 dark:bg-red-950/60 text-[#ED1C24] font-black text-[11px] sm:text-xs flex items-center justify-center shrink-0">
               {(currentUserName || 'U').charAt(0).toUpperCase()}
             </div>
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-black text-gray-900 dark:text-white leading-none max-w-[140px] truncate">
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="text-xs font-black text-gray-900 dark:text-white leading-none max-w-[120px] truncate">
                 {currentUserName}
               </span>
               <span className="text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider leading-none mt-0.5">
@@ -863,54 +1847,73 @@ export default function POS() {
 
           {/* Ventas de la Sesión Button */}
           <button
+            type="button"
             onClick={() => setIsSessionSalesOpen(true)}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-xs whitespace-nowrap"
+            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+            title="Ventas de la Sesión"
           >
-            <ReceiptPercentIcon className="h-4 w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
-            <span className="hidden xs:inline">Ventas Sesión</span>
-            <span className="xs:hidden">Ventas</span>
-            <span className="bg-[#ED1C24] text-white text-[10px] font-black px-2 py-0.5 rounded-full ml-0.5">
+            <ReceiptPercentIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
+            <span className="hidden sm:inline">Ventas</span>
+            <span className="bg-[#ED1C24] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
               {sessionSales.length}
             </span>
           </button>
 
           {/* Movimiento de Caja Button */}
           <button
+            type="button"
             onClick={() => setIsCashMovementOpen(true)}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-xs whitespace-nowrap"
+            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+            title="Movimientos de Caja"
           >
-            <BanknotesIcon className="h-4 w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
-            <span>Movimientos</span>
+            <BanknotesIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
+            <span className="hidden sm:inline">Movimientos</span>
           </button>
 
           {/* Cierre de Caja Button */}
           <button
+            type="button"
             onClick={() => setIsCashClosureOpen(true)}
-            className="flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-sm transition-all cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-2xs transition-all cursor-pointer whitespace-nowrap"
           >
-            <CalculatorIcon className="h-4 w-4 stroke-[2.5]" />
+            <CalculatorIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
             <span>Cierre</span>
           </button>
 
+          {/* Dark / Light Mode Toggle Button */}
           <button
+            type="button"
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="p-1.5 sm:p-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-amber-300 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-2xs flex items-center justify-center cursor-pointer"
+            title={isDark ? "Modo claro" : "Modo oscuro"}
+          >
+            {isDark ? (
+              <SunIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 stroke-[2.5]" />
+            ) : (
+              <MoonIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-700 stroke-[2.5]" />
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => navigate('/login')}
-            className="p-2.5 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-xs flex items-center justify-center cursor-pointer ml-1"
+            className="p-1.5 sm:p-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-2xs flex items-center justify-center cursor-pointer"
             title="Cerrar Sesión"
           >
-            <ArrowRightOnRectangleIcon className="h-4 w-4 text-red-500" />
+            <ArrowRightOnRectangleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
           </button>
         </div>
       </header>
 
       {/* Mobile Tab Switcher (Catalog vs Cart) */}
-      <div className="flex md:hidden px-3.5 pt-2.5 pb-1 bg-[#f4f3f1] dark:bg-[#0a0a0a] shrink-0">
-        <div className="flex bg-white dark:bg-[#1a1a1a] p-1.5 rounded-full w-full shadow-xs border border-gray-100 dark:border-zinc-800">
+      <div className="flex md:hidden px-3 pt-2 pb-1 bg-[#f4f3f1] dark:bg-[#0a0a0a] shrink-0">
+        <div className="flex bg-white dark:bg-[#1a1a1a] p-1 rounded-2xl w-full shadow-2xs border border-gray-200/80 dark:border-zinc-800">
           <button
             type="button"
             onClick={() => setMobileTab('catalog')}
-            className={`flex-1 py-2 text-xs font-black rounded-full transition-all text-center cursor-pointer ${
+            className={`flex-1 py-1.5 text-xs font-black rounded-xl transition-all text-center cursor-pointer ${
               mobileTab === 'catalog'
-                ? 'bg-[#ED1C24] text-white shadow-xs'
+                ? 'bg-[#ED1C24] text-white shadow-2xs'
                 : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 font-bold'
             }`}
           >
@@ -919,9 +1922,9 @@ export default function POS() {
           <button
             type="button"
             onClick={() => setMobileTab('cart')}
-            className={`flex-1 py-2 text-xs font-black rounded-full transition-all text-center cursor-pointer ${
+            className={`flex-1 py-1.5 text-xs font-black rounded-xl transition-all text-center cursor-pointer ${
               mobileTab === 'cart'
-                ? 'bg-[#ED1C24] text-white shadow-xs'
+                ? 'bg-[#ED1C24] text-white shadow-2xs'
                 : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 font-bold'
             }`}
           >
@@ -930,178 +1933,38 @@ export default function POS() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-3 sm:p-5 md:p-6 relative">
-        <div className="h-full flex flex-col md:flex-row gap-4 lg:gap-6 print:hidden">
+      <div className="flex-1 overflow-hidden p-2.5 sm:p-4 md:p-6 relative">
+        <div className="h-full flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-6 print:hidden">
       {/* Products Grid */}
       <div className={`flex-1 flex-col overflow-hidden ${mobileTab === 'cart' ? 'hidden md:flex' : 'flex'}`}>
-        <div className="pb-3.5 sm:pb-5 space-y-2.5 sm:space-y-3.5">
-          {/* Categories Tab & Search Criteria Filter (Above Search Bar) */}
-          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-            {/* Categories Tab */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0">
-              {(['Todas', 'Piezas', 'Camiones', 'Equipos'] as const).map((cat) => (
-                <button 
-                  key={cat} 
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-5 py-2.5 rounded-full text-xs whitespace-nowrap transition-all cursor-pointer ${
-                    selectedCategory === cat 
-                      ? 'bg-[#ED1C24] text-white shadow-md shadow-red-500/20 font-black' 
-                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            {/* Search Criteria Filter Pills */}
-            <div className="flex items-center gap-1 bg-white dark:bg-[#1a1a1a] p-1 rounded-full border border-gray-100 dark:border-zinc-800 shadow-xs self-start xl:self-auto shrink-0 overflow-x-auto scrollbar-hide max-w-full">
-              <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-400 pl-3 pr-1 flex items-center gap-1.5 whitespace-nowrap uppercase tracking-wider">
-                <FunnelIcon className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-400" />
-                Buscar por:
-              </span>
-              {([
-                { id: 'all', label: 'Todo' },
-                { id: 'barcode', label: 'Código de Barras' },
-                { id: 'internal_code', label: 'Código Interno' },
-                { id: 'name', label: 'Nombre' }
-              ] as const).map((crit) => (
-                <button
-                  key={crit.id}
-                  type="button"
-                  onClick={() => setSearchCriteria(crit.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap transition-all cursor-pointer ${
-                    searchCriteria === crit.id
-                      ? 'bg-[#ED1C24] text-white shadow-xs font-black'
-                      : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white font-bold'
-                  }`}
-                >
-                  {crit.label}
-                </button>
-              ))}
-            </div>
+        <div className="pb-2.5 sm:pb-4 space-y-2 sm:space-y-3">
+          {/* Categories Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide -mx-0.5 px-0.5 shrink-0">
+            {(['Todas', 'Piezas', 'Camiones', 'Equipos'] as const).map((cat) => (
+              <button 
+                key={cat} 
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl sm:rounded-full text-xs whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === cat 
+                    ? 'bg-[#ED1C24] text-white shadow-2xs font-black' 
+                    : 'bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
 
-          {/* Search Bar Input & Scanner Button */}
-          <div className="flex gap-3 sm:gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-4 sm:pl-5 pointer-events-none">
-                <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-zinc-500" />
-              </div>
-              <input
-                ref={searchInputRef}
-                type="text"
-                className="block w-full pl-11 sm:pl-12 pr-10 py-3 sm:py-3.5 border-none rounded-xl sm:rounded-2xl leading-5 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white shadow-xs placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30 transition-all text-xs sm:text-sm font-bold"
-                placeholder={
-                  searchCriteria === 'barcode'
-                    ? 'Buscar solo por código de barras...'
-                    : searchCriteria === 'internal_code'
-                    ? 'Buscar solo por código interno (P/N, VIN, ID)...'
-                    : searchCriteria === 'name'
-                    ? 'Buscar solo por nombre, marca o modelo...'
-                    : 'Buscar por código de barras, código interno, nombre o marca (Ej. FREIGHTLINER, MACK, CAT)...'
-                }
-                value={searchInputValue}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSearchInputValue(val); // immediate display update
-
-                  // Debounce the actual filter (120ms) to avoid filtering on every keystroke
-                  if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                  searchDebounceRef.current = setTimeout(() => setSearchTerm(val), 120);
-
-                  // Auto-add on exact barcode match (0ms — uses ref for always-fresh data)
-                  const clean = val.trim().toLowerCase();
-                  if (clean.length >= 4) {
-                    let exactMatch = null;
-                    if (searchCriteria === 'barcode') {
-                      exactMatch = dbProductsRef.current.find(p => p.barcode && p.barcode.toLowerCase() === clean);
-                    } else if (searchCriteria === 'internal_code') {
-                      exactMatch = dbProductsRef.current.find(p =>
-                        (p.part_number && p.part_number.toLowerCase() === clean) ||
-                        (p.vin && p.vin.toLowerCase() === clean) ||
-                        (p.id && String(p.id).toLowerCase() === clean)
-                      );
-                    } else if (searchCriteria === 'all') {
-                      exactMatch = dbProductsRef.current.find(p =>
-                        (p.barcode && p.barcode.toLowerCase() === clean) ||
-                        (p.part_number && p.part_number.toLowerCase() === clean)
-                      );
-                    }
-
-                    if (exactMatch) {
-                      addToCart(exactMatch);
-                      setTimeout(() => {
-                        searchInputRef.current?.focus();
-                        searchInputRef.current?.select();
-                      }, 15);
-                    }
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const clean = searchInputValue.trim().toLowerCase();
-                    if (!clean) return;
-
-                    let match = null;
-                    const prods = dbProductsRef.current;
-                    if (searchCriteria === 'barcode') {
-                      match = prods.find(p => p.barcode && p.barcode.toLowerCase() === clean);
-                    } else if (searchCriteria === 'internal_code') {
-                      match = prods.find(p =>
-                        (p.part_number && p.part_number.toLowerCase() === clean) ||
-                        (p.vin && p.vin.toLowerCase() === clean) ||
-                        (p.id && String(p.id).toLowerCase() === clean)
-                      );
-                    } else if (searchCriteria === 'name') {
-                      match = prods.find(p =>
-                        (p.name && p.name.toLowerCase() === clean) ||
-                        (p.brand && p.brand.toLowerCase() === clean) ||
-                        (p.model && p.model.toLowerCase() === clean)
-                      );
-                    } else {
-                      match = prods.find(p =>
-                        (p.barcode && p.barcode.toLowerCase() === clean) ||
-                        (p.part_number && p.part_number.toLowerCase() === clean) ||
-                        (p.vin && p.vin.toLowerCase() === clean) ||
-                        (p.id && String(p.id).toLowerCase() === clean) ||
-                        (p.name && p.name.toLowerCase() === clean)
-                      );
-                    }
-
-                    if (!match && filteredProducts.length > 0) {
-                      match = filteredProducts[0];
-                    }
-
-                    if (match) {
-                      addToCart(match);
-                    }
-
-                    setTimeout(() => {
-                      searchInputRef.current?.focus();
-                      searchInputRef.current?.select();
-                    }, 15);
-                  }
-                }}
-              />
-              {searchInputValue && (
-                <button
-                  type="button"
-                  onClick={() => { setSearchInputValue(''); setSearchTerm(''); }}
-                  className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 cursor-pointer"
-                  title="Limpiar búsqueda"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-            <button className="bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 p-3.5 rounded-full hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:text-[#fb3c44] dark:hover:text-[#fb3c44] transition-all shadow-sm flex items-center justify-center cursor-pointer" title="Escanear Código">
-              <QrCodeIcon className="h-5 w-5" />
-            </button>
-          </div>
+          {/* Search Bar Input & Integrated Criteria & Scanner */}
+          <POSSearchBar
+            searchCriteria={searchCriteria}
+            onSearchCriteriaChange={setSearchCriteria}
+            onSearch={setSearchTerm}
+            onEnterMatch={addToCart}
+            dbProductsRef={dbProductsRef}
+            filteredProducts={filteredProducts}
+          />
         </div>
         
         <div className="flex-1 overflow-y-auto pb-6 scrollbar-hide">
@@ -1424,704 +2287,62 @@ export default function POS() {
         </div>
       )}
 
-      {/* Select Client / Create Client Modal */}
-      <AnimatePresence>
-        {isClientModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                if (!isSavingClient) {
-                  setIsClientModalOpen(false);
-                  setIsCreatingClient(false);
-                }
-              }}
-              className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-1.5rem)] sm:w-full max-w-lg bg-white dark:bg-[#1a1a1a] rounded-3xl sm:rounded-[2.5rem] shadow-2xl z-[70] overflow-hidden border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[92vh]"
-            >
-              {/* Modal Header */}
-              <div className="px-6 py-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-white dark:bg-[#1a1a1a]">
-                <div className="flex items-center gap-3.5">
-                  {isCreatingClient && (
-                    <button
-                      type="button"
-                      onClick={() => setIsCreatingClient(false)}
-                      className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500 dark:text-zinc-400 transition-colors cursor-pointer"
-                      title="Volver a la lista"
-                    >
-                      <ArrowLeftIcon className="h-5 w-5" />
-                    </button>
-                  )}
-                  <div className="h-12 w-12 rounded-2xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-900 dark:text-white shrink-0">
-                    {isCreatingClient ? <UserPlusIcon className="h-6 w-6" /> : <UserIcon className="h-6 w-6" />}
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                      Brianna Heavy Equipment
-                    </div>
-                    <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight leading-tight">
-                      {isCreatingClient ? 'Registrar Nuevo Cliente' : 'Seleccionar Cliente'}
-                    </h3>
-                  </div>
-                </div>
+      {/* Minimalist & Ultra-Fast Select Client Modal (0ms latency) */}
+      <SelectClientModal
+        isOpen={isClientModalOpen}
+        onClose={() => setIsClientModalOpen(false)}
+        clients={dbClients}
+        selectedClient={selectedClient}
+        onSelectClient={(client) => {
+          setSelectedClient(client);
+          if (!client && paymentMethod === 'Crédito') {
+            setPaymentMethod('Efectivo');
+          }
+        }}
+        onCreateClient={async (clientData) => {
+          try {
+            const created = await createCustomer({
+              name: clientData.name,
+              document_id: clientData.document_id,
+              phone: clientData.phone,
+              email: clientData.email,
+              address: clientData.address,
+              status: 'Activo'
+            });
+            const mappedClient = {
+              id: created.id,
+              name: created.name,
+              type: clientData.type || (clientData.document_id?.replace(/\D/g, '').length === 9 ? 'Empresarial' : 'Físico'),
+              rnc: created.document_id,
+              email: created.email || '',
+              phone: created.phone || '',
+              address: created.address || ''
+            };
+            setDbClients(prev => [mappedClient, ...prev]);
+            return mappedClient;
+          } catch (err) {
+            console.error('Error creating client:', err);
+            showAlert({
+              title: 'Error al registrar cliente',
+              description: 'No se pudo guardar el cliente. Verifique los datos.',
+              variant: 'danger'
+            });
+            return null;
+          }
+        }}
+      />
 
-                <div className="flex items-center gap-2">
-                  {!isCreatingClient && (
-                    <button 
-                      type="button"
-                      onClick={handleStartCreateClient}
-                      className="px-4 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black rounded-full flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                    >
-                      <UserPlusIcon className="h-3.5 w-3.5" />
-                      <span>Nuevo</span>
-                    </button>
-                  )}
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setIsClientModalOpen(false);
-                      setIsCreatingClient(false);
-                    }} 
-                    className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                  >
-                    <XMarkIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-              
-              {!isCreatingClient ? (
-                /* Mode 1: Search & Select Client */
-                <>
-                  <div className="p-4 sm:p-6 pb-2 border-b border-gray-100 dark:border-zinc-800">
-                    <div className="relative">
-                      <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-zinc-500 absolute left-4 top-3 pointer-events-none" />
-                      <input 
-                        type="text" 
-                        placeholder="Buscar por Nombre, RNC o Cédula..." 
-                        autoFocus
-                        value={clientSearchTerm}
-                        onChange={(e) => setClientSearchTerm(e.target.value)}
-                        className="w-full pl-11 pr-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-4 sm:p-6 overflow-y-auto space-y-2.5 max-h-[50vh]">
-                    {/* Quick Create Suggestion Card */}
-                    {clientSearchTerm.trim().length > 0 && !filteredClients.some(c => c.name.toLowerCase() === clientSearchTerm.trim().toLowerCase()) && (
-                      <div 
-                        onClick={handleStartCreateClient}
-                        className="p-3.5 border-2 border-dashed border-[#ED1C24]/40 bg-red-50/40 dark:bg-red-950/20 rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer transition-all flex justify-between items-center group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 text-[#ED1C24] shadow-xs group-hover:scale-105 transition-transform">
-                            <UserPlusIcon className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-black text-xs text-gray-900 dark:text-white">
-                              Crear cliente <span className="text-[#ED1C24]">"{clientSearchTerm.trim()}"</span>
-                            </p>
-                            <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium">
-                              Registrar y asignar a esta venta
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-[11px] font-black text-[#ED1C24] px-3 py-1 bg-white dark:bg-zinc-800 rounded-full shadow-xs">
-                          + Registrar
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Cliente de Contado Option */}
-                    {!clientSearchTerm && (
-                      <div 
-                        onClick={() => { 
-                          setSelectedClient(null); 
-                          setIsClientModalOpen(false); 
-                          if (paymentMethod === 'Crédito') setPaymentMethod('Efectivo');
-                        }}
-                        className="p-3.5 border border-gray-100 dark:border-zinc-800 rounded-2xl hover:border-[#ED1C24]/60 hover:bg-red-50/30 dark:hover:bg-red-950/20 cursor-pointer transition-all flex justify-between items-center group bg-white dark:bg-[#1a1a1a]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-xl bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 group-hover:text-[#ED1C24] transition-colors">
-                            <UserIcon className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-black text-xs text-gray-900 dark:text-white">Cliente de Contado (Genérico)</p>
-                            <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Venta rápida sin registro fiscal específico</p>
-                          </div>
-                        </div>
-                        {!selectedClient && <CheckCircleIcon className="h-5 w-5 text-[#ED1C24]" />}
-                      </div>
-                    )}
-                    
-                    {/* Filtered Clients List */}
-                    {filteredClients.map(client => (
-                      <div 
-                        key={client.id}
-                        onClick={() => { 
-                          setSelectedClient(client); 
-                          setIsClientModalOpen(false); 
-                        }}
-                        className={`p-3.5 border rounded-2xl hover:border-[#ED1C24]/60 hover:bg-red-50/30 dark:hover:bg-red-950/20 cursor-pointer transition-all flex justify-between items-center group ${
-                          selectedClient?.id === client.id 
-                            ? 'border-[#ED1C24] bg-red-50/20 dark:bg-red-950/20 shadow-xs' 
-                            : 'border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#1a1a1a]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-xl bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 group-hover:text-[#ED1C24] transition-colors">
-                            <BuildingLibraryIcon className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-black text-xs text-gray-900 dark:text-white">{client.name}</p>
-                              {client.type && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400">
-                                  {client.type}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5 font-mono font-bold">
-                              <span>RNC/CÉD: <strong className="text-gray-700 dark:text-zinc-300">{client.rnc || 'N/A'}</strong></span>
-                              {client.phone && <span>TEL: {client.phone}</span>}
-                            </div>
-                          </div>
-                        </div>
-                        {selectedClient?.id === client.id && <CheckCircleIcon className="h-5 w-5 text-[#ED1C24]" />}
-                      </div>
-                    ))}
-
-                    {/* Empty State */}
-                    {filteredClients.length === 0 && (
-                      <div className="text-center py-8 px-4 bg-gray-50 dark:bg-[#222222]/40 rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800">
-                        <UserIcon className="w-8 h-8 mx-auto text-gray-300 dark:text-zinc-600 mb-2" />
-                        <p className="text-xs font-black text-gray-900 dark:text-white">No se encontraron clientes</p>
-                        <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1 mb-4 font-medium">
-                          No existe ningún cliente registrado con "{clientSearchTerm}".
-                        </p>
-                        <button
-                          type="button"
-                          onClick={handleStartCreateClient}
-                          className="px-6 py-2.5 rounded-full bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                        >
-                          <UserPlusIcon className="w-4 h-4" />
-                          <span>Registrar Nuevo Cliente</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                /* Mode 2: Quick Create Client Form */
-                <form onSubmit={handleSaveNewClient} className="p-6 space-y-4">
-                  {/* 1. RNC / Cédula (Primer campo con consulta DGII) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400">
-                        RNC / Cédula <span className="text-[#ED1C24]">*</span>
-                      </label>
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                        Consulta Automática DGII
-                      </span>
-                    </div>
-                    <div className="relative flex gap-2">
-                      <div className="relative flex-1">
-                        <input 
-                          type="text" 
-                          required 
-                          autoFocus
-                          value={newClientForm.document_id} 
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setNewClientForm({ ...newClientForm, document_id: val });
-                            const clean = val.replace(/\D/g, '').trim();
-                            if (clean.length === 9 || clean.length === 11) {
-                              handleSearchDgiiPOS(clean);
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSearchDgiiPOS();
-                            }
-                          }}
-                          className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white font-mono focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all" 
-                          placeholder="Ej. 131-45678-9 o 402-2384910-1"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isSearchingDgii}
-                        onClick={() => handleSearchDgiiPOS()}
-                        className="px-3.5 py-2 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-gray-900 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
-                        title="Consultar Razón Social en DGII"
-                      >
-                        {isSearchingDgii ? (
-                          <>
-                            <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ED1C24]" />
-                            <span>Buscando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
-                            <span>Buscar en DGII</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* DGII Feedback Message */}
-                    {dgiiMessage && (
-                      <div className={`mt-1.5 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 ${
-                        dgiiMessage.type === 'success'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                          : dgiiMessage.type === 'error'
-                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                          : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                      }`}>
-                        {dgiiMessage.type === 'success' && <CheckCircleIcon className="w-4 h-4 shrink-0 text-emerald-600" />}
-                        <span>{dgiiMessage.text}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. Nombre Completo / Razón Social (Auto-poblado por DGII) */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400">
-                        Nombre Completo / Razón Social <span className="text-[#ED1C24]">*</span>
-                      </label>
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                        Oficial DGII
-                      </span>
-                    </div>
-                    <input 
-                      type="text" 
-                      required 
-                      value={newClientForm.name} 
-                      onChange={(e) => setNewClientForm({ ...newClientForm, name: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all uppercase" 
-                      placeholder="Ej. Constructora del Caribe SRL"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Teléfono</label>
-                      <input 
-                        type="text" 
-                        value={newClientForm.phone} 
-                        onChange={(e) => setNewClientForm({ ...newClientForm, phone: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all" 
-                        placeholder="809-555-0100"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Correo Electrónico</label>
-                      <input 
-                        type="email" 
-                        value={newClientForm.email} 
-                        onChange={(e) => setNewClientForm({ ...newClientForm, email: e.target.value })}
-                        className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all" 
-                        placeholder="cliente@correo.com"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Dirección (Opcional)</label>
-                    <input 
-                      type="text" 
-                      value={newClientForm.address} 
-                      onChange={(e) => setNewClientForm({ ...newClientForm, address: e.target.value })}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all" 
-                      placeholder="Av. 27 de Febrero, Santo Domingo"
-                    />
-                  </div>
-
-                  <div className="pt-3 flex justify-end gap-2.5 border-t border-gray-100 dark:border-zinc-800">
-                    <button 
-                      type="button" 
-                      onClick={() => setIsCreatingClient(false)} 
-                      disabled={isSavingClient}
-                      className="px-5 py-2.5 rounded-full bg-gray-100 dark:bg-zinc-800 font-bold text-xs text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      type="submit" 
-                      disabled={isSavingClient}
-                      className="px-6 py-2.5 rounded-full bg-[#ED1C24] hover:bg-red-700 font-black text-xs text-white shadow-md shadow-red-900/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      {isSavingClient ? (
-                        <span>Guardando...</span>
-                      ) : (
-                        <>
-                          <CheckCircleIcon className="w-4 h-4" />
-                          <span>Guardar y Asignar</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Checkout Modal */}
-      <AnimatePresence>
-        {isCheckoutModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => !isTransmitting && setIsCheckoutModalOpen(false)}
-              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 15 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-1.5rem)] sm:w-full max-w-lg bg-white dark:bg-[#18181b] rounded-3xl sm:rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-2xl z-50 flex flex-col max-h-[94vh] overflow-hidden"
-            >
-              {/* Header */}
-              <div className="px-6 py-5 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
-                    Cobro de Factura
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                    Selecciona el comprobante y método de pago
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => !isTransmitting && setIsCheckoutModalOpen(false)}
-                  disabled={isTransmitting}
-                  className="p-2 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                {/* 1. SELECCIÓN DE TIPO DE FACTURA (SEPARADO Y DIVIDIDO) */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                      1. Tipo de Facturación
-                    </span>
-                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                      billingMode === 'electronic'
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                        : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
-                    }`}>
-                      {billingMode === 'electronic' ? 'Fiscal DGII (e-CF)' : 'No Fiscal (Interno)'}
-                    </span>
-                  </div>
-
-                  {/* Switch de Modo Principal */}
-                  <div className="grid grid-cols-2 gap-1.5 bg-[#f4f3f1] dark:bg-[#222222] p-1.5 rounded-2xl">
-                    <button
-                      type="button"
-                      onClick={() => setBillingMode('electronic')}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        billingMode === 'electronic'
-                          ? 'bg-white dark:bg-[#18181b] text-[#ED1C24] shadow-sm'
-                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <span>Factura Electrónica</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBillingMode('internal')}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        billingMode === 'internal'
-                          ? 'bg-white dark:bg-[#18181b] text-gray-900 dark:text-white shadow-sm'
-                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <span>📄 Documento Interno</span>
-                    </button>
-                  </div>
-
-                  {/* Sub-tipos de Comprobantes específicos según la categoría */}
-                  <div className="pt-0.5">
-                    {billingMode === 'electronic' ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                        {([
-                          { id: 'E32', code: 'E32', title: 'Consumo', subtitle: 'Consumidor Final', reqRnc: false },
-                          { id: 'E31', code: 'E31', title: 'Crédito Fiscal', subtitle: 'Para Deducir ITBIS', reqRnc: true },
-                          { id: 'E46', code: 'E46', title: 'Gubernamental', subtitle: 'Entidades Públicas', reqRnc: true },
-                          { id: 'E45', code: 'E45', title: 'Régimen Especial', subtitle: 'Zonas Francas/Turismo', reqRnc: true },
-                        ] as const).map(c => {
-                          const isSelected = electronicDocType === c.id;
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => setElectronicDocType(c.id)}
-                              className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
-                                isSelected
-                                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
-                                  : 'bg-[#f4f3f1]/60 dark:bg-[#222222]/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700'
-                              }`}
-                            >
-                              <div className="text-xs font-black">{c.code}</div>
-                              <div className="text-[10px] font-black truncate">{c.title}</div>
-                              <div className={`text-[9px] truncate mt-0.5 ${isSelected ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500'}`}>
-                                {c.subtitle}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {([
-                          { id: 'FAC-INT', code: 'FAC-INT', title: 'Factura Interna', subtitle: 'Venta comercial directa' },
-                          { id: 'CT', code: 'CT', title: 'Cotización', subtitle: 'Presupuesto para cliente' },
-                        ] as const).map(d => {
-                          const isSelected = internalDocType === d.id;
-                          return (
-                            <button
-                              key={d.id}
-                              type="button"
-                              onClick={() => setInternalDocType(d.id)}
-                              className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
-                                isSelected
-                                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
-                                  : 'bg-[#f4f3f1]/60 dark:bg-[#222222]/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700'
-                              }`}
-                            >
-                              <p className="text-xs font-black">{d.title}</p>
-                              <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500'}`}>
-                                {d.subtitle}
-                              </p>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. CLIENTE / RECEPTOR */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                      2. Cliente {needsClient && <span className="text-[#ED1C24] font-bold">(* RNC Requerido)</span>}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsClientModalOpen(true)}
-                      className="text-[11px] font-black text-[#ED1C24] hover:underline cursor-pointer"
-                    >
-                      {selectedClient ? 'Cambiar' : '+ Seleccionar Cliente'}
-                    </button>
-                  </div>
-                  {selectedClient ? (
-                    <div className="flex items-center justify-between bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl px-4 py-2.5">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <UserIcon className="w-4 h-4 text-gray-500 shrink-0" />
-                        <div className="truncate">
-                          <p className="text-xs font-black text-gray-900 dark:text-white leading-tight truncate">{selectedClient.name}</p>
-                          {selectedClient.rnc && <p className="text-[10px] font-mono text-gray-500 font-bold">{selectedClient.rnc}</p>}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedClient(null)}
-                        className="text-gray-400 hover:text-gray-700 dark:hover:text-zinc-300 p-1 cursor-pointer"
-                      >
-                        <XMarkIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div 
-                      onClick={() => setIsClientModalOpen(true)}
-                      className={`flex items-center justify-between px-4 py-2.5 rounded-2xl border text-xs cursor-pointer transition-all ${
-                        clientMissing
-                          ? 'border-[#ED1C24] bg-red-50/50 dark:bg-red-950/20 text-[#ED1C24] font-bold'
-                          : 'border-transparent bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 font-bold hover:bg-gray-200 dark:hover:bg-zinc-700'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
-                        {clientMissing ? 'RNC / Cliente Requerido para este comprobante' : 'Consumidor Final (Venta de Contado)'}
-                      </span>
-                      <span className="text-[10px] font-black text-gray-400 uppercase shrink-0">Buscar ➔</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. MÉTODO DE PAGO */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
-                    3. Método de Pago
-                  </span>
-                  <div className="grid grid-cols-4 gap-1.5 bg-[#f4f3f1] dark:bg-[#222222] p-1.5 rounded-2xl">
-                    {([
-                      { id: 'Efectivo', label: 'Efectivo', icon: BanknotesIcon },
-                      { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCardIcon },
-                      { id: 'Transferencia', label: 'Transf.', icon: BuildingLibraryIcon },
-                      { id: 'Crédito', label: 'Crédito', icon: UserIcon },
-                    ] as const).map((m) => {
-                      const isActive = paymentMethod === m.id;
-                      const Icon = m.icon;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setPaymentMethod(m.id as PaymentMethodType)}
-                          className={`py-2.5 px-1 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                            isActive
-                              ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-sm'
-                              : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                          <span className="text-[11px] leading-none">{m.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 4. Efectivo: Amount & Quick Presets */}
-                <AnimatePresence mode="wait">
-                  {paymentMethod === 'Efectivo' && (
-                    <motion.div
-                      key="cash"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="space-y-2 pt-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                          Monto Recibido
-                        </span>
-                        {isPaymentValid && (
-                          <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                            Devuelta: ${change.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="relative flex items-center bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl px-4 py-3">
-                        <span className="text-lg font-black text-gray-400 font-mono select-none mr-2">
-                          RD$
-                        </span>
-                        <input
-                          autoFocus
-                          type="number"
-                          step="any"
-                          value={amountReceived}
-                          onChange={e => setAmountReceived(e.target.value)}
-                          onFocus={e => e.target.select()}
-                          className="w-full bg-transparent text-xl font-black font-mono text-gray-900 dark:text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      {/* Quick Cash Presets */}
-                      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setAmountReceived(String(total))}
-                          className="px-3 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-full text-[11px] font-black text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap"
-                        >
-                          Exacto
-                        </button>
-                        {([Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000, Math.ceil(total / 2000) * 2000])
-                          .filter((val, idx, arr) => val > total && arr.indexOf(val) === idx)
-                          .slice(0, 3)
-                          .map(val => (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => setAmountReceived(String(val))}
-                              className="px-3 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-full text-[11px] font-black text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap font-mono"
-                            >
-                              ${val.toLocaleString('es-DO')}
-                            </button>
-                          ))}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {paymentMethod === 'Transferencia' && (
-                    <motion.div
-                      key="transfer"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="space-y-1.5 pt-1"
-                    >
-                      <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
-                        Número de Referencia
-                      </span>
-                      <input
-                        autoFocus
-                        type="text"
-                        value={transferReference}
-                        onChange={e => setTransferReference(e.target.value)}
-                        className="w-full bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl px-4 py-3 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 uppercase"
-                        placeholder="Nº Confirmación o Banco..."
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Minimal Footer with Big Action Button */}
-              <div className="p-6 pt-3 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#18181b]">
-                <button
-                  type="button"
-                  onClick={completeSale}
-                  disabled={!canEmit}
-                  className={`w-full py-4 rounded-full font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
-                    canEmit
-                      ? 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/25 active:scale-[0.98]'
-                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed shadow-none'
-                  }`}
-                >
-                  {isTransmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Emitiendo Comprobante...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircleIcon className="w-5 h-5 stroke-[2.5]" />
-                      <span>
-                        {billingMode === 'electronic'
-                          ? `Emitir Factura Electrónica (${electronicDocType})`
-                          : `Emitir Factura Interna (${internalDocType})`}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Minimalist & Ultra-Fast Checkout Modal (0ms lag, isolated state) */}
+      <CheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        total={total}
+        selectedClient={selectedClient}
+        onOpenSelectClient={() => setIsClientModalOpen(true)}
+        onClearClient={() => setSelectedClient(null)}
+        onCompleteSale={completeSale}
+        isTransmitting={isTransmitting}
+      />
 
       {/* Success Checkout Modal */}
       <AnimatePresence>
@@ -2129,119 +2350,150 @@ export default function POS() {
           <>
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
+              className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:hidden"
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0, y: 10 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                transition={{ duration: 0.2 }}
-                className="relative bg-white dark:bg-[#1a1a1a] rounded-3xl sm:rounded-[2.5rem] p-6 sm:p-8 w-[calc(100%-1.5rem)] max-w-sm text-center shadow-2xl border border-gray-100 dark:border-zinc-800 mx-auto"
+                transition={{ duration: 0.15 }}
+                className="relative bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 w-[calc(100%-1.5rem)] max-w-xs text-center shadow-2xl border border-gray-100 dark:border-zinc-800 mx-auto"
               >
                 {/* Close 'X' Button */}
                 <button
                   onClick={resetPOS}
-                  className="absolute top-5 right-5 p-2 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                  className="absolute top-4 right-4 p-1.5 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   title="Cerrar"
                 >
                   <XMarkIcon className="w-5 h-5" />
                 </button>
 
-                {/* Success Icon */}
-                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mb-3.5">
-                  <CheckCircleIcon className="h-8 w-8 stroke-[2.5]" aria-hidden="true" />
-                </div>
-                
-                <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                  Transacción Completada
-                </div>
-                <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
-                  {billingMode === 'electronic' ? 'Factura Electrónica' : 'Factura Registrada'}
-                </h3>
-                
-                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1 mb-4 font-mono font-bold">
-                  <span className="text-gray-900 dark:text-white text-sm font-black">${total.toFixed(2)}</span> • {paymentMethod}
-                </p>
+                {/* Cotización Minimalist Layout */}
+                {currentNCF.startsWith('CT') || (billingMode === 'internal' && internalDocType === 'CT') ? (
+                  <div className="pt-2 pb-1 space-y-4">
+                    {/* Icon & Title */}
+                    <div className="space-y-1.5">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+                        <DocumentTextIcon className="h-6 w-6 stroke-[2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                        Cotización Creada
+                      </h3>
+                    </div>
 
-                {/* High-Definition QR & Document Card (For both Electronic and Internal) */}
-                <div className="my-3 p-4 bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl border border-gray-100 dark:border-zinc-800 flex flex-col items-center justify-center gap-2.5">
-                  <div className="text-center">
-                    <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
-                      {billingMode === 'electronic' ? 'e-NCF DGII' : 'Comprobante Digital'}
-                    </span>
-                    <span className="text-xl font-black font-mono tracking-wide text-gray-900 dark:text-white">
-                      {currentNCF}
-                    </span>
+                    {/* Number & Amount in Clean Card */}
+                    <div className="py-3 px-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                      <div className="text-2xl font-black font-mono tracking-wider text-blue-600 dark:text-blue-400">
+                        {currentNCF}
+                      </div>
+                      <div className="text-sm font-bold text-gray-700 dark:text-zinc-300 mt-0.5">
+                        RD$ {total.toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          document.body.classList.add('print-ticket-mode');
+                          document.body.classList.remove('print-letter-mode');
+                          setTimeout(() => window.print(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
+                      >
+                        <PrinterIcon className="h-4 w-4 text-gray-500" />
+                        <span>Ticket</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          document.body.classList.add('print-letter-mode');
+                          document.body.classList.remove('print-ticket-mode');
+                          setTimeout(() => window.print(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
+                      >
+                        <DocumentArrowDownIcon className="h-4 w-4" />
+                        <span>PDF Carta</span>
+                      </button>
+                    </div>
+
+                    {/* Primary Button */}
+                    <button
+                      onClick={resetPOS}
+                      className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm shadow-red-900/20"
+                    >
+                      Nueva Venta
+                    </button>
                   </div>
+                ) : (
+                  /* Fiscal / Internal Invoice Layout */
+                  <div className="pt-2 pb-1 space-y-3.5">
+                    {/* Icon & Title */}
+                    <div className="space-y-1">
+                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircleIcon className="h-6 w-6 stroke-[2.2]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                        {billingMode === 'electronic' ? 'Factura Electrónica' : 'Factura Registrada'}
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-zinc-400 font-mono">
+                        RD$ {total.toFixed(2)} • {paymentMethod}
+                      </p>
+                    </div>
 
-                  {/* QR Code */}
-                  <div className="p-2.5 bg-white rounded-2xl shadow-xs border border-gray-100">
-                    <QRCode
-                      value={lastEcfData?.qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${currentNCF}`}
-                      size={110}
-                      level="M"
-                    />
+                    {/* QR Card */}
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex flex-col items-center gap-2">
+                      <span className="text-base font-black font-mono text-gray-900 dark:text-white">
+                        {currentNCF}
+                      </span>
+                      <div className="p-2 bg-white rounded-xl shadow-xs border border-gray-100">
+                        <QRCode
+                          value={lastEcfData?.qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${currentNCF}`}
+                          size={95}
+                          level="M"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-zinc-400 font-mono">
+                        {lastEcfData?.securityCode && <span>Cód: {lastEcfData.securityCode} •</span>}
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">Válido DGII</span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          document.body.classList.add('print-ticket-mode');
+                          document.body.classList.remove('print-letter-mode');
+                          setTimeout(() => window.print(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
+                      >
+                        <PrinterIcon className="h-4 w-4 text-gray-500" />
+                        <span>Ticket</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          document.body.classList.add('print-letter-mode');
+                          document.body.classList.remove('print-ticket-mode');
+                          setTimeout(() => window.print(), 50);
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-[#ED1C24] dark:text-red-400 border border-red-200/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
+                      >
+                        <DocumentArrowDownIcon className="h-4 w-4" />
+                        <span>PDF Carta</span>
+                      </button>
+                    </div>
+
+                    {/* Primary Button */}
+                    <button
+                      onClick={resetPOS}
+                      className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm shadow-red-900/20"
+                    >
+                      Nueva Venta
+                    </button>
                   </div>
-
-                  {/* Minimal Meta */}
-                  <div className="flex items-center justify-center gap-2 text-[10px] text-gray-500 dark:text-zinc-400 font-mono font-bold">
-                    {lastEcfData?.securityCode && (
-                      <span>Cód: <strong className="text-gray-900 dark:text-zinc-200">{lastEcfData.securityCode}</strong></span>
-                    )}
-                    <span>•</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-black">
-                      {billingMode === 'electronic' ? 'DGII Válido' : 'Certificado Válido'}
-                    </span>
-                  </div>
-
-                  <a
-                    href={lastEcfData?.qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${currentNCF}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
-                  >
-                    Verificar Comprobante ↗
-                  </a>
-                </div>
-
-                {/* Quick Print & Letter PDF Buttons */}
-                <div className="grid grid-cols-2 gap-2.5 mt-2.5 mb-3">
-                  <button
-                    onClick={() => {
-                      document.body.classList.add('print-ticket-mode');
-                      document.body.classList.remove('print-letter-mode');
-                      setTimeout(() => {
-                        window.print();
-                      }, 50);
-                    }}
-                    className="flex items-center justify-center gap-2 py-3 px-3 bg-[#f4f3f1] dark:bg-[#222222] hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-2xl transition-colors text-xs font-black text-gray-800 dark:text-zinc-200 cursor-pointer"
-                  >
-                    <PrinterIcon className="h-4 w-4" />
-                    <span>Imprimir Ticket</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      document.body.classList.add('print-letter-mode');
-                      document.body.classList.remove('print-ticket-mode');
-                      setTimeout(() => {
-                        window.print();
-                      }, 50);
-                    }}
-                    className="flex items-center justify-center gap-2 py-3 px-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-850 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-2xl transition-colors text-xs font-black text-[#ED1C24] dark:text-red-400 cursor-pointer"
-                  >
-                    <DocumentArrowDownIcon className="h-4 w-4" />
-                    <span>Guardar PDF (Carta)</span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={resetPOS}
-                  className="w-full py-3.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full font-black text-sm transition-all cursor-pointer shadow-md shadow-red-900/20"
-                >
-                  Nueva Venta
-                </button>
+                )}
               </motion.div>
             </motion.div>
           </>
@@ -2301,8 +2553,8 @@ export default function POS() {
         )}
       </AnimatePresence>
 
-      {/* High-Definition 80mm / 58mm Modern Minimalist Thermal Receipt Portal */}
-      {!isCashClosureOpen && createPortal(
+      {/* High-Definition 80mm / 58mm Modern Minimalist Thermal Receipt Portal (Mounted only when printing/success) */}
+      {isSuccessModalOpen && !isCashClosureOpen && createPortal(
         <ModernReceipt
           ncf={currentNCF}
           invoiceType={billingMode === 'electronic' ? electronicDocType : internalDocType}
@@ -2311,9 +2563,9 @@ export default function POS() {
           customerName={selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado')}
           customerRnc={selectedClient?.rnc || ''}
           paymentMethod={paymentMethod}
-          receivedAmount={paymentMethod === 'Efectivo' ? numReceived : undefined}
-          changeAmount={paymentMethod === 'Efectivo' ? change : undefined}
-          transferReference={transferReference}
+          receivedAmount={lastPaymentInfo.receivedAmount}
+          changeAmount={lastPaymentInfo.changeAmount}
+          transferReference={lastPaymentInfo.transferReference}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={cart.map(item => ({
             description: item.product.name,
@@ -2332,8 +2584,8 @@ export default function POS() {
         document.body
       )}
 
-      {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII) */}
-      {!isCashClosureOpen && createPortal(
+      {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII - Mounted only when printing/success) */}
+      {isSuccessModalOpen && !isCashClosureOpen && createPortal(
         <LetterInvoice
           ncf={currentNCF}
           invoiceType={billingMode === 'electronic' ? electronicDocType : internalDocType}
@@ -2344,9 +2596,9 @@ export default function POS() {
           customerPhone={selectedClient?.phone || ''}
           customerAddress={selectedClient?.address || ''}
           paymentMethod={paymentMethod}
-          receivedAmount={paymentMethod === 'Efectivo' ? numReceived : undefined}
-          changeAmount={paymentMethod === 'Efectivo' ? change : undefined}
-          transferReference={transferReference}
+          receivedAmount={lastPaymentInfo.receivedAmount}
+          changeAmount={lastPaymentInfo.changeAmount}
+          transferReference={lastPaymentInfo.transferReference}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={cart.map(item => ({
             description: item.product.name,

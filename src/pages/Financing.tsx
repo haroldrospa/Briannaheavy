@@ -572,16 +572,16 @@ export default function Financing() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Grace Days Config Button */}
           <div className="relative">
             <button 
               onClick={() => setShowGraceDaysPopover(!showGraceDaysPopover)}
-              className="flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30 px-4 py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
               title="Configurar Días de Gracia para Mora"
             >
               <ClockIcon className="h-4 w-4 text-amber-500" />
-              <span>Gracia Mora: <strong>{graceDays} días</strong></span>
+              <span>Gracia: <strong>{graceDays}d</strong></span>
             </button>
 
             {showGraceDaysPopover && (
@@ -645,23 +645,23 @@ export default function Financing() {
 
           <button 
             onClick={() => setIsCashClosureOpen(true)}
-            className="flex items-center justify-center gap-2 bg-[#fb3c44] text-white px-5 py-2.5 rounded-full font-bold hover:bg-red-600 transition-all shadow-md shadow-red-500/20 cursor-pointer"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-[#fb3c44] text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-red-600 transition-all shadow-md shadow-red-500/20 cursor-pointer text-xs"
           >
-            <BanknotesIcon className="h-5 w-5" />
+            <BanknotesIcon className="h-4 w-4" />
             Cierre de Caja
           </button>
           {activeTab === 'financiamientos' ? (
             <>
               <button 
                 onClick={() => setShowCalculator(!showCalculator)}
-                className="flex items-center justify-center gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer text-xs"
               >
-                <CalculatorIcon className="h-5 w-5" />
+                <CalculatorIcon className="h-4 w-4" />
                 Simulador
               </button>
               <button 
                 onClick={() => setIsNewFormOpen(!isNewFormOpen)}
-                className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer ${
+                className={`w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer text-xs ${
                   isNewFormOpen 
                     ? 'bg-red-600 text-white hover:bg-red-700' 
                     : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
@@ -669,13 +669,13 @@ export default function Financing() {
               >
                 {isNewFormOpen ? (
                   <>
-                    <XMarkIcon className="h-5 w-5" />
+                    <XMarkIcon className="h-4 w-4" />
                     <span>Cerrar Formulario</span>
                   </>
                 ) : (
                   <>
-                    <PlusIcon className="h-5 w-5" />
-                    <span>Nuevo Financiamiento</span>
+                    <PlusIcon className="h-4 w-4" />
+                    <span>+ Financiamiento</span>
                   </>
                 )}
               </button>
@@ -1242,11 +1242,11 @@ export default function Financing() {
 
       {/* Status Filter Pills Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] p-1.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-800 text-xs">
+        <div className="flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] p-1.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-800 text-xs w-full sm:w-auto overflow-x-auto scrollbar-hide -mx-1 px-1 shrink-0">
           <button
             type="button"
             onClick={() => setMainStatusFilter('Todos')}
-            className={`px-4 py-2 font-black rounded-full transition-all cursor-pointer ${
+            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap cursor-pointer ${
               mainStatusFilter === 'Todos'
                 ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
                 : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
@@ -1258,7 +1258,7 @@ export default function Financing() {
           <button
             type="button"
             onClick={() => setMainStatusFilter('En mora')}
-            className={`px-4 py-2 font-black rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
               mainStatusFilter === 'En mora'
                 ? 'bg-[#ED1C24] text-white shadow-xs'
                 : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'
@@ -1271,7 +1271,7 @@ export default function Financing() {
           <button
             type="button"
             onClick={() => setMainStatusFilter('Vence 1 dia')}
-            className={`px-4 py-2 font-black rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
               mainStatusFilter === 'Vence 1 dia'
                 ? 'bg-amber-500 text-white shadow-xs'
                 : 'text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
@@ -1284,7 +1284,7 @@ export default function Financing() {
           <button
             type="button"
             onClick={() => setMainStatusFilter('Al dia')}
-            className={`px-4 py-2 font-black rounded-full transition-all cursor-pointer ${
+            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap cursor-pointer ${
               mainStatusFilter === 'Al dia'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
@@ -1295,66 +1295,126 @@ export default function Financing() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-[2rem] overflow-hidden p-2">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
-            <thead>
-              <tr>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente</th>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Artículo</th>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Monto Financiado</th>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Próximo Pago</th>
-                <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
-                <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
+      {/* Financings Container */}
+      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-150 dark:border-gray-800">
+        {filteredFinancings.length === 0 ? (
+          <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
+            No se encontraron financiamientos para la búsqueda.
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card List (md:hidden) */}
+            <div className="md:hidden space-y-3 p-1">
               {filteredFinancings.map((item) => (
-                <tr key={item.id} onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors cursor-pointer">
-                  <td className="px-6 py-5 whitespace-nowrap">
-                    <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
-                    {item.rnc && (
-                      <div className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 flex items-center gap-1 mt-0.5">
-                        <IdentificationIcon className="h-3 w-3 text-red-500/70" />
-                        <span>RNC/Céd: {item.rnc}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">{item.item}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">${item.amount.toLocaleString()}</td>
-                  <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    <div>{item.nextPayment}</div>
-                    {isDueWithinDays(item.nextPayment, 1) && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/70 px-2 py-0.5 rounded-md mt-0.5 border border-amber-300 dark:border-amber-800">
-                        <ClockIcon className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                        Vence en 1d
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-5 whitespace-nowrap">
-                    <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
+                <div
+                  key={item.id}
+                  onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }}
+                  className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5 cursor-pointer hover:border-red-500/30 transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-black text-gray-900 dark:text-white truncate">{item.customer}</h4>
+                      {item.rnc && (
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
+                          <IdentificationIcon className="h-3 w-3 text-red-500/70" />
+                          <span>RNC: {item.rnc}</span>
+                        </p>
+                      )}
+                    </div>
+                    <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full shrink-0 ${
                       item.status === 'Al día' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
                       item.status === 'En mora' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                     }`}>
                       {item.status}
                     </span>
-                  </td>
-                  <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                    <button onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="text-gray-900 dark:text-white hover:text-red-900 dark:hover:text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Ver Detalles</button>
-                  </td>
-                </tr>
+                  </div>
+
+                  <p className="text-[11px] text-gray-600 dark:text-zinc-300 font-medium">
+                    {item.item}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-zinc-800/60">
+                    <div>
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Financiado</span>
+                      <span className="text-sm font-black text-gray-900 dark:text-white font-mono">
+                        ${item.amount.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Próximo Pago</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">
+                        {item.nextPayment}
+                      </span>
+                      {isDueWithinDays(item.nextPayment, 1) && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/70 px-1.5 py-0.5 rounded ml-1">
+                          1d
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-1 border-t border-gray-200/50 dark:border-zinc-800/60 flex justify-end">
+                    <span className="text-xs font-bold text-[#ED1C24] dark:text-red-400">Ver Detalles →</span>
+                  </div>
+                </div>
               ))}
-              {filteredFinancings.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
-                    No se encontraron financiamientos para la búsqueda.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop Table (hidden md:block) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+                <thead>
+                  <tr>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente</th>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Artículo</th>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Monto Financiado</th>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Próximo Pago</th>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
+                    <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
+                  {filteredFinancings.map((item) => (
+                    <tr key={item.id} onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors cursor-pointer">
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
+                        {item.rnc && (
+                          <div className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 flex items-center gap-1 mt-0.5">
+                            <IdentificationIcon className="h-3 w-3 text-red-500/70" />
+                            <span>RNC/Céd: {item.rnc}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">{item.item}</td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">${item.amount.toLocaleString()}</td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        <div>{item.nextPayment}</div>
+                        {isDueWithinDays(item.nextPayment, 1) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/70 px-2 py-0.5 rounded-md mt-0.5 border border-amber-300 dark:border-amber-800">
+                            <ClockIcon className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                            Vence en 1d
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
+                          item.status === 'Al día' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
+                          item.status === 'En mora' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="text-gray-900 dark:text-white hover:text-red-900 dark:hover:text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Ver Detalles</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
       </>
       ) : (
@@ -1387,45 +1447,29 @@ export default function Financing() {
           </div>
         </div>
 
-        {/* Receivables Table */}
-        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-[2rem] overflow-hidden p-2 border border-gray-100 dark:border-gray-800">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
-              <thead>
-                <tr>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente & RNC</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Factura / NCF</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Repuestos Vendidos</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Vencimiento</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Total / Saldo</th>
-                  <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
-                  <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
+        {/* Receivables Container */}
+        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-150 dark:border-gray-800">
+          {filteredReceivables.length === 0 ? (
+            <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
+              No se encontraron cuentas por cobrar de repuestos para la búsqueda.
+            </div>
+          ) : (
+            <>
+              {/* Mobile Card List (md:hidden) */}
+              <div className="md:hidden space-y-3 p-1">
                 {filteredReceivables.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors">
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
-                      <div className="text-xs text-gray-400 font-medium">RNC: {item.rnc}</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">{item.invoice}</div>
-                      <div className="text-[11px] text-gray-400 font-mono">{item.ncf}</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="text-xs font-semibold text-gray-700 dark:text-zinc-300 max-w-xs truncate">{item.items}</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="text-xs font-bold text-gray-900 dark:text-white">{item.dueDate}</div>
-                      <div className="text-[10px] font-medium text-gray-400">{item.creditDays} Días Crédito</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <div className="text-sm font-black text-[#ED1C24]">RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                      <div className="text-[10px] text-gray-400 font-medium">Total: RD$ {item.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
+                  <div
+                    key={item.id}
+                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-150 dark:border-zinc-800 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-gray-900 dark:text-white truncate">{item.customer}</h4>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
+                          RNC: {item.rnc} • {item.invoice}
+                        </p>
+                      </div>
+                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full shrink-0 ${
                         item.status === 'Pendiente' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 
                         item.status === 'Con Abono' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
                         item.status === 'Atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 
@@ -1433,35 +1477,117 @@ export default function Financing() {
                       }`}>
                         {item.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => {
-                            const financingMatch = financingsList.find(f => f.customer === item.customer) || financingsList[0];
-                            setSelectedFinancing(financingMatch);
-                            setShowPaymentForm(true);
-                            setShowReceipt(false);
-                            setShowAccountStatement(false);
-                          }} 
-                          className="text-white font-bold bg-[#ED1C24] hover:bg-red-700 px-4 py-1.5 rounded-full transition-all text-xs shadow-sm cursor-pointer"
-                        >
-                          Abonar / Cobrar
-                        </button>
+                    </div>
+
+                    <p className="text-[11px] text-gray-600 dark:text-zinc-300 font-medium line-clamp-1">
+                      {item.items}
+                    </p>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-zinc-800/60">
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-gray-400 block">Saldo Pendiente</span>
+                        <span className="text-sm font-black text-[#ED1C24] font-mono">
+                          RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
                       </div>
-                    </td>
-                  </tr>
+
+                      <div className="text-right">
+                        <span className="text-[9px] uppercase font-bold text-gray-400 block">Vencimiento</span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">
+                          {item.dueDate}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200/50 dark:border-zinc-800/60 flex items-center justify-between">
+                      <span className="text-[10px] text-gray-400">Total Factura: RD$ {item.totalAmount.toLocaleString()}</span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const financingMatch = financingsList.find(f => f.customer === item.customer) || financingsList[0];
+                          setSelectedFinancing(financingMatch);
+                          setShowPaymentForm(true);
+                          setShowReceipt(false);
+                          setShowAccountStatement(false);
+                        }} 
+                        className="text-white font-bold bg-[#ED1C24] hover:bg-red-700 px-4 py-1.5 rounded-full transition-all text-xs shadow-xs cursor-pointer"
+                      >
+                        Abonar / Cobrar
+                      </button>
+                    </div>
+                  </div>
                 ))}
-                {filteredReceivables.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
-                      No se encontraron cuentas por cobrar de repuestos para la búsqueda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              </div>
+
+              {/* Desktop Table (hidden md:block) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente & RNC</th>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Factura / NCF</th>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Repuestos Vendidos</th>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Vencimiento</th>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Total / Saldo</th>
+                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
+                      <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
+                    {filteredReceivables.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors">
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
+                          <div className="text-xs text-gray-400 font-medium">RNC: {item.rnc}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-sm font-bold text-gray-900 dark:text-white">{item.invoice}</div>
+                          <div className="text-[11px] text-gray-400 font-mono">{item.ncf}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-xs font-semibold text-gray-700 dark:text-zinc-300 max-w-xs truncate">{item.items}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-xs font-bold text-gray-900 dark:text-white">{item.dueDate}</div>
+                          <div className="text-[10px] font-medium text-gray-400">{item.creditDays} Días Crédito</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <div className="text-sm font-black text-[#ED1C24]">RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
+                          <div className="text-[10px] text-gray-400 font-medium">Total: RD$ {item.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap">
+                          <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
+                            item.status === 'Pendiente' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 
+                            item.status === 'Con Abono' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                            item.status === 'Atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 
+                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end gap-2">
+                            <button 
+                              onClick={() => {
+                                const financingMatch = financingsList.find(f => f.customer === item.customer) || financingsList[0];
+                                setSelectedFinancing(financingMatch);
+                                setShowPaymentForm(true);
+                                setShowReceipt(false);
+                                setShowAccountStatement(false);
+                              }} 
+                              className="text-white font-bold bg-[#ED1C24] hover:bg-red-700 px-4 py-1.5 rounded-full transition-all text-xs shadow-sm cursor-pointer"
+                            >
+                              Abonar / Cobrar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
       )}

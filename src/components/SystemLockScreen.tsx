@@ -180,13 +180,24 @@ export default function SystemLockScreen({ onUnlock }: SystemLockScreenProps) {
             <div className="bg-[#f4f3f1] dark:bg-[#1a1c23] border border-gray-200/50 dark:border-zinc-800/60 rounded-2xl p-4 flex flex-col justify-between">
               <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">
                 <ArrowPathIcon className="w-4 h-4 text-emerald-500" />
-                Horario Permitido
+                Horario Autorizado
               </div>
-              <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
-                {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
+              <div className="space-y-0.5">
+                <div className="text-xs sm:text-sm font-black text-gray-900 dark:text-white flex items-center justify-between">
+                  <span className="text-gray-500 font-bold">L-V:</span>
+                  <span>{formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}</span>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-gray-900 dark:text-white flex items-center justify-between">
+                  <span className="text-gray-500 font-bold">Sáb:</span>
+                  <span>
+                    {schedule.saturdayEnabled 
+                      ? `${formatTime12h(schedule.saturdayStartTime || '08:00')} - ${formatTime12h(schedule.saturdayEndTime || '13:00')}`
+                      : 'Cerrado'}
+                  </span>
+                </div>
               </div>
-              <div className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 mt-1">
-                {schedule.allowWeekends ? 'Lunes a Domingo' : 'Lunes a Viernes'}
+              <div className="text-[10px] font-bold text-gray-400 mt-1">
+                {schedule.sundayEnabled || schedule.allowWeekends ? 'Domingos habilitados' : 'Domingos: Cerrado'}
               </div>
             </div>
           </div>

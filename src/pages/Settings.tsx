@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import logo from '../assets/logo.png';
 import { 
@@ -24,7 +24,9 @@ import {
   KeyIcon,
   TrashIcon,
   PencilSquareIcon,
-  UserPlusIcon
+  UserPlusIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { 
   fetchUsers, 
@@ -57,7 +59,8 @@ import {
   syncSequencesWithSupabase, 
   syncScheduleWithSupabase, 
   syncAdminKeyWithSupabase,
-  syncPermissionsWithSupabase 
+  syncPermissionsWithSupabase,
+  saveRemoteSetting 
 } from '../services/settingsService';
 import { 
   getAlanubeConfig, 
@@ -78,10 +81,10 @@ import ModernReceipt from '../components/ui/ModernReceipt';
 
 const TABS = [
   { id: 'empresa', name: 'Empresa', icon: BuildingOfficeIcon },
-  { id: 'facturas', name: 'Diseño de Facturas', icon: PrinterIcon },
+  { id: 'facturas', name: 'Diseño Facturas', icon: PrinterIcon },
   { id: 'impuestos', name: 'Impuestos & Moneda', icon: CurrencyDollarIcon },
-  { id: 'comprobantes', name: 'Secuencias e-CF (DGII)', icon: DocumentTextIcon },
-  { id: 'comprobantes_electronicos', name: 'Integración Alanube (e-CF)', icon: BoltIcon },
+  { id: 'comprobantes', name: 'Secuencias e-CF', icon: DocumentTextIcon },
+  { id: 'comprobantes_electronicos', name: 'Integración e-CF', icon: BoltIcon },
   { id: 'usuarios', name: 'Usuarios & Roles', icon: UsersIcon },
   { id: 'permisos', name: 'Permisos', icon: ShieldCheckIcon },
   { id: 'respaldos', name: 'Respaldos', icon: CloudArrowUpIcon },
@@ -89,6 +92,32 @@ const TABS = [
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('empresa');
+  const tabsNavRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    if (tabsNavRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = tabsNavRef.current;
+      setCanScrollLeft(scrollLeft > 10);
+      setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 10);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, []);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (tabsNavRef.current) {
+      const offset = direction === 'left' ? -220 : 220;
+      tabsNavRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+      setTimeout(checkScroll, 250);
+    }
+  };
+
   const [sequences, setSequences] = useState(loadSequenceSettings);
   const [showSaveToast, setShowSaveToast] = useState(false);
 
@@ -125,6 +154,33 @@ export default function Settings() {
 
   const [invoiceConfig, setInvoiceConfig] = useState<InvoiceCustomConfig>(getInvoiceCustomConfig);
   const [showInvoiceToast, setShowInvoiceToast] = useState(false);
+
+  const [companyProfile, setCompanyProfile] = useState({
+    name: invoiceConfig.companyName || 'Brianna Heavy Equipment S.R.L.',
+    rnc: invoiceConfig.rnc || '132-61036-2',
+    phone: invoiceConfig.phone || '(809) 555-5555',
+    email: localStorage.getItem('brianna_company_email') || 'contacto@briannaheavy.com',
+    address: invoiceConfig.address || 'Av. Principal #123, Santo Domingo, R.D.',
+  });
+  const [showCompanyToast, setShowCompanyToast] = useState(false);
+
+  const handleSaveCompanyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedInvoiceConfig: InvoiceCustomConfig = {
+      ...invoiceConfig,
+      companyName: companyProfile.name,
+      rnc: companyProfile.rnc,
+      phone: companyProfile.phone,
+      address: companyProfile.address,
+    };
+    setInvoiceConfig(updatedInvoiceConfig);
+    saveInvoiceCustomConfig(updatedInvoiceConfig);
+    localStorage.setItem('brianna_company_email', companyProfile.email);
+    await saveRemoteSetting('company_profile', companyProfile);
+    await saveRemoteSetting('invoice_custom_settings', updatedInvoiceConfig);
+    setShowCompanyToast(true);
+    setTimeout(() => setShowCompanyToast(false), 3500);
+  };
 
   const handleSaveInvoiceConfig = () => {
     saveInvoiceCustomConfig(invoiceConfig);
@@ -275,6 +331,12 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettingsUsers(true);
+
+    const handleUserUpdate = () => {
+      loadSettingsUsers(false);
+    };
+    window.addEventListener('brianna_user_updated', handleUserUpdate);
+    return () => window.removeEventListener('brianna_user_updated', handleUserUpdate);
   }, []);
 
   const openUserModal = (user: UserProfile | null = null) => {
@@ -357,87 +419,177 @@ export default function Settings() {
     <div className="bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 rounded-2xl sm:rounded-[2rem] shadow-xs border border-gray-100 dark:border-zinc-800/80 flex flex-col min-h-[70vh] mb-8 overflow-hidden p-1.5 sm:p-2 transition-colors duration-300">
       
       {/* Settings Horizontal Menu */}
-      <div className="w-full pb-2 mb-2 p-2 sm:p-4 border-b border-gray-100 dark:border-zinc-800/80">
-        <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const isProtected = tab.id === 'comprobantes_electronicos' && !isEcfUnlocked;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  isActive
-                    ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-black'
-                    : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-100/60 dark:hover:bg-zinc-800/60'
-                }`}
-              >
-                <tab.icon
-                  className={`flex-shrink-0 mr-1.5 sm:mr-2.5 h-4 w-4 sm:h-5 sm:w-5 transition-colors ${
-                    isActive ? 'text-white dark:text-zinc-900' : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-500 dark:group-hover:text-zinc-300'
+      <div className="w-full pb-2 mb-2 p-2 sm:p-3 border-b border-gray-100 dark:border-zinc-800/80 relative">
+        <div className="relative flex items-center group/nav">
+          {/* Scroll Left Button */}
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => handleScroll('left')}
+              className="absolute left-0 z-10 p-1.5 rounded-full bg-white/95 dark:bg-zinc-900/95 text-gray-700 dark:text-zinc-200 shadow-md border border-gray-200/80 dark:border-zinc-700/80 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all cursor-pointer -translate-x-1"
+              aria-label="Desplazar a la izquierda"
+            >
+              <ChevronLeftIcon className="w-4 h-4 stroke-2" />
+            </button>
+          )}
+
+          <nav 
+            ref={tabsNavRef}
+            onScroll={checkScroll}
+            className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scroll-smooth scrollbar-hide w-full px-1"
+          >
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const isProtected = tab.id === 'comprobantes_electronicos' && !isEcfUnlocked;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`flex items-center px-3.5 sm:px-4.5 py-2 text-xs sm:text-sm font-bold rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                    isActive
+                      ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-black'
+                      : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-100/60 dark:hover:bg-zinc-800/60'
                   }`}
-                  aria-hidden="true"
-                />
-                <span className="truncate tracking-wide">{tab.name}</span>
-                {isProtected && (
-                  <LockClosedIcon className="ml-1.5 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
+                >
+                  <tab.icon
+                    className={`flex-shrink-0 mr-1.5 sm:mr-2 h-4 w-4 sm:h-4.5 sm:w-4.5 transition-colors ${
+                      isActive ? 'text-white dark:text-zinc-900' : 'text-gray-400 dark:text-zinc-500'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate tracking-wide">{tab.name}</span>
+                  {isProtected && (
+                    <LockClosedIcon className="ml-1.5 h-3.5 w-3.5 text-gray-400 dark:text-zinc-500" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Scroll Right Button */}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => handleScroll('right')}
+              className="absolute right-0 z-10 p-1.5 rounded-full bg-white/95 dark:bg-zinc-900/95 text-gray-700 dark:text-zinc-200 shadow-md border border-gray-200/80 dark:border-zinc-700/80 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all cursor-pointer translate-x-1"
+              aria-label="Desplazar a la derecha"
+            >
+              <ChevronRightIcon className="w-4 h-4 stroke-2" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Settings Content Area */}
       <div className="flex-1 overflow-x-hidden relative">
             
             {activeTab === 'empresa' && (
-              <div className="p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-6 mb-6">
-                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">Perfil de la Empresa</h3>
-                  <p className="mt-2 text-sm font-medium text-gray-500 dark:text-zinc-400">
-                    Esta información se mostrará en facturas, cotizaciones y reportes.
-                  </p>
+              <form onSubmit={handleSaveCompanyProfile} className="p-3 sm:p-5 space-y-3 sm:space-y-4 animate-in fade-in duration-300">
+                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      <BuildingOfficeIcon className="w-5 h-5 text-[#ED1C24]" />
+                      Perfil de la Empresa
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                      Datos mostrados en facturas, tickets POS, cotizaciones y reportes.
+                    </p>
+                  </div>
+                  <button 
+                    type="submit" 
+                    className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                  >
+                    <CheckCircleIcon className="w-4 h-4" />
+                    <span>Guardar Cambios</span>
+                  </button>
                 </div>
+
+                {showCompanyToast && (
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold">¡Perfil de la empresa y teléfono actualizados con éxito!</span>
+                  </div>
+                )}
                 
-                <div className="grid grid-cols-1 gap-y-8 gap-x-6 sm:grid-cols-6">
-                  <div className="sm:col-span-6">
-                    <label className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Logotipo</label>
-                    <div className="mt-1 flex items-center gap-6">
-                      <div className="h-24 w-48 rounded-2xl bg-[#f4f3f1] dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-3 shadow-xs">
-                        <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
-                      </div>
-                      <button type="button" className="bg-[#ED1C24] hover:bg-red-700 text-white py-3 px-6 rounded-full text-sm font-black transition-all cursor-pointer shadow-md shadow-red-900/20">
-                        Cambiar Logotipo
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 items-start">
+                  <div className="sm:col-span-6 flex items-center gap-4 p-2.5 bg-[#f4f3f1] dark:bg-zinc-850 rounded-xl border border-gray-200/50 dark:border-zinc-800">
+                    <div className="h-14 w-28 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
+                      <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-gray-800 dark:text-zinc-200">Logotipo Oficial</span>
+                      <button type="button" className="mt-1 bg-gray-900 hover:bg-black text-white dark:bg-zinc-100 dark:text-zinc-900 py-1 px-3 rounded-full text-xs font-bold transition-all cursor-pointer">
+                        Cambiar Logo
                       </button>
                     </div>
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="company-name" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Nombre de la Empresa</label>
-                    <input type="text" name="company-name" id="company-name" defaultValue="Brianna Heavy Equipment" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                  <div className="sm:col-span-4">
+                    <label htmlFor="company-name" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Nombre de la Empresa</label>
+                    <input 
+                      type="text" 
+                      name="company-name" 
+                      id="company-name" 
+                      value={companyProfile.name}
+                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, name: e.target.value }))}
+                      required
+                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label htmlFor="rnc" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">RNC / Identificación Tributaria</label>
+                    <input 
+                      type="text" 
+                      name="rnc" 
+                      id="rnc" 
+                      value={companyProfile.rnc}
+                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, rnc: e.target.value }))}
+                      required
+                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                    />
                   </div>
 
                   <div className="sm:col-span-3">
-                    <label htmlFor="rnc" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">RNC / Identificación Tributaria</label>
-                    <input type="text" name="rnc" id="rnc" defaultValue="1-32-45678-9" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                    <label htmlFor="company-phone" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Número de Teléfono / Contacto</label>
+                    <input 
+                      type="text" 
+                      name="company-phone" 
+                      id="company-phone" 
+                      value={companyProfile.phone}
+                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="(809) 555-5555"
+                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label htmlFor="company-email" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Correo Electrónico</label>
+                    <input 
+                      type="email" 
+                      name="company-email" 
+                      id="company-email" 
+                      value={companyProfile.email}
+                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="contacto@briannaheavy.com"
+                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                    />
                   </div>
 
                   <div className="sm:col-span-6">
-                    <label htmlFor="address" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Dirección Principal</label>
-                    <input type="text" name="address" id="address" defaultValue="Av. Principal #123, Santo Domingo" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                    <label htmlFor="address" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Dirección Principal</label>
+                    <input 
+                      type="text" 
+                      name="address" 
+                      id="address" 
+                      value={companyProfile.address}
+                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Av. Principal #123, Santo Domingo, R.D."
+                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                    />
                   </div>
                 </div>
-
-                <div className="pt-8 flex justify-end gap-3 border-t border-gray-100 dark:border-zinc-800/80 mt-8">
-                  <button type="button" className="bg-[#f4f3f1] dark:bg-zinc-800 py-3 px-6 rounded-full text-sm font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 focus:outline-none transition-all cursor-pointer">
-                    Cancelar
-                  </button>
-                  <button type="submit" className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-full py-3 px-8 text-sm font-bold transition-all shadow-sm cursor-pointer">
-                    Guardar Cambios
-                  </button>
-                </div>
-              </div>
+              </form>
             )}
 
             {activeTab === 'facturas' && (
@@ -964,74 +1116,84 @@ export default function Settings() {
             )}
 
             {activeTab === 'impuestos' && (
-              <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-6 mb-6">
-                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">Configuración de Impuestos y Moneda</h3>
-                  <p className="mt-2 text-sm font-medium text-gray-500 dark:text-zinc-400">
-                    Administra cómo se calculan los impuestos y la moneda base de tu sistema.
-                  </p>
+              <div className="p-3 sm:p-5 space-y-3 sm:space-y-4 animate-in fade-in duration-300">
+                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      <CurrencyDollarIcon className="w-5 h-5 text-[#ED1C24]" />
+                      Configuración de Impuestos y Moneda
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                      Administra moneda base, tasa impositiva y tamaño de impresión de recibos.
+                    </p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      saveReceiptFontSize(defaultFontSize);
+                      setShowPrintSizeToast(true);
+                      setTimeout(() => setShowPrintSizeToast(false), 3000);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                  >
+                    <CheckCircleIcon className="w-4 h-4" />
+                    <span>Guardar Configuración</span>
+                  </button>
                 </div>
+
+                {showPrintSizeToast && (
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold">¡Configuración de impuestos y tamaño de letra guardada correctamente!</span>
+                  </div>
+                )}
                 
-                <div className="grid grid-cols-1 gap-y-8 gap-x-6 sm:grid-cols-6">
-                  <div className="sm:col-span-3">
-                    <label htmlFor="currency" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Moneda Principal</label>
-                    <select id="currency" name="currency" defaultValue="DOP" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium appearance-none cursor-pointer">
+                {/* 4 Inputs in 1 Row */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 items-start">
+                  <div>
+                    <label htmlFor="currency" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Moneda Principal</label>
+                    <select id="currency" name="currency" defaultValue="DOP" className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all appearance-none cursor-pointer">
                       <option value="DOP" className="dark:bg-[#16171d]">Peso Dominicano (DOP)</option>
                       <option value="USD" className="dark:bg-[#16171d]">Dólar Estadounidense (USD)</option>
                       <option value="EUR" className="dark:bg-[#16171d]">Euro (EUR)</option>
                     </select>
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="currency-symbol" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Símbolo de Moneda</label>
-                    <input type="text" name="currency-symbol" id="currency-symbol" defaultValue="RD$" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                  <div>
+                    <label htmlFor="currency-symbol" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Símbolo de Moneda</label>
+                    <input type="text" name="currency-symbol" id="currency-symbol" defaultValue="RD$" className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" />
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="tax-name" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Nombre del Impuesto</label>
-                    <input type="text" name="tax-name" id="tax-name" defaultValue="ITBIS" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                  <div>
+                    <label htmlFor="tax-name" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Nombre del Impuesto</label>
+                    <input type="text" name="tax-name" id="tax-name" defaultValue="ITBIS" className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" />
                   </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="tax-rate" className="block text-sm font-bold text-gray-700 dark:text-zinc-300 mb-2">Tasa de Impuesto (%)</label>
-                    <input type="number" name="tax-rate" id="tax-rate" defaultValue="18" className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+                  <div>
+                    <label htmlFor="tax-rate" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Tasa de Impuesto (%)</label>
+                    <input type="number" name="tax-rate" id="tax-rate" defaultValue="18" className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" />
                   </div>
+                </div>
 
-                  <div className="sm:col-span-6 mt-4">
-                    <div className="flex items-start bg-[#f4f3f1] dark:bg-zinc-800/40 p-6 rounded-3xl border border-transparent dark:border-zinc-800/80">
-                      <div className="flex items-center h-5">
-                        <input id="tax-inclusive" name="tax-inclusive" type="checkbox" defaultChecked className="focus:ring-[#ED1C24] h-5 w-5 text-[#ED1C24] border-gray-300 rounded cursor-pointer" />
-                      </div>
-                      <div className="ml-4 text-sm">
-                        <label htmlFor="tax-inclusive" className="font-bold text-gray-900 dark:text-white text-base cursor-pointer">Precios incluyen impuestos</label>
-                        <p className="text-gray-500 dark:text-zinc-400 mt-1 font-medium">Si se activa, el sistema calculará el impuesto extrayéndolo del precio final del producto.</p>
-                      </div>
+                {/* Precios Incluyen Impuestos Banner */}
+                <div className="flex items-center justify-between bg-[#f4f3f1] dark:bg-zinc-850 px-3.5 py-2 rounded-xl border border-gray-200/50 dark:border-zinc-800">
+                  <div className="flex items-center gap-2.5">
+                    <input id="tax-inclusive" name="tax-inclusive" type="checkbox" defaultChecked className="focus:ring-[#ED1C24] h-4 w-4 text-[#ED1C24] border-gray-300 rounded cursor-pointer" />
+                    <div>
+                      <label htmlFor="tax-inclusive" className="font-bold text-gray-900 dark:text-white text-xs cursor-pointer select-none">Precios incluyen impuestos</label>
+                      <p className="text-gray-500 dark:text-zinc-400 text-[11px]">Calcula el impuesto extrayéndolo del precio final de venta.</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Configuración de Tamaño de Letra en Facturas Térmicas */}
-                <div className="pt-8 border-t border-gray-100 dark:border-zinc-800/80">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-                        <PrinterIcon className="w-5 h-5 text-[#ED1C24]" />
-                        Tamaño de Letra en Facturas y Recibos
-                      </h4>
-                      <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-1">
-                        Personaliza el tamaño de fuente predeterminado para las facturas impresas en el Punto de Venta y panel de facturas.
-                      </p>
-                    </div>
-                  </div>
+                <div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-2 flex items-center gap-1.5">
+                    <PrinterIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                    <span>Tamaño de Letra en Facturas y Recibos Térmicos</span>
+                  </h4>
 
-                  {showPrintSizeToast && (
-                    <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
-                      <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
-                      <span className="text-sm font-bold">¡Tamaño de letra predeterminado actualizado correctamente!</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     {(['sm', 'md', 'lg', 'xl'] as const).map((size) => {
                       const isSelected = defaultFontSize === size;
                       const config = RECEIPT_FONT_SIZES[size];
@@ -1045,100 +1207,96 @@ export default function Settings() {
                             setShowPrintSizeToast(true);
                             setTimeout(() => setShowPrintSizeToast(false), 3000);
                           }}
-                          className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                             isSelected
-                              ? 'border-[#ED1C24] bg-red-50/40 dark:bg-red-950/20 ring-2 ring-[#ED1C24]/30'
+                              ? 'border-[#ED1C24] bg-red-50/40 dark:bg-red-950/20 ring-1 ring-[#ED1C24]/30'
                               : 'border-gray-200/80 dark:border-zinc-800 bg-[#f4f3f1] dark:bg-[#1a1a1a] hover:border-gray-300'
                           }`}
                         >
                           <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
-                                <span className="px-2 py-0.5 rounded bg-[#ED1C24] text-white text-[10px] font-mono font-bold leading-none">{config.label}</span>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="font-bold text-xs text-gray-900 dark:text-white flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.2 rounded bg-[#ED1C24] text-white text-[9px] font-mono font-bold leading-none">{config.label}</span>
                                 {config.name}
                               </span>
                               {isSelected && (
-                                <CheckCircleIcon className="w-5 h-5 text-[#ED1C24]" />
+                                <CheckCircleIcon className="w-4 h-4 text-[#ED1C24]" />
                               )}
                             </div>
-                            <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1.5 leading-snug">
+                            <p className="text-[10px] text-gray-500 dark:text-zinc-400 leading-tight">
                               {config.description}
                             </p>
                           </div>
-                          <div className="mt-3 pt-2 border-t border-gray-200/60 dark:border-zinc-700/60 flex items-center justify-between text-[10px] font-mono text-gray-400">
-                            <span>Escala: {config.scalePercent}%</span>
-                            <span>Base: {config.baseSize}</span>
+                          <div className="mt-2 pt-1 border-t border-gray-200/60 dark:border-zinc-700/60 flex items-center justify-between text-[9px] font-mono text-gray-400">
+                            <span>{config.scalePercent}%</span>
+                            <span>{config.baseSize}</span>
                           </div>
                         </button>
                       );
                     })}
                   </div>
                 </div>
-
-                <div className="pt-8 flex justify-end gap-3 border-t border-gray-100 dark:border-zinc-800/80 mt-8">
-                  <button type="button" className="bg-[#f4f3f1] dark:bg-zinc-800 py-3 px-6 rounded-full text-sm font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 focus:outline-none transition-all cursor-pointer">
-                    Restablecer
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      saveReceiptFontSize(defaultFontSize);
-                      setShowPrintSizeToast(true);
-                      setTimeout(() => setShowPrintSizeToast(false), 3000);
-                    }}
-                    className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-full py-3 px-8 text-sm font-bold transition-all shadow-sm cursor-pointer"
-                  >
-                    Guardar Configuración
-                  </button>
-                </div>
               </div>
             )}
 
             {activeTab === 'permisos' && (
-              <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="sm:flex sm:items-center sm:justify-between border-b border-gray-100 dark:border-zinc-800/80 pb-6 mb-6">
+              <div className="p-3 sm:p-5 space-y-3 animate-in fade-in duration-300">
+                {/* Header with Title, Role Selector and Action */}
+                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-2.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2.5">
-                      <ShieldCheckIcon className="w-7 h-7 text-[#ED1C24]" />
-                      Control de Accesos y Permisos
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      <ShieldCheckIcon className="w-5 h-5 text-[#ED1C24]" />
+                      Control de Accesos & Permisos
                     </h3>
-                    <p className="mt-2 text-sm font-medium text-gray-500 dark:text-zinc-400">
-                      Define qué acciones pueden realizar los usuarios según su rol asignado.
+                    <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                      Define acciones por rol, horario operativo y clave de acceso maestro.
                     </p>
                   </div>
                   
-                  {/* Segmented Role Selector */}
-                  <div className="mt-4 sm:mt-0 flex items-center gap-1.5 p-1 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/50 dark:border-zinc-700/50">
-                    {(['Administrador', 'Oficina', 'Repuestos'] as const).map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setSelectedRole(r)}
-                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                          selectedRole === r
-                            ? 'bg-white dark:bg-[#121318] text-gray-900 dark:text-white shadow-sm'
-                            : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white font-bold'
-                        }`}
-                      >
-                        {r === 'Repuestos' ? 'Cajero / Repuestos' : r}
-                      </button>
-                    ))}
+                  {/* Segmented Role Selector + Save Button */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1 p-0.5 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-xl border border-gray-200/50 dark:border-zinc-700/50">
+                      {(['Administrador', 'Oficina', 'Repuestos'] as const).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setSelectedRole(r)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            selectedRole === r
+                              ? 'bg-white dark:bg-[#121318] text-gray-900 dark:text-white shadow-2xs font-black'
+                              : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                        >
+                          {r === 'Repuestos' ? 'Cajero/Repuestos' : r}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button 
+                      type="button" 
+                      onClick={handleSavePermissions}
+                      className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-4 rounded-full text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                    >
+                      <CheckCircleIcon className="w-3.5 h-3.5" />
+                      <span>Guardar Permisos</span>
+                    </button>
                   </div>
                 </div>
 
                 {showPermissionsToast && (
-                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in slide-in-from-top-2">
-                    <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
-                    <span className="text-sm font-bold">¡Permisos de roles actualizados y guardados exitosamente!</span>
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold">¡Permisos de roles actualizados y guardados exitosamente!</span>
                   </div>
                 )}
 
-                <div className="flex flex-col">
-                  <div className="flex items-center justify-between mb-3 px-2">
-                    <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">
-                      Editando permisos para rol: <span className="text-gray-900 dark:text-white font-black">{selectedRole === 'Repuestos' ? 'Cajero / Repuestos' : selectedRole}</span>
+                {/* Compact Permissions Matrix Table */}
+                <div className="bg-white dark:bg-zinc-900/90 rounded-xl border border-gray-200/70 dark:border-zinc-800/80 shadow-xs overflow-hidden">
+                  <div className="px-3 py-1.5 bg-gray-50 dark:bg-zinc-850 flex items-center justify-between border-b border-gray-200/60 dark:border-zinc-800">
+                    <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-300">
+                      Permisos para: <span className="text-gray-900 dark:text-white font-black">{selectedRole === 'Repuestos' ? 'Cajero / Repuestos' : selectedRole}</span>
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => {
@@ -1150,7 +1308,7 @@ export default function Settings() {
                             return { ...prev, [selectedRole]: updated };
                           });
                         }}
-                        className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                       >
                         Marcar Todo
                       </button>
@@ -1165,388 +1323,375 @@ export default function Settings() {
                             return { ...prev, [selectedRole]: updated };
                           });
                         }}
-                        className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        className="text-[10px] font-bold text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                       >
                         Desmarcar Todo
                       </button>
-                    </div>
-                  </div>
-
-                  <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                    <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
-                      <div className="overflow-hidden bg-white dark:bg-[#1a1a1a] rounded-3xl p-3 border border-gray-100 dark:border-zinc-800 shadow-sm">
-                        <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
-                          <thead>
-                            <tr>
-                              <th scope="col" className="py-4 pl-6 pr-3 text-left text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Módulo</th>
-                              <th scope="col" className="px-3 py-4 text-center text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Ver</th>
-                              <th scope="col" className="px-3 py-4 text-center text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Crear</th>
-                              <th scope="col" className="px-3 py-4 text-center text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Editar</th>
-                              <th scope="col" className="px-3 py-4 text-center text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Eliminar</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60">
-                            {MODULE_LIST.map((module) => (
-                              <tr key={module} className="hover:bg-gray-50/60 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm font-bold text-gray-900 dark:text-white">{module}</td>
-                                <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={roles[selectedRole]?.[module]?.ver || false}
-                                    onChange={() => togglePermission(module, 'ver')}
-                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded-lg cursor-pointer transition-transform active:scale-95" 
-                                  />
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={roles[selectedRole]?.[module]?.crear || false}
-                                    onChange={() => togglePermission(module, 'crear')}
-                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded-lg cursor-pointer transition-transform active:scale-95" 
-                                  />
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={roles[selectedRole]?.[module]?.editar || false}
-                                    onChange={() => togglePermission(module, 'editar')}
-                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded-lg cursor-pointer transition-transform active:scale-95" 
-                                  />
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-4 text-center">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={roles[selectedRole]?.[module]?.eliminar || false}
-                                    onChange={() => togglePermission(module, 'eliminar')}
-                                    className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded-lg cursor-pointer transition-transform active:scale-95" 
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-
-                        <div className="flex justify-end p-4 border-t border-gray-100 dark:border-zinc-800 mt-2">
-                          <button
-                            type="button"
-                            onClick={handleSavePermissions}
-                            className="bg-[#ED1C24] text-white hover:bg-[#d91920] font-bold px-6 py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 text-xs"
-                          >
-                            <ShieldCheckIcon className="w-4 h-4" />
-                            <span>Guardar Permisos para {selectedRole === 'Repuestos' ? 'Cajero' : selectedRole}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Horario Operativo Section */}
-                <div className="pt-8 border-t border-gray-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <ClockIcon className="w-5 h-5 text-[#ED1C24]" />
-                        Horario Operativo y Bloqueo de Acceso
-                      </h4>
-                      <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-1">
-                        Define las horas en las que los usuarios con rol Oficina y Repuestos pueden usar el sistema. El Administrador siempre tiene libre acceso.
-                      </p>
-                    </div>
-                  </div>
-
-                  {showScheduleToast && (
-                    <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in slide-in-from-top-2">
-                      <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
-                      <span className="text-sm font-bold">¡Horario operativo actualizado y guardado exitosamente!</span>
-                    </div>
-                  )}
-
-                  <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-6">
-                    <div className="flex items-center justify-between p-4 bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800 text-[#ED1C24] shadow-xs">
-                          <LockClosedIcon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <label className="text-sm font-black text-gray-900 dark:text-white cursor-pointer select-none">
-                            Activar Bloqueo Fuera de Horario
-                          </label>
-                          <p className="text-xs font-medium text-gray-500 dark:text-zinc-400">
-                            Si está activado, los usuarios no administradores serán bloqueados fuera de la jornada laboral.
-                          </p>
-                        </div>
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={schedule.enabled}
-                        onChange={(e) => setSchedule(prev => ({ ...prev, enabled: e.target.checked }))}
-                        className="h-6 w-6 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-2">
-                          Hora de Apertura (Inicio de Jornada)
-                        </label>
-                        <input 
-                          type="time" 
-                          value={schedule.startTime}
-                          onChange={(e) => setSchedule(prev => ({ ...prev, startTime: e.target.value }))}
-                          disabled={!schedule.enabled}
-                          className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-2xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all disabled:opacity-50"
-                        />
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">
-                          Formato 12h: {formatTime12h(schedule.startTime)}
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-2">
-                          Hora de Cierre (Fin de Jornada)
-                        </label>
-                        <input 
-                          type="time" 
-                          value={schedule.endTime}
-                          onChange={(e) => setSchedule(prev => ({ ...prev, endTime: e.target.value }))}
-                          disabled={!schedule.enabled}
-                          className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-2xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all disabled:opacity-50"
-                        />
-                        <span className="text-[11px] font-bold text-gray-400 mt-1 block">
-                          Formato 12h: {formatTime12h(schedule.endTime)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-[#f4f3f1] dark:bg-[#222222] rounded-2xl">
-                      <div>
-                        <label className="text-sm font-bold text-gray-900 dark:text-white cursor-pointer select-none">
-                          Permitir Acceso Fines de Semana
-                        </label>
-                        <p className="text-xs font-medium text-gray-500 dark:text-zinc-400">
-                          Habilita el acceso de usuarios los Sábados y Domingos dentro del rango de horas configurado.
-                        </p>
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={schedule.allowWeekends}
-                        onChange={(e) => setSchedule(prev => ({ ...prev, allowWeekends: e.target.checked }))}
-                        disabled={!schedule.enabled}
-                        className="h-5 w-5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer disabled:opacity-50"
-                      />
-                    </div>
-
-                    <div className="flex justify-end pt-2">
                       <button
                         type="button"
-                        onClick={handleSaveSchedule}
-                        className="bg-[#ED1C24] text-white hover:bg-[#d91920] font-bold px-6 py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer"
+                        onClick={handleResetPermissions}
+                        className="text-[10px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 px-2 py-0.5 rounded transition-colors cursor-pointer"
                       >
-                        Guardar Horario Operativo
+                        ↺ Restaurar
                       </button>
                     </div>
                   </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
+                      <thead>
+                        <tr className="bg-gray-50/50 dark:bg-zinc-850/50 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                          <th scope="col" className="py-1.5 pl-4 pr-2 text-left">Módulo</th>
+                          <th scope="col" className="px-2 py-1.5 text-center">Ver</th>
+                          <th scope="col" className="px-2 py-1.5 text-center">Crear</th>
+                          <th scope="col" className="px-2 py-1.5 text-center">Editar</th>
+                          <th scope="col" className="px-2 py-1.5 text-center">Eliminar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60">
+                        {MODULE_LIST.map((module) => (
+                          <tr key={module} className="hover:bg-gray-50/70 dark:hover:bg-zinc-800/30 transition-colors">
+                            <td className="whitespace-nowrap py-1.5 pl-4 pr-2 text-xs font-bold text-gray-900 dark:text-white">{module}</td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-center">
+                              <input 
+                                type="checkbox" 
+                                checked={roles[selectedRole]?.[module]?.ver || false}
+                                onChange={() => togglePermission(module, 'ver')}
+                                className="h-4 w-4 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-center">
+                              <input 
+                                type="checkbox" 
+                                checked={roles[selectedRole]?.[module]?.crear || false}
+                                onChange={() => togglePermission(module, 'crear')}
+                                className="h-4 w-4 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-center">
+                              <input 
+                                type="checkbox" 
+                                checked={roles[selectedRole]?.[module]?.editar || false}
+                                onChange={() => togglePermission(module, 'editar')}
+                                className="h-4 w-4 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                              />
+                            </td>
+                            <td className="whitespace-nowrap px-2 py-1.5 text-center">
+                              <input 
+                                type="checkbox" 
+                                checked={roles[selectedRole]?.[module]?.eliminar || false}
+                                onChange={() => togglePermission(module, 'eliminar')}
+                                className="h-4 w-4 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer" 
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                {/* Clave Maestra de Administrador Section */}
-                <div className="pt-8 border-t border-gray-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <KeyIcon className="w-5 h-5 text-[#ED1C24]" />
-                        Clave de Administrador (Acceso Maestro)
-                      </h4>
-                      <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-1">
-                        Clave de seguridad requerida para desbloquear el sistema fuera de horario o autorizar cambios críticos.
-                      </p>
+                {/* 2-Column Bottom Row: Horario Operativo & Clave Maestra */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-1">
+                  {/* Horario Operativo (Col 7) */}
+                  <div className="lg:col-span-7 bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ClockIcon className="w-4 h-4 text-[#ED1C24]" />
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">Horario Operativo & Bloqueo</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-bold text-gray-700 dark:text-zinc-300 cursor-pointer">Bloquear fuera de horario</label>
+                        <input 
+                          type="checkbox" 
+                          checked={schedule.enabled}
+                          onChange={(e) => setSchedule(prev => ({ ...prev, enabled: e.target.checked }))}
+                          className="h-4 w-4 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {showScheduleToast && (
+                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 text-xs">
+                        <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>¡Horario guardado con éxito!</span>
+                      </div>
+                    )}
+
+                    {/* Lunes a Viernes row */}
+                    <div className="space-y-1.5 pt-0.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                        <span>📅 Lunes a Viernes</span>
+                        <span className="text-[10px] text-gray-500 font-normal">
+                          {formatTime12h(schedule.startTime)} - {formatTime12h(schedule.endTime)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Apertura L-V</label>
+                          <input 
+                            type="time" 
+                            value={schedule.startTime}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, startTime: e.target.value }))}
+                            disabled={!schedule.enabled}
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Cierre L-V</label>
+                          <input 
+                            type="time" 
+                            value={schedule.endTime}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, endTime: e.target.value }))}
+                            disabled={!schedule.enabled}
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sábados & Domingos row */}
+                    <div className="space-y-1.5 pt-1 border-t border-gray-100 dark:border-zinc-800/60">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={schedule.saturdayEnabled}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, saturdayEnabled: e.target.checked }))}
+                            disabled={!schedule.enabled}
+                            className="h-3.5 w-3.5 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer disabled:opacity-50"
+                          />
+                          <span>📅 Sábados ({formatTime12h(schedule.saturdayStartTime || '08:00')} - {formatTime12h(schedule.saturdayEndTime || '13:00')})</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer text-[10px] text-gray-500 dark:text-zinc-400">
+                          <input 
+                            type="checkbox" 
+                            checked={schedule.sundayEnabled || schedule.allowWeekends || false}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, sundayEnabled: e.target.checked, allowWeekends: e.target.checked }))}
+                            disabled={!schedule.enabled}
+                            className="h-3 w-3 text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 rounded cursor-pointer disabled:opacity-50"
+                          />
+                          <span>Domingos</span>
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Apertura Sáb</label>
+                          <input 
+                            type="time" 
+                            value={schedule.saturdayStartTime || '08:00'}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, saturdayStartTime: e.target.value }))}
+                            disabled={!schedule.enabled || !schedule.saturdayEnabled}
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Cierre Sáb</label>
+                          <input 
+                            type="time" 
+                            value={schedule.saturdayEndTime || '13:00'}
+                            onChange={(e) => setSchedule(prev => ({ ...prev, saturdayEndTime: e.target.value }))}
+                            disabled={!schedule.enabled || !schedule.saturdayEnabled}
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveSchedule}
+                        className="bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 text-white font-bold px-3 py-1 rounded-full text-xs transition-all cursor-pointer"
+                      >
+                        Guardar Horario
+                      </button>
                     </div>
                   </div>
 
-                  {showAdminKeyToast && (
-                    <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in slide-in-from-top-2">
-                      <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
-                      <span className="text-sm font-bold">¡Clave de administrador actualizada y guardada con éxito!</span>
+                  {/* Clave Maestra de Administrador (Col 5) */}
+                  <div className="lg:col-span-5 bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs space-y-2.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <KeyIcon className="w-4 h-4 text-[#ED1C24]" />
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">Clave Maestra (Admin)</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 leading-tight">
+                        Para desbloquear el sistema fuera de horario o autorizaciones.
+                      </p>
                     </div>
-                  )}
 
-                  <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4">
-                    <div className="max-w-md">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-2">
-                        Clave de Acceso Administrador (Por defecto: 190421)
-                      </label>
-                      <div className="relative">
+                    {showAdminKeyToast && (
+                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 text-xs">
+                        <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>¡Clave guardada con éxito!</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
                         <input
                           type={showAdminMasterKeyText ? 'text' : 'password'}
                           value={adminMasterKey}
                           onChange={(e) => setAdminMasterKey(e.target.value)}
                           placeholder="190421"
-                          className="w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-2xl text-base font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all tracking-wider"
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => setShowAdminMasterKeyText(!showAdminMasterKeyText)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 p-1 cursor-pointer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 p-0.5 cursor-pointer"
                         >
-                          {showAdminMasterKeyText ? (
-                            <EyeSlashIcon className="w-5 h-5" />
-                          ) : (
-                            <EyeIcon className="w-5 h-5" />
-                          )}
+                          {showAdminMasterKeyText ? <EyeSlashIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-2">
-                        Esta clave se utiliza en la pantalla de bloqueo cuando el sistema está fuera de horario para entrar como Administrador.
-                      </p>
-                    </div>
-
-                    <div className="flex justify-end pt-2">
                       <button
                         type="button"
                         onClick={handleSaveAdminMasterKey}
-                        className="bg-[#ED1C24] text-white hover:bg-[#d91920] font-bold px-6 py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                        className="bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 text-white font-bold px-3 py-1 rounded-full text-xs transition-all cursor-pointer shrink-0"
                       >
-                        <KeyIcon className="w-4 h-4" />
-                        <span>Guardar Clave de Administrador</span>
+                        Guardar Clave
                       </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-8 flex justify-end gap-3 border-t border-gray-100 dark:border-zinc-800/80 mt-8">
-                  <button 
-                    type="button" 
-                    onClick={handleResetPermissions}
-                    className="bg-[#f4f3f1] dark:bg-zinc-800 py-3 px-6 rounded-full text-sm font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 focus:outline-none transition-all cursor-pointer"
-                  >
-                    Restaurar Predeterminados
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={handleSavePermissions}
-                    className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-full py-3 px-8 text-sm font-bold transition-all shadow-sm cursor-pointer"
-                  >
-                    Guardar Todos los Permisos
-                  </button>
                 </div>
               </div>
             )}
 
             {activeTab === 'comprobantes' && (
-              <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 dark:border-zinc-800 pb-6 mb-6">
-                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">Secuencias de Comprobantes & Reportes</h3>
-                  <p className="mt-2 text-sm font-medium text-gray-500 dark:text-zinc-400">
-                    Configura los prefijos y secuencias numéricas de facturación (NCF - DGII) y correlativos para reportes e inspecciones.
-                  </p>
+              <div className="p-3 sm:p-5 space-y-3 sm:space-y-4 animate-in fade-in duration-300">
+                {/* Compact Header with Title + Action Buttons */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-gray-100 dark:border-zinc-800/80">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                      <DocumentTextIcon className="w-5 h-5 text-[#ED1C24]" />
+                      Secuencias e-CF & Correlativos
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                      Numeración oficial DGII y correlativos para órdenes y reportes.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button" 
+                      onClick={handleResetSequences}
+                      className="bg-gray-100 dark:bg-zinc-800/80 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 font-bold px-3 py-1.5 rounded-full transition-all cursor-pointer border border-red-200/50 dark:border-red-900/40 text-xs"
+                    >
+                      ↺ Reiniciar a 0
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={handleSaveSequences}
+                      className="bg-[#ED1C24] hover:bg-red-700 text-white font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer text-xs sm:text-sm flex items-center gap-1.5"
+                    >
+                      <CheckCircleIcon className="w-4 h-4" />
+                      <span>Guardar Secuencias</span>
+                    </button>
+                  </div>
                 </div>
                 
                 {/* Toast Notification */}
                 {showSaveToast && (
-                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in slide-in-from-top-2">
-                    <CheckCircleIcon className="w-6 h-6 text-emerald-600 shrink-0" />
-                    <span className="text-sm font-bold">¡Secuencias actualizadas y guardadas con éxito en el sistema!</span>
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold">¡Secuencias actualizadas y guardadas con éxito!</span>
                   </div>
                 )}
 
-                {/* Section 1: NCF */}
+                {/* Section 1: e-CF DGII */}
                 <div>
-                  <h4 className="text-base font-bold text-gray-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
-                    <DocumentTextIcon className="w-5 h-5 text-gray-700 dark:text-zinc-300" />
-                    Comprobantes Fiscales Electrónicos (e-CF - DGII)
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                    <span>Comprobantes Fiscales Electrónicos (e-CF • DGII)</span>
                   </h4>
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Crédito Fiscal Electrónico */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                        Crédito Fiscal Electrónico (E31)
-                      </h4>
-                      <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    {/* Crédito Fiscal E31 */}
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                          Crédito Fiscal (E31)
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded">B01 / E31</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo e-CF</label>
-                          <input type="text" defaultValue="E31" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próxima Secuencia</label>
                           <input 
                             type="text" 
                             value={sequences.seqE31} 
                             onChange={(e) => setSequences(prev => ({ ...prev, seqE31: e.target.value, seqB01: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Vencimiento</label>
                           <input 
                             type="date" 
                             value={sequences.expiryE31} 
                             onChange={(e) => setSequences(prev => ({ ...prev, expiryE31: e.target.value, expiryB01: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                       </div>
                     </div>
 
-                    {/* Factura de Consumo Electrónica */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                        Consumo Electrónico (E32)
-                      </h4>
-                      <div className="space-y-4">
+                    {/* Consumo E32 */}
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                          Consumo Electrónico (E32)
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded">B02 / E32</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo e-CF</label>
-                          <input type="text" defaultValue="E32" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próxima Secuencia</label>
                           <input 
                             type="text" 
                             value={sequences.seqE32} 
                             onChange={(e) => setSequences(prev => ({ ...prev, seqE32: e.target.value, seqB02: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Vencimiento</label>
                           <input 
                             type="date" 
                             value={sequences.expiryE32} 
                             onChange={(e) => setSequences(prev => ({ ...prev, expiryE32: e.target.value, expiryB02: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                       </div>
                     </div>
 
-                    {/* Gubernamental Electrónico */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                        Gubernamental Electrónico (E45)
-                      </h4>
-                      <div className="space-y-4">
+                    {/* Gubernamental E45 */}
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                          Gubernamental (E45)
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 rounded">B15 / E45</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo e-CF</label>
-                          <input type="text" defaultValue="E45" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próxima Secuencia</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próxima Secuencia</label>
                           <input 
                             type="text" 
                             value={sequences.seqE45} 
                             onChange={(e) => setSequences(prev => ({ ...prev, seqE45: e.target.value, seqB15: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
+                            className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Fecha de Vencimiento</label>
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Vencimiento</label>
                           <input 
                             type="date" 
                             value={sequences.expiryE45} 
                             onChange={(e) => setSequences(prev => ({ ...prev, expiryE45: e.target.value, expiryB15: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all" 
+                            className="w-full px-2 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
                           />
                         </div>
                       </div>
@@ -1554,105 +1699,75 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Section 2: Reportes & Formularios */}
-                <div className="pt-6 border-t border-gray-100 dark:border-zinc-800">
-                  <h4 className="text-base font-bold text-gray-800 dark:text-zinc-200 mb-4 flex items-center gap-2">
-                    <DocumentChartBarIcon className="w-5 h-5 text-gray-700 dark:text-zinc-300" />
-                    Secuencias de Reportes & Formularios de Mantenimiento
+                {/* Section 2: Reportes & Mantenimiento */}
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                    <span>Correlativos de Taller & Reportes</span>
                   </h4>
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                     {/* Inspección de Camiones */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <TruckIcon className="w-5 h-5 text-red-500" />
-                        Inspección de Camiones
-                      </h4>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo / Etiqueta</label>
-                          <input type="text" defaultValue="Nº de Reporte" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Nº de Reporte</label>
-                          <input 
-                            type="text" 
-                            value={sequences.seqInspection} 
-                            onChange={(e) => setSequences(prev => ({ ...prev, seqInspection: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
-                            placeholder="0004"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-zinc-500">Número impreso en la esquina superior derecha del reporte de inspección.</p>
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <TruckIcon className="w-3.5 h-3.5 text-red-500" />
+                          Inspección de Camiones
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded">INSP</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Nº de Reporte</label>
+                        <input 
+                          type="text" 
+                          value={sequences.seqInspection} 
+                          onChange={(e) => setSequences(prev => ({ ...prev, seqInspection: e.target.value }))}
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
+                          placeholder="0004"
+                        />
                       </div>
                     </div>
 
                     {/* Orden de Trabajo */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <WrenchScrewdriverIcon className="w-5 h-5 text-amber-500" />
-                        Orden de Trabajo
-                      </h4>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo / Etiqueta</label>
-                          <input type="text" defaultValue="Nº de Control" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Nº de Control</label>
-                          <input 
-                            type="text" 
-                            value={sequences.seqWorkOrder} 
-                            onChange={(e) => setSequences(prev => ({ ...prev, seqWorkOrder: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
-                            placeholder="0016"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-zinc-500">Número de control utilizado para órdenes de servicio y talleres.</p>
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <WrenchScrewdriverIcon className="w-3.5 h-3.5 text-amber-500" />
+                          Orden de Trabajo (Taller)
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded">OT</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Nº de Control</label>
+                        <input 
+                          type="text" 
+                          value={sequences.seqWorkOrder} 
+                          onChange={(e) => setSequences(prev => ({ ...prev, seqWorkOrder: e.target.value }))}
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
+                          placeholder="0016"
+                        />
                       </div>
                     </div>
 
                     {/* Reportes Ejecutivos */}
-                    <div className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-                      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <DocumentChartBarIcon className="w-5 h-5 text-blue-500" />
-                        Reportes Ejecutivos
-                      </h4>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Prefijo de Reporte</label>
-                          <input type="text" defaultValue="REP" readOnly className="w-full px-4 py-2 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-sm font-bold text-gray-700 dark:text-zinc-300" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">Próximo Correlativo</label>
-                          <input 
-                            type="text" 
-                            value={sequences.seqReport} 
-                            onChange={(e) => setSequences(prev => ({ ...prev, seqReport: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none transition-all font-mono" 
-                            placeholder="4"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-zinc-500">Correlativo para descargas y exportaciones de reportes generales.</p>
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <DocumentChartBarIcon className="w-3.5 h-3.5 text-blue-500" />
+                          Reportes Ejecutivos
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded">REP</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Correlativo</label>
+                        <input 
+                          type="text" 
+                          value={sequences.seqReport} 
+                          onChange={(e) => setSequences(prev => ({ ...prev, seqReport: e.target.value }))}
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
+                          placeholder="4"
+                        />
                       </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-8 flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-gray-100 dark:border-zinc-800 mt-8">
-                  <button 
-                    type="button" 
-                    onClick={handleResetSequences}
-                    className="bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 font-extrabold px-6 py-2.5 rounded-2xl transition-all cursor-pointer border border-red-200/50 dark:border-red-900/40 text-xs"
-                  >
-                    ↺ Reiniciar Todas las Secuencias a 0 (Empezar de Cero)
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={handleSaveSequences}
-                    className="bg-[#ED1C24] text-white hover:bg-[#d91920] font-bold px-6 py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer"
-                  >
-                    Guardar Secuencias
-                  </button>
                 </div>
               </div>
             )}

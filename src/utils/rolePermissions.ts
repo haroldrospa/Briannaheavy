@@ -57,10 +57,27 @@ export const loadRolePermissions = (): RolePermissionsMap => {
     const raw = localStorage.getItem(PERMISSIONS_STORAGE_KEY);
     if (!raw) return DEFAULT_ROLE_PERMISSIONS;
     const parsed = JSON.parse(raw);
+    
+    const mergeRole = (role: UserRole): PermissionsRecord => {
+      const defaultRole = DEFAULT_ROLE_PERMISSIONS[role] || {};
+      const savedRole = (parsed && parsed[role]) || {};
+      const result: PermissionsRecord = {};
+      
+      MODULE_LIST.forEach((mod) => {
+        result[mod] = {
+          ver: savedRole[mod]?.ver !== undefined ? Boolean(savedRole[mod].ver) : Boolean(defaultRole[mod]?.ver),
+          crear: savedRole[mod]?.crear !== undefined ? Boolean(savedRole[mod].crear) : Boolean(defaultRole[mod]?.crear),
+          editar: savedRole[mod]?.editar !== undefined ? Boolean(savedRole[mod].editar) : Boolean(defaultRole[mod]?.editar),
+          eliminar: savedRole[mod]?.eliminar !== undefined ? Boolean(savedRole[mod].eliminar) : Boolean(defaultRole[mod]?.eliminar),
+        };
+      });
+      return result;
+    };
+
     return {
-      Administrador: { ...DEFAULT_ROLE_PERMISSIONS.Administrador, ...(parsed.Administrador || {}) },
-      Oficina: { ...DEFAULT_ROLE_PERMISSIONS.Oficina, ...(parsed.Oficina || {}) },
-      Repuestos: { ...DEFAULT_ROLE_PERMISSIONS.Repuestos, ...(parsed.Repuestos || {}) },
+      Administrador: mergeRole('Administrador'),
+      Oficina: mergeRole('Oficina'),
+      Repuestos: mergeRole('Repuestos'),
     };
   } catch (e) {
     console.error('Error loading role permissions:', e);
