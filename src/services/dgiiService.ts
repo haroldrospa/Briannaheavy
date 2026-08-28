@@ -113,7 +113,59 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
   const docType: 'Físico' | 'Jurídico' = isFisico ? 'Físico' : 'Jurídico';
   const isValidMath = isFisico ? validateCedulaMod10(clean) : validateRncMod11(clean);
 
-  // 1. Verificar directorio estático en memoria (0ms)
+  // 1. Verificar caché dinámico en localStorage de clientes guardados (0ms)
+  try {
+    const rawCache = localStorage.getItem('brianna_cached_rncs');
+    if (rawCache) {
+      const parsedCache = JSON.parse(rawCache);
+      if (parsedCache[clean] && parsedCache[clean].name) {
+        return {
+          success: true,
+          rnc: clean.length === 9
+            ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
+            : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`,
+          name: parsedCache[clean].name,
+          status: parsedCache[clean].status || 'ACTIVO',
+          type: docType,
+          isValidStructure: true,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading local RNC cache:', err);
+  }
+
+  // 2. Consulta en tiempo real al endpoint DGII oficial
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch(`/api/dgii-lookup?rnc=${clean}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.name) {
+        cacheDgiiRnc(clean, data.name, data.status);
+        return {
+          success: true,
+          rnc: data.rnc || clean,
+          name: data.name,
+          commercialName: data.commercialName,
+          status: data.status || 'ACTIVO',
+          type: data.type || docType,
+          activity: data.activity,
+          isValidStructure: true
+        };
+      }
+    }
+  } catch (netErr) {
+    console.warn('DGII live lookup error, fallbacking to local:', netErr);
+  }
+
+  // 3. Verificar directorio estático en memoria
   if (LOCAL_RNC_DIRECTORY[clean]) {
     const item = LOCAL_RNC_DIRECTORY[clean];
     return {
@@ -127,44 +179,7 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
     };
   }
 
-  // 2. Verificar caché dinámico en localStorage de clientes registrados previamente
-  try {
-    const rawCache = localStorage.getItem('brianna_cached_rncs');
-    if (rawCache) {
-      const parsedCache = JSON.parse(rawCache);
-      if (parsedCache[clean] && parsedCache[clean].name) {
-        return {
-          success: true,
-          rnc: clean,
-          name: parsedCache[clean].name,
-          status: parsedCache[clean].status || 'ACTIVO',
-          type: docType,
-          isValidStructure: true,
-        };
-      }
-    }
-
-    // Buscar también en la lista local de clientes guardados
-    const rawCusts = localStorage.getItem('brianna_local_customers');
-    if (rawCusts) {
-      const custs = JSON.parse(rawCusts);
-      const found = custs.find((c: any) => c.document_id && c.document_id.replace(/\D/g, '') === clean);
-      if (found && found.name) {
-        return {
-          success: true,
-          rnc: clean,
-          name: found.name.toUpperCase(),
-          status: 'ACTIVO',
-          type: docType,
-          isValidStructure: true,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('Error reading local RNC cache:', err);
-  }
-
-  // 3. Si la estructura matemática es válida pero aún no está en el directorio/historial
+  // 4. Si la estructura matemática es válida pero no devolvió nombre
   if (isValidMath) {
     return {
       success: true,
