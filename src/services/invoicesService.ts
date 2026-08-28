@@ -144,38 +144,26 @@ export const createInvoice = async (
   // 2. Sync to Supabase
   if (isSupabaseConfigured()) {
     try {
-      let res = await supabase
+      const dbPayload: Record<string, any> = {
+        invoice_number: invoiceData.invoice_number,
+        customer_name: invoiceData.customer_name,
+        customer_rnc: invoiceData.customer_rnc || '',
+        subtotal: Number(invoiceData.subtotal),
+        tax_amount: Number(invoiceData.tax_amount),
+        total_amount: Number(invoiceData.total_amount),
+        payment_method: invoiceData.payment_method,
+        status: invoiceData.status || 'Pagada',
+        cashier_name: invoiceData.cashier_name || 'Cajero POS',
+        created_at: nowIso
+      };
+      if (invoiceData.ncf) dbPayload.ncf = invoiceData.ncf;
+      if (invoiceData.ncf_type) dbPayload.ncf_type = invoiceData.ncf_type;
+
+      const res = await supabase
         .from('invoices')
-        .insert([{
-          ...invoiceData,
-          created_at: nowIso
-        }])
+        .insert([dbPayload])
         .select()
         .single();
-
-      // If failed due to unmapped columns (400 Bad Request), retry with standard schema columns
-      if (res.error) {
-        const standardPayload: Record<string, any> = {
-          invoice_number: invoiceData.invoice_number,
-          customer_name: invoiceData.customer_name,
-          customer_rnc: invoiceData.customer_rnc || '',
-          subtotal: invoiceData.subtotal,
-          tax_amount: invoiceData.tax_amount,
-          total_amount: invoiceData.total_amount,
-          payment_method: invoiceData.payment_method,
-          status: invoiceData.status || 'Pagada',
-          cashier_name: invoiceData.cashier_name || 'Cajero POS',
-          created_at: nowIso
-        };
-        if (invoiceData.ncf) standardPayload.ncf = invoiceData.ncf;
-        if (invoiceData.ncf_type) standardPayload.ncf_type = invoiceData.ncf_type;
-
-        res = await supabase
-          .from('invoices')
-          .insert([standardPayload])
-          .select()
-          .single();
-      }
 
       if (!res.error && res.data) {
         const inv = res.data;
