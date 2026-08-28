@@ -120,41 +120,30 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           .from('invoices')
           .select('*, items:invoice_items(*)')
           .order('created_at', { ascending: false })
-          .limit(150);
+          .limit(200);
         const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2500)
+          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 3500)
         );
 
         const res = await Promise.race([supabasePromise, timeoutPromise]);
         if (!res.error && res.data) {
           const supabaseInvoices = res.data as Invoice[];
-          // Merge Supabase invoices with local invoices so local items are NEVER lost
-          const map = new Map<string, Invoice>();
-          localList.forEach(i => map.set(i.id, i));
-          supabaseInvoices.forEach(i => map.set(i.id, i));
-
-          const merged = Array.from(map.values()).sort((a, b) => {
-            const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return tB - tA;
-          });
-
-          saveLocalStorageInvoices(merged);
+          saveLocalStorageInvoices(supabaseInvoices);
           lastInvoicesFetch = Date.now();
-          return merged;
+          return supabaseInvoices;
         }
       } catch (err) {
         console.warn('Error fetching invoices from Supabase, returning local:', err);
       } finally {
         inFlightInvoicesPromise = null;
       }
-      return localList;
+      return localList.filter(inv => !inv.id.startsWith('inv-seed-'));
     })();
 
     return inFlightInvoicesPromise;
   }
 
-  return localList;
+  return localList.filter(inv => !inv.id.startsWith('inv-seed-'));
 };
 
 export const createInvoice = async (
