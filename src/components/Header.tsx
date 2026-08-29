@@ -16,9 +16,10 @@ import { getLocalStorageUsers, type UserProfile } from '../services/usersService
 const routeNames: Record<string, string> = {
   '/dashboard': 'Panel Principal',
   '/pos': 'Punto de Venta (POS)',
+  '/cobros': 'Cobros de Repuestos (POS)',
   '/clientes': 'Directorio de Clientes',
   '/inventario': 'Inventario',
-  '/financiamientos': 'Financiamientos',
+  '/financiamientos': 'Finanzas & Financiamientos',
   '/reportes': 'Reportes & Informes',
   '/configuracion': 'Configuración del Sistema',
   '/usuarios': 'Gestión de Usuarios',

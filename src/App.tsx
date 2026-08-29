@@ -11,6 +11,7 @@ import { ConfirmProvider } from './contexts/ConfirmContext';
 const Login = React.lazy(() => import('./pages/Login'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const POS = React.lazy(() => import('./pages/POS'));
+const Cobros = React.lazy(() => import('./pages/Cobros'));
 const Inventory = React.lazy(() => import('./pages/Inventory'));
 const Financing = React.lazy(() => import('./pages/Financing'));
 const Settings = React.lazy(() => import('./pages/Settings'));
@@ -49,12 +50,15 @@ function App() {
                   <Route path="/facturas" element={<Invoices />} />
                   <Route path="/usuarios" element={<Navigate to="/configuracion" replace />} />
                   <Route path="/pos" element={<POS />} />
+                  <Route path="/cobros" element={<Cobros />} />
                   <Route path="/inventario" element={<Inventory />} />
                   <Route path="/financiamientos" element={<Financing />} />
                   <Route path="/reportes" element={<Reports />} />
                   <Route path="/configuracion" element={<Settings />} />
 
                   {/* Alias en Inglés & Catch-all Fallback */}
+                  <Route path="/receivables" element={<Navigate to="/cobros" replace />} />
+                  <Route path="/finanzas" element={<Navigate to="/financiamientos" replace />} />
                   <Route path="/inventory" element={<Navigate to="/inventario" replace />} />
                   <Route path="/customers" element={<Navigate to="/clientes" replace />} />
                   <Route path="/invoices" element={<Navigate to="/facturas" replace />} />

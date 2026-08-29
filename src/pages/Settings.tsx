@@ -26,7 +26,10 @@ import {
   PencilSquareIcon,
   UserPlusIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  BanknotesIcon,
+  PlusIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 import { 
   fetchUsers, 
@@ -74,8 +77,12 @@ import {
   getInvoiceCustomConfig,
   saveInvoiceCustomConfig,
   RECEIPT_FONT_SIZES, 
+  getCompanyBankAccounts,
+  saveCompanyBankAccounts,
+  DEFAULT_BANK_ACCOUNTS,
   type ReceiptFontSize,
-  type InvoiceCustomConfig
+  type InvoiceCustomConfig,
+  type CompanyBankAccount
 } from '../utils/receiptSettings';
 import ModernReceipt from '../components/ui/ModernReceipt';
 
@@ -163,6 +170,113 @@ export default function Settings() {
     address: invoiceConfig.address || 'Av. Principal #123, Santo Domingo, R.D.',
   });
   const [showCompanyToast, setShowCompanyToast] = useState(false);
+
+  // Bank Accounts Management State
+  const DOMINICAN_BANKS = [
+    'Banco Popular Dominicano',
+    'Banreservas',
+    'Banco BHD',
+    'Banco Santa Cruz',
+    'Scotiabank República Dominicana',
+    'Banco Promerica',
+    'Banco BDI',
+    'Banco Caribe',
+    'Banco López de Haro',
+    'Banco Vimenca',
+    'Banco Ademi',
+    'APAP (Asoc. Popular)',
+    'Asociación Cibao',
+    'Asociación La Nacional'
+  ];
+
+  const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<CompanyBankAccount | null>(null);
+  const [bankForm, setBankForm] = useState<Omit<CompanyBankAccount, 'id'>>({
+    bankName: 'Banco Popular Dominicano',
+    accountNumber: '',
+    accountType: 'Cta. Corriente',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    rnc: '132-61036-2',
+  });
+  const [showBankToast, setShowBankToast] = useState(false);
+  const [bankToastMessage, setBankToastMessage] = useState('');
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  const handleOpenAddBankModal = () => {
+    setEditingAccount(null);
+    setBankForm({
+      bankName: 'Banco Popular Dominicano',
+      accountNumber: '',
+      accountType: 'Cta. Corriente',
+      currency: 'DOP',
+      holderName: companyProfile.name || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+      rnc: companyProfile.rnc || '132-61036-2',
+    });
+    setIsBankModalOpen(true);
+  };
+
+  const handleOpenEditBankModal = (account: CompanyBankAccount) => {
+    setEditingAccount(account);
+    setBankForm({
+      bankName: account.bankName,
+      accountNumber: account.accountNumber,
+      accountType: account.accountType,
+      currency: account.currency || 'DOP',
+      holderName: account.holderName || companyProfile.name,
+      rnc: account.rnc || companyProfile.rnc,
+    });
+    setIsBankModalOpen(true);
+  };
+
+  const handleSaveBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bankForm.accountNumber.trim() || !bankForm.bankName.trim()) return;
+
+    let updatedList: CompanyBankAccount[];
+    if (editingAccount) {
+      updatedList = bankAccounts.map(acc => 
+        acc.id === editingAccount.id 
+          ? { ...editingAccount, ...bankForm }
+          : acc
+      );
+      setBankToastMessage('¡Cuenta bancaria actualizada correctamente!');
+    } else {
+      const newAcc: CompanyBankAccount = {
+        id: `bank_${Date.now()}`,
+        ...bankForm,
+      };
+      updatedList = [...bankAccounts, newAcc];
+      setBankToastMessage('¡Nueva cuenta bancaria añadida con éxito!');
+    }
+
+    setBankAccounts(updatedList);
+    saveCompanyBankAccounts(updatedList);
+    await saveRemoteSetting('company_bank_accounts', updatedList);
+    setIsBankModalOpen(false);
+    setShowBankToast(true);
+    setTimeout(() => setShowBankToast(false), 3500);
+  };
+
+  const handleDeleteBankAccount = async (id: string) => {
+    const updatedList = bankAccounts.filter(acc => acc.id !== id);
+    setBankAccounts(updatedList);
+    saveCompanyBankAccounts(updatedList);
+    await saveRemoteSetting('company_bank_accounts', updatedList);
+    setBankToastMessage('Cuenta bancaria eliminada');
+    setShowBankToast(true);
+    setTimeout(() => setShowBankToast(false), 3500);
+  };
+
+  const handleResetDefaultBankAccounts = async () => {
+    setBankAccounts(DEFAULT_BANK_ACCOUNTS);
+    saveCompanyBankAccounts(DEFAULT_BANK_ACCOUNTS);
+    await saveRemoteSetting('company_bank_accounts', DEFAULT_BANK_ACCOUNTS);
+    setBankToastMessage('Cuentas bancarias restablecidas a los valores predeterminados');
+    setShowBankToast(true);
+    setTimeout(() => setShowBankToast(false), 3500);
+  };
 
   const handleSaveCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -484,112 +598,248 @@ export default function Settings() {
       <div className="flex-1 overflow-x-hidden relative">
             
             {activeTab === 'empresa' && (
-              <form onSubmit={handleSaveCompanyProfile} className="p-3 sm:p-5 space-y-3 sm:space-y-4 animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                      <BuildingOfficeIcon className="w-5 h-5 text-[#ED1C24]" />
-                      Perfil de la Empresa
-                    </h3>
-                    <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
-                      Datos mostrados en facturas, tickets POS, cotizaciones y reportes.
-                    </p>
-                  </div>
-                  <button 
-                    type="submit" 
-                    className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm shrink-0"
-                  >
-                    <CheckCircleIcon className="w-4 h-4" />
-                    <span>Guardar Cambios</span>
-                  </button>
-                </div>
-
-                {showCompanyToast && (
-                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
-                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="text-xs font-bold">¡Perfil de la empresa y teléfono actualizados con éxito!</span>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 items-start">
-                  <div className="sm:col-span-6 flex items-center gap-4 p-2.5 bg-[#f4f3f1] dark:bg-zinc-850 rounded-xl border border-gray-200/50 dark:border-zinc-800">
-                    <div className="h-14 w-28 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
-                      <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
-                    </div>
+              <div className="p-3 sm:p-5 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+                {/* 1. Perfil de la Empresa Form */}
+                <form onSubmit={handleSaveCompanyProfile} className="space-y-3 sm:space-y-4">
+                  <div className="border-b border-gray-100 dark:border-zinc-800/80 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
-                      <span className="block text-xs font-bold text-gray-800 dark:text-zinc-200">Logotipo Oficial</span>
-                      <button type="button" className="mt-1 bg-gray-900 hover:bg-black text-white dark:bg-zinc-100 dark:text-zinc-900 py-1 px-3 rounded-full text-xs font-bold transition-all cursor-pointer">
-                        Cambiar Logo
+                      <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        <BuildingOfficeIcon className="w-5 h-5 text-[#ED1C24]" />
+                        Perfil de la Empresa
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                        Datos mostrados en facturas, tickets POS, cotizaciones y reportes.
+                      </p>
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-5 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                    >
+                      <CheckCircleIcon className="w-4 h-4" />
+                      <span>Guardar Cambios</span>
+                    </button>
+                  </div>
+
+                  {showCompanyToast && (
+                    <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                      <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-bold">¡Perfil de la empresa y teléfono actualizados con éxito!</span>
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 items-start">
+                    <div className="sm:col-span-6 flex items-center gap-4 p-2.5 bg-[#f4f3f1] dark:bg-zinc-850 rounded-xl border border-gray-200/50 dark:border-zinc-800">
+                      <div className="h-14 w-28 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
+                        <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-gray-800 dark:text-zinc-200">Logotipo Oficial</span>
+                        <button type="button" className="mt-1 bg-gray-900 hover:bg-black text-white dark:bg-zinc-100 dark:text-zinc-900 py-1 px-3 rounded-full text-xs font-bold transition-all cursor-pointer">
+                          Cambiar Logo
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <label htmlFor="company-name" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Nombre de la Empresa</label>
+                      <input 
+                        type="text" 
+                        name="company-name" 
+                        id="company-name" 
+                        value={companyProfile.name}
+                        onChange={(e) => setCompanyProfile(prev => ({ ...prev, name: e.target.value }))}
+                        required
+                        className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label htmlFor="rnc" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">RNC / Identificación Tributaria</label>
+                      <input 
+                        type="text" 
+                        name="rnc" 
+                        id="rnc" 
+                        value={companyProfile.rnc}
+                        onChange={(e) => setCompanyProfile(prev => ({ ...prev, rnc: e.target.value }))}
+                        required
+                        className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <label htmlFor="company-phone" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Número de Teléfono / Contacto</label>
+                      <input 
+                        type="text" 
+                        name="company-phone" 
+                        id="company-phone" 
+                        value={companyProfile.phone}
+                        onChange={(e) => setCompanyProfile(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="(809) 555-5555"
+                        className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <label htmlFor="company-email" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Correo Electrónico</label>
+                      <input 
+                        type="email" 
+                        name="company-email" 
+                        id="company-email" 
+                        value={companyProfile.email}
+                        onChange={(e) => setCompanyProfile(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="contacto@briannaheavy.com"
+                        className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                      />
+                    </div>
+
+                    <div className="sm:col-span-6">
+                      <label htmlFor="address" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Dirección Principal</label>
+                      <input 
+                        type="text" 
+                        name="address" 
+                        id="address" 
+                        value={companyProfile.address}
+                        onChange={(e) => setCompanyProfile(prev => ({ ...prev, address: e.target.value }))}
+                        placeholder="Av. Principal #123, Santo Domingo, R.D."
+                        className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
+                      />
+                    </div>
+                  </div>
+                </form>
+
+                {/* 2. Cuentas Bancarias Oficiales Section */}
+                <div className="border-t border-gray-200/80 dark:border-zinc-800/80 pt-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        <BanknotesIcon className="w-5 h-5 text-[#ED1C24]" />
+                        Cuentas Bancarias Oficiales (Transferencias POS)
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-gray-500 dark:text-zinc-400">
+                        Cuentas disponibles para que los clientes realicen pagos por transferencia en el Punto de Venta (POS).
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetDefaultBankAccounts}
+                        className="px-3 py-1.5 rounded-full text-xs font-bold text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all cursor-pointer"
+                        title="Restablecer cuentas por defecto"
+                      >
+                        Restablecer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenAddBankModal}
+                        className="inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white py-1.5 px-4 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-sm shrink-0"
+                      >
+                        <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+                        <span>Añadir Cuenta</span>
                       </button>
                     </div>
                   </div>
 
-                  <div className="sm:col-span-4">
-                    <label htmlFor="company-name" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Nombre de la Empresa</label>
-                    <input 
-                      type="text" 
-                      name="company-name" 
-                      id="company-name" 
-                      value={companyProfile.name}
-                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, name: e.target.value }))}
-                      required
-                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
-                    />
-                  </div>
+                  {showBankToast && (
+                    <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                      <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-bold">{bankToastMessage}</span>
+                    </div>
+                  )}
 
-                  <div className="sm:col-span-2">
-                    <label htmlFor="rnc" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">RNC / Identificación Tributaria</label>
-                    <input 
-                      type="text" 
-                      name="rnc" 
-                      id="rnc" 
-                      value={companyProfile.rnc}
-                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, rnc: e.target.value }))}
-                      required
-                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
-                    />
-                  </div>
+                  {/* Accounts Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {bankAccounts.map((acc) => (
+                      <div
+                        key={acc.id}
+                        className="p-4 bg-[#f4f3f1] dark:bg-zinc-850 rounded-2xl border border-gray-200/60 dark:border-zinc-800 flex flex-col justify-between gap-3 shadow-2xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <h4 className="font-black text-sm text-gray-900 dark:text-white truncate">
+                              {acc.bankName}
+                            </h4>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="px-2 py-0.5 text-[10px] font-black bg-red-50 text-[#ED1C24] dark:bg-red-950/60 dark:text-red-300 rounded-md">
+                                {acc.currency || 'DOP'}
+                              </span>
+                              <span className="px-2 py-0.5 text-[10px] font-bold bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-md">
+                                {acc.accountType}
+                              </span>
+                            </div>
+                          </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="company-phone" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Número de Teléfono / Contacto</label>
-                    <input 
-                      type="text" 
-                      name="company-phone" 
-                      id="company-phone" 
-                      value={companyProfile.phone}
-                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, phone: e.target.value }))}
-                      placeholder="(809) 555-5555"
-                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
-                    />
-                  </div>
+                          {/* Account Number with Copy */}
+                          <div className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 mt-2">
+                            <span className="font-mono font-black text-sm text-[#ED1C24] tracking-wider truncate">
+                              {acc.accountNumber}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(acc.accountNumber);
+                                setCopiedBankId(acc.id);
+                                setTimeout(() => setCopiedBankId(null), 2000);
+                              }}
+                              className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ml-2 ${
+                                copiedBankId === acc.id
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
+                              }`}
+                              title="Copiar número de cuenta"
+                            >
+                              {copiedBankId === acc.id ? (
+                                <CheckCircleIcon className="w-4 h-4" />
+                              ) : (
+                                <DocumentDuplicateIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
 
-                  <div className="sm:col-span-3">
-                    <label htmlFor="company-email" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Correo Electrónico</label>
-                    <input 
-                      type="email" 
-                      name="company-email" 
-                      id="company-email" 
-                      value={companyProfile.email}
-                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, email: e.target.value }))}
-                      placeholder="contacto@briannaheavy.com"
-                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
-                    />
-                  </div>
+                          <div className="mt-2.5 space-y-0.5 text-[11px] text-gray-500 dark:text-zinc-400">
+                            <p className="truncate"><strong>Titular:</strong> {acc.holderName || companyProfile.name}</p>
+                            <p className="truncate"><strong>RNC/ID:</strong> {acc.rnc || companyProfile.rnc}</p>
+                          </div>
+                        </div>
 
-                  <div className="sm:col-span-6">
-                    <label htmlFor="address" className="block text-[11px] font-bold text-gray-600 dark:text-zinc-300 mb-0.5">Dirección Principal</label>
-                    <input 
-                      type="text" 
-                      name="address" 
-                      id="address" 
-                      value={companyProfile.address}
-                      onChange={(e) => setCompanyProfile(prev => ({ ...prev, address: e.target.value }))}
-                      placeholder="Av. Principal #123, Santo Domingo, R.D."
-                      className="block w-full px-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800/70 text-gray-900 dark:text-zinc-100 border-none rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#ED1C24]/20 transition-all" 
-                    />
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-gray-200/60 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditBankModal(acc)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300 hover:text-[#ED1C24] hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
+                          >
+                            <PencilSquareIcon className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBankAccount(acc.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-all cursor-pointer"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {bankAccounts.length === 0 && (
+                      <div className="col-span-full p-8 text-center bg-[#f4f3f1] dark:bg-zinc-850 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 space-y-2">
+                        <BanknotesIcon className="w-8 h-8 text-gray-400 mx-auto" />
+                        <p className="text-sm font-bold text-gray-700 dark:text-zinc-300">No hay cuentas bancarias registradas</p>
+                        <p className="text-xs text-gray-400">Añade las cuentas bancarias de la empresa para habilitar transferencias rápidas en el POS.</p>
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultBankAccounts}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#ED1C24] hover:underline cursor-pointer"
+                        >
+                          Cargar cuentas predeterminadas
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </form>
+              </div>
             )}
 
             {activeTab === 'facturas' && (
@@ -2274,6 +2524,166 @@ export default function Settings() {
                     className="bg-[#ED1C24] hover:bg-[#d91920] text-white rounded-full py-3 px-8 text-sm font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
                   >
                     {isSavingUser ? 'Guardando...' : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal para Crear / Editar Cuenta Bancaria */}
+      <AnimatePresence>
+        {isBankModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs"
+          >
+            <div className="fixed inset-0" onClick={() => setIsBankModalOpen(false)} />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-md bg-white dark:bg-[#16171d] rounded-3xl p-6 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-4">
+                <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+                  <BanknotesIcon className="w-5 h-5 text-[#ED1C24]" />
+                  {editingAccount ? 'Editar Cuenta Bancaria' : 'Nueva Cuenta Bancaria'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsBankModalOpen(false)}
+                  className="p-1 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveBankAccount} className="space-y-3.5">
+                {/* Banco */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Nombre del Banco / Entidad
+                  </label>
+                  <select
+                    value={DOMINICAN_BANKS.includes(bankForm.bankName) ? bankForm.bankName : 'Otro'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val !== 'Otro') {
+                        setBankForm(prev => ({ ...prev, bankName: val }));
+                      } else {
+                        setBankForm(prev => ({ ...prev, bankName: '' }));
+                      }
+                    }}
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                  >
+                    {DOMINICAN_BANKS.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                    <option value="Otro">Otro Banco / Entidad Personalizada...</option>
+                  </select>
+                  {(!DOMINICAN_BANKS.includes(bankForm.bankName) || bankForm.bankName === '') && (
+                    <input
+                      type="text"
+                      placeholder="Escribe el nombre del banco..."
+                      value={bankForm.bankName}
+                      onChange={(e) => setBankForm(prev => ({ ...prev, bankName: e.target.value }))}
+                      required
+                      className="mt-1.5 block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                    />
+                  )}
+                </div>
+
+                {/* Número de Cuenta */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Número de Cuenta
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 798-234156-2"
+                    value={bankForm.accountNumber}
+                    onChange={(e) => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))}
+                    required
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                  />
+                </div>
+
+                {/* Tipo de Cuenta y Moneda */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                      Tipo de Cuenta
+                    </label>
+                    <select
+                      value={bankForm.accountType}
+                      onChange={(e) => setBankForm(prev => ({ ...prev, accountType: e.target.value }))}
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                    >
+                      <option value="Cta. Corriente">Cta. Corriente</option>
+                      <option value="Cta. de Ahorros">Cta. de Ahorros</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                      Moneda
+                    </label>
+                    <select
+                      value={bankForm.currency}
+                      onChange={(e) => setBankForm(prev => ({ ...prev, currency: e.target.value }))}
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                    >
+                      <option value="DOP">DOP (Pesos Dominicanos)</option>
+                      <option value="USD">USD (Dólares)</option>
+                      <option value="EUR">EUR (Euros)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Titular y RNC */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Titular de la Cuenta (Beneficiario)
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.holderName}
+                    onChange={(e) => setBankForm(prev => ({ ...prev, holderName: e.target.value }))}
+                    required
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    RNC / Cédula del Titular
+                  </label>
+                  <input
+                    type="text"
+                    value={bankForm.rnc}
+                    onChange={(e) => setBankForm(prev => ({ ...prev, rnc: e.target.value }))}
+                    required
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsBankModalOpen(false)}
+                    className="px-4 py-2 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-900/20 cursor-pointer"
+                  >
+                    {editingAccount ? 'Actualizar Cuenta' : 'Guardar Cuenta'}
                   </button>
                 </div>
               </form>

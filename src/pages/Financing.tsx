@@ -10,7 +10,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
-import { fetchInvoices, getLocalStorageInvoices } from '../services/invoicesService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 
@@ -25,24 +24,6 @@ const mapFinancingsToState = (dbF: any[]) => {
     rate: f.interest_rate,
     status: f.status === 'Activo' ? 'Al día' : f.status,
     nextPayment: f.start_date || '2026-08-15',
-  }));
-};
-
-const mapInvoicesToReceivables = (invs: any[]) => {
-  if (!invs || invs.length === 0) return [];
-  return invs.map((inv, idx) => ({
-    id: inv.id || idx + 1,
-    customer: inv.customer_name,
-    rnc: inv.customer_rnc || '101-00000-1',
-    invoice: inv.invoice_number,
-    ncf: inv.ncf || 'E3100000001',
-    items: inv.items ? inv.items.map((i: any) => i.description).join(', ') : 'Piezas & Equipos',
-    totalAmount: inv.total_amount,
-    balance: inv.status === 'Pagada' ? 0 : inv.total_amount,
-    issueDate: inv.created_at ? inv.created_at.slice(0, 10) : '2026-08-01',
-    dueDate: '2026-08-31',
-    creditDays: 30,
-    status: inv.status === 'Pagada' ? 'Pagado' : 'Pendiente',
   }));
 };
 
@@ -155,8 +136,6 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
 
 export default function Financing() {
   const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
-  const [dbReceivables, setDbReceivables] = useState<any[]>(() => mapInvoicesToReceivables(getLocalStorageInvoices()));
-  const [activeTab, setActiveTab] = useState<'financiamientos' | 'cobrar'>('financiamientos');
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
@@ -167,18 +146,14 @@ export default function Financing() {
   useEffect(() => {
     let isMounted = true;
     const loadDbData = async () => {
-      const [dbF, invs, custs, invItems] = await Promise.all([
+      const [dbF, custs, invItems] = await Promise.all([
         fetchFinancings(),
-        fetchInvoices(),
         fetchCustomers(),
         fetchInventory()
       ]);
       if (isMounted) {
         if (dbF && dbF.length > 0) {
           setFinancingsList(mapFinancingsToState(dbF));
-        }
-        if (invs && invs.length > 0) {
-          setDbReceivables(mapInvoicesToReceivables(invs));
         }
         if (custs && custs.length > 0) {
           setCustomersList(custs);
@@ -447,23 +422,6 @@ export default function Financing() {
     });
   }, [financingsList, searchCustomer, mainStatusFilter]);
 
-  const filteredReceivables = useMemo(() => {
-    const rawQ = searchCustomer.trim().toLowerCase();
-    if (!rawQ) return dbReceivables;
-
-    const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
-
-    return dbReceivables.filter(r => {
-      const nameMatch = r.customer.toLowerCase().includes(rawQ);
-      const invMatch = r.invoice.toLowerCase().includes(rawQ);
-      const itemsMatch = r.items.toLowerCase().includes(rawQ);
-      const rncRawMatch = (r.rnc || '').toLowerCase().includes(rawQ);
-      const rncCleanMatch = cleanQ.length > 0 && (r.rnc || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanQ);
-
-      return nameMatch || invMatch || itemsMatch || rncRawMatch || rncCleanMatch;
-    });
-  }, [dbReceivables, searchCustomer]);
-
   const currentInstallments = useMemo(() => {
     return dummyInstallments.map(inst => {
       const evalResult = getInstallmentMoraAndStatus(inst.dueDate, inst.isPaid, graceDays);
@@ -650,75 +608,34 @@ export default function Financing() {
             <BanknotesIcon className="h-4 w-4" />
             Cierre de Caja
           </button>
-          {activeTab === 'financiamientos' ? (
-            <>
-              <button 
-                onClick={() => setShowCalculator(!showCalculator)}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer text-xs"
-              >
-                <CalculatorIcon className="h-4 w-4" />
-                Simulador
-              </button>
-              <button 
-                onClick={() => setIsNewFormOpen(!isNewFormOpen)}
-                className={`w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer text-xs ${
-                  isNewFormOpen 
-                    ? 'bg-red-600 text-white hover:bg-red-700' 
-                    : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
-                }`}
-              >
-                {isNewFormOpen ? (
-                  <>
-                    <XMarkIcon className="h-4 w-4" />
-                    <span>Cerrar Formulario</span>
-                  </>
-                ) : (
-                  <>
-                    <PlusIcon className="h-4 w-4" />
-                    <span>+ Financiamiento</span>
-                  </>
-                )}
-              </button>
-            </>
-          ) : (
-            <button 
-              onClick={() => setIsNewFormOpen(!isNewFormOpen)}
-              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer ${
-                isNewFormOpen 
-                  ? 'bg-red-600 text-white hover:bg-red-700' 
-                  : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
-              }`}
-            >
-              {isNewFormOpen ? (
-                <>
-                  <XMarkIcon className="h-5 w-5" />
-                  <span>Cerrar Formulario</span>
-                </>
-              ) : (
-                <>
-                  <PlusIcon className="h-5 w-5" />
-                  <span>Nueva Cuenta por Cobrar</span>
-                </>
-              )}
-            </button>
-          )}
+          <button 
+            onClick={() => setShowCalculator(!showCalculator)}
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer text-xs"
+          >
+            <CalculatorIcon className="h-4 w-4" />
+            Simulador
+          </button>
+          <button 
+            onClick={() => setIsNewFormOpen(!isNewFormOpen)}
+            className={`w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer text-xs ${
+              isNewFormOpen 
+                ? 'bg-red-600 text-white hover:bg-red-700' 
+                : 'bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white'
+            }`}
+          >
+            {isNewFormOpen ? (
+              <>
+                <XMarkIcon className="h-4 w-4" />
+                <span>Cerrar Formulario</span>
+              </>
+            ) : (
+              <>
+                <PlusIcon className="h-4 w-4" />
+                <span>+ Financiamiento</span>
+              </>
+            )}
+          </button>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] p-1 sm:p-1.5 rounded-full w-full sm:w-fit overflow-x-auto scrollbar-hide shadow-xs print:hidden">
-        <button
-          onClick={() => setActiveTab('financiamientos')}
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold rounded-full transition-all whitespace-nowrap cursor-pointer ${activeTab === 'financiamientos' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-xs font-black' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
-        >
-          Financiamientos
-        </button>
-        <button
-          onClick={() => setActiveTab('cobrar')}
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-bold rounded-full transition-all whitespace-nowrap cursor-pointer ${activeTab === 'cobrar' ? 'bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white shadow-xs font-black' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#222222]'}`}
-        >
-          Cobros de Repuestos (POS)
-        </button>
       </div>
 
       {/* Panel En Página: Nuevo Financiamiento (Directo en Pantalla, Sin Ventana Emergente) */}
@@ -732,7 +649,7 @@ export default function Financing() {
               </div>
               <div>
                 <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-zinc-100 tracking-tight">
-                  {activeTab === 'financiamientos' ? 'Nuevo Contrato de Financiamiento' : 'Nueva Cuenta por Cobrar POS'}
+                  Nuevo Contrato de Financiamiento
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
                   Registro directo en página • Sin ventanas emergentes y con cálculo en tiempo real
@@ -1186,9 +1103,6 @@ export default function Financing() {
       )}
 
       <div className="print:hidden">
-      {activeTab === 'financiamientos' ? (
-        <>
-
       {showCalculator && (
         <div className="bg-white dark:bg-[#1a1a1a] p-4 sm:p-6 md:p-8 shadow-xs rounded-2xl sm:rounded-[2rem] mb-4 sm:mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-3">
@@ -1416,182 +1330,6 @@ export default function Financing() {
           </>
         )}
       </div>
-      </>
-      ) : (
-      <div className="space-y-6">
-        {/* KPI Cards for POS Receivables */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
-            <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Total Cartera Repuestos</p>
-            <p className="text-xl font-black text-gray-900 dark:text-white mt-1">
-              RD$ {dbReceivables.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
-            <p className="text-[11px] font-bold text-[#ED1C24] uppercase tracking-wider">Saldo Pendiente por Cobrar</p>
-            <p className="text-xl font-black text-[#ED1C24] mt-1">
-              RD$ {dbReceivables.reduce((sum, r) => sum + r.balance, 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
-            <p className="text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Clientes a Crédito</p>
-            <p className="text-xl font-black text-gray-900 dark:text-white mt-1">
-              {dbReceivables.length} Clientes Activos
-            </p>
-          </div>
-          <div className="bg-white dark:bg-[#1a1a1a] p-5 rounded-[1.5rem] shadow-sm border border-gray-100 dark:border-gray-800">
-            <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Facturas Atrasadas</p>
-            <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">
-              {dbReceivables.filter(r => r.status === 'Atrasado').length} Facturas Vencidas
-            </p>
-          </div>
-        </div>
-
-        {/* Receivables Container */}
-        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
-          {filteredReceivables.length === 0 ? (
-            <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
-              No se encontraron cuentas por cobrar de repuestos para la búsqueda.
-            </div>
-          ) : (
-            <>
-              {/* Mobile Card List (md:hidden) */}
-              <div className="md:hidden space-y-3 p-1">
-                {filteredReceivables.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-black text-gray-900 dark:text-white truncate">{item.customer}</h4>
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono mt-0.5">
-                          RNC: {item.rnc} • {item.invoice}
-                        </p>
-                      </div>
-                      <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full shrink-0 ${
-                        item.status === 'Pendiente' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 
-                        item.status === 'Con Abono' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                        item.status === 'Atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 
-                        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-gray-600 dark:text-zinc-300 font-medium line-clamp-1">
-                      {item.items}
-                    </p>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-zinc-800/60">
-                      <div>
-                        <span className="text-[9px] uppercase font-bold text-gray-400 block">Saldo Pendiente</span>
-                        <span className="text-sm font-black text-[#ED1C24] font-mono">
-                          RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="text-[9px] uppercase font-bold text-gray-400 block">Vencimiento</span>
-                        <span className="text-xs font-bold text-gray-900 dark:text-white">
-                          {item.dueDate}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-200/50 dark:border-zinc-800/60 flex items-center justify-between">
-                      <span className="text-[10px] text-gray-400">Total Factura: RD$ {item.totalAmount.toLocaleString()}</span>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const financingMatch = financingsList.find(f => f.customer === item.customer) || financingsList[0];
-                          setSelectedFinancing(financingMatch);
-                          setShowPaymentForm(true);
-                          setShowReceipt(false);
-                          setShowAccountStatement(false);
-                        }} 
-                        className="text-white font-bold bg-[#ED1C24] hover:bg-red-700 px-4 py-1.5 rounded-full transition-all text-xs shadow-xs cursor-pointer"
-                      >
-                        Abonar / Cobrar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop Table (hidden md:block) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
-                  <thead>
-                    <tr>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente & RNC</th>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Factura / NCF</th>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Repuestos Vendidos</th>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Vencimiento</th>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Total / Saldo</th>
-                      <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
-                      <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
-                    {filteredReceivables.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors">
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
-                          <div className="text-xs text-gray-400 font-medium">RNC: {item.rnc}</div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-sm font-bold text-gray-900 dark:text-white">{item.invoice}</div>
-                          <div className="text-[11px] text-gray-400 font-mono">{item.ncf}</div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-xs font-semibold text-gray-700 dark:text-zinc-300 max-w-xs truncate">{item.items}</div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-xs font-bold text-gray-900 dark:text-white">{item.dueDate}</div>
-                          <div className="text-[10px] font-medium text-gray-400">{item.creditDays} Días Crédito</div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <div className="text-sm font-black text-[#ED1C24]">RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                          <div className="text-[10px] text-gray-400 font-medium">Total: RD$ {item.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap">
-                          <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
-                            item.status === 'Pendiente' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 
-                            item.status === 'Con Abono' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                            item.status === 'Atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' : 
-                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end gap-2">
-                            <button 
-                              onClick={() => {
-                                const financingMatch = financingsList.find(f => f.customer === item.customer) || financingsList[0];
-                                setSelectedFinancing(financingMatch);
-                                setShowPaymentForm(true);
-                                setShowReceipt(false);
-                                setShowAccountStatement(false);
-                              }} 
-                              className="text-white font-bold bg-[#ED1C24] hover:bg-red-700 px-4 py-1.5 rounded-full transition-all text-xs shadow-sm cursor-pointer"
-                            >
-                              Abonar / Cobrar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-      )}
-
       </div>
 
       {/* Financing Details Modal */}

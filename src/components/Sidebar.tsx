@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import logo from '../assets/logo.png';
 import { 
   HomeIcon, 
   ShoppingCartIcon, 
@@ -12,7 +13,8 @@ import {
   Cog6ToothIcon,
   PlusIcon,
   ArrowRightOnRectangleIcon,
-  XMarkIcon
+  XMarkIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermissions';
@@ -20,6 +22,7 @@ import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermi
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'POS', href: '/pos', icon: ShoppingCartIcon },
+  { name: 'Cobros POS', href: '/cobros', icon: CurrencyDollarIcon },
   { name: 'Clientes', href: '/clientes', icon: UsersIcon },
   { name: 'Facturas', href: '/facturas', icon: DocumentTextIcon },
   { name: 'Inventario', href: '/inventario', icon: WrenchScrewdriverIcon },
@@ -66,17 +69,31 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
 
   const SidebarContent = (
     <div className="w-[280px] max-w-[85vw] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-5 sm:p-6 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300 shadow-xl lg:shadow-none">
-      {/* Header Mobile Close Button */}
-      <div className="flex lg:hidden items-center justify-between mb-4 pb-2 border-b border-gray-200/60 dark:border-zinc-800/80">
-        <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Menú Principal</span>
+      {/* Brand Logo Header */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200/60 dark:border-zinc-800/80">
+        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-3 group">
+          <div className="h-10 w-24 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+            <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-black text-xs text-gray-900 dark:text-white uppercase tracking-tight leading-none">
+              Brianna
+            </span>
+            <span className="text-[10px] font-bold text-[#ED1C24] uppercase tracking-wider leading-none mt-1">
+              Heavy Equipment
+            </span>
+          </div>
+        </Link>
+
+        {/* Mobile Close Button */}
         <button 
           onClick={onClose} 
-          className="p-1.5 rounded-full bg-gray-200/80 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:bg-gray-300 cursor-pointer"
+          className="lg:hidden p-1.5 rounded-full bg-gray-200/80 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:bg-gray-300 cursor-pointer"
+          title="Cerrar Menú"
         >
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
-
 
       {/* Navigation */}
       <nav className="flex-1 space-y-2">

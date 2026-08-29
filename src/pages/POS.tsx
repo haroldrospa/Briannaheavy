@@ -803,14 +803,24 @@ const CheckoutModal = memo(({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
   const [amountReceived, setAmountReceived] = useState<string>(() => total.toFixed(2));
   const [transferReference, setTransferReference] = useState<string>('');
-  const [bankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
+  const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setAmountReceived(total.toFixed(2));
+      setBankAccounts(getCompanyBankAccounts());
     }
   }, [isOpen, total]);
+
+  useEffect(() => {
+    const handleAccountsChanged = (e: any) => {
+      if (e.detail) setBankAccounts(e.detail);
+      else setBankAccounts(getCompanyBankAccounts());
+    };
+    window.addEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+    return () => window.removeEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+  }, []);
 
   const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
 
@@ -1519,7 +1529,7 @@ export default function POS() {
   }, []);
 
   const calculateItemTotal = useCallback((item: {product: any, quantity: number, discount?: number, discountType?: '%' | '$'}) => {
-    let itemTotal = item.product.price * item.quantity;
+    let itemTotal = (item.product?.price || 0) * item.quantity;
     if (item.discount && item.discount > 0) {
       if (item.discountType === '%') {
         itemTotal -= itemTotal * (item.discount / 100);
@@ -1530,20 +1540,55 @@ export default function POS() {
     return Math.max(0, itemTotal);
   }, []);
 
-  const subtotal = useMemo(() => {
+  const cartGrossTotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + calculateItemTotal(item), 0);
   }, [cart, calculateItemTotal]);
   
   const globalDiscountAmount = useMemo(() => {
     if (globalDiscount > 0) {
-      return globalDiscountType === '%' ? subtotal * (globalDiscount / 100) : globalDiscount;
+      return globalDiscountType === '%' 
+        ? cartGrossTotal * (globalDiscount / 100) 
+        : Math.min(cartGrossTotal, globalDiscount);
     }
     return 0;
-  }, [globalDiscount, globalDiscountType, subtotal]);
+  }, [globalDiscount, globalDiscountType, cartGrossTotal]);
 
-  const subtotalAfterGlobalDiscount = useMemo(() => Math.max(0, subtotal - globalDiscountAmount), [subtotal, globalDiscountAmount]);
-  const tax = useMemo(() => subtotalAfterGlobalDiscount * 0.18, [subtotalAfterGlobalDiscount]);
-  const total = useMemo(() => subtotalAfterGlobalDiscount + tax, [subtotalAfterGlobalDiscount, tax]);
+  const { subtotal, tax, total } = useMemo(() => {
+    const discountFactor = cartGrossTotal > 0 ? Math.max(0, (cartGrossTotal - globalDiscountAmount) / cartGrossTotal) : 1;
+    
+    let totalBase = 0;
+    let totalTax = 0;
+    let totalFactura = 0;
+
+    cart.forEach(item => {
+      const lineGross = calculateItemTotal(item) * discountFactor;
+      const isExento = item.product?.itbis_type === 'exento';
+      const isAdicional = item.product?.includes_itbis === false || item.product?.itbis_type === 'adicional';
+
+      if (isExento) {
+        totalBase += lineGross;
+        totalFactura += lineGross;
+      } else if (isAdicional) {
+        const itemTax = lineGross * 0.18;
+        totalBase += lineGross;
+        totalTax += itemTax;
+        totalFactura += lineGross + itemTax;
+      } else {
+        // Incluido (por defecto) -> el precio YA contiene el ITBIS, NO se suma al total
+        const itemBase = lineGross / 1.18;
+        const itemTax = lineGross - itemBase;
+        totalBase += itemBase;
+        totalTax += itemTax;
+        totalFactura += lineGross;
+      }
+    });
+
+    return {
+      subtotal: totalBase,
+      tax: totalTax,
+      total: totalFactura
+    };
+  }, [cart, calculateItemTotal, cartGrossTotal, globalDiscountAmount]);
 
   const openCheckout = useCallback(() => {
     if (cart.length === 0) return;

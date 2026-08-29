@@ -250,7 +250,7 @@ export default function LetterInvoice({
           <tbody className="divide-y divide-zinc-200 text-xs">
             {items && items.length > 0 ? (
               items.map((item, idx) => {
-                const itemItbis = (item.total_price * 0.18);
+                const itemItbis = taxAmount > 0 ? (item.total_price - (item.total_price / 1.18)) : 0;
                 return (
                   <tr key={idx} className="hover:bg-zinc-50/50">
                     <td className="py-2.5 px-2 text-center font-mono text-zinc-500">{idx + 1}</td>
