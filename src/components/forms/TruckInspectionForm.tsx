@@ -88,21 +88,21 @@ interface InspectionItemRowProps {
 
 const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, onObsChange }: InspectionItemRowProps) => {
   return (
-    <tr className="border-b border-gray-100 dark:border-zinc-800/60 print:border-gray-300 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors odd:bg-white dark:odd:bg-zinc-900 even:bg-gray-50/40 dark:even:bg-zinc-850/40 print:odd:bg-white print:even:bg-gray-50/60">
+    <tr className="border-b border-gray-200/70 dark:border-zinc-800/80 print:border-gray-300 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors odd:bg-white dark:odd:bg-zinc-900 even:bg-gray-50/50 dark:even:bg-zinc-850/50 print:odd:bg-white print:even:bg-gray-50/80">
       {/* 1. Item Name */}
-      <td className="py-1 px-1.5 sm:py-1.5 sm:px-2 text-[10px] sm:text-[11px] print:text-[8px] font-bold text-gray-800 dark:text-zinc-200 print:text-black leading-tight align-middle truncate max-w-[130px] sm:max-w-[160px] print:max-w-none">
+      <td className="py-1.5 px-2 sm:py-2 sm:px-2.5 print:py-1 print:px-1.5 text-[10.5px] sm:text-[11px] print:text-[8.5px] font-bold text-gray-800 dark:text-zinc-200 print:text-black leading-tight align-middle w-[38%] print:w-[36%]">
         <span className="text-[9px] text-gray-400 dark:text-zinc-500 font-mono mr-1 print:hidden">{String(idx + 1).padStart(2, '0')}.</span>
         {item}
       </td>
 
-      {/* 2. Status Radios / Checkmark */}
-      <td className="py-0.5 px-0.5 sm:py-1 sm:px-1 w-20 sm:w-24 print:w-16 align-middle">
-        <div className="flex items-center justify-center gap-0.5">
+      {/* 2. Status Radios / Badges */}
+      <td className="py-1 px-1 sm:py-1.5 sm:px-1.5 print:py-0.5 print:px-1 w-20 sm:w-24 print:w-16 align-middle text-center">
+        <div className="flex items-center justify-center gap-1 print:gap-0.5">
           {/* Bueno */}
           <button
             type="button"
             onClick={() => onStatusChange(item, 'B')}
-            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8.5px] ${
               status === 'B' 
                 ? 'bg-emerald-500 text-white shadow-2xs font-black print:bg-transparent print:text-emerald-700' 
                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-emerald-100 hover:text-emerald-600 print:hidden'
@@ -116,7 +116,7 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
           <button
             type="button"
             onClick={() => onStatusChange(item, 'R')}
-            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8.5px] ${
               status === 'R' 
                 ? 'bg-amber-500 text-white shadow-2xs font-black print:bg-transparent print:text-amber-700' 
                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-amber-100 hover:text-amber-600 print:hidden'
@@ -130,7 +130,7 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
           <button
             type="button"
             onClick={() => onStatusChange(item, 'D')}
-            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8.5px] ${
               status === 'D' 
                 ? 'bg-red-600 text-white shadow-2xs font-black print:bg-transparent print:text-red-700' 
                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-red-100 hover:text-red-600 print:hidden'
@@ -142,18 +142,18 @@ const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, 
         </div>
       </td>
 
-      {/* 3. Observation */}
-      <td className="py-0.5 px-1 sm:py-1 sm:px-1.5 align-middle">
+      {/* 3. Observation - Generous width with no artificial truncation */}
+      <td className="py-1 px-2 sm:py-1.5 sm:px-2 print:py-0.5 print:px-1.5 align-middle flex-1">
         <input 
           type="text" 
           value={obs}
           onChange={(e) => onObsChange(item, e.target.value)}
-          placeholder="Obs..."
-          className="w-full py-0.5 px-1 bg-transparent text-[10px] sm:text-[11px] print:text-[7.5px] font-medium text-gray-900 dark:text-zinc-100 border-none outline-none focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-red-500/50 rounded print:hidden placeholder:text-gray-300" 
+          placeholder="Escribir observación..."
+          className="w-full py-0.5 px-1.5 bg-transparent text-[10px] sm:text-[11px] print:text-[8px] font-medium text-gray-900 dark:text-zinc-100 border-none outline-none focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-red-500/50 rounded print:hidden placeholder:text-gray-300" 
         />
-        <span className="hidden print:block text-[7.5px] font-medium text-gray-700 leading-none truncate max-w-[110px]">
-          {obs || '—'}
-        </span>
+        <div className="hidden print:block text-[8px] font-medium text-gray-800 leading-snug break-words">
+          {obs || <span className="text-gray-300">—</span>}
+        </div>
       </td>
     </tr>
   );
@@ -201,9 +201,9 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
       if (idx < good) {
         data[item] = { status: 'B', obs: '' };
       } else if (idx < good + reg) {
-        data[item] = { status: 'R', obs: 'Revisión preventiva' };
+        data[item] = { status: 'R', obs: 'Revisión preventiva requerida' };
       } else if (idx < good + reg + def) {
-        data[item] = { status: 'D', obs: 'Requiere sustitución' };
+        data[item] = { status: 'D', obs: 'Sustitución inmediata' };
       } else {
         data[item] = { status: 'B', obs: '' };
       }
@@ -220,7 +220,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
   });
 
   const [fuelLevel, setFuelLevel] = useState<string>('3/4');
-  const [generalNotes, setGeneralNotes] = useState<string>('Vehículo operativo y listo para ruta. Se recomienda chequeo preventivo.');
+  const [generalNotes, setGeneralNotes] = useState<string>('Vehículo operativo y listo para ruta. Se recomienda inspección periódica de fluidos.');
 
   const [reportSeq, setReportSeq] = useState<string>(() => {
     return initialData?.code || localStorage.getItem('brianna_inspection_seq') || '0004';
@@ -333,12 +333,12 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
   return (
     <div className="w-full bg-white dark:bg-zinc-950 print:bg-white text-gray-900 dark:text-zinc-100 font-sans p-2 sm:p-5 print:p-0 print:m-0 rounded-2xl print:rounded-none max-w-7xl mx-auto shadow-xs print:shadow-none">
       
-      {/* Strict Print CSS for 1-Page Letter Layout */}
+      {/* Strict Full-Page Print CSS for Exact 1-Page Letter Layout */}
       <style>{`
         @media print {
           @page {
             size: letter portrait;
-            margin: 5mm 6mm 5mm 6mm !important;
+            margin: 6mm 7mm 6mm 7mm !important;
           }
           html, body {
             height: 100% !important;
@@ -349,8 +349,11 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
             print-color-adjust: exact !important;
           }
           .inspection-single-page {
-            height: 100% !important;
-            max-height: 268mm !important;
+            height: 265mm !important;
+            max-height: 265mm !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
             page-break-after: avoid !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -363,13 +366,12 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
         }
       `}</style>
 
-      {/* Main Single Page Container */}
-      <div className="inspection-single-page flex flex-col justify-between space-y-2.5 print:space-y-1.5">
+      {/* Main Single Page Container - Fills the entire page vertically */}
+      <div className="inspection-single-page flex flex-col justify-between space-y-3 print:space-y-0 h-full">
 
         {/* 1. HEADER CORPORATIVO BRIANNA HEAVY EQUIPMENT */}
-        <div className="flex items-center justify-between pb-2 border-b-2 border-red-600 dark:border-red-500 print:pb-1 print:border-red-600">
-          {/* Logo y Datos de la Empresa */}
-          <div className="flex items-center gap-3 print:gap-2">
+        <div className="flex items-center justify-between pb-2 border-b-2 border-[#ED1C24] print:pb-1.5 print:border-[#ED1C24] shrink-0">
+          <div className="flex items-center gap-3 print:gap-2.5">
             <img 
               src={logo} 
               alt="Brianna Heavy Equipment" 
@@ -387,9 +389,8 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
             </div>
           </div>
 
-          {/* Reporte Nº y Acciones de Pantalla */}
           <div className="flex items-center gap-2">
-            <div className="text-right border-l border-gray-200 dark:border-zinc-800 print:border-gray-300 pl-3 sm:pl-4 print:pl-2">
+            <div className="text-right border-l border-gray-200 dark:border-zinc-800 print:border-gray-300 pl-3 sm:pl-4 print:pl-2.5">
               <span className="text-[9px] uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:text-gray-500 block font-black">
                 Nº DE REPORTE
               </span>
@@ -402,7 +403,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
               type="button"
               onClick={() => window.print()}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-all print:hidden cursor-pointer ml-2"
-              title="Imprimir en 1 Sola Hoja"
+              title="Imprimir en 1 Sola Hoja Completa"
             >
               <PrinterIcon className="w-4 h-4" />
               <span>Imprimir</span>
@@ -410,16 +411,16 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
           </div>
         </div>
 
-        {/* 2. DATOS DEL VEHÍCULO Y DETALLES DE INSPECCIÓN (Ultra Compacto en 2 filas) */}
-        <div className="bg-gray-50/80 dark:bg-zinc-900/90 rounded-xl p-2 sm:p-2.5 border border-gray-200/80 dark:border-zinc-800 text-xs print:bg-gray-50 print:border-gray-300 print:p-1.5 print:rounded-lg">
-          {/* Fila 1: Vehículo, Año, Chasis/VIN, Millas */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pb-1.5 border-b border-gray-200/60 dark:border-zinc-800/80 print:border-gray-300 print:pb-1">
-            {/* Marca & Modelo */}
+        {/* 2. DATOS DEL VEHÍCULO Y DETALLES DE INSPECCIÓN (Claro, estructurado y espacioso) */}
+        <div className="bg-gray-50/90 dark:bg-zinc-900/90 rounded-xl p-2.5 sm:p-3 border border-gray-200 dark:border-zinc-800 text-xs print:bg-gray-50 print:border-gray-300 print:p-2 print:rounded-lg shrink-0 print:my-1">
+          {/* Fila 1: Marca & Modelo, Año, Chasis/VIN, Odómetro */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pb-2 border-b border-gray-200 dark:border-zinc-800 print:border-gray-300 print:pb-1.5">
+            {/* Vehículo / Marca / Modelo */}
             <div className="relative" ref={brandRef}>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
-                Vehículo / Marca / Modelo
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
+                Vehículo / Marca & Modelo
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 print:hidden">
                 <input 
                   type="text" 
                   value={vehicleInfo.brand}
@@ -429,7 +430,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                   }}
                   onFocus={() => setShowBrandDropdown(true)}
                   placeholder="MARCA"
-                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent print:w-auto uppercase"
+                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white uppercase"
                 />
                 <input 
                   type="text" 
@@ -440,8 +441,13 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                   }}
                   onFocus={() => setShowModelDropdown(true)}
                   placeholder="MODELO"
-                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent print:w-auto uppercase"
+                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white uppercase"
                 />
+              </div>
+
+              {/* Print Display for Vehicle */}
+              <div className="hidden print:block text-xs font-black text-black uppercase">
+                {vehicleInfo.brand || 'MACK'} {vehicleInfo.model || 'GRANITE'}
               </div>
 
               {/* Autocomplete Brand */}
@@ -479,88 +485,106 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
 
             {/* Año */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Año
               </span>
               <input 
                 type="text" 
                 value={vehicleInfo.year}
                 onChange={(e) => setVehicleInfo(prev => ({ ...prev, year: e.target.value }))}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:hidden"
               />
+              <div className="hidden print:block text-xs font-black text-black">
+                {vehicleInfo.year || '2024'}
+              </div>
             </div>
 
             {/* Chasis / VIN */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Chasis / VIN
               </span>
               <input 
                 type="text" 
                 value={vehicleInfo.vin}
                 onChange={(e) => setVehicleInfo(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent uppercase"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white uppercase print:hidden"
               />
+              <div className="hidden print:block text-xs font-mono font-black text-black uppercase tracking-tight">
+                {vehicleInfo.vin || '—'}
+              </div>
             </div>
 
             {/* Odómetro */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Millas / Km
               </span>
               <input 
                 type="text" 
                 value={vehicleInfo.mileage}
                 onChange={(e) => setVehicleInfo(prev => ({ ...prev, mileage: e.target.value }))}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white print:hidden"
               />
+              <div className="hidden print:block text-xs font-mono font-black text-black">
+                {vehicleInfo.mileage ? `${vehicleInfo.mileage} mi/km` : '—'}
+              </div>
             </div>
           </div>
 
           {/* Fila 2: Inspector, Fecha, Hora, Nivel Combustible */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-1.5 print:pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-2 print:pt-1.5">
             {/* Inspector */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Inspector / Técnico
               </span>
               <input 
                 type="text" 
                 value={inspectorName}
                 onChange={(e) => setInspectorName(e.target.value.toUpperCase())}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent uppercase"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white uppercase print:hidden"
               />
+              <div className="hidden print:block text-xs font-black text-black uppercase">
+                {inspectorName || 'TÉCNICO DE TALLER'}
+              </div>
             </div>
 
             {/* Fecha */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Fecha Inspección
               </span>
               <input 
                 type="date" 
                 value={inspectionDate}
                 onChange={(e) => setInspectionDate(e.target.value)}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:hidden"
               />
+              <div className="hidden print:block text-xs font-bold text-black font-mono">
+                {inspectionDate.split('-').reverse().join('/')}
+              </div>
             </div>
 
             {/* Hora */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Hora
               </span>
               <input 
                 type="time" 
                 value={inspectionTime}
                 onChange={(e) => setInspectionTime(e.target.value)}
-                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:hidden"
               />
+              <div className="hidden print:block text-xs font-bold text-black font-mono">
+                {inspectionTime}
+              </div>
             </div>
 
-            {/* Nivel de Combustible (Compact Bar) */}
+            {/* Nivel de Combustible */}
             <div>
-              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+              <span className="text-[9px] font-black text-gray-500 dark:text-zinc-400 print:text-gray-600 uppercase tracking-wider block mb-0.5">
                 Nivel de Combustible
               </span>
               <div className="flex items-center gap-1 pt-0.5">
@@ -569,10 +593,10 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                     key={lvl}
                     type="button"
                     onClick={() => setFuelLevel(lvl)}
-                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-all print:px-1 print:text-[8px] ${
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-all print:px-1.5 print:text-[8px] ${
                       fuelLevel === lvl 
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black print:bg-black print:text-white' 
-                        : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 print:border-gray-300'
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black print:bg-black print:text-white shadow-2xs' 
+                        : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 print:border-gray-400 print:text-gray-600'
                     }`}
                   >
                     {lvl === 'Vacio' ? 'E' : lvl === 'Lleno' ? 'F' : lvl}
@@ -583,19 +607,19 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
           </div>
         </div>
 
-        {/* 3. CHECKLIST EN 2 COLUMNAS PARALELAS (20 Items por columna = 1 sola hoja garantizada) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-2 print:gap-2">
+        {/* 3. TABLAS DE CHECKLIST (2 Columnas paralelas que ocupan el espacio principal con holgura) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-2.5 print:gap-2 flex-1 my-1">
           
           {/* COLUMNA 1 (Items 1 a 20) */}
-          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none">
+          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-400 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none flex flex-col justify-between">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-200 dark:border-zinc-700 print:border-gray-400 text-[9px] print:text-[8px] font-black uppercase text-gray-600 dark:text-zinc-400 print:text-black">
-                  <th className="py-1 px-2 text-left">1. Componente / Sistema</th>
-                  <th className="py-1 px-1 text-center w-20 print:w-16">
-                    <span className="text-emerald-600">B</span> / <span className="text-amber-500">R</span> / <span className="text-red-600">D</span>
+                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-300 dark:border-zinc-700 print:border-gray-400 text-[9.5px] print:text-[8.5px] font-black uppercase text-gray-700 dark:text-zinc-300 print:text-black">
+                  <th className="py-1.5 px-2 print:py-1 print:px-1.5 text-left">1. Componente / Sistema</th>
+                  <th className="py-1.5 px-1 print:py-1 print:px-0.5 text-center w-20 sm:w-24 print:w-16">
+                    <span className="text-emerald-700">B</span> / <span className="text-amber-600">R</span> / <span className="text-red-700">D</span>
                   </th>
-                  <th className="py-1 px-2 text-left">Observaciones</th>
+                  <th className="py-1.5 px-2 print:py-1 print:px-1.5 text-left">Observaciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -615,15 +639,15 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
           </div>
 
           {/* COLUMNA 2 (Items 21 a 40) */}
-          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none">
+          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-400 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none flex flex-col justify-between">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-200 dark:border-zinc-700 print:border-gray-400 text-[9px] print:text-[8px] font-black uppercase text-gray-600 dark:text-zinc-400 print:text-black">
-                  <th className="py-1 px-2 text-left">2. Componente / Sistema</th>
-                  <th className="py-1 px-1 text-center w-20 print:w-16">
-                    <span className="text-emerald-600">B</span> / <span className="text-amber-500">R</span> / <span className="text-red-600">D</span>
+                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-300 dark:border-zinc-700 print:border-gray-400 text-[9.5px] print:text-[8.5px] font-black uppercase text-gray-700 dark:text-zinc-300 print:text-black">
+                  <th className="py-1.5 px-2 print:py-1 print:px-1.5 text-left">2. Componente / Sistema</th>
+                  <th className="py-1.5 px-1 print:py-1 print:px-0.5 text-center w-20 sm:w-24 print:w-16">
+                    <span className="text-emerald-700">B</span> / <span className="text-amber-600">R</span> / <span className="text-red-700">D</span>
                   </th>
-                  <th className="py-1 px-2 text-left">Observaciones</th>
+                  <th className="py-1.5 px-2 print:py-1 print:px-1.5 text-left">Observaciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -644,23 +668,23 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
 
         </div>
 
-        {/* 4. BLOQUE INFERIOR: DIAGRAMA, RESUMEN ESTADÍSTICO Y FIRMAS (Todo en 1 sola hoja) */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 print:grid-cols-12 gap-2 print:gap-2 pt-1 border-t border-gray-200 dark:border-zinc-800 print:border-gray-300 items-stretch">
+        {/* 4. BLOQUE INFERIOR: DIAGRAMA, DICTAMEN, OBSERVACIONES GENERALES Y FIRMAS (Ocupa la parte baja completa) */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 print:grid-cols-12 gap-2.5 print:gap-2 pt-2 border-t-2 border-gray-200 dark:border-zinc-800 print:border-gray-300 items-stretch shrink-0 print:pt-1.5">
           
           {/* A. Diagrama de Camión & Leyenda */}
-          <div className="sm:col-span-4 print:col-span-4 bg-gray-50 dark:bg-zinc-900/60 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
-            <div className="flex items-center justify-between pb-1 border-b border-gray-200/60 dark:border-zinc-800 print:border-gray-300">
-              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black">
-                Puntos de Carrocería & Chasis
+          <div className="sm:col-span-4 print:col-span-4 bg-gray-50 dark:bg-zinc-900/60 p-2.5 print:p-2 rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
+            <div className="flex items-center justify-between pb-1 border-b border-gray-200 dark:border-zinc-800 print:border-gray-300">
+              <span className="text-[9.5px] font-black uppercase tracking-wider text-gray-600 dark:text-zinc-400 print:text-black">
+                Diagrama de Carrocería & Ejes
               </span>
               <span className="text-[8px] font-bold text-gray-400 font-mono">VISTA PLANTA</span>
             </div>
 
             {/* SVG Camión Tractor & Remolque Pro */}
-            <div className="py-1 flex items-center justify-center">
-              <svg viewBox="0 0 450 110" className="w-full max-w-[200px] h-auto stroke-gray-800 dark:stroke-zinc-200 print:stroke-black" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <div className="py-1.5 print:py-1 flex items-center justify-center">
+              <svg viewBox="0 0 450 110" className="w-full max-w-[220px] h-auto stroke-gray-800 dark:stroke-zinc-200 print:stroke-black" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 {/* Cabina / Tractor */}
-                <rect x="15" y="25" width="80" height="60" rx="8" className="fill-gray-200/60 dark:fill-zinc-800/60 print:fill-gray-100" />
+                <rect x="15" y="25" width="80" height="60" rx="8" className="fill-gray-200/70 dark:fill-zinc-800/60 print:fill-gray-100" />
                 <rect x="25" y="32" width="30" height="46" rx="4" className="stroke-gray-400" />
                 <circle cx="50" cy="18" r="6" className="fill-gray-900 print:fill-black" />
                 <circle cx="50" cy="92" r="6" className="fill-gray-900 print:fill-black" />
@@ -671,7 +695,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                 <circle cx="85" cy="92" r="6" className="fill-gray-900 print:fill-black" />
                 
                 {/* Remolque / Caja de carga */}
-                <rect x="105" y="20" width="320" height="70" rx="6" className="fill-gray-100/70 dark:fill-zinc-850/60 print:fill-gray-50" />
+                <rect x="105" y="20" width="320" height="70" rx="6" className="fill-gray-100/80 dark:fill-zinc-850/60 print:fill-gray-50" />
                 <line x1="105" y1="55" x2="425" y2="55" strokeDasharray="3 3" className="stroke-gray-300" />
                 
                 {/* Ejes remolque */}
@@ -683,74 +707,74 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
             </div>
 
             {/* Leyenda */}
-            <div className="flex items-center justify-between text-[8.5px] print:text-[8px] font-black border-t border-gray-200/60 dark:border-zinc-800 print:border-gray-300 pt-1">
+            <div className="flex items-center justify-between text-[8.5px] print:text-[8px] font-black border-t border-gray-200 dark:border-zinc-800 print:border-gray-300 pt-1">
               <span className="text-emerald-700">✓ B: Bueno</span>
               <span className="text-amber-700">⚠ R: Regular</span>
               <span className="text-red-700">✕ D: Deficiente</span>
             </div>
           </div>
 
-          {/* B. Resumen Estadístico y Dictamen */}
-          <div className="sm:col-span-3 print:col-span-3 bg-gray-50 dark:bg-zinc-900/60 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between space-y-1">
-            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black block border-b border-gray-200/60 dark:border-zinc-800 print:border-gray-300 pb-1">
-              Evaluación Global
+          {/* B. Resumen Estadístico y Dictamen Técnico */}
+          <div className="sm:col-span-3 print:col-span-3 bg-gray-50 dark:bg-zinc-900/60 p-2.5 print:p-2 rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between space-y-1">
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-gray-600 dark:text-zinc-400 print:text-black block border-b border-gray-200 dark:border-zinc-800 print:border-gray-300 pb-1">
+              Dictamen de Evaluación
             </span>
 
-            <div className="grid grid-cols-3 gap-1 text-center py-0.5">
-              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded p-1">
+            <div className="grid grid-cols-3 gap-1.5 text-center py-1">
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800/40 rounded-lg p-1">
                 <span className="text-[8px] font-bold text-emerald-800 dark:text-emerald-400 block leading-none">B</span>
-                <span className="text-xs font-black font-mono text-emerald-700">{stats.good}</span>
+                <span className="text-sm font-black font-mono text-emerald-700">{stats.good}</span>
               </div>
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded p-1">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/40 rounded-lg p-1">
                 <span className="text-[8px] font-bold text-amber-800 dark:text-amber-400 block leading-none">R</span>
-                <span className="text-xs font-black font-mono text-amber-700">{stats.reg}</span>
+                <span className="text-sm font-black font-mono text-amber-700">{stats.reg}</span>
               </div>
-              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded p-1">
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800/40 rounded-lg p-1">
                 <span className="text-[8px] font-bold text-red-800 dark:text-red-400 block leading-none">D</span>
-                <span className="text-xs font-black font-mono text-red-700">{stats.def}</span>
+                <span className="text-sm font-black font-mono text-red-700">{stats.def}</span>
               </div>
             </div>
 
             {/* Dictamen */}
-            <div className={`p-1 text-center rounded font-black text-[9px] uppercase tracking-wide border ${
+            <div className={`py-1.5 px-2 text-center rounded-lg font-black text-[9px] uppercase tracking-wide border ${
               stats.def === 0 
-                ? 'bg-emerald-500 text-white border-emerald-600 print:bg-gray-100 print:text-emerald-800' 
-                : 'bg-red-600 text-white border-red-700 print:bg-gray-100 print:text-red-800'
+                ? 'bg-emerald-500 text-white border-emerald-600 print:bg-emerald-50 print:text-emerald-900 print:border-emerald-400' 
+                : 'bg-red-600 text-white border-red-700 print:bg-red-50 print:text-red-900 print:border-red-400'
             }`}>
               {stats.def === 0 ? '✓ APTO PARA OPERACIÓN' : '⚠ REQUIERE REPARACIÓN'}
             </div>
           </div>
 
-          {/* C. Firmas de Conformidad */}
-          <div className="sm:col-span-5 print:col-span-5 bg-white dark:bg-zinc-900 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
-            <div className="pb-1 border-b border-gray-100 dark:border-zinc-800 print:border-gray-300">
-              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black block">
-                Observaciones Generales
+          {/* C. Observaciones Generales y Firmas de Conformidad */}
+          <div className="sm:col-span-5 print:col-span-5 bg-white dark:bg-zinc-900 p-2.5 print:p-2 rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
+            <div className="pb-1.5 border-b border-gray-200 dark:border-zinc-800 print:border-gray-300">
+              <span className="text-[9.5px] font-black uppercase tracking-wider text-gray-600 dark:text-zinc-400 print:text-black block mb-0.5">
+                Observaciones Generales del Técnico
               </span>
-              <input 
-                type="text" 
+              <textarea 
+                rows={2}
                 value={generalNotes}
                 onChange={(e) => setGeneralNotes(e.target.value)}
-                placeholder="Notas finales de la inspección..."
-                className="w-full text-[9px] font-medium text-gray-800 dark:text-zinc-200 bg-transparent border-none outline-none print:hidden"
+                placeholder="Añadir notas detalladas de la inspección..."
+                className="w-full text-[9.5px] font-medium text-gray-800 dark:text-zinc-200 bg-transparent border-none outline-none resize-none print:hidden placeholder:text-gray-400"
               />
-              <p className="hidden print:block text-[8px] font-medium text-gray-700 leading-tight">
-                {generalNotes || 'Sin observaciones adicionales reportadas.'}
+              <p className="hidden print:block text-[8.5px] font-medium text-gray-800 leading-snug break-words min-h-[28px]">
+                {generalNotes || 'Sin observaciones adicionales registradas.'}
               </p>
             </div>
 
-            {/* Firmas lado a lado */}
-            <div className="grid grid-cols-2 gap-3 pt-2 print:pt-3">
+            {/* Doble bloque de firmas lado a lado */}
+            <div className="grid grid-cols-2 gap-4 pt-3 print:pt-4">
               <div className="text-center">
-                <div className="border-b border-gray-400 dark:border-zinc-600 print:border-gray-800 mb-0.5 h-6 print:h-5"></div>
+                <div className="border-b border-gray-500 dark:border-zinc-600 print:border-gray-800 mb-1 h-7 print:h-6"></div>
                 <p className="text-[8.5px] print:text-[8px] font-black uppercase text-gray-900 dark:text-white print:text-black">
-                  Firma Inspector
+                  Firma Inspector / Técnico
                 </p>
                 <p className="text-[7.5px] text-gray-400 print:text-gray-500">Brianna Heavy Equipment</p>
               </div>
 
               <div className="text-center">
-                <div className="border-b border-gray-400 dark:border-zinc-600 print:border-gray-800 mb-0.5 h-6 print:h-5"></div>
+                <div className="border-b border-gray-500 dark:border-zinc-600 print:border-gray-800 mb-1 h-7 print:h-6"></div>
                 <p className="text-[8.5px] print:text-[8px] font-black uppercase text-gray-900 dark:text-white print:text-black">
                   Firma Conductor / Taller
                 </p>
