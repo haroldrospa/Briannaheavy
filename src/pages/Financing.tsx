@@ -101,12 +101,14 @@ const getInstallmentMoraAndStatus = (dueDateStr: string, isPaid: boolean, daysLi
 
 const generateAmortizationSchedule = (
   financedAmount: number,
-  annualRate: number,
+  monthlyRatePercent: number,
   months: number,
   startDateStr: string
 ) => {
   const schedule = [];
-  const mRate = (annualRate / 100) / 12;
+  // Compatibilidad: si una tasa previa era anual (> 8%), convertir a mensual
+  const effectiveMonthlyRate = monthlyRatePercent > 8 ? (monthlyRatePercent / 12) : monthlyRatePercent;
+  const mRate = effectiveMonthlyRate / 100;
   const mPayment = mRate > 0 && months > 0
     ? (financedAmount * mRate * Math.pow(1 + mRate, months)) / (Math.pow(1 + mRate, months) - 1)
     : (financedAmount / (months || 1));
@@ -436,7 +438,7 @@ export default function Financing() {
   const [newChassis, setNewChassis] = useState('');
   const [newTotalValue, setNewTotalValue] = useState('750,000');
   const [newDownPayment, setNewDownPayment] = useState('150,000');
-  const [newRate, setNewRate] = useState('16');
+  const [newRate, setNewRate] = useState('2.0');
   const [newMonths, setNewMonths] = useState('24');
   const [newNextPayment, setNewNextPayment] = useState(defaultNextMonthDate);
   const [formValidationNotice, setFormValidationNotice] = useState(false);
@@ -478,7 +480,7 @@ export default function Financing() {
     setNewChassis('1M8GDM9A2KP09812');
     setNewTotalValue('1,200,000');
     setNewDownPayment('240,000');
-    setNewRate('16');
+    setNewRate('2.0');
     setNewMonths('36');
     setNewNextPayment(defaultNextMonthDate());
     if (formValidationNotice) setFormValidationNotice(false);
@@ -488,9 +490,9 @@ export default function Financing() {
   const modalValTotal = parseCurrencyInput(newTotalValue);
   const modalInicial = parseCurrencyInput(newDownPayment);
   const modalFinancedAmount = Math.max(0, modalValTotal - modalInicial);
-  const modalAnnualRate = parseFloat(newRate) || 0;
+  const modalMonthlyRateNum = parseFloat(newRate) || 0;
   const modalNumMonths = parseInt(newMonths) || 36;
-  const modalMonthlyRate = (modalAnnualRate / 100) / 12;
+  const modalMonthlyRate = modalMonthlyRateNum / 100;
 
   const modalMonthlyPayment = modalFinancedAmount > 0 && modalMonthlyRate > 0
     ? (modalFinancedAmount * modalMonthlyRate * Math.pow(1 + modalMonthlyRate, modalNumMonths)) / (Math.pow(1 + modalMonthlyRate, modalNumMonths) - 1)
@@ -549,11 +551,11 @@ export default function Financing() {
     const finalInicial = modalInicial;
     const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : Math.max(0, finalTotal - finalInicial);
     const finalMonths = modalNumMonths || 24;
-    const finalRate = modalAnnualRate || 16;
+    const finalRate = parseFloat(newRate) || 2.0;
     const baseDate = newNextPayment ? new Date(newNextPayment) : new Date();
 
     let balance = finalFinanced;
-    const mRate = (finalRate / 100) / 12;
+    const mRate = finalRate / 100;
     const mPayment = modalMonthlyPayment > 0 ? modalMonthlyPayment : (finalFinanced / finalMonths);
     const installmentsToCreate: Omit<Installment, 'id' | 'financing_id'>[] = [];
 
@@ -929,13 +931,13 @@ export default function Financing() {
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
   const [downPaymentStr, setDownPaymentStr] = useState('20,000');
-  const [rate, setRate] = useState(18);
+  const [rate, setRate] = useState(2.0);
   const [months, setMonths] = useState(36);
 
   const amount = parseCurrencyInput(amountStr);
   const downPayment = parseCurrencyInput(downPaymentStr);
   const financedAmount = Math.max(0, amount - downPayment);
-  const monthlyRate = (rate / 100) / 12;
+  const monthlyRate = rate / 100;
   const monthlyPayment = financedAmount > 0 
     ? (financedAmount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
     : 0;
@@ -1422,27 +1424,46 @@ export default function Financing() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400">
-                          Tasa Anual (%)
+                          Tasa Mensual (%)
                         </label>
-                        <span className="text-[10px] text-gray-400 font-medium">
-                          {((parseFloat(newRate) || 0) / 12).toFixed(2)}%/mes
+                        <span className="text-[10px] text-gray-400 font-medium font-mono">
+                          {((parseFloat(newRate) || 0) * 12).toFixed(1)}% anual equiv.
                         </span>
                       </div>
-                      <div className="grid grid-cols-4 gap-1">
-                        {['12', '14', '16', '18'].map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => setNewRate(r)}
-                            className={`py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              newRate === r
-                                ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
-                                : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
-                            }`}
-                          >
-                            {r}%
-                          </button>
-                        ))}
+
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative w-24 shrink-0">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            max="50"
+                            value={newRate}
+                            onChange={(e) => setNewRate(e.target.value)}
+                            className="w-full pl-2.5 pr-6 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-[#ED1C24]"
+                            placeholder="2.0"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                            %
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-1 flex-1">
+                          {['1.5', '2.0', '2.5', '3.0'].map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => setNewRate(r)}
+                              className={`py-2 px-1 rounded-lg text-xs font-bold transition-all cursor-pointer text-center truncate ${
+                                newRate === r
+                                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
+                                  : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                              }`}
+                            >
+                              {r}%
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1570,8 +1591,8 @@ export default function Financing() {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tasa Anual (%)</label>
-              <input type="number" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium" />
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tasa Mensual (%)</label>
+              <input type="number" step="0.1" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium font-mono" />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Plazo (Meses)</label>
@@ -2167,7 +2188,9 @@ export default function Financing() {
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Tasa de Interés</p>
-                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.rate}% Anual</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">
+                          {selectedFinancing.rate > 8 ? (selectedFinancing.rate / 12).toFixed(2) : selectedFinancing.rate}% Mensual
+                        </p>
                       </div>
                     </div>
 
@@ -2779,7 +2802,7 @@ export default function Financing() {
               <div className="pt-4 mt-4 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
                 <div className="text-xs text-gray-500 dark:text-zinc-400 font-medium flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                  {modalNumMonths} cuotas calculadas con tasa anual de {modalAnnualRate}%
+                  {modalNumMonths} cuotas calculadas con tasa mensual de {newRate}% ({((parseFloat(newRate) || 0) * 12).toFixed(1)}% anual equiv.)
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -2863,7 +2886,7 @@ export default function Financing() {
                         <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Monto Neto Financiado:</td>
                         <td style={{ padding: '6px 10px', fontWeight: '900', color: '#111827' }}>RD$ {modalFinancedAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Tasa & Plazo Crédito:</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '700' }}>{modalAnnualRate}% Anual • {modalNumMonths} Meses</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '700' }}>{newRate}% Mensual • {modalNumMonths} Meses</td>
                       </tr>
                       <tr style={{ backgroundColor: '#fef2f2' }}>
                         <td style={{ padding: '8px 10px', fontWeight: '900', color: '#991b1b' }}>Cuota Fija Mensual:</td>
