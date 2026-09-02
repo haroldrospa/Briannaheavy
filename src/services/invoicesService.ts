@@ -113,6 +113,33 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           const supabaseInvoices = res.data as Invoice[];
           saveLocalStorageInvoices(supabaseInvoices);
           lastInvoicesFetch = Date.now();
+
+          // Auto-align local sequence counters with database highest values
+          let maxInv = 0;
+          let maxCt = 0;
+          for (const inv of supabaseInvoices) {
+            const num = inv.invoice_number || '';
+            if (num.startsWith('CT-')) {
+              const p = parseInt(num.replace(/\D/g, ''), 10);
+              if (!isNaN(p) && p > maxCt) maxCt = p;
+            } else {
+              const p = parseInt(num.replace(/\D/g, ''), 10);
+              if (!isNaN(p) && p > maxInv) maxInv = p;
+            }
+          }
+          if (maxInv > 0) {
+            const localSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+            if (localSeq <= maxInv) {
+              localStorage.setItem('brianna_seq_invoice', String(maxInv + 1));
+            }
+          }
+          if (maxCt > 0) {
+            const localCt = parseInt(localStorage.getItem('brianna_seq_ct') || '1', 10);
+            if (localCt <= maxCt) {
+              localStorage.setItem('brianna_seq_ct', String(maxCt + 1));
+            }
+          }
+
           return supabaseInvoices;
         }
       } catch (err) {
@@ -127,6 +154,75 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
   }
 
   return localList.filter(inv => !inv.id.startsWith('inv-seed-'));
+};
+
+/**
+ * Synchronizes and calculates the guaranteed next invoice sequence number,
+ * checking both local invoices and Supabase to prevent 409 unique constraint errors.
+ */
+export const syncAndGetNextInvoiceSequence = async (
+  type: 'internal' | 'electronic' | 'ct'
+): Promise<{ invoiceNumber: string; ncf: string }> => {
+  const localList = getLocalStorageInvoices();
+  let maxInternalSeq = 0;
+  let maxCtSeq = 0;
+
+  // 1. Scan localStorage invoices
+  for (const inv of localList) {
+    const num = inv.invoice_number || '';
+    if (num.startsWith('CT-')) {
+      const parsed = parseInt(num.replace(/\D/g, ''), 10);
+      if (!isNaN(parsed) && parsed > maxCtSeq) maxCtSeq = parsed;
+    } else {
+      const parsed = parseInt(num.replace(/\D/g, ''), 10);
+      if (!isNaN(parsed) && parsed > maxInternalSeq) maxInternalSeq = parsed;
+    }
+  }
+
+  // 2. Scan Supabase invoices for the latest sequence
+  if (isSupabaseConfigured()) {
+    try {
+      const { data } = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (data && Array.isArray(data)) {
+        for (const row of data) {
+          const num = row.invoice_number || '';
+          if (num.startsWith('CT-')) {
+            const parsed = parseInt(num.replace(/\D/g, ''), 10);
+            if (!isNaN(parsed) && parsed > maxCtSeq) maxCtSeq = parsed;
+          } else {
+            const parsed = parseInt(num.replace(/\D/g, ''), 10);
+            if (!isNaN(parsed) && parsed > maxInternalSeq) maxInternalSeq = parsed;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching remote sequence from Supabase:', err);
+    }
+  }
+
+  // 3. Stored localStorage sequence counter
+  const storedInv = parseInt(localStorage.getItem('brianna_seq_invoice') || '0', 10);
+  const storedCt = parseInt(localStorage.getItem('brianna_seq_ct') || '0', 10);
+
+  const effectiveMaxInternal = Math.max(maxInternalSeq, storedInv > 0 ? storedInv - 1 : 0);
+  const effectiveMaxCt = Math.max(maxCtSeq, storedCt > 0 ? storedCt - 1 : 0);
+
+  if (type === 'ct') {
+    const nextSeq = effectiveMaxCt + 1;
+    localStorage.setItem('brianna_seq_ct', String(nextSeq + 1));
+    const formatted = `CT-${String(nextSeq).padStart(6, '0')}`;
+    return { invoiceNumber: formatted, ncf: formatted };
+  } else {
+    const nextSeq = effectiveMaxInternal + 1;
+    localStorage.setItem('brianna_seq_invoice', String(nextSeq + 1));
+    const formattedNum = String(nextSeq).padStart(6, '0');
+    return { invoiceNumber: formattedNum, ncf: `INT-${formattedNum}` };
+  }
 };
 
 export const createInvoice = async (
@@ -173,11 +269,54 @@ export const createInvoice = async (
       if (invoiceData.ncf) dbPayload.ncf = invoiceData.ncf;
       if (invoiceData.ncf_type) dbPayload.ncf_type = invoiceData.ncf_type;
 
-      const res = await supabase
+      let res = await supabase
         .from('invoices')
         .insert([dbPayload])
         .select()
         .single();
+
+      // If unique constraint conflict (409 / 23505), resolve collision automatically
+      if (
+        res.error &&
+        (res.error.code === '23505' ||
+          (res.error as any).status === 409 ||
+          res.error.message?.includes('duplicate key') ||
+          res.error.message?.includes('unique constraint'))
+      ) {
+        console.warn('Invoice sequence collision (409) detected in Supabase. Auto-resolving next unique sequence...');
+
+        // Find highest existing invoice number in Supabase
+        const { data: latestRows } = await supabase
+          .from('invoices')
+          .select('invoice_number')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        let highest = 0;
+        if (latestRows) {
+          for (const r of latestRows) {
+            const parsed = parseInt(String(r.invoice_number).replace(/\D/g, ''), 10);
+            if (!isNaN(parsed) && parsed > highest) highest = parsed;
+          }
+        }
+
+        const currentStored = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+        const resolvedSeq = Math.max(highest + 1, currentStored);
+        const resolvedNum = String(resolvedSeq).padStart(6, '0');
+
+        dbPayload.invoice_number = resolvedNum;
+        if (dbPayload.ncf && dbPayload.ncf.startsWith('INT-')) {
+          dbPayload.ncf = `INT-${resolvedNum}`;
+        }
+        localStorage.setItem('brianna_seq_invoice', String(resolvedSeq + 1));
+
+        // Retry insert with guaranteed unique number
+        res = await supabase
+          .from('invoices')
+          .insert([dbPayload])
+          .select()
+          .single();
+      }
 
       if (!res.error && res.data) {
         const inv = res.data;
@@ -190,7 +329,7 @@ export const createInvoice = async (
         }));
         await supabase.from('invoice_items').insert(preparedItems);
         
-        // Update local item with official Supabase id
+        // Update local item with official Supabase id and updated invoice_number/ncf
         const list = getLocalStorageInvoices();
         const idx = list.findIndex(i => i.id === localInvoice.id);
         if (idx !== -1) {

@@ -41,7 +41,7 @@ import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { getActiveRole, hasPermission } from '../utils/rolePermissions';
 import { useTheme } from '../contexts/ThemeContext';
-import { createInvoice, fetchInvoices, getLocalStorageInvoices, type Invoice } from '../services/invoicesService';
+import { createInvoice, fetchInvoices, getLocalStorageInvoices, syncAndGetNextInvoiceSequence, type Invoice } from '../services/invoicesService';
 import { fetchInventory, getLocalStorageInventory, updateInventoryItem } from '../services/inventoryService';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../services/customersService';
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
@@ -1621,6 +1621,35 @@ export default function POS() {
     transferReference?: string;
   }>({});
 
+  const printTicket = useCallback(() => {
+    document.body.classList.add('print-ticket-mode');
+    document.body.classList.remove('print-letter-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 120);
+    });
+  }, []);
+
+  const printLetter = useCallback(() => {
+    document.body.classList.add('print-letter-mode');
+    document.body.classList.remove('print-ticket-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 120);
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      document.body.classList.remove('print-ticket-mode');
+      document.body.classList.remove('print-letter-mode');
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
+
   const removeFromCart = useCallback((id: number) => {
     setCart(prev => prev.filter(item => item.product.id !== id));
   }, []);
@@ -1748,9 +1777,7 @@ export default function POS() {
         }
 
         // 1. Get next numeric invoice sequence
-        const currentInvSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
-        const formattedInvSeq = String(currentInvSeq).padStart(6, '0');
-        localStorage.setItem('brianna_seq_invoice', String(currentInvSeq + 1));
+        const { invoiceNumber: formattedInvSeq } = await syncAndGetNextInvoiceSequence('electronic');
 
         ecfRes = await transmitElectronicInvoice({
           invoiceNumber: formattedInvSeq,
@@ -1776,12 +1803,10 @@ export default function POS() {
         // Opción 2: Factura del Sistema / Comprobante Interno / Cotización
         finalNcfType = internalDocType;
         if (internalDocType === 'CT') {
-          const currentCtSeq = parseInt(localStorage.getItem('brianna_seq_ct') || '1', 10);
-          const formattedCtSeq = String(currentCtSeq).padStart(6, '0');
-          localStorage.setItem('brianna_seq_ct', String(currentCtSeq + 1));
+          const { invoiceNumber: formattedCtSeq, ncf: ctNcf } = await syncAndGetNextInvoiceSequence('ct');
 
-          finalInvoiceNumber = `CT-${formattedCtSeq}`;
-          finalNcf = `CT-${formattedCtSeq}`;
+          finalInvoiceNumber = formattedCtSeq;
+          finalNcf = ctNcf;
 
           setLastEcfData({
             success: true,
@@ -1793,12 +1818,10 @@ export default function POS() {
             issuedAt: new Date().toISOString(),
           });
         } else {
-          const currentInvSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
-          const formattedInvSeq = String(currentInvSeq).padStart(6, '0');
-          localStorage.setItem('brianna_seq_invoice', String(currentInvSeq + 1));
+          const { invoiceNumber: formattedInvSeq, ncf: intNcf } = await syncAndGetNextInvoiceSequence('internal');
 
           finalInvoiceNumber = formattedInvSeq;
-          finalNcf = `INT-${formattedInvSeq}`;
+          finalNcf = intNcf;
 
           const internalSecurityCode = generateSecurityCode();
           const internalQrUrl = `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${internalSecurityCode}&monto=${total.toFixed(2)}`;
@@ -1853,6 +1876,11 @@ export default function POS() {
       setIsCheckoutModalOpen(false);
       setIsSuccessModalOpen(true);
       setIsTransmitting(false);
+
+      // Auto-trigger thermal receipt print dialog for POS
+      setTimeout(() => {
+        printTicket();
+      }, 250);
 
       // 4. Background Persistence & Sync (Never blocks UI)
       const invoicePayload = {
@@ -2547,22 +2575,14 @@ export default function POS() {
                     {/* Action Buttons */}
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <button
-                        onClick={() => {
-                          document.body.classList.add('print-ticket-mode');
-                          document.body.classList.remove('print-letter-mode');
-                          setTimeout(() => window.print(), 50);
-                        }}
+                        onClick={printTicket}
                         className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
                       >
                         <PrinterIcon className="h-4 w-4 text-gray-500" />
                         <span>Ticket</span>
                       </button>
                       <button
-                        onClick={() => {
-                          document.body.classList.add('print-letter-mode');
-                          document.body.classList.remove('print-ticket-mode');
-                          setTimeout(() => window.print(), 50);
-                        }}
+                        onClick={printLetter}
                         className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
                       >
                         <DocumentArrowDownIcon className="h-4 w-4" />
@@ -2615,22 +2635,14 @@ export default function POS() {
                     {/* Action Buttons */}
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => {
-                          document.body.classList.add('print-ticket-mode');
-                          document.body.classList.remove('print-letter-mode');
-                          setTimeout(() => window.print(), 50);
-                        }}
+                        onClick={printTicket}
                         className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
                       >
                         <PrinterIcon className="h-4 w-4 text-gray-500" />
                         <span>Ticket</span>
                       </button>
                       <button
-                        onClick={() => {
-                          document.body.classList.add('print-letter-mode');
-                          document.body.classList.remove('print-ticket-mode');
-                          setTimeout(() => window.print(), 50);
-                        }}
+                        onClick={printLetter}
                         className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-[#ED1C24] dark:text-red-400 border border-red-200/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
                       >
                         <DocumentArrowDownIcon className="h-4 w-4" />
