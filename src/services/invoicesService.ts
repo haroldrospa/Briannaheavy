@@ -116,13 +116,31 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
         const res = await Promise.race([supabasePromise, timeoutPromise]);
         if (!res.error && res.data) {
           const supabaseInvoices = res.data as Invoice[];
-          saveLocalStorageInvoices(supabaseInvoices);
+
+          // Merge local and Supabase invoices so local sales are NEVER lost
+          const map = new Map<string, Invoice>();
+          localList.forEach(inv => map.set(inv.id, inv));
+          supabaseInvoices.forEach(inv => {
+            const existing = map.get(inv.id);
+            map.set(inv.id, {
+              ...inv,
+              bank_account_id: existing?.bank_account_id || (inv as any).bank_account_id,
+              bank_account_name: existing?.bank_account_name || (inv as any).bank_account_name,
+              transfer_reference: existing?.transfer_reference || (inv as any).transfer_reference,
+            });
+          });
+
+          const merged = Array.from(map.values()).sort((a, b) => 
+            new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
+          );
+
+          saveLocalStorageInvoices(merged);
           lastInvoicesFetch = Date.now();
 
           // Auto-align local sequence counters with database highest values
           let maxInv = 0;
           let maxCt = 0;
-          for (const inv of supabaseInvoices) {
+          for (const inv of merged) {
             const num = inv.invoice_number || '';
             if (num.startsWith('CT-')) {
               const p = parseInt(num.replace(/\D/g, ''), 10);
@@ -145,7 +163,7 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
             }
           }
 
-          return supabaseInvoices;
+          return merged;
         }
       } catch (err) {
         console.warn('Error fetching invoices from Supabase, returning local:', err);
@@ -248,6 +266,13 @@ export const createInvoice = async (
   const updated = [localInvoice, ...current];
   saveLocalStorageInvoices(updated);
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_invoices_updated', { detail: localInvoice }));
+    if (localInvoice.payment_method?.toLowerCase().includes('transf') || localInvoice.bank_account_id) {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: localInvoice }));
+    }
+  }
+
   // 2. Sync to Supabase
   if (isSupabaseConfigured()) {
     try {
@@ -340,7 +365,14 @@ export const createInvoice = async (
         const list = getLocalStorageInvoices();
         const idx = list.findIndex(i => i.id === localInvoice.id);
         if (idx !== -1) {
-          list[idx] = { ...localInvoice, ...inv, items: preparedItems } as Invoice;
+          list[idx] = { 
+            ...localInvoice, 
+            ...inv, 
+            bank_account_id: localInvoice.bank_account_id || (inv as any).bank_account_id,
+            bank_account_name: localInvoice.bank_account_name || (inv as any).bank_account_name,
+            transfer_reference: localInvoice.transfer_reference || (inv as any).transfer_reference,
+            items: preparedItems 
+          } as Invoice;
           saveLocalStorageInvoices(list);
         }
       }

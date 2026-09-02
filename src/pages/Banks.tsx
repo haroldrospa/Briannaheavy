@@ -52,13 +52,19 @@ export default function Banks() {
 
     const handleBankChanges = () => loadData();
     window.addEventListener('brianna_bank_transactions_changed', handleBankChanges);
+    window.addEventListener('brianna_invoices_updated', handleBankChanges);
     window.addEventListener('brianna_bank_accounts_changed', handleBankChanges);
     window.addEventListener('brianna_cash_movements_changed', handleBankChanges);
+    window.addEventListener('storage', handleBankChanges);
+    window.addEventListener('focus', handleBankChanges);
 
     return () => {
       window.removeEventListener('brianna_bank_transactions_changed', handleBankChanges);
+      window.removeEventListener('brianna_invoices_updated', handleBankChanges);
       window.removeEventListener('brianna_bank_accounts_changed', handleBankChanges);
       window.removeEventListener('brianna_cash_movements_changed', handleBankChanges);
+      window.removeEventListener('storage', handleBankChanges);
+      window.removeEventListener('focus', handleBankChanges);
     };
   }, [loadData]);
 
