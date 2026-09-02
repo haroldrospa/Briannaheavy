@@ -35,6 +35,7 @@ import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import SessionSalesModal from '../components/finance/SessionSalesModal';
 import type { SessionSale } from '../components/finance/SessionSalesModal';
+import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
@@ -2631,21 +2632,40 @@ export default function POS() {
               </p>
 
               {/* Invoice & Total Summary Card */}
-              <div className="my-4 py-3 px-4 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-1">
+              <div className="my-3.5 py-3 px-4 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800 flex flex-col items-center gap-1.5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
                   {lastCompletedSale?.ncf.startsWith('CT') ? 'Número Cotización' : 'Comprobante NCF'}
                 </div>
                 <div className="text-2xl font-black font-mono tracking-wider text-[#ED1C24] dark:text-red-500">
                   {lastCompletedSale?.ncf || currentNCF}
                 </div>
-                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200 pt-0.5">
+                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200">
                   Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod || paymentMethod}
                 </div>
                 {lastCompletedSale?.client && (
-                  <div className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+                  <div className="text-xs text-gray-500 dark:text-zinc-400 truncate max-w-full">
                     Cliente: {lastCompletedSale.client.name}
                   </div>
                 )}
+
+                {/* QR Code Container */}
+                <div className="mt-1 p-2 bg-white rounded-xl shadow-xs border border-gray-200/80 flex flex-col items-center">
+                  <QRCode
+                    value={
+                      lastCompletedSale?.lastEcfData?.qrCodeUrl ||
+                      lastEcfData?.qrCodeUrl ||
+                      `https://dgii.gov.do/ecf/consultatimbre?encf=${lastCompletedSale?.ncf || currentNCF}&monto=${(lastCompletedSale?.total ?? total).toFixed(2)}`
+                    }
+                    size={95}
+                    level="M"
+                  />
+                  <div className="mt-1 flex items-center gap-1 text-[9px] font-mono text-gray-500">
+                    {lastCompletedSale?.lastEcfData?.securityCode && (
+                      <span>Cód: <strong>{lastCompletedSale.lastEcfData.securityCode}</strong> •</span>
+                    )}
+                    <span className="text-emerald-600 font-bold">Timbre Digital</span>
+                  </div>
+                </div>
               </div>
 
               {/* Question: Imprimir */}
