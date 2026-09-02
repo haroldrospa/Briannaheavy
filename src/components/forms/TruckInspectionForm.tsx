@@ -1,13 +1,6 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { 
-  TruckIcon, 
-  DocumentCheckIcon, 
-  UserIcon, 
-  CalendarDaysIcon, 
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CheckIcon
-} from '@heroicons/react/24/outline';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { PrinterIcon } from '@heroicons/react/24/outline';
+import logo from '../../assets/logo.png';
 
 const UNIVERSAL_VEHICLES_CATALOG = [
   { brand: 'MACK', models: ['ANTHEM', 'GRANITE', 'PINNACLE', 'LR', 'TERRAPRO', 'SUPER-LINER', 'TITAN', 'MD SERIES'] },
@@ -39,15 +32,49 @@ const UNIVERSAL_VEHICLES_CATALOG = [
 ];
 
 const INSPECTION_ITEMS = [
-  'LUCES DELANTERAS ALTA / BAJA', 'LUCES TRASERAS', 'LUCES DE FRENOS', 'LUCES INTERMITENTES F / A',
-  'ASIENTOS', 'CHEQUEO FLUIDOS', 'ACEITE HIDRÁULICO', 'ACEITE DE TRANSMISIÓN', 'ACEITE DE MOTOR',
-  'ACEITE DE DIRECCIÓN', 'REFRIGERANTE', 'RADIADOR', 'INDICADOR DE COMBUSTIBLE', 'INDICADOR DE TEMPERATURA',
-  'INDICADOR DE PRESIÓN DE ACEITE', 'TABLERO', 'CINTURÓN DE SEGURIDAD', 'RETROVISOR', 'BOCINA',
-  'TANQUE DE COMBUSTIBLE', 'FUGAS EVIDENTES', 'CEPILLOS LIMPIA PARABRISAS', 'LLANTAS EJE ATRÁS',
-  'LLANTAS FRENTE', 'ARO ALUMINIOS', 'ARO HIERROS', 'NEUMÁTICOS', 'NEUMÁTICOS DE REPUESTO',
-  'TAPA DE COMBUSTIBLE', 'PUERTAS', 'VIDRIO DELANTERO', 'VIDRIO TRASERO', 'VIDRIOS LATERALES DELANTEROS',
-  'VIDRIOS LATERALES TRASEROS', 'DIRECCIÓN', 'SUSPENSIÓN DELANTERA', 'SUSPENSIÓN TRASERA', 'PINTURA',
-  'ORDEN Y LIMPIEZA', 'SISTEMA ECOLÓGICO'
+  // Columna 1 (0 a 19): Cabina, Luces, Fluidos, Motor
+  'LUCES DELANTERAS ALTA / BAJA',
+  'LUCES TRASERAS',
+  'LUCES DE FRENOS',
+  'LUCES INTERMITENTES F / A',
+  'ASIENTOS',
+  'CHEQUEO FLUIDOS',
+  'ACEITE HIDRÁULICO',
+  'ACEITE DE TRANSMISIÓN',
+  'ACEITE DE MOTOR',
+  'ACEITE DE DIRECCIÓN',
+  'REFRIGERANTE',
+  'RADIADOR',
+  'INDICADOR DE COMBUSTIBLE',
+  'INDICADOR DE TEMPERATURA',
+  'INDICADOR DE PRESIÓN DE ACEITE',
+  'TABLERO',
+  'CINTURÓN DE SEGURIDAD',
+  'RETROVISOR',
+  'BOCINA',
+  'TANQUE DE COMBUSTIBLE',
+
+  // Columna 2 (20 a 39): Carrocería, Neumáticos, Vidrios, Suspensión
+  'FUGAS EVIDENTES',
+  'CEPILLOS LIMPIA PARABRISAS',
+  'LLANTAS EJE ATRÁS',
+  'LLANTAS FRENTE',
+  'ARO ALUMINIOS',
+  'ARO HIERROS',
+  'NEUMÁTICOS',
+  'NEUMÁTICOS DE REPUESTO',
+  'TAPA DE COMBUSTIBLE',
+  'PUERTAS',
+  'VIDRIO DELANTERO',
+  'VIDRIO TRASERO',
+  'VIDRIOS LATERALES DELANTEROS',
+  'VIDRIOS LATERALES TRASEROS',
+  'DIRECCIÓN',
+  'SUSPENSIÓN DELANTERA',
+  'SUSPENSIÓN TRASERA',
+  'PINTURA',
+  'ORDEN Y LIMPIEZA',
+  'SISTEMA ECOLÓGICO'
 ];
 
 interface InspectionItemRowProps {
@@ -61,70 +88,76 @@ interface InspectionItemRowProps {
 
 const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, onObsChange }: InspectionItemRowProps) => {
   return (
-    <div className="flex border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-[#222] transition-colors group print:border-gray-300">
-      <div className="w-1/3 p-3 text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center print:text-[9.5px] print:p-1 print:text-black">
+    <tr className="border-b border-gray-100 dark:border-zinc-800/60 print:border-gray-300 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors odd:bg-white dark:odd:bg-zinc-900 even:bg-gray-50/40 dark:even:bg-zinc-850/40 print:odd:bg-white print:even:bg-gray-50/60">
+      {/* 1. Item Name */}
+      <td className="py-1 px-1.5 sm:py-1.5 sm:px-2 text-[10px] sm:text-[11px] print:text-[8px] font-bold text-gray-800 dark:text-zinc-200 print:text-black leading-tight align-middle truncate max-w-[130px] sm:max-w-[160px] print:max-w-none">
+        <span className="text-[9px] text-gray-400 dark:text-zinc-500 font-mono mr-1 print:hidden">{String(idx + 1).padStart(2, '0')}.</span>
         {item}
-      </div>
-      <div className="w-28 flex border-x border-gray-100 dark:border-gray-800 print:border-gray-300">
-        <div className="w-1/3 flex items-center justify-center border-r border-gray-100 dark:border-gray-800 hover:bg-green-50/50 dark:hover:bg-green-900/30 transition-colors print:border-gray-300">
-          <input 
-            type="radio" 
-            name={`status-${idx}`} 
-            checked={status === 'B'}
-            onChange={() => onStatusChange(item, 'B')}
-            className="w-4 h-4 text-green-500 focus:ring-green-500 cursor-pointer print:hidden" 
-          />
-          <span className="hidden print:inline-block text-xs font-black text-green-700">{status === 'B' ? '✓' : ''}</span>
+      </td>
+
+      {/* 2. Status Radios / Checkmark */}
+      <td className="py-0.5 px-0.5 sm:py-1 sm:px-1 w-20 sm:w-24 print:w-16 align-middle">
+        <div className="flex items-center justify-center gap-0.5">
+          {/* Bueno */}
+          <button
+            type="button"
+            onClick={() => onStatusChange(item, 'B')}
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+              status === 'B' 
+                ? 'bg-emerald-500 text-white shadow-2xs font-black print:bg-transparent print:text-emerald-700' 
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-emerald-100 hover:text-emerald-600 print:hidden'
+            }`}
+            title="Bueno"
+          >
+            {status === 'B' ? '✓' : 'B'}
+          </button>
+
+          {/* Regular */}
+          <button
+            type="button"
+            onClick={() => onStatusChange(item, 'R')}
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+              status === 'R' 
+                ? 'bg-amber-500 text-white shadow-2xs font-black print:bg-transparent print:text-amber-700' 
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-amber-100 hover:text-amber-600 print:hidden'
+            }`}
+            title="Regular"
+          >
+            {status === 'R' ? '⚠' : 'R'}
+          </button>
+
+          {/* Deficiente */}
+          <button
+            type="button"
+            onClick={() => onStatusChange(item, 'D')}
+            className={`w-5 h-5 sm:w-6 sm:h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-all print:w-4 print:h-4 print:text-[8px] ${
+              status === 'D' 
+                ? 'bg-red-600 text-white shadow-2xs font-black print:bg-transparent print:text-red-700' 
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-red-100 hover:text-red-600 print:hidden'
+            }`}
+            title="Deficiente"
+          >
+            {status === 'D' ? '✕' : 'D'}
+          </button>
         </div>
-        <div className="w-1/3 flex items-center justify-center border-r border-gray-100 dark:border-gray-800 hover:bg-yellow-50/50 dark:hover:bg-yellow-900/30 transition-colors print:border-gray-300">
-          <input 
-            type="radio" 
-            name={`status-${idx}`} 
-            checked={status === 'R'}
-            onChange={() => onStatusChange(item, 'R')}
-            className="w-4 h-4 text-yellow-400 focus:ring-yellow-400 cursor-pointer print:hidden" 
-          />
-          <span className="hidden print:inline-block text-xs font-black text-amber-700">{status === 'R' ? '✓' : ''}</span>
-        </div>
-        <div className="w-1/3 flex items-center justify-center hover:bg-red-50/50 dark:hover:bg-red-900/30 transition-colors">
-          <input 
-            type="radio" 
-            name={`status-${idx}`} 
-            checked={status === 'D'}
-            onChange={() => onStatusChange(item, 'D')}
-            className="w-4 h-4 text-red-500 focus:ring-red-500 cursor-pointer print:hidden" 
-          />
-          <span className="hidden print:inline-block text-xs font-black text-red-700">{status === 'D' ? '✓' : ''}</span>
-        </div>
-      </div>
-      <div className="flex-1 p-2 print:p-1">
+      </td>
+
+      {/* 3. Observation */}
+      <td className="py-0.5 px-1 sm:py-1 sm:px-1.5 align-middle">
         <input 
           type="text" 
           value={obs}
           onChange={(e) => onObsChange(item, e.target.value)}
-          placeholder="Añadir observación..."
-          className="w-full h-full p-2 bg-transparent border-none rounded-lg text-sm font-medium text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#333] focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:hidden" 
+          placeholder="Obs..."
+          className="w-full py-0.5 px-1 bg-transparent text-[10px] sm:text-[11px] print:text-[7.5px] font-medium text-gray-900 dark:text-zinc-100 border-none outline-none focus:bg-white dark:focus:bg-zinc-800 focus:ring-1 focus:ring-red-500/50 rounded print:hidden placeholder:text-gray-300" 
         />
-        <span className="hidden print:block text-[9.5px] font-medium text-black">{obs || '—'}</span>
-      </div>
-    </div>
+        <span className="hidden print:block text-[7.5px] font-medium text-gray-700 leading-none truncate max-w-[110px]">
+          {obs || '—'}
+        </span>
+      </td>
+    </tr>
   );
 });
-
-const getCurrentDate = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const getCurrentTime = () => {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
 
 interface TruckInspectionFormProps {
   initialData?: {
@@ -141,6 +174,21 @@ interface TruckInspectionFormProps {
   };
 }
 
+const getCurrentDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentTime = () => {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 export default function TruckInspectionForm({ initialData }: TruckInspectionFormProps = {}) {
   const [formData, setFormData] = useState<Record<string, { status: 'B'|'R'|'D'|'', obs: string }>>(() => {
     if (!initialData) return {};
@@ -153,9 +201,9 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
       if (idx < good) {
         data[item] = { status: 'B', obs: '' };
       } else if (idx < good + reg) {
-        data[item] = { status: 'R', obs: 'Revisión preventiva en taller' };
+        data[item] = { status: 'R', obs: 'Revisión preventiva' };
       } else if (idx < good + reg + def) {
-        data[item] = { status: 'D', obs: 'Requiere sustitución o reparación' };
+        data[item] = { status: 'D', obs: 'Requiere sustitución' };
       } else {
         data[item] = { status: 'B', obs: '' };
       }
@@ -171,6 +219,9 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
     return sessionUser || 'HAROLD RODRÍGUEZ';
   });
 
+  const [fuelLevel, setFuelLevel] = useState<string>('3/4');
+  const [generalNotes, setGeneralNotes] = useState<string>('Vehículo operativo y listo para ruta. Se recomienda chequeo preventivo.');
+
   const [reportSeq, setReportSeq] = useState<string>(() => {
     return initialData?.code || localStorage.getItem('brianna_inspection_seq') || '0004';
   });
@@ -185,8 +236,8 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
   }, []);
 
   const [vehicleInfo, setVehicleInfo] = useState(() => {
-    let brand = '';
-    let model = '';
+    let brand = 'MACK';
+    let model = 'GRANITE';
     if (initialData?.vehicle) {
       const parts = initialData.vehicle.split(' ');
       brand = parts[0] || '';
@@ -196,8 +247,8 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
       brand,
       model,
       year: '2024',
-      mileage: initialData?.mileage || '',
-      vin: initialData?.vin || ''
+      mileage: initialData?.mileage || '45,200',
+      vin: initialData?.vin || '1M2AX13C5PM001892'
     };
   });
 
@@ -247,10 +298,6 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
     setShowModelDropdown(false);
   };
 
-  const handleClearVehicle = () => {
-    setVehicleInfo({ brand: '', model: '', year: '', mileage: '', vin: '' });
-  };
-
   const handleStatusChange = useCallback((item: string, status: 'B'|'R'|'D') => {
     setFormData(prev => ({
       ...prev,
@@ -265,275 +312,294 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
     }));
   }, []);
 
+  // Totales calculados
+  const stats = useMemo(() => {
+    let good = 0;
+    let reg = 0;
+    let def = 0;
+    INSPECTION_ITEMS.forEach(item => {
+      const st = formData[item]?.status;
+      if (st === 'B') good++;
+      else if (st === 'R') reg++;
+      else if (st === 'D') def++;
+    });
+    return { good, reg, def, total: INSPECTION_ITEMS.length };
+  }, [formData]);
+
+  // División exacta en 2 columnas de 20 items cada una
+  const col1Items = useMemo(() => INSPECTION_ITEMS.slice(0, 20), []);
+  const col2Items = useMemo(() => INSPECTION_ITEMS.slice(20, 40), []);
+
   return (
-    <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[700px] flex flex-col rounded-2xl sm:rounded-3xl print:rounded-none overflow-hidden">
+    <div className="w-full bg-white dark:bg-zinc-950 print:bg-white text-gray-900 dark:text-zinc-100 font-sans p-2 sm:p-5 print:p-0 print:m-0 rounded-2xl print:rounded-none max-w-7xl mx-auto shadow-xs print:shadow-none">
       
-      <div className="w-full max-w-none p-3.5 sm:p-6 font-sans flex-1 flex flex-col print:max-w-none print:p-0 gap-4 sm:gap-6">
-        
-        {/* Document Header (Compact & Minimalist) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-[#1a1a1a] p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-200/60 dark:border-gray-800 print:shadow-none print:border-none print:p-0 print:rounded-none gap-3 sm:gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center print:border print:border-gray-900 print:bg-transparent shrink-0">
-              <DocumentCheckIcon className="h-5 w-5 sm:h-6 sm:w-6 text-gray-900 dark:text-white print:text-black" />
-            </div>
+      {/* Strict Print CSS for 1-Page Letter Layout */}
+      <style>{`
+        @media print {
+          @page {
+            size: letter portrait;
+            margin: 5mm 6mm 5mm 6mm !important;
+          }
+          html, body {
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .inspection-single-page {
+            height: 100% !important;
+            max-height: 268mm !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            overflow: hidden !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
+
+      {/* Main Single Page Container */}
+      <div className="inspection-single-page flex flex-col justify-between space-y-2.5 print:space-y-1.5">
+
+        {/* 1. HEADER CORPORATIVO BRIANNA HEAVY EQUIPMENT */}
+        <div className="flex items-center justify-between pb-2 border-b-2 border-red-600 dark:border-red-500 print:pb-1 print:border-red-600">
+          {/* Logo y Datos de la Empresa */}
+          <div className="flex items-center gap-3 print:gap-2">
+            <img 
+              src={logo} 
+              alt="Brianna Heavy Equipment" 
+              className="h-10 sm:h-12 w-auto object-contain print:h-9" 
+            />
             <div>
-              <div className="text-[10px] sm:text-xs font-bold tracking-wider text-gray-500 dark:text-zinc-400 print:text-gray-500 uppercase">
-                Brianna Heavy Equipment • RNC: 132610362
-              </div>
-              <h1 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight leading-tight">
-                Inspección de Camiones
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-gray-900 dark:text-white print:text-black uppercase leading-tight">
+                BRIANNA HEAVY EQUIPMENT S.R.L.
               </h1>
-              <p className="text-[11px] font-medium text-gray-500 dark:text-zinc-400">Departamento de Mantenimiento</p>
+              <div className="flex items-center gap-2 text-[10px] sm:text-xs text-gray-500 dark:text-zinc-400 print:text-gray-600 font-bold">
+                <span>RNC: 132-61036-2</span>
+                <span>•</span>
+                <span className="text-[#ED1C24] font-black uppercase">Hoja de Inspección Técnica Vehicular</span>
+              </div>
             </div>
           </div>
-          
-          <div className="flex items-center justify-between sm:justify-end gap-2.5 bg-gray-50 dark:bg-[#222222] px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-gray-200/60 dark:border-gray-800 print:bg-transparent print:border-none print:p-0 shrink-0">
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Nº de Reporte</span>
-            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight print:text-black select-none">
-              {reportSeq}
-            </span>
+
+          {/* Reporte Nº y Acciones de Pantalla */}
+          <div className="flex items-center gap-2">
+            <div className="text-right border-l border-gray-200 dark:border-zinc-800 print:border-gray-300 pl-3 sm:pl-4 print:pl-2">
+              <span className="text-[9px] uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:text-gray-500 block font-black">
+                Nº DE REPORTE
+              </span>
+              <span className="text-base sm:text-lg font-black font-mono text-[#ED1C24] print:text-black tracking-tight">
+                #{reportSeq}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-all print:hidden cursor-pointer ml-2"
+              title="Imprimir en 1 Sola Hoja"
+            >
+              <PrinterIcon className="w-4 h-4" />
+              <span>Imprimir</span>
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Left Column (Metadata) */}
-          <div className="lg:col-span-1 flex flex-col gap-4 sm:gap-6">
-            {/* Vehicle Info */}
-            <div className="bg-white dark:bg-[#1a1a1a] p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-200/60 dark:border-gray-800 space-y-3.5 print:shadow-none print:border-gray-900 print:rounded-none">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
-                  <TruckIcon className="h-4 w-4 text-gray-900 dark:text-white print:text-black" />
-                  Datos del Vehículo
-                </h3>
-                {(vehicleInfo.brand || vehicleInfo.model || vehicleInfo.vin) && (
-                  <button 
-                    type="button" 
-                    onClick={handleClearVehicle}
-                    className="text-xs font-bold text-gray-900 dark:text-white hover:underline print:hidden cursor-pointer"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-              
-              <div className="space-y-4">
-                {/* Marca Autocompletada */}
-                <div className="relative" ref={brandRef}>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">
-                    Marca (Escribe o Selecciona)
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      value={vehicleInfo.brand}
-                      onChange={(e) => {
-                        setVehicleInfo(prev => ({ ...prev, brand: e.target.value.toUpperCase() }));
-                        setShowBrandDropdown(true);
-                      }}
-                      onFocus={() => setShowBrandDropdown(true)}
-                      placeholder="Ej. FREIGHTLINER, MACK, CAT..." 
-                      className="w-full pl-4 pr-8 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all uppercase"
-                    />
-                    <ChevronDownIcon className="h-4 w-4 text-gray-400 dark:text-zinc-400 absolute right-3 top-3 pointer-events-none" />
-                  </div>
-
-                  {/* Dropdown de Marcas */}
-                  {showBrandDropdown && (
-                    <div className="absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-[#1f2028] border border-gray-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-zinc-800">
-                      {filteredBrands.length > 0 ? (
-                        filteredBrands.map((b) => (
-                          <button
-                            key={b.brand}
-                            type="button"
-                            onClick={() => handleSelectBrand(b.brand)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-gray-900 dark:text-white dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
-                          >
-                            <span>{b.brand}</span>
-                            <span className="text-[10px] text-gray-400 font-normal">({b.models.length} modelos)</span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="p-3 text-center text-xs text-gray-400 dark:text-zinc-500">
-                          Marca libre. Puedes continuar escribiendo.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Modelo Autocompletado */}
-                <div className="relative" ref={modelRef}>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">
-                    Modelo (Escribe o Selecciona)
-                  </label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      value={vehicleInfo.model}
-                      onChange={(e) => {
-                        setVehicleInfo(prev => ({ ...prev, model: e.target.value.toUpperCase() }));
-                        setShowModelDropdown(true);
-                      }}
-                      onFocus={() => setShowModelDropdown(true)}
-                      placeholder="Ej. CASCADIA 126, ANTHEM..." 
-                      className="w-full pl-4 pr-8 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all uppercase"
-                    />
-                    <ChevronDownIcon className="h-4 w-4 text-gray-400 dark:text-zinc-400 absolute right-3 top-3 pointer-events-none" />
-                  </div>
-
-                  {/* Dropdown de Modelos */}
-                  {showModelDropdown && (
-                    <div className="absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-[#1f2028] border border-gray-200 dark:border-zinc-700 rounded-2xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-zinc-800">
-                      {filteredModels.length > 0 ? (
-                        filteredModels.map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => handleSelectModel(m)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-red-50/50 dark:hover:bg-zinc-800/80 text-sm font-bold text-gray-900 dark:text-zinc-100 hover:text-gray-900 dark:text-white dark:hover:text-red-400 transition-colors flex items-center justify-between group cursor-pointer"
-                          >
-                            <span>{m}</span>
-                            <CheckIcon className="h-4 w-4 text-gray-900 dark:text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </button>
-                        ))
-                      ) : (
-                        <div className="p-3 text-center text-xs text-gray-400 dark:text-zinc-500">
-                          Modelo libre. Puedes escribir libremente.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Año</label>
-                    <input 
-                      type="text" 
-                      value={vehicleInfo.year}
-                      onChange={(e) => setVehicleInfo(prev => ({ ...prev, year: e.target.value }))}
-                      placeholder="2024"
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Millas/Km</label>
-                    <input 
-                      type="text" 
-                      value={vehicleInfo.mileage}
-                      onChange={(e) => setVehicleInfo(prev => ({ ...prev, mileage: e.target.value }))}
-                      placeholder="45,200"
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Chasis</label>
-                  <input 
-                    type="text" 
-                    value={vehicleInfo.vin}
-                    onChange={(e) => setVehicleInfo(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
-                    placeholder="1M2AX13C5PM001892"
-                    className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" 
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Inspector Info */}
-            <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 space-y-4 print:shadow-none print:border-gray-900 print:rounded-none">
-              <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-                <UserIcon className="h-5 w-5 text-gray-900 dark:text-white print:text-black" />
-                Detalles de Inspección
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Nombre del Inspector</label>
-                  <input 
-                    type="text" 
-                    value={inspectorName}
-                    onChange={(e) => setInspectorName(e.target.value.toUpperCase())}
-                    placeholder="EJ. HAROLD RODRÍGUEZ"
-                    className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1 uppercase" 
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1">
-                      <CalendarDaysIcon className="h-3 w-3" /> Fecha
-                    </label>
-                    <input 
-                      type="date" 
-                      value={inspectionDate}
-                      onChange={(e) => setInspectionDate(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Hora</label>
-                    <input 
-                      type="time" 
-                      value={inspectionTime}
-                      onChange={(e) => setInspectionTime(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] border-none rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 outline-none transition-all print:bg-transparent print:border-b print:border-gray-400 print:rounded-none print:px-0 print:py-1" 
-                    />
-                  </div>
-                </div>
+        {/* 2. DATOS DEL VEHÍCULO Y DETALLES DE INSPECCIÓN (Ultra Compacto en 2 filas) */}
+        <div className="bg-gray-50/80 dark:bg-zinc-900/90 rounded-xl p-2 sm:p-2.5 border border-gray-200/80 dark:border-zinc-800 text-xs print:bg-gray-50 print:border-gray-300 print:p-1.5 print:rounded-lg">
+          {/* Fila 1: Vehículo, Año, Chasis/VIN, Millas */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pb-1.5 border-b border-gray-200/60 dark:border-zinc-800/80 print:border-gray-300 print:pb-1">
+            {/* Marca & Modelo */}
+            <div className="relative" ref={brandRef}>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Vehículo / Marca / Modelo
+              </span>
+              <div className="flex items-center gap-1">
+                <input 
+                  type="text" 
+                  value={vehicleInfo.brand}
+                  onChange={(e) => {
+                    setVehicleInfo(prev => ({ ...prev, brand: e.target.value.toUpperCase() }));
+                    setShowBrandDropdown(true);
+                  }}
+                  onFocus={() => setShowBrandDropdown(true)}
+                  placeholder="MARCA"
+                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent print:w-auto uppercase"
+                />
+                <input 
+                  type="text" 
+                  value={vehicleInfo.model}
+                  onChange={(e) => {
+                    setVehicleInfo(prev => ({ ...prev, model: e.target.value.toUpperCase() }));
+                    setShowModelDropdown(true);
+                  }}
+                  onFocus={() => setShowModelDropdown(true)}
+                  placeholder="MODELO"
+                  className="w-1/2 p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent print:w-auto uppercase"
+                />
               </div>
 
-              {/* Fuel Level */}
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800 print:border-gray-300 mt-4">
-                <label className="block text-xs font-bold text-gray-900 dark:text-white mb-3 uppercase tracking-wider">Nivel de Combustible</label>
-                <div className="flex flex-wrap gap-3">
-                  {['Vacio', '1/4', '1/2', '3/4', 'Lleno'].map(level => (
-                    <label key={level} className="flex items-center gap-1.5 cursor-pointer bg-gray-50 dark:bg-[#222222] px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 transition-colors print:bg-transparent print:border-none print:p-0">
-                      <input type="radio" name="fuel" className="w-3.5 h-3.5 text-gray-900 dark:text-white focus:ring-[#ED1C24]" />
-                      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{level}</span>
-                    </label>
+              {/* Autocomplete Brand */}
+              {showBrandDropdown && (
+                <div className="absolute z-40 left-0 mt-1 w-48 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto print:hidden">
+                  {filteredBrands.map(b => (
+                    <button
+                      key={b.brand}
+                      type="button"
+                      onClick={() => handleSelectBrand(b.brand)}
+                      className="w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-red-50 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-zinc-200"
+                    >
+                      {b.brand}
+                    </button>
                   ))}
                 </div>
-              </div>
+              )}
+
+              {/* Autocomplete Model */}
+              {showModelDropdown && (
+                <div className="absolute z-40 left-20 mt-1 w-48 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl max-h-48 overflow-y-auto print:hidden">
+                  {filteredModels.map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => handleSelectModel(m)}
+                      className="w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-red-50 dark:hover:bg-zinc-700 cursor-pointer text-gray-800 dark:text-zinc-200"
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            
-            {/* Truck Silhouette */}
-            <div className="bg-white dark:bg-[#1a1a1a] p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-center opacity-80 print:shadow-none print:border-gray-900 print:rounded-none">
-              <svg viewBox="0 0 600 200" className="w-full max-w-[200px] h-auto stroke-gray-700 dark:stroke-zinc-300" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="50" y="40" width="120" height="120" rx="15" />
-                <rect x="180" y="50" width="80" height="100" />
-                <rect x="270" y="40" width="280" height="120" rx="10" />
-                <line x1="120" y1="40" x2="120" y2="160" />
-                <circle cx="100" cy="100" r="15" />
-                <text x="100" y="105" textAnchor="middle" fontSize="16" fontWeight="bold" stroke="none" className="fill-gray-700 dark:fill-zinc-300">D</text>
-                <line x1="180" y1="100" x2="270" y2="100" strokeDasharray="4 4" />
-                <line x1="270" y1="50" x2="550" y2="50" />
-                <line x1="270" y1="150" x2="550" y2="150" />
-                <line x1="550" y1="50" x2="550" y2="150" />
-              </svg>
+
+            {/* Año */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Año
+              </span>
+              <input 
+                type="text" 
+                value={vehicleInfo.year}
+                onChange={(e) => setVehicleInfo(prev => ({ ...prev, year: e.target.value }))}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+              />
+            </div>
+
+            {/* Chasis / VIN */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Chasis / VIN
+              </span>
+              <input 
+                type="text" 
+                value={vehicleInfo.vin}
+                onChange={(e) => setVehicleInfo(prev => ({ ...prev, vin: e.target.value.toUpperCase() }))}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent uppercase"
+              />
+            </div>
+
+            {/* Odómetro */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Millas / Km
+              </span>
+              <input 
+                type="text" 
+                value={vehicleInfo.mileage}
+                onChange={(e) => setVehicleInfo(prev => ({ ...prev, mileage: e.target.value }))}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-mono font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+              />
             </div>
           </div>
 
-          {/* Right Column (Checklist) */}
-          <div className="lg:col-span-2 flex flex-col h-full max-h-[1200px] print:max-h-none print:h-auto">
-            <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 flex-1 flex flex-col overflow-hidden print:shadow-none print:border-gray-900 print:rounded-none">
-              
-              {/* Table Header */}
-              <div className="flex bg-gray-50 dark:bg-[#222222] border-b border-gray-200 dark:border-gray-800 font-bold text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider print:border-gray-900 shrink-0">
-                <div className="w-1/3 p-4 print:p-1.5 flex items-center print:text-black">Descripción</div>
-                <div className="w-28 border-x border-gray-200 dark:border-gray-800 flex flex-col print:border-gray-900">
-                  <div className="border-b border-gray-200 dark:border-gray-800 p-1 text-center text-[10px] print:border-gray-900 print:text-black font-bold">Estado</div>
-                  <div className="flex flex-1 text-[10px]">
-                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-green-600 font-black">B</div>
-                    <div className="w-1/3 p-1 flex items-center justify-center border-r border-gray-200 dark:border-gray-800 print:border-gray-900 text-yellow-500 font-black">R</div>
-                    <div className="w-1/3 p-1 flex items-center justify-center text-red-500 font-black">D</div>
-                  </div>
-                </div>
-                <div className="flex-1 p-4 print:p-1.5 flex items-center justify-center print:text-black">Observaciones</div>
-              </div>
+          {/* Fila 2: Inspector, Fecha, Hora, Nivel Combustible */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-1.5 print:pt-1">
+            {/* Inspector */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Inspector / Técnico
+              </span>
+              <input 
+                type="text" 
+                value={inspectorName}
+                onChange={(e) => setInspectorName(e.target.value.toUpperCase())}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-black text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent uppercase"
+              />
+            </div>
 
-              {/* Table Body */}
-              <div className="flex flex-col flex-1 overflow-y-auto print:overflow-visible print:h-auto">
-                {INSPECTION_ITEMS.map((item, idx) => (
+            {/* Fecha */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Fecha Inspección
+              </span>
+              <input 
+                type="date" 
+                value={inspectionDate}
+                onChange={(e) => setInspectionDate(e.target.value)}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+              />
+            </div>
+
+            {/* Hora */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Hora
+              </span>
+              <input 
+                type="time" 
+                value={inspectionTime}
+                onChange={(e) => setInspectionTime(e.target.value)}
+                className="w-full p-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded text-xs font-bold text-gray-900 dark:text-white print:border-none print:p-0 print:bg-transparent"
+              />
+            </div>
+
+            {/* Nivel de Combustible (Compact Bar) */}
+            <div>
+              <span className="text-[9px] font-black text-gray-400 dark:text-zinc-500 print:text-gray-500 uppercase tracking-wider block">
+                Nivel de Combustible
+              </span>
+              <div className="flex items-center gap-1 pt-0.5">
+                {['Vacio', '1/4', '1/2', '3/4', 'Lleno'].map(lvl => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setFuelLevel(lvl)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-all print:px-1 print:text-[8px] ${
+                      fuelLevel === lvl 
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black print:bg-black print:text-white' 
+                        : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 print:border-gray-300'
+                    }`}
+                  >
+                    {lvl === 'Vacio' ? 'E' : lvl === 'Lleno' ? 'F' : lvl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. CHECKLIST EN 2 COLUMNAS PARALELAS (20 Items por columna = 1 sola hoja garantizada) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-2 print:gap-2">
+          
+          {/* COLUMNA 1 (Items 1 a 20) */}
+          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-200 dark:border-zinc-700 print:border-gray-400 text-[9px] print:text-[8px] font-black uppercase text-gray-600 dark:text-zinc-400 print:text-black">
+                  <th className="py-1 px-2 text-left">1. Componente / Sistema</th>
+                  <th className="py-1 px-1 text-center w-20 print:w-16">
+                    <span className="text-emerald-600">B</span> / <span className="text-amber-500">R</span> / <span className="text-red-600">D</span>
+                  </th>
+                  <th className="py-1 px-2 text-left">Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {col1Items.map((item, idx) => (
                   <InspectionItemRow
                     key={item}
                     item={item}
@@ -544,33 +610,159 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                     onObsChange={handleObsChange}
                   />
                 ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* COLUMNA 2 (Items 21 a 40) */}
+          <div className="rounded-xl border border-gray-200 dark:border-zinc-800 print:border-gray-300 overflow-hidden bg-white dark:bg-zinc-900 print:bg-white shadow-2xs print:shadow-none">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-zinc-800 print:bg-gray-200 border-b border-gray-200 dark:border-zinc-700 print:border-gray-400 text-[9px] print:text-[8px] font-black uppercase text-gray-600 dark:text-zinc-400 print:text-black">
+                  <th className="py-1 px-2 text-left">2. Componente / Sistema</th>
+                  <th className="py-1 px-1 text-center w-20 print:w-16">
+                    <span className="text-emerald-600">B</span> / <span className="text-amber-500">R</span> / <span className="text-red-600">D</span>
+                  </th>
+                  <th className="py-1 px-2 text-left">Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {col2Items.map((item, idx) => (
+                  <InspectionItemRow
+                    key={item}
+                    item={item}
+                    idx={idx + 20}
+                    status={formData[item]?.status || ''}
+                    obs={formData[item]?.obs || ''}
+                    onStatusChange={handleStatusChange}
+                    onObsChange={handleObsChange}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        {/* 4. BLOQUE INFERIOR: DIAGRAMA, RESUMEN ESTADÍSTICO Y FIRMAS (Todo en 1 sola hoja) */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 print:grid-cols-12 gap-2 print:gap-2 pt-1 border-t border-gray-200 dark:border-zinc-800 print:border-gray-300 items-stretch">
+          
+          {/* A. Diagrama de Camión & Leyenda */}
+          <div className="sm:col-span-4 print:col-span-4 bg-gray-50 dark:bg-zinc-900/60 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
+            <div className="flex items-center justify-between pb-1 border-b border-gray-200/60 dark:border-zinc-800 print:border-gray-300">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black">
+                Puntos de Carrocería & Chasis
+              </span>
+              <span className="text-[8px] font-bold text-gray-400 font-mono">VISTA PLANTA</span>
+            </div>
+
+            {/* SVG Camión Tractor & Remolque Pro */}
+            <div className="py-1 flex items-center justify-center">
+              <svg viewBox="0 0 450 110" className="w-full max-w-[200px] h-auto stroke-gray-800 dark:stroke-zinc-200 print:stroke-black" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {/* Cabina / Tractor */}
+                <rect x="15" y="25" width="80" height="60" rx="8" className="fill-gray-200/60 dark:fill-zinc-800/60 print:fill-gray-100" />
+                <rect x="25" y="32" width="30" height="46" rx="4" className="stroke-gray-400" />
+                <circle cx="50" cy="18" r="6" className="fill-gray-900 print:fill-black" />
+                <circle cx="50" cy="92" r="6" className="fill-gray-900 print:fill-black" />
+                
+                {/* Quinta rueda / Eje tractor */}
+                <circle cx="85" cy="55" r="7" className="stroke-red-600 fill-red-100" />
+                <circle cx="85" cy="18" r="6" className="fill-gray-900 print:fill-black" />
+                <circle cx="85" cy="92" r="6" className="fill-gray-900 print:fill-black" />
+                
+                {/* Remolque / Caja de carga */}
+                <rect x="105" y="20" width="320" height="70" rx="6" className="fill-gray-100/70 dark:fill-zinc-850/60 print:fill-gray-50" />
+                <line x1="105" y1="55" x2="425" y2="55" strokeDasharray="3 3" className="stroke-gray-300" />
+                
+                {/* Ejes remolque */}
+                <circle cx="370" cy="14" r="6" className="fill-gray-900 print:fill-black" />
+                <circle cx="370" cy="96" r="6" className="fill-gray-900 print:fill-black" />
+                <circle cx="400" cy="14" r="6" className="fill-gray-900 print:fill-black" />
+                <circle cx="400" cy="96" r="6" className="fill-gray-900 print:fill-black" />
+              </svg>
+            </div>
+
+            {/* Leyenda */}
+            <div className="flex items-center justify-between text-[8.5px] print:text-[8px] font-black border-t border-gray-200/60 dark:border-zinc-800 print:border-gray-300 pt-1">
+              <span className="text-emerald-700">✓ B: Bueno</span>
+              <span className="text-amber-700">⚠ R: Regular</span>
+              <span className="text-red-700">✕ D: Deficiente</span>
+            </div>
+          </div>
+
+          {/* B. Resumen Estadístico y Dictamen */}
+          <div className="sm:col-span-3 print:col-span-3 bg-gray-50 dark:bg-zinc-900/60 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between space-y-1">
+            <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black block border-b border-gray-200/60 dark:border-zinc-800 print:border-gray-300 pb-1">
+              Evaluación Global
+            </span>
+
+            <div className="grid grid-cols-3 gap-1 text-center py-0.5">
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded p-1">
+                <span className="text-[8px] font-bold text-emerald-800 dark:text-emerald-400 block leading-none">B</span>
+                <span className="text-xs font-black font-mono text-emerald-700">{stats.good}</span>
               </div>
-              
-              <div className="bg-gray-50 dark:bg-[#222222] p-4 border-t border-gray-100 dark:border-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 flex justify-center gap-6 print:border-gray-900 shrink-0">
-                <span className="flex items-center gap-1"><CheckCircleIcon className="w-4 h-4 text-green-500"/> B: Bueno</span>
-                <span className="flex items-center gap-1"><CheckCircleIcon className="w-4 h-4 text-yellow-400"/> R: Regular</span>
-                <span className="flex items-center gap-1"><CheckCircleIcon className="w-4 h-4 text-red-500"/> D: Deficiente</span>
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded p-1">
+                <span className="text-[8px] font-bold text-amber-800 dark:text-amber-400 block leading-none">R</span>
+                <span className="text-xs font-black font-mono text-amber-700">{stats.reg}</span>
+              </div>
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded p-1">
+                <span className="text-[8px] font-bold text-red-800 dark:text-red-400 block leading-none">D</span>
+                <span className="text-xs font-black font-mono text-red-700">{stats.def}</span>
+              </div>
+            </div>
+
+            {/* Dictamen */}
+            <div className={`p-1 text-center rounded font-black text-[9px] uppercase tracking-wide border ${
+              stats.def === 0 
+                ? 'bg-emerald-500 text-white border-emerald-600 print:bg-gray-100 print:text-emerald-800' 
+                : 'bg-red-600 text-white border-red-700 print:bg-gray-100 print:text-red-800'
+            }`}>
+              {stats.def === 0 ? '✓ APTO PARA OPERACIÓN' : '⚠ REQUIERE REPARACIÓN'}
+            </div>
+          </div>
+
+          {/* C. Firmas de Conformidad */}
+          <div className="sm:col-span-5 print:col-span-5 bg-white dark:bg-zinc-900 p-2 print:p-1.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-300 flex flex-col justify-between">
+            <div className="pb-1 border-b border-gray-100 dark:border-zinc-800 print:border-gray-300">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 print:text-black block">
+                Observaciones Generales
+              </span>
+              <input 
+                type="text" 
+                value={generalNotes}
+                onChange={(e) => setGeneralNotes(e.target.value)}
+                placeholder="Notas finales de la inspección..."
+                className="w-full text-[9px] font-medium text-gray-800 dark:text-zinc-200 bg-transparent border-none outline-none print:hidden"
+              />
+              <p className="hidden print:block text-[8px] font-medium text-gray-700 leading-tight">
+                {generalNotes || 'Sin observaciones adicionales reportadas.'}
+              </p>
+            </div>
+
+            {/* Firmas lado a lado */}
+            <div className="grid grid-cols-2 gap-3 pt-2 print:pt-3">
+              <div className="text-center">
+                <div className="border-b border-gray-400 dark:border-zinc-600 print:border-gray-800 mb-0.5 h-6 print:h-5"></div>
+                <p className="text-[8.5px] print:text-[8px] font-black uppercase text-gray-900 dark:text-white print:text-black">
+                  Firma Inspector
+                </p>
+                <p className="text-[7.5px] text-gray-400 print:text-gray-500">Brianna Heavy Equipment</p>
+              </div>
+
+              <div className="text-center">
+                <div className="border-b border-gray-400 dark:border-zinc-600 print:border-gray-800 mb-0.5 h-6 print:h-5"></div>
+                <p className="text-[8.5px] print:text-[8px] font-black uppercase text-gray-900 dark:text-white print:text-black">
+                  Firma Conductor / Taller
+                </p>
+                <p className="text-[7.5px] text-gray-400 print:text-gray-500">Conformidad de Entrega</p>
               </div>
             </div>
           </div>
 
         </div>
-        
-        {/* Printed Document Signatures */}
-        <div className="hidden print:grid grid-cols-2 gap-12 pt-8 border-t-2 border-gray-900 mt-6 avoid-break">
-          <div className="text-center">
-            <div className="border-b border-gray-400 mb-2 h-10"></div>
-            <p className="text-xs font-bold uppercase text-gray-900">Firma del Inspector / Técnico</p>
-            <p className="text-[10px] text-gray-500">Brianna Heavy Equipment SRL</p>
-          </div>
-          <div className="text-center">
-            <div className="border-b border-gray-400 mb-2 h-10"></div>
-            <p className="text-xs font-bold uppercase text-gray-900">Firma del Conductor / Recibido</p>
-            <p className="text-[10px] text-gray-500">Conformidad de Entrega</p>
-          </div>
-        </div>
 
       </div>
+
     </div>
   );
 }
