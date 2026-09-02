@@ -298,14 +298,14 @@ export default function LetterInvoice({
               Válido por 15 días calendario a partir de la fecha de emisión.
             </p>
           </div>
-        ) : isEcf ? (
+        ) : (
           <div className="col-span-7 flex items-start gap-4 p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200">
             <div className="bg-white p-2 rounded-xl shadow-xs border border-zinc-200 shrink-0">
               <QRCode value={defaultQrUrl} size={96} level="M" />
             </div>
             <div className="space-y-1 text-[11px] text-zinc-600">
               <span className="font-black text-zinc-900 uppercase tracking-wide block">
-                Comprobante Fiscal Electrónico (DGII)
+                {isEcf ? 'Comprobante Fiscal Electrónico (DGII)' : 'Timbre Digital de Facturación'}
               </span>
               {securityCode && (
                 <p>
@@ -322,18 +322,11 @@ export default function LetterInvoice({
                 </p>
               )}
               <p className="text-[10px] text-zinc-500 leading-tight pt-1">
-                Escanea el código QR con cualquier dispositivo móvil o la app de la DGII para verificar la autenticidad y validez de este comprobante electrónico.
+                {isEcf
+                  ? 'Escanea el código QR con cualquier dispositivo móvil o la app de la DGII para verificar la autenticidad y validez de este comprobante electrónico.'
+                  : 'Escanea el código QR para verificar la autenticidad y los datos de esta factura comercial.'}
               </p>
             </div>
-          </div>
-        ) : (
-          <div className="col-span-7 flex flex-col justify-center p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-left space-y-1">
-            <span className="font-black text-zinc-900 uppercase tracking-wide text-xs">
-              Documento Interno de Venta
-            </span>
-            <p className="text-[11px] text-zinc-600">
-              Comprobante comercial para control administrativo interno.
-            </p>
           </div>
         )}
 
