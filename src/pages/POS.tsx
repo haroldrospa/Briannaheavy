@@ -29,8 +29,16 @@ import {
   SunIcon,
   MoonIcon,
   ClockIcon,
-  TagIcon
+  TagIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
+import QuotationsModal from '../components/pos/QuotationsModal';
+import { 
+  createQuotation, 
+  markQuotationAsBilled, 
+  getActiveQuotationsCount, 
+  type Quotation 
+} from '../services/quotationsService';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
@@ -1574,15 +1582,24 @@ export default function POS() {
     return localStorage.getItem('brianna_user_name') || 'Harold Cajero';
   });
 
+  const [isQuotationsModalOpen, setIsQuotationsModalOpen] = useState(false);
+  const [activeQuotationsCount, setActiveQuotationsCount] = useState<number>(() => getActiveQuotationsCount());
+  const [activeQuotationId, setActiveQuotationId] = useState<string | null>(null);
+
   useEffect(() => {
     const handleUserUpdate = () => {
       setCurrentUserName(localStorage.getItem('brianna_user_name') || 'Harold Cajero');
     };
+    const handleQuotationsUpdate = () => {
+      setActiveQuotationsCount(getActiveQuotationsCount());
+    };
     window.addEventListener('brianna_role_updated', handleUserUpdate);
     window.addEventListener('brianna_user_updated', handleUserUpdate);
+    window.addEventListener('brianna_quotations_updated', handleQuotationsUpdate);
     return () => {
       window.removeEventListener('brianna_role_updated', handleUserUpdate);
       window.removeEventListener('brianna_user_updated', handleUserUpdate);
+      window.removeEventListener('brianna_quotations_updated', handleQuotationsUpdate);
     };
   }, []);
 
@@ -2198,7 +2215,45 @@ export default function POS() {
           if (paymentMethod === 'Transferencia') {
             window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
           }
-          if (internalDocType !== 'CT') {
+          if (internalDocType === 'CT') {
+            createQuotation({
+              quotation_number: invoicePayload.invoice_number,
+              customer: selectedClient ? {
+                id: selectedClient.id,
+                name: selectedClient.name,
+                rnc: selectedClient.rnc,
+                phone: selectedClient.phone,
+                email: selectedClient.email,
+                address: selectedClient.address
+              } : undefined,
+              items: cartItemsSnapshot.map(it => ({
+                product: {
+                  id: it.product.id,
+                  name: it.product.name,
+                  price: it.product.price,
+                  stock: it.product.stock,
+                  part_number: it.product.part_number,
+                  barcode: it.product.barcode,
+                  category: it.product.category,
+                  image_url: it.product.image_url
+                },
+                quantity: it.quantity,
+                unitPrice: it.product.price,
+                totalPrice: it.product.price * it.quantity,
+                discount: it.discount,
+                discountType: it.discountType
+              })),
+              subtotal,
+              tax_amount: tax,
+              total_amount: total,
+              notes: 'Cotización emitida desde POS',
+              cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado'
+            });
+          } else {
+            if (activeQuotationId) {
+              markQuotationAsBilled(activeQuotationId, finalNcf || finalInvoiceNumber);
+              setActiveQuotationId(null);
+            }
             await Promise.all(cartItemsSnapshot.map(item => {
               if (item.product && item.product.id) {
                 const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
@@ -2233,6 +2288,7 @@ export default function POS() {
     setSelectedClient(null);
     setGlobalDiscount(0);
     setPaymentMethod('Efectivo');
+    setActiveQuotationId(null);
     setElectronicDocType('E32');
     setInternalDocType('FAC-INT');
     setBillingMode('internal');
@@ -2240,6 +2296,125 @@ export default function POS() {
     setLastPaymentInfo({});
     setLastCompletedSale(null);
   };
+
+  const handleLoadQuotationIntoPOS = useCallback((quotation: Quotation) => {
+    // 1. Convert quotation items to cart
+    const newCart = quotation.items.map(it => {
+      const matched = dbProducts.find(p => String(p.id) === String(it.product.id) || p.part_number === it.product.part_number);
+      const productObj = matched || {
+        id: it.product.id,
+        name: it.product.name,
+        price: it.unitPrice,
+        stock: it.product.stock ?? 999,
+        category: it.product.category || 'Piezas',
+        part_number: it.product.part_number || '',
+        barcode: it.product.barcode || '',
+        image_url: it.product.image_url || ''
+      };
+
+      return {
+        product: productObj,
+        quantity: it.quantity,
+        discount: it.discount || 0,
+        discountType: it.discountType || '%'
+      };
+    });
+
+    setCart(newCart);
+
+    // 2. Set customer
+    if (quotation.customer) {
+      setSelectedClient({
+        id: quotation.customer.id || '',
+        name: quotation.customer.name,
+        rnc: quotation.customer.rnc || '',
+        phone: quotation.customer.phone || '',
+        email: quotation.customer.email || '',
+        address: quotation.customer.address || '',
+        credit_limit: 0,
+        current_debt: 0
+      });
+    }
+
+    setActiveQuotationId(quotation.id);
+    showAlert({
+      title: '✓ Cotización Cargada al POS',
+      description: `La cotización ${quotation.quotation_number} (${quotation.items.length} repuestos) se cargó al carrito. Lista para cobrar o facturar.`,
+      variant: 'success'
+    });
+  }, [dbProducts, showAlert]);
+
+  const handlePrintQuotationFromModal = useCallback((q: Quotation) => {
+    const saleDetails: any = {
+      ncf: q.quotation_number,
+      ncfType: 'Cotización',
+      isElectronic: false,
+      billingMode: 'internal',
+      internalDocType: 'CT',
+      subtotal: q.subtotal,
+      tax: q.tax_amount,
+      total: q.total_amount,
+      paymentMethod: 'Cotización',
+      client: q.customer,
+      items: q.items.map(it => ({
+        product: it.product,
+        quantity: it.quantity,
+        price: it.unitPrice
+      })),
+      lastPaymentInfo: {},
+      lastEcfData: {
+        securityCode: 'COT-30D',
+        qrCodeUrl: '',
+        dgiiStatus: 'Cotización Comercial (30 días)',
+        issuedAt: q.created_at
+      },
+      date: new Date(q.created_at)
+    };
+    setLastCompletedSale(saleDetails);
+    setIsSuccessModalOpen(true);
+  }, []);
+
+  const handleSaveCartAsQuotation = useCallback(() => {
+    if (cart.length === 0) return;
+    const newQ = createQuotation({
+      customer: selectedClient ? {
+        id: selectedClient.id,
+        name: selectedClient.name,
+        rnc: selectedClient.rnc,
+        phone: selectedClient.phone,
+        email: selectedClient.email,
+        address: selectedClient.address
+      } : undefined,
+      items: cart.map(it => ({
+        product: {
+          id: it.product.id,
+          name: it.product.name,
+          price: it.product.price,
+          stock: it.product.stock,
+          part_number: it.product.part_number,
+          barcode: it.product.barcode,
+          category: it.product.category,
+          image_url: it.product.image_url
+        },
+        quantity: it.quantity,
+        unitPrice: it.product.price,
+        totalPrice: it.product.price * it.quantity,
+        discount: it.discount,
+        discountType: it.discountType
+      })),
+      subtotal,
+      tax_amount: tax,
+      total_amount: total,
+      notes: 'Cotización guardada desde carrito POS',
+      cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado'
+    });
+
+    showAlert({
+      title: '✓ Cotización Guardada',
+      description: `Se guardó la cotización ${newQ.quotation_number} con vigencia de 30 días. Puedes verla o facturarla desde el botón "Cotizaciones".`,
+      variant: 'success'
+    });
+  }, [cart, selectedClient, subtotal, tax, total, showAlert]);
 
   return (
     <div className="h-[100dvh] w-full max-w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] text-gray-900 dark:text-white flex flex-col transition-colors duration-300 overflow-hidden font-sans">
@@ -2281,6 +2456,22 @@ export default function POS() {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto scrollbar-hide py-0.5">
+          {/* Direct Access to Cotizaciones (Guardadas por 30 días) */}
+          <button
+            type="button"
+            onClick={() => setIsQuotationsModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-300 active:scale-[0.98] text-xs font-black transition-all cursor-pointer border border-blue-200/60 dark:border-blue-900/60 shadow-2xs whitespace-nowrap"
+            title="Ver cotizaciones guardadas (vigentes por 30 días) para facturar en el POS"
+          >
+            <ClipboardDocumentListIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
+            <span className="hidden xs:inline">Cotizaciones</span>
+            {activeQuotationsCount > 0 && (
+              <span className="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {activeQuotationsCount}
+              </span>
+            )}
+          </button>
+
           {/* Direct Access to Inventario if permitted for this role */}
           {hasPermission(getActiveRole(), 'Inventario', 'ver') && (
             <Link
@@ -2701,6 +2892,18 @@ export default function POS() {
           </div>
           
 
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSaveCartAsQuotation}
+              className="w-full mb-2 flex items-center justify-center gap-1.5 rounded-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-300 font-bold text-xs border border-blue-200/60 dark:border-blue-900/60 transition-all cursor-pointer active:scale-[0.98]"
+              title="Guardar estos repuestos como Cotización con 30 días de vigencia"
+            >
+              <ClipboardDocumentListIcon className="h-4 w-4 stroke-[2]" />
+              <span>Guardar como Cotización (30 días)</span>
+            </button>
+          )}
+
           <motion.button 
             whileHover={{ scale: cart.length > 0 ? 1.02 : 1 }}
             whileTap={{ scale: cart.length > 0 ? 0.98 : 1 }}
@@ -2939,6 +3142,14 @@ export default function POS() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Quotations Modal */}
+      <QuotationsModal
+        isOpen={isQuotationsModalOpen}
+        onClose={() => setIsQuotationsModalOpen(false)}
+        onLoadIntoPOS={handleLoadQuotationIntoPOS}
+        onPrintQuotation={handlePrintQuotationFromModal}
+      />
 
       {/* Session Sales Modal */}
       <AnimatePresence>
