@@ -5,10 +5,11 @@ import {
   PrinterIcon, UserIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon,
-  CheckIcon, BoltIcon
+  CheckIcon, BoltIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
+import CashMovementModal from '../components/finance/CashMovementModal';
 import { 
   fetchFinancings, 
   getLocalStorageFinancings, 
@@ -18,6 +19,7 @@ import {
 } from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
+import { fetchCashMovements, type CashMovement } from '../services/cashMovementsService';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
 
@@ -323,7 +325,76 @@ export default function Financing() {
   }, []);
   
   // Main Financiamientos Status Filter State
-  const [mainStatusFilter, setMainStatusFilter] = useState<'Todos' | 'En mora' | 'Vence 1 dia' | 'Al dia'>('Todos');
+  const [mainStatusFilter, setMainStatusFilter] = useState<'Todos' | 'En mora' | 'Vence 1 dia' | 'Al dia' | 'Movimientos'>('Todos');
+  const [isCashMovementOpen, setIsCashMovementOpen] = useState<boolean>(false);
+  const [movementsList, setMovementsList] = useState<CashMovement[]>([]);
+  const [movementFilterType, setMovementFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
+  const [movementFilterMethod, setMovementFilterMethod] = useState<'Todos' | 'Transferencia' | 'Efectivo'>('Todos');
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMovements = async () => {
+      const movs = await fetchCashMovements();
+      if (isMounted) setMovementsList(movs || []);
+    };
+    loadMovements();
+    const handleMovementsChanged = () => {
+      loadMovements();
+    };
+    window.addEventListener('brianna_cash_movements_changed', handleMovementsChanged);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('brianna_cash_movements_changed', handleMovementsChanged);
+    };
+  }, []);
+
+  // Totales de Movimientos
+  const movementsSummary = useMemo(() => {
+    let totalIngresos = 0;
+    let totalEgresos = 0;
+    let bankTransfer = 0;
+    let cash = 0;
+
+    movementsList.forEach(m => {
+      const amt = Number(m.amount) || 0;
+      if (m.type === 'Ingreso') {
+        totalIngresos += amt;
+        if (m.payment_method === 'Transferencia') bankTransfer += amt;
+        else cash += amt;
+      } else {
+        totalEgresos += amt;
+        if (m.payment_method === 'Transferencia') bankTransfer -= amt;
+        else cash -= amt;
+      }
+    });
+
+    return {
+      totalIngresos,
+      totalEgresos,
+      balanceNeto: totalIngresos - totalEgresos,
+      bankTransfer,
+      cash,
+    };
+  }, [movementsList]);
+
+  // Movimientos filtrados para la tabla
+  const filteredMovements = useMemo(() => {
+    return movementsList.filter(m => {
+      if (movementFilterType !== 'Todos' && m.type !== movementFilterType) return false;
+      if (movementFilterMethod !== 'Todos') {
+        if (movementFilterMethod === 'Transferencia' && m.payment_method !== 'Transferencia') return false;
+        if (movementFilterMethod === 'Efectivo' && m.payment_method === 'Transferencia') return false;
+      }
+      if (searchCustomer.trim()) {
+        const q = searchCustomer.toLowerCase().trim();
+        const matchConcept = m.concept?.toLowerCase().includes(q);
+        const matchBank = m.bank_account_name?.toLowerCase().includes(q);
+        const matchRef = m.reference?.toLowerCase().includes(q);
+        return matchConcept || matchBank || matchRef;
+      }
+      return true;
+    });
+  }, [movementsList, movementFilterType, movementFilterMethod, searchCustomer]);
   
   // Dynamic Mora Grace Period Days State (Editable)
   const [graceDays, setGraceDays] = useState<number>(15);
@@ -958,6 +1029,16 @@ export default function Financing() {
           </div>
 
           <button 
+            type="button"
+            onClick={() => setIsCashMovementOpen(true)}
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-emerald-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 cursor-pointer text-xs"
+            title="Registrar Ingreso o Egreso de Fondos"
+          >
+            <ArrowsRightLeftIcon className="h-4 w-4 stroke-[2.5]" />
+            <span>Movimientos (I/E)</span>
+          </button>
+
+          <button 
             onClick={() => setIsCashClosureOpen(true)}
             className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-[#fb3c44] text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-red-600 transition-all shadow-md shadow-red-500/20 cursor-pointer text-xs"
           >
@@ -1562,11 +1643,213 @@ export default function Financing() {
           >
             Al Día ({financingsList.filter(f => f.status === 'Al día').length})
           </button>
+
+          <button
+            type="button"
+            onClick={() => setMainStatusFilter('Movimientos')}
+            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+              mainStatusFilter === 'Movimientos'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+            }`}
+          >
+            <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+            <span>Movimientos I/E ({movementsList.length})</span>
+          </button>
         </div>
       </div>
 
-      {/* Financings Container */}
-      <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
+      {mainStatusFilter === 'Movimientos' ? (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Resumen de Movimientos */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Total Ingresos */}
+            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Total Ingresos</span>
+                <ArrowDownCircleIcon className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-xl sm:text-2xl font-black font-mono text-emerald-700 dark:text-emerald-400">
+                +RD$ {movementsSummary.totalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-[10px] text-emerald-600/80 font-medium">Entradas a caja y bancos</p>
+            </div>
+
+            {/* Total Egresos */}
+            <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-2xl border border-red-200/80 dark:border-red-900/40 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-red-800 dark:text-red-300">Total Egresos</span>
+                <ArrowUpCircleIcon className="w-4 h-4 text-red-600" />
+              </div>
+              <p className="text-xl sm:text-2xl font-black font-mono text-[#ED1C24] dark:text-red-400">
+                -RD$ {movementsSummary.totalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-[10px] text-red-600/80 font-medium">Salidas y gastos registrados</p>
+            </div>
+
+            {/* Balance Neto */}
+            <div className="p-4 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-gray-200/80 dark:border-zinc-800 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">Balance Neto</span>
+                <span className="text-xs">💰</span>
+              </div>
+              <p className={`text-xl sm:text-2xl font-black font-mono ${movementsSummary.balanceNeto >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600'}`}>
+                RD$ {movementsSummary.balanceNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-[10px] text-gray-400 font-medium">Ingresos menos Egresos</p>
+            </div>
+
+            {/* Bancos vs Efectivo */}
+            <div className="p-4 bg-blue-50/70 dark:bg-blue-950/30 rounded-2xl border border-blue-200/80 dark:border-blue-900/40 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 dark:text-blue-300">Por Transferencia</span>
+                <BuildingLibraryIcon className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-xl sm:text-2xl font-black font-mono text-blue-800 dark:text-blue-300">
+                RD$ {movementsSummary.bankTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-[10px] text-blue-600/80 font-medium">Efectivo: RD$ {movementsSummary.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          {/* Barra de Filtros secundarios & Botón Nuevo Movimiento */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-gray-100 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">Filtrar:</span>
+              <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
+                {(['Todos', 'Ingreso', 'Egreso'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setMovementFilterType(t)}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${movementFilterType === t ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {t === 'Todos' ? 'Todos' : t}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
+                {(['Todos', 'Transferencia', 'Efectivo'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMovementFilterMethod(m)}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${movementFilterMethod === m ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                  >
+                    {m === 'Todos' ? 'Caja y Bancos' : m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCashMovementOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            >
+              <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+              <span>+ Registrar Movimiento</span>
+            </button>
+          </div>
+
+          {/* Tabla de Movimientos */}
+          <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
+            {filteredMovements.length === 0 ? (
+              <div className="py-12 text-center space-y-3">
+                <ArrowsRightLeftIcon className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto" />
+                <p className="text-xs text-gray-400 dark:text-zinc-500 font-bold">
+                  No hay movimientos de ingresos o egresos registrados con los filtros seleccionados.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsCashMovementOpen(true)}
+                  className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer hover:bg-emerald-700 transition-all"
+                >
+                  Registrar Primer Movimiento
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
+                  <thead className="bg-gray-50/50 dark:bg-zinc-900/50">
+                    <tr>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Monto</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Método / Cuenta Bancaria</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Concepto / Referencia</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fecha / Hora</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Caja / Responsable</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 bg-white dark:bg-[#1a1a1a]">
+                    {filteredMovements.map(m => {
+                      const isIngreso = m.type === 'Ingreso';
+                      const isTransfer = m.payment_method === 'Transferencia';
+                      return (
+                        <tr key={m.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-900/50 transition-colors">
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black ${
+                              isIngreso 
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60'
+                                : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200/80 dark:border-red-800/60'
+                            }`}>
+                              {isIngreso ? <ArrowDownCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" /> : <ArrowUpCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" />}
+                              <span>{m.type}</span>
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span className={`font-mono text-sm font-black ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-red-400'}`}>
+                              {isIngreso ? '+' : '-'}RD$ {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="space-y-1">
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                                isTransfer 
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                  : 'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300'
+                              }`}>
+                                {isTransfer ? <BuildingLibraryIcon className="w-3.5 h-3.5 text-blue-600" /> : <BanknotesIcon className="w-3.5 h-3.5 text-gray-600" />}
+                                <span>{m.payment_method || 'Efectivo'}</span>
+                              </span>
+                              {isTransfer && m.bank_account_name && (
+                                <p className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1">
+                                  <span>🏦 {m.bank_account_name}</span>
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <p className="text-xs font-bold text-gray-900 dark:text-white max-w-xs sm:max-w-md">
+                              {m.concept}
+                            </p>
+                            {m.reference && (
+                              <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 mt-0.5 font-bold">
+                                Comprobante: {m.reference}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-zinc-400">
+                            <div>{m.created_at ? new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</div>
+                            <div className="text-[10px] text-gray-400">{m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}</div>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-600 dark:text-zinc-400">
+                            <div className="font-semibold text-gray-800 dark:text-zinc-200">{m.register_name || 'Finanzas & Cobros'}</div>
+                            <div className="text-[10px] text-gray-400">{m.created_by || 'Sistema'}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Financings Container */
+        <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
         {filteredFinancings.length === 0 ? (
           <div className="py-8 text-center text-gray-400 dark:text-zinc-500 text-xs">
             No se encontraron financiamientos para la búsqueda.
@@ -1686,6 +1969,7 @@ export default function Financing() {
           </>
         )}
       </div>
+      )}
       </div>
 
       {/* Financing Details Modal */}
@@ -2787,6 +3071,22 @@ export default function Financing() {
         </div>,
         document.body
       )}
+      </AnimatePresence>
+
+      {/* Cash Movement Modal (Ingresos y Egresos) */}
+      <AnimatePresence>
+        {isCashMovementOpen && (
+          <CashMovementModal 
+            isOpen={isCashMovementOpen} 
+            onClose={() => setIsCashMovementOpen(false)} 
+            onSuccess={async () => {
+              setIsCashMovementOpen(false);
+              const updated = await fetchCashMovements(true);
+              setMovementsList(updated);
+            }}
+            defaultRegister="Caja Cobros & Financiamientos"
+          />
+        )}
       </AnimatePresence>
 
       {/* Cierre de Caja Modal */}

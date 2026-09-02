@@ -5,6 +5,10 @@ export interface CashMovement {
   type: 'Ingreso' | 'Egreso';
   amount: number;
   concept: string;
+  payment_method?: 'Efectivo' | 'Transferencia' | string;
+  bank_account_id?: string;
+  bank_account_name?: string;
+  reference?: string;
   register_name?: string;
   created_by?: string;
   created_at: string;
@@ -106,18 +110,28 @@ export const createCashMovement = async (
   const current = getLocalStorageMovements();
   const updated = [newMov, ...current];
   saveLocalStorageMovements(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_cash_movements_changed', { detail: newMov }));
+  }
 
   // 2. Intentar sincronizar con Supabase en segundo plano
   if (isSupabaseConfigured()) {
     try {
+      const dbPayload: any = {
+        type: newMov.type,
+        amount: newMov.amount,
+        concept: newMov.concept,
+        created_at: newMov.created_at,
+      };
+      if (newMov.payment_method) dbPayload.payment_method = newMov.payment_method;
+      if (newMov.bank_account_name) dbPayload.bank_account_name = newMov.bank_account_name;
+      if (newMov.reference) dbPayload.reference = newMov.reference;
+      if (newMov.register_name) dbPayload.register_name = newMov.register_name;
+      if (newMov.created_by) dbPayload.created_by = newMov.created_by;
+
       const { data, error } = await supabase
         .from('cash_movements')
-        .insert([{
-          type: newMov.type,
-          amount: newMov.amount,
-          concept: newMov.concept,
-          created_at: newMov.created_at,
-        }])
+        .insert([dbPayload])
         .select()
         .single();
 
