@@ -35,7 +35,6 @@ import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import SessionSalesModal from '../components/finance/SessionSalesModal';
 import type { SessionSale } from '../components/finance/SessionSalesModal';
-import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
@@ -1620,6 +1619,23 @@ export default function POS() {
     changeAmount?: number;
     transferReference?: string;
   }>({});
+  const [lastCompletedSale, setLastCompletedSale] = useState<{
+    invoiceNumber: string;
+    ncf: string;
+    ncfType: string;
+    internalDocType: 'FAC-INT' | 'CT';
+    billingMode: 'electronic' | 'internal';
+    isElectronic: boolean;
+    total: number;
+    subtotal: number;
+    tax: number;
+    client: any;
+    paymentMethod: string;
+    items: { description: string; quantity: number; unit_price: number; total_price: number }[];
+    lastPaymentInfo: { receivedAmount?: number; changeAmount?: number; transferReference?: string };
+    lastEcfData: ElectronicInvoiceResponse | null;
+    date: Date;
+  } | null>(null);
 
   const printTicket = useCallback(() => {
     document.body.classList.add('print-ticket-mode');
@@ -1872,17 +1888,63 @@ export default function POS() {
       };
       setSessionSales(prev => [newSessionSale, ...prev]);
 
-      // 3. Show Success Modal Immediately (Instant Feedback!)
+      // 3. Save completed sale details for receipt printing & confirmation modal
+      const saleItems = cart.map(item => ({
+        description: item.product.name,
+        quantity: item.quantity,
+        unit_price: item.product.price,
+        total_price: calculateItemTotal(item),
+      }));
+
+      const saleDetails = {
+        invoiceNumber: finalInvoiceNumber,
+        ncf: finalNcf,
+        ncfType: finalNcfType,
+        internalDocType,
+        billingMode,
+        isElectronic,
+        total,
+        subtotal,
+        tax,
+        client: selectedClient,
+        paymentMethod,
+        items: saleItems,
+        lastPaymentInfo: {
+          receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
+          changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
+          transferReference: transferReference || undefined,
+        },
+        lastEcfData: ecfRes || (internalDocType === 'CT' ? {
+          success: true,
+          trackId: `CT-${Date.now().toString().slice(-6)}`,
+          eNcf: finalNcf,
+          securityCode: '',
+          qrCodeUrl: '',
+          dgiiStatus: 'Emitido Localmente',
+          issuedAt: new Date().toISOString(),
+        } : {
+          success: true,
+          trackId: `INT-${Date.now().toString().slice(-6)}`,
+          eNcf: finalNcf,
+          securityCode: generateSecurityCode(),
+          qrCodeUrl: `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${generateSecurityCode()}&monto=${total.toFixed(2)}`,
+          dgiiStatus: 'Emitido Localmente',
+          issuedAt: new Date().toISOString(),
+        }),
+        date: new Date(),
+      };
+      setLastCompletedSale(saleDetails);
+
+      // 4. Clear Cart and show Confirmation Modal
+      const cartItemsSnapshot = [...cart];
+      setCart([]);
+      setSelectedClient(null);
+      setGlobalDiscount(0);
       setIsCheckoutModalOpen(false);
       setIsSuccessModalOpen(true);
       setIsTransmitting(false);
 
-      // Auto-trigger thermal receipt print dialog for POS
-      setTimeout(() => {
-        printTicket();
-      }, 250);
-
-      // 4. Background Persistence & Sync (Never blocks UI)
+      // 5. Background Persistence & Sync (Never blocks UI)
       const invoicePayload = {
         invoice_number: finalInvoiceNumber,
         ncf: finalNcf,
@@ -1904,19 +1966,12 @@ export default function POS() {
         ecf_dgii_status: isElectronic ? 'Aceptado' : (internalDocType === 'CT' ? 'Cotización' : 'Emitido Localmente'),
       };
 
-      const invoiceItems = cart.map(item => ({
-        description: item.product.name,
-        quantity: item.quantity,
-        unit_price: item.product.price,
-        total_price: calculateItemTotal(item),
-      }));
-
       // Fire & forget background sync
       (async () => {
         try {
-          await createInvoice(invoicePayload, invoiceItems);
+          await createInvoice(invoicePayload, saleItems);
           if (internalDocType !== 'CT') {
-            await Promise.all(cart.map(item => {
+            await Promise.all(cartItemsSnapshot.map(item => {
               if (item.product && item.product.id) {
                 const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
                 const newStock = Math.max(0, currentStock - item.quantity);
@@ -1948,12 +2003,14 @@ export default function POS() {
     setIsSuccessModalOpen(false);
     setCart([]);
     setSelectedClient(null);
+    setGlobalDiscount(0);
     setPaymentMethod('Efectivo');
     setElectronicDocType('E32');
     setInternalDocType('FAC-INT');
     setBillingMode('internal');
     setLastEcfData(null);
     setLastPaymentInfo({});
+    setLastCompletedSale(null);
   };
 
   return (
@@ -2528,140 +2585,106 @@ export default function POS() {
       {/* Success Checkout Modal */}
       <AnimatePresence>
         {isSuccessModalOpen && (
-          <>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 print:hidden">
+            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:hidden"
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={resetPOS}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 15 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="relative w-full max-w-sm bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 text-center shadow-2xl border border-gray-100 dark:border-zinc-800 mx-auto z-10"
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                transition={{ duration: 0.15 }}
-                className="relative bg-white dark:bg-[#1a1a1a] rounded-3xl p-6 w-[calc(100%-1.5rem)] max-w-xs text-center shadow-2xl border border-gray-100 dark:border-zinc-800 mx-auto"
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={resetPOS}
+                className="absolute top-4 right-4 p-1.5 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Cerrar"
               >
-                {/* Close 'X' Button */}
-                <button
-                  onClick={resetPOS}
-                  className="absolute top-4 right-4 p-1.5 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title="Cerrar"
-                >
-                  <XMarkIcon className="w-5 h-5" />
-                </button>
+                <XMarkIcon className="w-5 h-5" />
+              </button>
 
-                {/* Cotización Minimalist Layout */}
-                {currentNCF.startsWith('CT') || (billingMode === 'internal' && internalDocType === 'CT') ? (
-                  <div className="pt-2 pb-1 space-y-4">
-                    {/* Icon & Title */}
-                    <div className="space-y-1.5">
-                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
-                        <DocumentTextIcon className="h-6 w-6 stroke-[2]" />
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                        Cotización Creada
-                      </h3>
-                    </div>
+              {/* Status Icon */}
+              <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 mb-3 shadow-xs">
+                <CheckCircleIcon className="h-8 w-8 stroke-[2.2]" />
+              </div>
 
-                    {/* Number & Amount in Clean Card */}
-                    <div className="py-3 px-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-                      <div className="text-2xl font-black font-mono tracking-wider text-blue-600 dark:text-blue-400">
-                        {currentNCF}
-                      </div>
-                      <div className="text-sm font-bold text-gray-700 dark:text-zinc-300 mt-0.5">
-                        RD$ {total.toFixed(2)}
-                      </div>
-                    </div>
+              {/* Title & Subtitle */}
+              <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
+                {lastCompletedSale?.ncf.startsWith('CT')
+                  ? '¡Cotización Creada!'
+                  : '¡Venta Facturada con Éxito!'}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
+                {lastCompletedSale?.ncf.startsWith('CT')
+                  ? 'El presupuesto ha sido registrado.'
+                  : 'Comprobante emitido correctamente.'}
+              </p>
 
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        onClick={printTicket}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
-                      >
-                        <PrinterIcon className="h-4 w-4 text-gray-500" />
-                        <span>Ticket</span>
-                      </button>
-                      <button
-                        onClick={printLetter}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
-                      >
-                        <DocumentArrowDownIcon className="h-4 w-4" />
-                        <span>PDF Carta</span>
-                      </button>
-                    </div>
-
-                    {/* Primary Button */}
-                    <button
-                      onClick={resetPOS}
-                      className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm shadow-red-900/20"
-                    >
-                      Nueva Venta
-                    </button>
-                  </div>
-                ) : (
-                  /* Fiscal / Internal Invoice Layout */
-                  <div className="pt-2 pb-1 space-y-3.5">
-                    {/* Icon & Title */}
-                    <div className="space-y-1">
-                      <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircleIcon className="h-6 w-6 stroke-[2.2]" />
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                        {billingMode === 'electronic' ? 'Factura Electrónica' : 'Factura Registrada'}
-                      </h3>
-                      <p className="text-xs text-gray-500 dark:text-zinc-400 font-mono">
-                        RD$ {total.toFixed(2)} • {paymentMethod}
-                      </p>
-                    </div>
-
-                    {/* QR Card */}
-                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex flex-col items-center gap-2">
-                      <span className="text-base font-black font-mono text-gray-900 dark:text-white">
-                        {currentNCF}
-                      </span>
-                      <div className="p-2 bg-white rounded-xl shadow-xs border border-gray-100">
-                        <QRCode
-                          value={lastEcfData?.qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${currentNCF}`}
-                          size={95}
-                          level="M"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-zinc-400 font-mono">
-                        {lastEcfData?.securityCode && <span>Cód: {lastEcfData.securityCode} •</span>}
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">Válido DGII</span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={printTicket}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors text-xs font-bold text-gray-800 dark:text-zinc-200 cursor-pointer"
-                      >
-                        <PrinterIcon className="h-4 w-4 text-gray-500" />
-                        <span>Ticket</span>
-                      </button>
-                      <button
-                        onClick={printLetter}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-[#ED1C24] dark:text-red-400 border border-red-200/60 rounded-xl transition-colors text-xs font-bold cursor-pointer"
-                      >
-                        <DocumentArrowDownIcon className="h-4 w-4" />
-                        <span>PDF Carta</span>
-                      </button>
-                    </div>
-
-                    {/* Primary Button */}
-                    <button
-                      onClick={resetPOS}
-                      className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm shadow-red-900/20"
-                    >
-                      Nueva Venta
-                    </button>
+              {/* Invoice & Total Summary Card */}
+              <div className="my-4 py-3 px-4 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                  {lastCompletedSale?.ncf.startsWith('CT') ? 'Número Cotización' : 'Comprobante NCF'}
+                </div>
+                <div className="text-2xl font-black font-mono tracking-wider text-[#ED1C24] dark:text-red-500">
+                  {lastCompletedSale?.ncf || currentNCF}
+                </div>
+                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200 pt-0.5">
+                  Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod || paymentMethod}
+                </div>
+                {lastCompletedSale?.client && (
+                  <div className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+                    Cliente: {lastCompletedSale.client.name}
                   </div>
                 )}
-              </motion.div>
+              </div>
+
+              {/* Question: Imprimir */}
+              <div className="mb-3">
+                <span className="text-xs font-semibold text-gray-600 dark:text-zinc-300">
+                  ¿Desea imprimir el comprobante?
+                </span>
+              </div>
+
+              {/* Action Buttons: Ticket & Letter */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={printTicket}
+                  className="flex items-center justify-center gap-1.5 py-3 px-3 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                >
+                  <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
+                  <span>Imprimir Ticket</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={printLetter}
+                  className="flex items-center justify-center gap-1.5 py-3 px-3 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-[0.98] text-gray-800 dark:text-zinc-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                >
+                  <DocumentArrowDownIcon className="h-4 w-4" />
+                  <span>PDF Carta</span>
+                </button>
+              </div>
+
+              {/* Nueva Venta Button */}
+              <button
+                type="button"
+                onClick={resetPOS}
+                className="w-full py-2.5 bg-gray-50 dark:bg-zinc-900/70 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs border border-gray-200/70 dark:border-zinc-800 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>➕ Nueva Venta</span>
+              </button>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
 
@@ -2721,28 +2744,28 @@ export default function POS() {
       {/* High-Definition 80mm / 58mm Modern Minimalist Thermal Receipt Portal (Mounted only when printing/success) */}
       {isSuccessModalOpen && !isCashClosureOpen && createPortal(
         <ModernReceipt
-          ncf={currentNCF}
-          invoiceType={billingMode === 'electronic' ? electronicDocType : internalDocType}
-          isElectronic={billingMode === 'electronic'}
-          date={new Date()}
-          customerName={selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado')}
-          customerRnc={selectedClient?.rnc || ''}
-          paymentMethod={paymentMethod}
-          receivedAmount={lastPaymentInfo.receivedAmount}
-          changeAmount={lastPaymentInfo.changeAmount}
-          transferReference={lastPaymentInfo.transferReference}
+          ncf={lastCompletedSale?.ncf || currentNCF}
+          invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
+          isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
+          date={lastCompletedSale?.date || new Date()}
+          customerName={lastCompletedSale ? (lastCompletedSale.client ? lastCompletedSale.client.name : (lastCompletedSale.isElectronic ? 'Consumidor Final' : 'Venta de Contado')) : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado'))}
+          customerRnc={lastCompletedSale?.client?.rnc || selectedClient?.rnc || ''}
+          paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
+          receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
+          changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
+          transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
-          items={cart.map(item => ({
+          items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,
             quantity: item.quantity,
             unit_price: item.product.price,
             total_price: calculateItemTotal(item)
           }))}
-          subtotal={subtotal}
-          taxAmount={tax}
-          total={total}
-          securityCode={lastEcfData?.securityCode || '34F595'}
-          qrCodeUrl={lastEcfData?.qrCodeUrl}
+          subtotal={lastCompletedSale?.subtotal ?? subtotal}
+          taxAmount={lastCompletedSale?.tax ?? tax}
+          total={lastCompletedSale?.total ?? total}
+          securityCode={lastCompletedSale?.lastEcfData?.securityCode || lastEcfData?.securityCode || '34F595'}
+          qrCodeUrl={lastCompletedSale?.lastEcfData?.qrCodeUrl || lastEcfData?.qrCodeUrl}
           fontSize={receiptFontSize}
           isPrintOnly={true}
         />,
@@ -2752,31 +2775,31 @@ export default function POS() {
       {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII - Mounted only when printing/success) */}
       {isSuccessModalOpen && !isCashClosureOpen && createPortal(
         <LetterInvoice
-          ncf={currentNCF}
-          invoiceType={billingMode === 'electronic' ? electronicDocType : internalDocType}
-          isElectronic={billingMode === 'electronic'}
-          date={new Date()}
-          customerName={selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado')}
-          customerRnc={selectedClient?.rnc || ''}
-          customerPhone={selectedClient?.phone || ''}
-          customerAddress={selectedClient?.address || ''}
-          paymentMethod={paymentMethod}
-          receivedAmount={lastPaymentInfo.receivedAmount}
-          changeAmount={lastPaymentInfo.changeAmount}
-          transferReference={lastPaymentInfo.transferReference}
+          ncf={lastCompletedSale?.ncf || currentNCF}
+          invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
+          isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
+          date={lastCompletedSale?.date || new Date()}
+          customerName={lastCompletedSale ? (lastCompletedSale.client ? lastCompletedSale.client.name : (lastCompletedSale.isElectronic ? 'Consumidor Final' : 'Venta de Contado')) : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado'))}
+          customerRnc={lastCompletedSale?.client?.rnc || selectedClient?.rnc || ''}
+          customerPhone={lastCompletedSale?.client?.phone || selectedClient?.phone || ''}
+          customerAddress={lastCompletedSale?.client?.address || selectedClient?.address || ''}
+          paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
+          receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
+          changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
+          transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
-          items={cart.map(item => ({
+          items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,
             quantity: item.quantity,
             unit_price: item.product.price,
             total_price: calculateItemTotal(item)
           }))}
-          subtotal={subtotal}
-          taxAmount={tax}
-          total={total}
-          securityCode={lastEcfData?.securityCode || '34F595'}
-          qrCodeUrl={lastEcfData?.qrCodeUrl}
-          trackId={lastEcfData?.trackId}
+          subtotal={lastCompletedSale?.subtotal ?? subtotal}
+          taxAmount={lastCompletedSale?.tax ?? tax}
+          total={lastCompletedSale?.total ?? total}
+          securityCode={lastCompletedSale?.lastEcfData?.securityCode || lastEcfData?.securityCode || '34F595'}
+          qrCodeUrl={lastCompletedSale?.lastEcfData?.qrCodeUrl || lastEcfData?.qrCodeUrl}
+          trackId={lastCompletedSale?.lastEcfData?.trackId || lastEcfData?.trackId}
           isPrintOnly={true}
         />,
         document.body
