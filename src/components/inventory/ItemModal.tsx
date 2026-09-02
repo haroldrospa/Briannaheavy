@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, PhotoIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PhotoIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline';
 import { compressImage } from '../../utils/imageCompressor';
 
 export interface InventoryItem {
@@ -43,9 +43,10 @@ interface ItemModalProps {
   isOpen?: boolean;
   onClose: () => void;
   onSave: (item: any) => Promise<void> | void;
+  onPrintBarcode?: (item: any) => void;
 }
 
-export default function ItemModal({ item, initialData, onClose, onSave }: ItemModalProps) {
+export default function ItemModal({ item, initialData, onClose, onSave, onPrintBarcode }: ItemModalProps) {
   const targetItem = item || initialData;
   const isEditing = !!targetItem;
   const [formData, setFormData] = useState<InventoryItem>({
@@ -761,29 +762,45 @@ export default function ItemModal({ item, initialData, onClose, onSave }: ItemMo
           </div>
 
           {/* Footer Actions */}
-          <div className="px-6 py-3.5 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-end gap-3 shrink-0 bg-gray-50/50 dark:bg-[#111217]/50">
-            <button
-              type="button"
-              onClick={onClose}
-              className="bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl py-2 px-5 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              form="item-form"
-              disabled={isSubmitting}
-              className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-xl py-2 px-6 text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-white dark:border-zinc-900 border-t-transparent rounded-full animate-spin"></span>
-                  <span>Guardando...</span>
-                </>
-              ) : (
-                <span>{isEditing ? 'Guardar Cambios' : 'Guardar Artículo'}</span>
+          <div className="px-6 py-3.5 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between gap-3 shrink-0 bg-gray-50/50 dark:bg-[#111217]/50">
+            <div>
+              {isEditing && onPrintBarcode && (
+                <button
+                  type="button"
+                  onClick={() => onPrintBarcode(formData)}
+                  className="bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl py-2 px-4 text-xs sm:text-sm font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                  title="Imprimir etiquetas de código de barras"
+                >
+                  <TagIcon className="w-4 h-4 text-[#ED1C24]" />
+                  <span>Imprimir Etiqueta</span>
+                </button>
               )}
-            </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl py-2 px-5 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="item-form"
+                disabled={isSubmitting}
+                className="bg-gray-900 text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white rounded-xl py-2 px-6 text-xs sm:text-sm font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white dark:border-zinc-900 border-t-transparent rounded-full animate-spin"></span>
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <span>{isEditing ? 'Guardar Cambios' : 'Guardar Artículo'}</span>
+                )}
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

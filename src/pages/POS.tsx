@@ -27,7 +27,8 @@ import {
   ArrowPathIcon,
   WrenchScrewdriverIcon,
   SunIcon,
-  MoonIcon
+  MoonIcon,
+  TagIcon
 } from '@heroicons/react/24/outline';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
@@ -156,6 +157,38 @@ const ProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) =>
   );
 });
 
+// ─── Search Criteria Definition ───
+const SEARCH_CRITERIA_CONFIG = [
+  {
+    id: 'all' as const,
+    label: 'Todo el catálogo',
+    shortLabel: 'Todo',
+    placeholder: 'Buscar repuesto, camión o código...',
+    icon: MagnifyingGlassIcon,
+  },
+  {
+    id: 'barcode' as const,
+    label: 'Código de Barras',
+    shortLabel: 'Código',
+    placeholder: 'Buscar por código de barras...',
+    icon: QrCodeIcon,
+  },
+  {
+    id: 'internal_code' as const,
+    label: 'P/N / VIN',
+    shortLabel: 'P/N / VIN',
+    placeholder: 'Buscar por P/N, VIN, ID...',
+    icon: TagIcon,
+  },
+  {
+    id: 'name' as const,
+    label: 'Nombre o Marca',
+    shortLabel: 'Nombre',
+    placeholder: 'Buscar por nombre o marca...',
+    icon: DocumentTextIcon,
+  },
+];
+
 // ─── Ultra-Fast Search Bar (0ms typing latency, isolated state) ───
 const POSSearchBar = memo(({
   searchCriteria,
@@ -173,8 +206,31 @@ const POSSearchBar = memo(({
   filteredProducts: any[];
 }) => {
   const [inputValue, setInputValue] = useState('');
+  const [isCriteriaOpen, setIsCriteriaOpen] = useState(false);
+  const criteriaRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isCriteriaOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (criteriaRef.current && !criteriaRef.current.contains(e.target as Node)) {
+        setIsCriteriaOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCriteriaOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCriteriaOpen]);
+
+  const activeCriteria = SEARCH_CRITERIA_CONFIG.find(c => c.id === searchCriteria) || SEARCH_CRITERIA_CONFIG[0];
+  const ActiveIcon = activeCriteria.icon;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -261,20 +317,84 @@ const POSSearchBar = memo(({
   return (
     <div className="flex items-center gap-2 sm:gap-3">
       <div className="relative flex-1 flex items-center bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-xs border border-gray-200/80 dark:border-zinc-800 p-1 sm:p-1.5 focus-within:ring-2 focus-within:ring-[#ED1C24]/30 transition-all">
-        {/* Compact Criteria Selector */}
+        {/* Modern Minimalist Criteria Selector */}
         {onSearchCriteriaChange && (
-          <div className="relative shrink-0 pr-1 border-r border-gray-200 dark:border-zinc-800 mr-1 sm:mr-2">
-            <select
-              value={searchCriteria}
-              onChange={(e) => onSearchCriteriaChange(e.target.value as any)}
-              className="appearance-none bg-gray-50 dark:bg-zinc-800/80 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-[11px] sm:text-xs font-black py-1.5 sm:py-2 pl-2.5 sm:pl-3 pr-6 sm:pr-7 rounded-xl outline-none cursor-pointer border border-gray-200/70 dark:border-zinc-700 transition-colors"
+          <div ref={criteriaRef} className="relative shrink-0 pr-1.5 border-r border-gray-200/80 dark:border-zinc-800 mr-1 sm:mr-2">
+            <button
+              type="button"
+              onClick={() => setIsCriteriaOpen(prev => !prev)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer select-none ${
+                isCriteriaOpen
+                  ? 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
+                  : 'text-gray-700 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/70 dark:hover:bg-zinc-800/70'
+              }`}
+              title="Filtrar por criterio"
             >
-              <option value="all">🔍 Todo</option>
-              <option value="barcode">Código Barras</option>
-              <option value="internal_code">P/N / VIN</option>
-              <option value="name">Nombre</option>
-            </select>
-            <ChevronDownIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gray-400 absolute right-2 top-2.5 sm:top-3 pointer-events-none" />
+              <ActiveIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#ED1C24] shrink-0" />
+              <span className="whitespace-nowrap">{activeCriteria.shortLabel}</span>
+              <ChevronDownIcon
+                className={`w-3 h-3 text-gray-400 dark:text-zinc-500 transition-transform duration-200 shrink-0 ${
+                  isCriteriaOpen ? 'rotate-180 text-gray-700 dark:text-zinc-300' : ''
+                }`}
+              />
+            </button>
+
+            {/* Modern Minimalist Popover */}
+            <AnimatePresence>
+              {isCriteriaOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.12, ease: 'easeOut' }}
+                  className="absolute left-0 top-[calc(100%+8px)] min-w-[200px] bg-white/95 dark:bg-[#1a1a1a]/95 backdrop-blur-md rounded-2xl shadow-xl shadow-black/10 dark:shadow-black/60 border border-gray-100 dark:border-zinc-800 p-1.5 z-50 overflow-hidden"
+                >
+                  <div className="px-2.5 py-1 mb-1 border-b border-gray-100 dark:border-zinc-800/70">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                      Filtrar por
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {SEARCH_CRITERIA_CONFIG.map((crit) => {
+                      const isSelected = crit.id === searchCriteria;
+                      const Icon = crit.icon;
+                      return (
+                        <button
+                          key={crit.id}
+                          type="button"
+                          onClick={() => {
+                            onSearchCriteriaChange(crit.id);
+                            setIsCriteriaOpen(false);
+                            inputRef.current?.focus();
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer text-left ${
+                            isSelected
+                              ? 'bg-red-50 dark:bg-red-950/40 text-[#ED1C24] dark:text-red-400 font-bold'
+                              : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800/80 hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className={`p-1 rounded-lg ${
+                                isSelected
+                                  ? 'bg-red-100/80 dark:bg-red-900/40 text-[#ED1C24] dark:text-red-400'
+                                  : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'
+                              }`}
+                            >
+                              <Icon className="w-3.5 h-3.5" />
+                            </span>
+                            <span>{crit.label}</span>
+                          </div>
+                          {isSelected && (
+                            <CheckIcon className="w-4 h-4 text-[#ED1C24] dark:text-red-400 stroke-[2.5]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 
@@ -283,15 +403,7 @@ const POSSearchBar = memo(({
             ref={inputRef}
             type="text"
             className="w-full bg-transparent px-2.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 outline-none"
-            placeholder={
-              searchCriteria === 'barcode'
-                ? 'Buscar por código de barras...'
-                : searchCriteria === 'internal_code'
-                ? 'Buscar por P/N, VIN, ID...'
-                : searchCriteria === 'name'
-                ? 'Buscar por nombre o marca...'
-                : 'Buscar repuesto, camión o código...'
-            }
+            placeholder={activeCriteria.placeholder}
             value={inputValue}
             onFocus={(e) => e.target.select()}
             onChange={handleChange}

@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlusIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhotoIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhotoIcon, TrashIcon, TagIcon, PrinterIcon } from '@heroicons/react/24/outline';
 import ItemModal from '../components/inventory/ItemModal';
+import BarcodePrintModal from '../components/inventory/BarcodePrintModal';
+import BulkBarcodePrintModal from '../components/inventory/BulkBarcodePrintModal';
 import { fetchInventory, getLocalStorageInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, type InventoryItem } from '../services/inventoryService';
 import { useConfirm } from '../contexts/ConfirmContext';
 
@@ -16,6 +18,9 @@ export default function Inventory() {
   const [stockFilter, setStockFilter] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<InventoryItem | null>(null);
+  const [itemToPrintBarcode, setItemToPrintBarcode] = useState<InventoryItem | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [isBulkPrintOpen, setIsBulkPrintOpen] = useState<boolean>(false);
 
   // Debounce search — filteredInventory useMemo only fires 120ms after user stops typing
   useEffect(() => {
@@ -157,21 +162,59 @@ export default function Inventory() {
   }, [inventory, activeTab, debouncedSearchTerm, stockFilter]);
 
 
+  const handleToggleSelectItem = useCallback((id: string) => {
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllFiltered = useCallback(() => {
+    if (selectedItemIds.size === filteredInventory.length && filteredInventory.length > 0) {
+      setSelectedItemIds(new Set());
+    } else {
+      setSelectedItemIds(new Set(filteredInventory.map(i => String(i.id))));
+    }
+  }, [filteredInventory, selectedItemIds]);
+
+  const selectedItemsList = useMemo(() => {
+    return inventory.filter(item => selectedItemIds.has(String(item.id)));
+  }, [inventory, selectedItemIds]);
+
   return (
     <div className="space-y-4 sm:space-y-6 relative">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400">Control de stock de camiones, maquinarias y piezas.</p>
         </div>
-        <motion.button 
-          whileHover={{ scale: 1.03 }} 
-          whileTap={{ scale: 0.97 }}
-          onClick={() => { setItemToEdit(null); setIsModalOpen(true); }}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-sm"
-        >
-          <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-          Agregar Artículo
-        </motion.button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <motion.button 
+            whileHover={{ scale: 1.03 }} 
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => setIsBulkPrintOpen(true)}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-4 sm:px-5 py-2.5 sm:py-3 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            title="Imprimir etiquetas de múltiples artículos a la vez"
+          >
+            <PrinterIcon className="h-4 w-4 text-[#ED1C24]" />
+            <span>Impresión Masiva {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
+          </motion.button>
+
+          <motion.button 
+            whileHover={{ scale: 1.03 }} 
+            whileTap={{ scale: 0.97 }}
+            onClick={() => { setItemToEdit(null); setIsModalOpen(true); }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-xs sm:text-sm"
+          >
+            <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            Agregar Artículo
+          </motion.button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-transparent dark:border-zinc-800/80">
@@ -227,18 +270,33 @@ export default function Inventory() {
             <div className="md:hidden space-y-3 p-1">
               {filteredInventory.map(item => {
                 const isLowStock = (item.stock ?? 1) <= (item.min_stock ?? 1);
+                const isSelected = selectedItemIds.has(String(item.id));
 
                 return (
                   <div
                     key={item.id}
-                    className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5"
+                    className={`p-3.5 rounded-2xl border space-y-2.5 transition-colors ${
+                      isSelected 
+                        ? 'bg-red-50/40 dark:bg-red-950/20 border-[#ED1C24]/50 shadow-2xs' 
+                        : 'bg-gray-50/70 dark:bg-zinc-900/60 border-gray-200/60 dark:border-zinc-800'
+                    }`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden border border-gray-200/60 dark:border-zinc-700/60">
+                      {/* Checkbox for mobile */}
+                      <div className="pt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectItem(String(item.id))}
+                          className="rounded text-[#ED1C24] focus:ring-[#ED1C24] w-4 h-4 cursor-pointer align-middle"
+                        />
+                      </div>
+
+                      <div className="w-13 h-13 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden border border-gray-200/60 dark:border-zinc-700/60">
                         {item.image_url ? (
                           <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                         ) : (
-                          <PhotoIcon className="w-6 h-6" />
+                          <PhotoIcon className="w-5 h-5" />
                         )}
                       </div>
 
@@ -306,6 +364,15 @@ export default function Inventory() {
                     <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-200/50 dark:border-zinc-800/60">
                       <button 
                         type="button"
+                        onClick={() => setItemToPrintBarcode(item)}
+                        className="p-1.5 px-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer border border-gray-200/80 dark:border-zinc-700 shadow-2xs flex items-center gap-1 text-xs font-bold"
+                        title="Imprimir etiquetas con código de barras"
+                      >
+                        <TagIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                        <span>Etiqueta</span>
+                      </button>
+                      <button 
+                        type="button"
                         onClick={() => { setItemToEdit(item); setIsModalOpen(true); }}
                         className="px-4 py-1.5 rounded-xl bg-white dark:bg-zinc-800 font-bold text-xs hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 border border-gray-200/80 dark:border-zinc-700 shadow-2xs"
                       >
@@ -330,27 +397,49 @@ export default function Inventory() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-[10px] sm:text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-3.5 sm:py-4 px-4 sm:px-6">Artículo</th>
-                    <th className="py-4 px-6">Tipo / Marca</th>
-                    <th className="py-4 px-6">Costo</th>
-                    <th className="py-4 px-6">Precio Venta</th>
-                    <th className="py-4 px-6">Stock</th>
-                    <th className="py-4 px-6">Estado</th>
+                    <th className="py-3.5 sm:py-4 pl-4 pr-1 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredInventory.length > 0 && selectedItemIds.size === filteredInventory.length}
+                        onChange={handleSelectAllFiltered}
+                        className="rounded text-[#ED1C24] focus:ring-[#ED1C24] w-4 h-4 cursor-pointer align-middle"
+                        title="Seleccionar todos"
+                      />
+                    </th>
+                    <th className="py-3.5 sm:py-4 px-4 sm:px-5">Artículo</th>
+                    <th className="py-4 px-5">Tipo / Marca</th>
+                    <th className="py-4 px-5">Costo</th>
+                    <th className="py-4 px-5">Precio Venta</th>
+                    <th className="py-4 px-5">Stock</th>
+                    <th className="py-4 px-5">Estado</th>
                     <th className="py-4 px-6 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-zinc-800/50">
                   {filteredInventory.map(item => {
                     const isLowStock = (item.stock ?? 1) <= (item.min_stock ?? 1);
+                    const isSelected = selectedItemIds.has(String(item.id));
 
                     return (
                       <motion.tr 
                         key={item.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors"
+                        className={`transition-colors ${
+                          isSelected 
+                            ? 'bg-red-50/40 dark:bg-red-950/20' 
+                            : 'hover:bg-gray-50 dark:hover:bg-zinc-800/40'
+                        }`}
                       >
-                        <td className="py-4 px-6">
+                        <td className="py-4 pl-4 pr-1 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectItem(String(item.id))}
+                            className="rounded text-[#ED1C24] focus:ring-[#ED1C24] w-4 h-4 cursor-pointer align-middle"
+                          />
+                        </td>
+                        <td className="py-4 px-4 sm:px-5">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden">
                               {item.image_url ? (
@@ -369,16 +458,16 @@ export default function Inventory() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-5">
                           <div className="text-sm font-medium text-gray-900 dark:text-zinc-200">
                             {item.brand} {item.model}
                           </div>
                           <div className="text-xs text-gray-400 font-bold uppercase">{item.type}</div>
                         </td>
-                        <td className="py-4 px-6 font-bold text-gray-500 dark:text-zinc-400 text-sm">
+                        <td className="py-4 px-5 font-bold text-gray-500 dark:text-zinc-400 text-sm">
                           RD$ {(item.cost || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-4 px-6 font-black text-gray-900 dark:text-zinc-100 text-sm">
+                        <td className="py-4 px-5 font-black text-gray-900 dark:text-zinc-100 text-sm">
                           <div>RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
                           <div className="text-[10px] font-bold mt-0.5">
                             {item.itbis_type === 'exento' ? (
@@ -390,7 +479,7 @@ export default function Inventory() {
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-5">
                           <div className="flex items-center gap-2">
                             <button 
                               onClick={() => updateStock(item.id, (item.stock ?? 1) - 1)}
@@ -412,7 +501,7 @@ export default function Inventory() {
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-5">
                           <span className={`px-3 py-1 text-xs font-bold rounded-full ${
                             item.status === 'Disponible' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' :
                             item.status === 'Reservado' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400' :
@@ -421,7 +510,16 @@ export default function Inventory() {
                             {item.status}
                           </span>
                         </td>
-                        <td className="py-4 px-6 text-right space-x-2">
+                        <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
+                          <button 
+                            type="button"
+                            onClick={() => setItemToPrintBarcode(item)}
+                            className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-zinc-800 font-bold text-xs hover:bg-gray-200 text-gray-800 dark:text-zinc-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Imprimir etiquetas con código de barras"
+                          >
+                            <TagIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                            <span>Etiqueta</span>
+                          </button>
                           <button 
                             onClick={() => { setItemToEdit(item); setIsModalOpen(true); }}
                             className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-zinc-800 font-bold text-xs hover:bg-gray-200 text-gray-800 dark:text-zinc-200"
@@ -446,6 +544,45 @@ export default function Inventory() {
         )}
       </div>
 
+      {/* Floating Bulk Selection Action Bar */}
+      <AnimatePresence>
+        {selectedItemIds.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900/95 dark:bg-zinc-800/95 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl border border-zinc-700/80 flex items-center gap-3 sm:gap-4 text-xs sm:text-sm font-bold"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-[#ED1C24] flex items-center justify-center text-xs font-black text-white">
+                {selectedItemIds.size}
+              </span>
+              <span className="hidden sm:inline">artículos seleccionados</span>
+              <span className="sm:hidden">elegidos</span>
+            </div>
+
+            <div className="h-4 w-px bg-zinc-700"></div>
+
+            <button
+              type="button"
+              onClick={() => setIsBulkPrintOpen(true)}
+              className="bg-[#ED1C24] hover:bg-red-700 text-white px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 font-black shadow-md shadow-red-900/40"
+            >
+              <PrinterIcon className="w-4 h-4" />
+              <span>Imprimir Etiquetas</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedItemIds(new Set())}
+              className="text-zinc-400 hover:text-white transition-colors cursor-pointer px-1 py-1 text-xs"
+            >
+              Limpiar
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isModalOpen && (
           <ItemModal
@@ -454,6 +591,28 @@ export default function Inventory() {
             initialData={itemToEdit}
             onClose={() => setIsModalOpen(false)}
             onSave={handleSaveItem}
+            onPrintBarcode={(item) => setItemToPrintBarcode(item)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {itemToPrintBarcode && (
+          <BarcodePrintModal
+            isOpen={!!itemToPrintBarcode}
+            item={itemToPrintBarcode}
+            onClose={() => setItemToPrintBarcode(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isBulkPrintOpen && (
+          <BulkBarcodePrintModal
+            isOpen={isBulkPrintOpen}
+            items={selectedItemsList.length > 0 ? selectedItemsList : filteredInventory}
+            onClose={() => setIsBulkPrintOpen(false)}
+            onClearSelection={() => setSelectedItemIds(new Set())}
           />
         )}
       </AnimatePresence>
