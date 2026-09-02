@@ -18,6 +18,24 @@ import {
 } from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
+import logo from '../assets/logo.png';
+import QRCode from '../components/ui/QRCode';
+
+export interface PaymentReceiptData {
+  receiptNumber: string;
+  date: string;
+  paymentType: 'cuotas' | 'abono';
+  paidInstallments: MappedInstallment[];
+  abonoAmount: number;
+  totalPaid: number;
+  newBalance: number;
+  customerName: string;
+  customerCode: string;
+  itemName: string;
+  cashierName: string;
+  financingId: string;
+  qrUrl: string;
+}
 
 export interface MappedInstallment {
   id: number;
@@ -548,11 +566,23 @@ export default function Financing() {
   // Print & Exit Confirmation State
   const [hasPrintedReceipt, setHasPrintedReceipt] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<PaymentReceiptData | null>(null);
 
   const handlePrintReceipt = () => {
     setHasPrintedReceipt(true);
-    window.print();
+    document.body.classList.add('print-receipt-mode');
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      document.body.classList.remove('print-receipt-mode');
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   const handleAttemptCloseModal = () => {
     // If currently viewing a receipt and hasn't printed yet, ask for confirmation
@@ -571,6 +601,8 @@ export default function Financing() {
     setSelectedInstallmentIds([]);
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
+    setLastReceipt(null);
+    document.body.classList.remove('print-receipt-mode');
   };
 
   // Filtered Financings & Receivables by customer search (Name, Cédula / RNC, Item, Invoice, Chassis) and Status Filter
@@ -688,6 +720,28 @@ export default function Financing() {
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
 
+      const paidList = [...selectedInsts];
+      const totalPaid = totalSelectedAmount;
+      const totalCap = totalSelectedCapital;
+      const newBal = Math.max(0, selectedFinancing.amount - totalCap);
+      const recNumber = `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+
+      setLastReceipt({
+        receiptNumber: recNumber,
+        date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+        paymentType: 'cuotas',
+        paidInstallments: paidList,
+        abonoAmount: 0,
+        totalPaid: totalPaid,
+        newBalance: newBal,
+        customerName: selectedFinancing.customer,
+        customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
+        itemName: selectedFinancing.item,
+        cashierName: 'Carlos Mendoza',
+        financingId: String(selectedFinancing.id),
+        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`
+      });
+
       const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
         if (selectedInstallmentIds.includes(inst.id)) {
           const paidInstTotal = inst.total;
@@ -720,6 +774,26 @@ export default function Financing() {
     } else {
       if (numAbono <= 0) return;
       let remainingAbono = numAbono;
+      const paidAbono = numAbono;
+      const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
+      const recNumber = `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+
+      setLastReceipt({
+        receiptNumber: recNumber,
+        date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+        paymentType: 'abono',
+        paidInstallments: [],
+        abonoAmount: paidAbono,
+        totalPaid: paidAbono,
+        newBalance: newBal,
+        customerName: selectedFinancing.customer,
+        customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
+        itemName: selectedFinancing.item,
+        cashierName: 'Carlos Mendoza',
+        financingId: String(selectedFinancing.id),
+        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`
+      });
+
       const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
         if (!inst.isPaid && remainingAbono > 0) {
           const applied = Math.min(inst.capital, remainingAbono);
@@ -755,6 +829,31 @@ export default function Financing() {
       setShowReceipt(true);
     }
   };
+
+  const activeReceiptData: PaymentReceiptData = useMemo(() => {
+    if (lastReceipt) return lastReceipt;
+    const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
+    const totalPaid = paymentType === 'abono'
+      ? numAbono
+      : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0));
+    const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)))) : 0;
+    const recNumber = `REC-${new Date().getFullYear()}-${String(selectedFinancing?.id || '0001').slice(-4).padStart(4, '0')}`;
+    return {
+      receiptNumber: recNumber,
+      date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+      paymentType: paymentType,
+      paidInstallments: paidList,
+      abonoAmount: numAbono,
+      totalPaid: totalPaid,
+      newBalance: newBal,
+      customerName: selectedFinancing?.customer || 'Cliente General',
+      customerCode: `CLI-${(selectedFinancing?.id || '1').toString().padStart(4, '0')}`,
+      itemName: selectedFinancing?.item || 'Equipo Pesado',
+      cashierName: 'Carlos Mendoza',
+      financingId: String(selectedFinancing?.id || ''),
+      qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`
+    };
+  }, [lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -1626,20 +1725,20 @@ export default function Financing() {
                   <div className="max-w-3xl mx-auto bg-white dark:bg-[#1a1a1a] p-8 sm:p-10 border border-gray-200/80 dark:border-gray-800 rounded-3xl shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-6 print:text-black print:bg-white">
                     {/* Header Marca / Factura */}
                     <div className="flex justify-between items-start border-b-2 border-gray-900 dark:border-white pb-6 mb-6 print:border-black">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="h-4 w-4 rounded-full bg-[#ED1C24] inline-block print:hidden"></span>
+                      <div className="flex items-center gap-4">
+                        <img src={logo} alt="Brianna Heavy Logo" className="h-12 object-contain" />
+                        <div>
                           <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight print:text-black print:text-2xl">BRIANNA HEAVY</h2>
+                          <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-0.5 print:text-gray-700">Soluciones en Maquinaria Pesada</p>
+                          <p className="text-[11px] text-gray-400 font-medium mt-0.5 print:text-gray-600">RNC: 131-48841-7 • Tel: (809) 555-0199 • Santiago, R.D.</p>
                         </div>
-                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1 print:text-gray-700">Soluciones en Maquinaria Pesada</p>
-                        <p className="text-[11px] text-gray-400 font-medium mt-0.5 print:text-gray-600">RNC: 131-45678-9 | Tel: (809) 555-0199</p>
                       </div>
                       <div className="text-right">
                         <span className="inline-block px-3 py-1 bg-red-50 text-[#ED1C24] font-black text-xs uppercase tracking-widest rounded-full border border-red-100 print:bg-gray-100 print:text-black print:border-gray-300">
                           Recibo Oficial de Pago
                         </span>
-                        <p className="text-sm font-black text-gray-900 dark:text-white mt-2 print:text-black">N° #REC-2026-0001</p>
-                        <p className="text-xs font-medium text-gray-500 mt-0.5 print:text-gray-700">Fecha: {new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p className="text-sm font-black text-gray-900 dark:text-white mt-2 print:text-black">N° #{activeReceiptData.receiptNumber}</p>
+                        <p className="text-xs font-medium text-gray-500 mt-0.5 print:text-gray-700">Fecha: {activeReceiptData.date}</p>
                       </div>
                     </div>
 
@@ -1647,17 +1746,17 @@ export default function Financing() {
                     <div className="grid grid-cols-3 gap-4 mb-8 bg-gray-50 dark:bg-[#222222] p-5 rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-50 print:border-gray-200">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Datos del Cliente</p>
-                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{selectedFinancing.customer}</p>
-                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Código: CLI-{selectedFinancing.id.toString().padStart(4, '0')}</p>
+                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.customerName}</p>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Código: {activeReceiptData.customerCode}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Detalle del Equipo</p>
-                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{selectedFinancing.item}</p>
-                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Modalidad: {paymentType === 'abono' ? 'Abono Extra' : 'Cuota Regular'}</p>
+                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.itemName}</p>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Procesado Por</p>
-                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">Carlos Mendoza</p>
+                        <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.cashierName}</p>
                         <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Rol: Cajero Principal</p>
                       </div>
                     </div>
@@ -1675,16 +1774,16 @@ export default function Financing() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 print:divide-gray-200 text-xs">
-                          {paymentType === 'abono' ? (
+                          {activeReceiptData.paymentType === 'abono' ? (
                             <tr>
                               <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Abono Directo al Capital Principal</td>
-                              <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${numAbono.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                               <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
                               <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
-                              <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${numAbono.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                             </tr>
                           ) : (
-                            selectedInsts.map((inst: MappedInstallment) => (
+                            activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                               <tr key={inst.id}>
                                 <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota N° #{inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -1698,33 +1797,39 @@ export default function Financing() {
                       </table>
                     </div>
 
-                    {/* Resumen de Totales */}
-                    <div className="flex justify-between items-start mb-12">
-                      <div className="w-1/2 pr-6">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Nota Informativa</p>
-                        <p className="text-[11px] text-gray-500 leading-tight print:text-gray-600 font-medium">
-                          Este recibo es un comprobante válido de pago del financiamiento contratado en Brianna Heavy. Conservar para fines de garantía y saldos.
-                        </p>
+                    {/* Resumen de Totales y Código QR */}
+                    <div className="flex justify-between items-center mb-10 gap-6">
+                      <div className="flex items-center gap-4 w-3/5">
+                        <div className="p-2 bg-white rounded-xl border border-gray-200 dark:border-zinc-700 shadow-2xs shrink-0 flex flex-col items-center">
+                          <QRCode value={activeReceiptData.qrUrl} size={76} level="M" />
+                          <span className="text-[8px] font-bold text-gray-400 mt-1 uppercase tracking-tight">Validación DGII</span>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Nota Informativa</p>
+                          <p className="text-[11px] text-gray-500 dark:text-zinc-400 leading-tight print:text-gray-600 font-medium">
+                            Este recibo es un comprobante oficial de pago válido para amortizaciones y saldos del financiamiento contratado en Brianna Heavy Equipment.
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="w-1/2 bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2 print:bg-transparent print:border-gray-300 print:p-3">
+                      <div className="w-2/5 bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2 print:bg-transparent print:border-gray-300 print:p-3">
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-bold text-gray-500 print:text-gray-700">Monto Total Recibido:</span>
-                          <span className="font-black text-gray-900 dark:text-white text-base print:text-black">
-                            ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                          <span className="font-black text-emerald-600 dark:text-emerald-400 text-base print:text-black">
+                            ${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
                         <div className="pt-2 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
                           <span className="font-bold text-gray-500 print:text-gray-700">Nuevo Balance Pendiente:</span>
                           <span className="font-black text-[#ED1C24] dark:text-red-400 text-sm print:text-black">
-                            ${Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : totalSelectedCapital)).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                            ${activeReceiptData.newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
                       </div>
                     </div>
 
                     {/* Firmas de Conformidad */}
-                    <div className="grid grid-cols-2 gap-12 mt-16 pt-6 border-t border-dashed border-gray-300 dark:border-zinc-700 print:border-gray-400">
+                    <div className="grid grid-cols-2 gap-12 mt-12 pt-6 border-t border-dashed border-gray-300 dark:border-zinc-700 print:border-gray-400">
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
                         <p className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider print:text-black">Caja / Firma Autorizada</p>
@@ -1733,7 +1838,7 @@ export default function Financing() {
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
                         <p className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider print:text-black">Firma del Cliente</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5 print:text-gray-500">{selectedFinancing.customer}</p>
+                        <p className="text-[9px] text-gray-400 mt-0.5 print:text-gray-500">{activeReceiptData.customerName}</p>
                       </div>
                     </div>
 
@@ -2558,6 +2663,130 @@ export default function Financing() {
             )}
           </>
         )}
+      {/* Isolated Print Portal for Payment Receipt (Rendered in document.body) */}
+      {showReceipt && typeof document !== 'undefined' && createPortal(
+        <div className="hidden print:block printable-financing-receipt font-sans text-black bg-white">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-5">
+            <div className="flex items-center gap-4">
+              <img src={logo} alt="Brianna Heavy Logo" className="h-14 object-contain" />
+              <div>
+                <h1 className="text-2xl font-black text-black tracking-tight">BRIANNA HEAVY</h1>
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Soluciones en Maquinaria Pesada</p>
+                <p className="text-[10px] text-gray-600 font-medium mt-0.5">RNC: 131-48841-7 • Tel: (809) 555-0199 • Santiago, República Dominicana</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="inline-block px-3 py-1 bg-gray-100 text-black font-black text-xs uppercase tracking-widest rounded-full border border-gray-300">
+                Recibo Oficial de Pago
+              </span>
+              <p className="text-sm font-black text-black mt-2">N° #{activeReceiptData.receiptNumber}</p>
+              <p className="text-xs font-medium text-gray-700 mt-0.5">Fecha: {activeReceiptData.date}</p>
+            </div>
+          </div>
+
+          {/* Details Box */}
+          <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-300">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Datos del Cliente</p>
+              <p className="font-black text-black text-sm">{activeReceiptData.customerName}</p>
+              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Código: {activeReceiptData.customerCode}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Detalle del Equipo</p>
+              <p className="font-black text-black text-sm">{activeReceiptData.itemName}</p>
+              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Procesado Por</p>
+              <p className="font-black text-black text-sm">{activeReceiptData.cashierName}</p>
+              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Rol: Cajero Principal</p>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="mb-6 overflow-hidden rounded-xl border border-gray-300">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-100 text-black uppercase tracking-wider text-[10px] font-black">
+                <tr>
+                  <th className="py-2.5 px-4">Concepto / Cuota</th>
+                  <th className="py-2.5 px-4 text-right">Capital</th>
+                  <th className="py-2.5 px-4 text-right">Interés</th>
+                  <th className="py-2.5 px-4 text-right">Mora</th>
+                  <th className="py-2.5 px-4 text-right">Monto Pagado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-300 text-xs">
+                {activeReceiptData.paymentType === 'abono' ? (
+                  <tr>
+                    <td className="py-3 px-4 font-bold text-black">Abono Directo al Capital Principal</td>
+                    <td className="py-3 px-4 text-right font-medium text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                    <td className="py-3 px-4 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                  </tr>
+                ) : (
+                  activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
+                    <tr key={inst.id}>
+                      <td className="py-3 px-4 font-bold text-black">Cuota N° #{inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
+                      <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                      <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                      <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                      <td className="py-3 px-4 text-right font-black text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals & QR Code */}
+          <div className="flex justify-between items-center mb-10 gap-6">
+            <div className="flex items-center gap-4 w-3/5">
+              <div className="p-2 bg-white rounded-xl border border-gray-300 shrink-0 flex flex-col items-center">
+                <QRCode value={activeReceiptData.qrUrl} size={84} level="M" />
+                <span className="text-[8px] font-bold text-gray-500 mt-1 uppercase tracking-tight">Validación DGII</span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Nota Informativa</p>
+                <p className="text-[11px] text-gray-700 leading-tight font-medium">
+                  Este recibo es un comprobante oficial de pago válido para amortizaciones y saldos del financiamiento contratado en Brianna Heavy Equipment.
+                </p>
+              </div>
+            </div>
+
+            <div className="w-2/5 p-4 rounded-xl border border-gray-300 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-700">Monto Total Recibido:</span>
+                <span className="font-black text-black text-base">
+                  ${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-gray-300 flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-700">Nuevo Balance Pendiente:</span>
+                <span className="font-black text-black text-sm">
+                  ${activeReceiptData.newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Signatures */}
+          <div className="grid grid-cols-2 gap-12 mt-12 pt-6 border-t border-dashed border-gray-400">
+            <div className="text-center">
+              <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
+              <p className="text-[10px] font-black text-black uppercase tracking-wider">Caja / Firma Autorizada</p>
+              <p className="text-[9px] font-bold text-black mt-0.5">Carlos Mendoza (Cajero)</p>
+            </div>
+            <div className="text-center">
+              <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
+              <p className="text-[10px] font-black text-black uppercase tracking-wider">Firma del Cliente</p>
+              <p className="text-[9px] text-gray-700 mt-0.5">{activeReceiptData.customerName}</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       </AnimatePresence>
 
       {/* Cierre de Caja Modal */}
