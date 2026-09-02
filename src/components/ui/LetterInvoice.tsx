@@ -19,6 +19,8 @@ export interface LetterInvoiceProps {
   customerPhone?: string;
   customerAddress?: string;
   paymentMethod?: string;
+  creditDays?: number;
+  dueDate?: string;
   receivedAmount?: number;
   changeAmount?: number;
   transferReference?: string;
@@ -48,6 +50,8 @@ export default function LetterInvoice({
   customerPhone = '',
   customerAddress = '',
   paymentMethod = 'Efectivo',
+  creditDays = 15,
+  dueDate,
   receivedAmount,
   changeAmount,
   transferReference,
@@ -158,8 +162,22 @@ export default function LetterInvoice({
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : 'Término de Pago:'}</span>
-              <strong className="uppercase text-zinc-900">{isCotizacion ? 'Presupuesto' : paymentMethod}</strong>
+              <strong className="uppercase text-zinc-900">
+                {isCotizacion ? 'Presupuesto' : (paymentMethod === 'Crédito' ? `Crédito (${creditDays || 15} Días)` : paymentMethod)}
+              </strong>
             </div>
+            {!isCotizacion && paymentMethod === 'Crédito' && (
+              <div className="flex justify-between text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px]">
+                <span className="font-bold text-amber-800">Fecha Vencimiento:</span>
+                <strong className="font-mono font-black">
+                  {dueDate || (() => {
+                    const d = new Date(dateObj);
+                    d.setDate(d.getDate() + (creditDays || 15));
+                    return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' });
+                  })()}
+                </strong>
+              </div>
+            )}
             {isEcf && (
               <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-zinc-300">
                 <span className="text-emerald-700 font-bold">Estado Fiscal:</span>

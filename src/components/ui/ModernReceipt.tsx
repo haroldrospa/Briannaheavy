@@ -23,6 +23,8 @@ export interface ModernReceiptProps {
   customerName?: string;
   customerRnc?: string;
   paymentMethod?: string;
+  creditDays?: number;
+  dueDate?: string;
   receivedAmount?: number;
   changeAmount?: number;
   transferReference?: string;
@@ -52,6 +54,8 @@ export default function ModernReceipt({
   customerName = 'Consumidor Final',
   customerRnc = '',
   paymentMethod = 'Efectivo',
+  creditDays = 15,
+  dueDate,
   receivedAmount,
   changeAmount,
   transferReference,
@@ -156,10 +160,23 @@ export default function ModernReceipt({
 
           <div className="flex justify-between items-center">
             <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : 'Método de Pago:'}</span>
-            <span className="bg-zinc-100 border border-zinc-300 text-black px-2 py-0.5 rounded font-bold uppercase" style={{ fontSize: '0.92em' }}>
-              {isCotizacion ? 'Presupuesto' : paymentMethod}
+            <span className={`border px-2 py-0.5 rounded font-bold uppercase ${paymentMethod === 'Crédito' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-zinc-100 border-zinc-300 text-black'}`} style={{ fontSize: '0.92em' }}>
+              {isCotizacion ? 'Presupuesto' : (paymentMethod === 'Crédito' ? `Crédito (${creditDays || 15} Días)` : paymentMethod)}
             </span>
           </div>
+
+          {!isCotizacion && paymentMethod === 'Crédito' && (
+            <div className="flex justify-between items-center bg-amber-50/70 border border-amber-200/80 rounded px-1.5 py-0.5">
+              <span className="text-amber-800 font-bold">Vencimiento:</span>
+              <strong className="text-amber-950 font-black font-mono">
+                {dueDate || (() => {
+                  const d = new Date(dateObj);
+                  d.setDate(d.getDate() + (creditDays || 15));
+                  return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' });
+                })()}
+              </strong>
+            </div>
+          )}
 
           {activeConfig.showCashier && cashierName && (
             <div className="flex justify-between items-center">

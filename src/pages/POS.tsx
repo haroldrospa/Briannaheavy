@@ -28,6 +28,7 @@ import {
   WrenchScrewdriverIcon,
   SunIcon,
   MoonIcon,
+  ClockIcon,
   TagIcon
 } from '@heroicons/react/24/outline';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -910,6 +911,8 @@ const CheckoutModal = memo(({
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
+    creditDays?: number;
+    dueDate?: string;
   }) => Promise<void>;
   isTransmitting: boolean;
 }) => {
@@ -919,6 +922,7 @@ const CheckoutModal = memo(({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
   const [amountReceived, setAmountReceived] = useState<string>(() => total.toFixed(2));
   const [transferReference, setTransferReference] = useState<string>('');
+  const [creditDays, setCreditDays] = useState<number>(15);
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
@@ -926,6 +930,7 @@ const CheckoutModal = memo(({
     if (isOpen) {
       setAmountReceived(total.toFixed(2));
       setBankAccounts(getCompanyBankAccounts());
+      setCreditDays(15);
     }
   }, [isOpen, total]);
 
@@ -939,6 +944,25 @@ const CheckoutModal = memo(({
   }, []);
 
   const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
+
+  const effectiveCreditDays = Math.max(1, Number(creditDays) || 15);
+
+  const calculatedDueDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + effectiveCreditDays);
+    return d.toLocaleDateString('es-DO', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  }, [effectiveCreditDays]);
+
+  const isoDueDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + effectiveCreditDays);
+    return d.toISOString().slice(0, 10);
+  }, [effectiveCreditDays]);
 
   // Derived Payment Math
   const numReceived = parseFloat(amountReceived) || 0;
@@ -969,7 +993,9 @@ const CheckoutModal = memo(({
       internalDocType,
       paymentMethod: isCotizacion ? 'Efectivo' : paymentMethod,
       amountReceived: isCotizacion ? total.toFixed(2) : amountReceived,
-      transferReference: isCotizacion ? '' : transferReference
+      transferReference: isCotizacion ? '' : transferReference,
+      creditDays: paymentMethod === 'Crédito' ? effectiveCreditDays : undefined,
+      dueDate: paymentMethod === 'Crédito' ? isoDueDate : undefined,
     });
   };
 
@@ -1320,6 +1346,114 @@ const CheckoutModal = memo(({
                   </div>
                 </div>
               )}
+
+              {paymentMethod === 'Crédito' && (
+                <div className="space-y-2 pt-0.5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl p-3 border border-amber-200/90 dark:border-amber-900/50 space-y-2.5">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-300">
+                        <ClockIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-[11px] font-black uppercase tracking-wider">Plazo de Crédito</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60">
+                        Por Defecto: 15 Días
+                      </span>
+                    </div>
+
+                    {/* Stepper + Input */}
+                    <div className="flex items-center gap-1.5 bg-white dark:bg-[#15161b] rounded-xl p-1.5 border border-amber-200 dark:border-amber-800/60 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setCreditDays(prev => Math.max(1, (Number(prev) || 15) - 5))}
+                        className="h-8 px-2 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-bold text-xs transition-colors cursor-pointer shrink-0"
+                        title="Restar 5 días"
+                      >
+                        -5d
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreditDays(prev => Math.max(1, (Number(prev) || 15) - 1))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-sm flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                        title="Restar 1 día"
+                      >
+                        -
+                      </button>
+
+                      <div className="flex-1 flex items-center justify-center gap-1">
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={creditDays}
+                          onChange={e => {
+                            const val = parseInt(e.target.value, 10);
+                            setCreditDays(isNaN(val) ? ('' as any) : Math.max(1, val));
+                          }}
+                          onBlur={() => {
+                            if (!creditDays || Number(creditDays) < 1) setCreditDays(15);
+                          }}
+                          className="w-16 text-center text-lg font-black font-mono text-gray-900 dark:text-white outline-none bg-transparent"
+                        />
+                        <span className="text-xs font-bold text-gray-400 uppercase select-none">días</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setCreditDays(prev => Math.min(365, (Number(prev) || 15) + 1))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-sm flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                        title="Sumar 1 día"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreditDays(prev => Math.min(365, (Number(prev) || 15) + 5))}
+                        className="h-8 px-2 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-bold text-xs transition-colors cursor-pointer shrink-0"
+                        title="Sumar 5 días"
+                      >
+                        +5d
+                      </button>
+                    </div>
+
+                    {/* Quick Preset Chips */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { days: 7, label: '7 Días' },
+                        { days: 15, label: '15 Días (Defecto)' },
+                        { days: 30, label: '30 Días' },
+                        { days: 60, label: '60 Días' },
+                      ].map(preset => {
+                        const isSelected = Number(creditDays) === preset.days;
+                        return (
+                          <button
+                            key={preset.days}
+                            type="button"
+                            onClick={() => setCreditDays(preset.days)}
+                            className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center truncate ${
+                              isSelected
+                                ? 'bg-amber-600 text-white font-black shadow-xs ring-1 ring-amber-700'
+                                : 'bg-white/90 dark:bg-zinc-850 text-gray-700 dark:text-zinc-300 hover:bg-white border border-amber-200/70 dark:border-amber-900/50'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Calculated Due Date banner */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200/70 dark:border-amber-900/40">
+                      <span className="text-amber-800 dark:text-amber-300 font-medium text-[11px]">
+                        📅 Fecha Vencimiento:
+                      </span>
+                      <strong className="text-amber-950 dark:text-amber-100 font-mono font-bold capitalize text-[11px]">
+                        {calculatedDueDate}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1332,6 +1466,8 @@ const CheckoutModal = memo(({
                 canEmit
                   ? isCotizacion
                     ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-[0.99]'
+                    : paymentMethod === 'Crédito'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.99] shadow-amber-900/20'
                     : 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
                   : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed shadow-none'
               }`}
@@ -1347,9 +1483,11 @@ const CheckoutModal = memo(({
                   <span>
                     {isCotizacion
                       ? '📄 Guardar Cotización (CT)'
-                      : (billingMode === 'electronic'
-                          ? `Emitir Factura Electrónica (${electronicDocType})`
-                          : `Emitir Factura Interna (${internalDocType})`)}
+                      : (paymentMethod === 'Crédito'
+                          ? `Emitir Factura a Crédito (${effectiveCreditDays} Días)`
+                          : (billingMode === 'electronic'
+                              ? `Emitir Factura Electrónica (${electronicDocType})`
+                              : `Emitir Factura Interna (${internalDocType})`))}
                   </span>
                 </>
               )}
@@ -1622,6 +1760,8 @@ export default function POS() {
     receivedAmount?: number;
     changeAmount?: number;
     transferReference?: string;
+    creditDays?: number;
+    dueDate?: string;
   }>({});
   const [lastCompletedSale, setLastCompletedSale] = useState<{
     invoiceNumber: string;
@@ -1635,8 +1775,10 @@ export default function POS() {
     tax: number;
     client: any;
     paymentMethod: string;
+    creditDays?: number;
+    dueDate?: string;
     items: { description: string; quantity: number; unit_price: number; total_price: number }[];
-    lastPaymentInfo: { receivedAmount?: number; changeAmount?: number; transferReference?: string };
+    lastPaymentInfo: { receivedAmount?: number; changeAmount?: number; transferReference?: string; creditDays?: number; dueDate?: string };
     lastEcfData: ElectronicInvoiceResponse | null;
     date: Date;
   } | null>(null);
@@ -1754,11 +1896,13 @@ export default function POS() {
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
+    creditDays?: number;
+    dueDate?: string;
   }) => {
     if (isTransmitting) return;
 
     setIsTransmitting(true);
-    const { billingMode, electronicDocType, internalDocType, paymentMethod, amountReceived, transferReference } = saleParams;
+    const { billingMode, electronicDocType, internalDocType, paymentMethod, amountReceived, transferReference, creditDays, dueDate } = saleParams;
     setBillingMode(billingMode);
     setElectronicDocType(electronicDocType);
     setInternalDocType(internalDocType);
@@ -1770,6 +1914,8 @@ export default function POS() {
       receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
       changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
       transferReference: transferReference || undefined,
+      creditDays: paymentMethod === 'Crédito' ? creditDays : undefined,
+      dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
     });
 
     try {
@@ -1912,11 +2058,15 @@ export default function POS() {
         tax,
         client: selectedClient,
         paymentMethod,
+        creditDays: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
+        dueDate: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         items: saleItems,
         lastPaymentInfo: {
           receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
           changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
           transferReference: transferReference || undefined,
+          creditDays: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
+          dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
         },
         lastEcfData: ecfRes || (internalDocType === 'CT' ? {
           success: true,
@@ -1959,9 +2109,11 @@ export default function POS() {
         tax_amount: tax,
         total_amount: total,
         payment_method: internalDocType === 'CT' ? 'Cotización' : paymentMethod,
+        credit_days: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
+        due_date: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
         register_name: activeRegister,
-        status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : 'Pagada (No Fiscal)'),
+        status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : (paymentMethod === 'Crédito' ? 'Crédito Pendiente' : 'Pagada (No Fiscal)')),
         is_electronic: isElectronic,
         billing_mode: billingMode,
         ecf_security_code: ecfRes?.securityCode || lastEcfData?.securityCode,
@@ -2642,9 +2794,14 @@ export default function POS() {
                 <div className="text-2xl font-black font-mono tracking-wider text-[#ED1C24] dark:text-red-500">
                   {lastCompletedSale?.ncf || currentNCF}
                 </div>
-                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200">
-                  Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod || paymentMethod}
+                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200 text-center">
+                  Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod === 'Crédito' ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)` : (lastCompletedSale?.paymentMethod || paymentMethod)}
                 </div>
+                {lastCompletedSale?.paymentMethod === 'Crédito' && lastCompletedSale?.dueDate && (
+                  <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
+                    📅 Vence el: {lastCompletedSale.dueDate}
+                  </div>
+                )}
                 {lastCompletedSale?.client && (
                   <div className="text-xs text-gray-500 dark:text-zinc-400 truncate max-w-full">
                     Cliente: {lastCompletedSale.client.name}
@@ -2774,6 +2931,8 @@ export default function POS() {
           customerName={lastCompletedSale ? (lastCompletedSale.client ? lastCompletedSale.client.name : (lastCompletedSale.isElectronic ? 'Consumidor Final' : 'Venta de Contado')) : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado'))}
           customerRnc={lastCompletedSale?.client?.rnc || selectedClient?.rnc || ''}
           paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
+          creditDays={lastCompletedSale?.creditDays}
+          dueDate={lastCompletedSale?.dueDate}
           receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
           changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
           transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
@@ -2807,6 +2966,8 @@ export default function POS() {
           customerPhone={lastCompletedSale?.client?.phone || selectedClient?.phone || ''}
           customerAddress={lastCompletedSale?.client?.address || selectedClient?.address || ''}
           paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
+          creditDays={lastCompletedSale?.creditDays}
+          dueDate={lastCompletedSale?.dueDate}
           receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
           changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
           transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}

@@ -48,13 +48,14 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
       const paidAmount = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
       const balance = Math.max(0, totalAmount - paidAmount);
 
+      const creditDays = Number(inv.credit_days || (inv as any).creditDays) || 15;
       const issueDate = inv.created_at ? inv.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10);
       
       const issueObj = new Date(issueDate);
-      issueObj.setDate(issueObj.getDate() + 30);
-      const dueDate = issueObj.toISOString().slice(0, 10);
+      issueObj.setDate(issueObj.getDate() + creditDays);
+      const dueDate = inv.due_date || issueObj.toISOString().slice(0, 10);
       
-      const isOverdue = balance > 0 && new Date() > issueObj;
+      const isOverdue = balance > 0 && new Date() > new Date(dueDate);
 
       let status: 'Pendiente' | 'Con Abono' | 'Atrasado' | 'Saldado' = 'Pendiente';
       if (balance <= 0.01) {
@@ -81,7 +82,7 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
         balance,
         issueDate,
         dueDate,
-        creditDays: 30,
+        creditDays,
         status,
         paymentsHistory: payments
       };

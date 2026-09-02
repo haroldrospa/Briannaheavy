@@ -252,7 +252,7 @@ export default function Invoices() {
                           {invoice.customer_rnc || 'Consumidor Final'}
                         </p>
                         <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
-                          {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'} • <span className="uppercase font-semibold">{invoice.payment_method || 'Efectivo'}</span>
+                          {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'} • <span className="uppercase font-semibold">{invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15}d)` : (invoice.payment_method || 'Efectivo')}</span>
                         </p>
                       </div>
 
@@ -356,7 +356,7 @@ export default function Invoices() {
                             {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                           </div>
                           <div className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase font-medium mt-0.5">
-                            {invoice.payment_method || 'Efectivo'}
+                            {invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15} Días)` : (invoice.payment_method || 'Efectivo')}
                           </div>
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-zinc-100 font-mono">
@@ -771,6 +771,8 @@ export default function Invoices() {
           customerName={viewingInvoice.customer_name}
           customerRnc={viewingInvoice.customer_rnc || ''}
           paymentMethod={viewingInvoice.payment_method || 'Efectivo'}
+          creditDays={viewingInvoice.credit_days}
+          dueDate={viewingInvoice.due_date}
           cashierName={viewingInvoice.cashier_name || 'Cajero POS'}
           items={viewingInvoice.items?.map(it => ({
             description: it.description,
@@ -799,6 +801,8 @@ export default function Invoices() {
           customerName={viewingInvoice.customer_name}
           customerRnc={viewingInvoice.customer_rnc || ''}
           paymentMethod={viewingInvoice.payment_method || 'Efectivo'}
+          creditDays={viewingInvoice.credit_days}
+          dueDate={viewingInvoice.due_date}
           cashierName={viewingInvoice.cashier_name || 'Cajero POS'}
           items={viewingInvoice.items?.map(it => ({
             description: it.description,
