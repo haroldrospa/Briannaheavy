@@ -61,10 +61,18 @@ export default function Customers() {
     const raw = rncInput !== undefined ? rncInput : newCustomer.document_id;
     const clean = raw.replace(/\D/g, '').trim();
 
+    if (!clean) {
+      setDgiiMessage({
+        type: 'info',
+        text: 'Ingrese el RNC (9 dígitos) o Cédula (11 dígitos) para buscar en la DGII.'
+      });
+      return;
+    }
+
     if (clean.length !== 9 && clean.length !== 11) {
       setDgiiMessage({
         type: 'info',
-        text: 'Ingrese 9 dígitos para RNC o 11 para Cédula para consultar en DGII.'
+        text: 'El RNC debe tener 9 dígitos y la Cédula 11 dígitos para consultar en DGII.'
       });
       return;
     }
@@ -92,25 +100,25 @@ export default function Customers() {
       } else if (res.success && res.isValidStructure) {
         setNewCustomer(prev => ({
           ...prev,
-          name: '',
+          name: prev.name || '',
           document_id: formattedDoc
         }));
         setDgiiMessage({
           type: 'info',
           text: isFisico
-            ? `Cédula Válida (${formattedDoc}). Ingrese el nombre del cliente.`
-            : `RNC Válido (${formattedDoc}). Ingrese la Razón Social.`
+            ? `Cédula con estructura válida (${formattedDoc}). Puede completar el nombre del cliente.`
+            : `RNC válido (${formattedDoc}). Ingrese el nombre o razón social.`
         });
       } else {
         setDgiiMessage({
           type: 'error',
-          text: res.error || 'Identificación no válida.'
+          text: res.error || 'Identificación no registrada en el padrón de la DGII.'
         });
       }
     } catch {
       setDgiiMessage({
         type: 'error',
-        text: 'Error consultando DGII. Ingrese los datos manualmente.'
+        text: 'Error al conectar con la DGII. Puede ingresar los datos del cliente manualmente.'
       });
     } finally {
       setIsSearchingDgii(false);
@@ -119,9 +127,18 @@ export default function Customers() {
 
   const handleCreateCustomer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomer.name || !newCustomer.document_id) return;
-    cacheDgiiRnc(newCustomer.document_id, newCustomer.name);
-    await createCustomer(newCustomer);
+    if (!newCustomer.name.trim()) return;
+
+    const trimmedDoc = newCustomer.document_id.trim();
+    if (trimmedDoc) {
+      cacheDgiiRnc(trimmedDoc, newCustomer.name.trim());
+    }
+
+    await createCustomer({
+      ...newCustomer,
+      name: newCustomer.name.trim(),
+      document_id: trimmedDoc || `CF-${Date.now().toString().slice(-6)}`,
+    });
     setIsModalOpen(false);
     setNewCustomer({ name: '', document_id: '', email: '', phone: '', address: '', status: 'Activo' });
     setDgiiMessage(null);
@@ -248,7 +265,9 @@ export default function Customers() {
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center text-sm font-mono font-bold text-gray-700 dark:text-zinc-300">
                         <DocumentTextIcon className="w-4 h-4 mr-1.5 text-gray-400" />
-                        {customer.document_id}
+                        {customer.document_id && !customer.document_id.startsWith('CF-') && !customer.document_id.startsWith('CLIENTE-') && customer.document_id !== 'Sin RNC'
+                          ? customer.document_id
+                          : <span className="text-gray-400 dark:text-zinc-500 font-normal">Sin RNC</span>}
                       </div>
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap">
@@ -315,7 +334,7 @@ export default function Customers() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300">
-                      RNC / Cédula <span className="text-[#ED1C24]">*</span>
+                      RNC / Cédula <span className="text-gray-400 font-normal text-[11px]">(Opcional)</span>
                     </label>
                     <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
                       Consulta Automática DGII
@@ -325,7 +344,6 @@ export default function Customers() {
                     <div className="relative flex-1">
                       <input 
                         type="text" 
-                        required 
                         autoFocus
                         value={newCustomer.document_id} 
                         onChange={(e) => {

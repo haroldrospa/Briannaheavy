@@ -527,7 +527,7 @@ const SelectClientModal = memo(({
       } else if (res.success && res.isValidStructure) {
         setNewClient(prev => ({
           ...prev,
-          name: '',
+          name: prev.name || '',
           document_id: formattedDoc
         }));
         setDgiiMessage({
@@ -552,15 +552,19 @@ const SelectClientModal = memo(({
 
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClient.name.trim() || !newClient.document_id.trim()) return;
+    if (!newClient.name.trim()) return;
 
     setIsSaving(true);
     try {
-      cacheDgiiRnc(newClient.document_id, newClient.name);
-      const isEmpresarial = newClient.document_id.replace(/\D/g, '').length === 9;
+      const trimmedDoc = newClient.document_id.trim();
+      if (trimmedDoc) {
+        cacheDgiiRnc(trimmedDoc, newClient.name);
+      }
+      const cleanDoc = trimmedDoc.replace(/\D/g, '');
+      const isEmpresarial = cleanDoc.length === 9;
       const created = await onCreateClient({
         name: newClient.name.trim(),
-        document_id: newClient.document_id.trim(),
+        document_id: trimmedDoc || `CF-${Date.now().toString().slice(-6)}`,
         phone: newClient.phone.trim() || undefined,
         email: newClient.email.trim() || undefined,
         address: newClient.address.trim() || undefined,
@@ -771,14 +775,13 @@ const SelectClientModal = memo(({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400">
-                  RNC / Cédula <span className="text-[#ED1C24]">*</span>
+                  RNC / Cédula <span className="text-gray-400 font-normal">(Opcional)</span>
                 </label>
                 <span className="text-[9px] font-bold text-gray-400">Búsqueda automática DGII</span>
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  required
                   autoFocus
                   value={newClient.document_id}
                   onChange={(e) => {

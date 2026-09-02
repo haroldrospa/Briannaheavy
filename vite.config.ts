@@ -21,15 +21,21 @@ function dgiiLookupPlugin(): Plugin {
 
         try {
           const dgiiUrl = 'https://dgii.gov.do/app/WebApps/ConsultasWeb2/ConsultasWeb/consultas/rnc.aspx';
+          const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
           const getRes = await fetch(dgiiUrl, {
             headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'User-Agent': userAgent,
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
               'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
             }
           });
           const html = await getRes.text();
-          const cookies = getRes.headers.get('set-cookie');
+          
+          const rawCookies = typeof (getRes.headers as any).getSetCookie === 'function' 
+            ? (getRes.headers as any).getSetCookie() 
+            : [getRes.headers.get('set-cookie') || ''];
+          const cookieHeader = rawCookies.map((c: string) => c.split(';')[0]).filter(Boolean).join('; ');
 
           const vsMatch = html.match(/name="__VIEWSTATE" id="__VIEWSTATE" value="([^"]+)"/);
           const vsgMatch = html.match(/name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="([^"]+)"/);
@@ -43,21 +49,27 @@ function dgiiLookupPlugin(): Plugin {
           }
 
           const params = new URLSearchParams();
+          params.append('ctl00$smMain', 'ctl00$cphMain$upBusqueda|ctl00$cphMain$btnBuscarPorRNC');
           params.append('__EVENTTARGET', '');
           params.append('__EVENTARGUMENT', '');
           params.append('__VIEWSTATE', vsMatch[1]);
           if (vsgMatch) params.append('__VIEWSTATEGENERATOR', vsgMatch[1]);
           if (evMatch) params.append('__EVENTVALIDATION', evMatch[1]);
           params.append('ctl00$cphMain$txtRNCCedula', rnc);
-          params.append('ctl00$cphMain$btnBuscarPorRNC', 'Buscar');
+          params.append('ctl00$cphMain$txtRazonSocial', '');
+          params.append('ctl00$cphMain$hidActiveTab', '');
+          params.append('__ASYNCPOST', 'true');
+          params.append('ctl00$cphMain$btnBuscarPorRNC', 'BUSCAR');
 
           const postRes = await fetch(dgiiUrl, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Cookie': cookies || '',
-              'Referer': dgiiUrl
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'User-Agent': userAgent,
+              'X-MicrosoftAjax': 'Delta=true',
+              'Cookie': cookieHeader,
+              'Referer': dgiiUrl,
+              'Origin': 'https://dgii.gov.do'
             },
             body: params.toString()
           });

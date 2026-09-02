@@ -19,6 +19,11 @@ export interface DgiiRncResult {
 // Directorio base de RNCs y empresas dominicanas frecuentes
 const LOCAL_RNC_DIRECTORY: Record<string, { name: string; status: 'ACTIVO' | 'INACTIVO'; type: 'Jurídico' | 'Físico'; activity?: string }> = {
   '131488417': { name: 'BRIANNA HEAVY EQUIPMENT S.R.L.', status: 'ACTIVO', type: 'Jurídico', activity: 'Venta de Maquinaria Pesada y Repuestos' },
+  '101010632': { name: 'BANCO POPULAR DOMINICANO S A BANCO MULTIPLE', status: 'ACTIVO', type: 'Jurídico', activity: 'Bancos Múltiples' },
+  '401506254': { name: 'DIRECCION GENERAL DE IMPUESTOS INTERNOS', status: 'ACTIVO', type: 'Jurídico', activity: 'Servicios Generales de la Administración Pública' },
+  '101001570': { name: 'COMPAÑIA DOMINICANA DE TELEFONOS S.A. (CLARO)', status: 'ACTIVO', type: 'Jurídico', activity: 'Telecomunicaciones' },
+  '101004162': { name: 'CERVECERIA NACIONAL DOMINICANA S.A.', status: 'ACTIVO', type: 'Jurídico', activity: 'Elaboración de Bebidas Malteadas' },
+  '101135843': { name: 'BANCO MULTIPLE BHD S.A.', status: 'ACTIVO', type: 'Jurídico', activity: 'Bancos Múltiples' },
   '131316212': { name: 'INVERSIONES JM-AC S.R.L.', status: 'ACTIVO', type: 'Jurídico', activity: 'Comercio y Servicios Generales' },
   '132610362': { name: 'CONSTRUCTORA DEL CARIBE S.R.L.', status: 'ACTIVO', type: 'Jurídico', activity: 'Construcción y Obras Civiles' },
   '101998823': { name: 'TRANSPORTES CIBAO S.A.', status: 'ACTIVO', type: 'Jurídico', activity: 'Transporte Pesado y Logística' },
