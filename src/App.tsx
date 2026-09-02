@@ -18,6 +18,7 @@ const Settings = React.lazy(() => import('./pages/Settings'));
 const Reports = React.lazy(() => import('./pages/Reports'));
 const Customers = React.lazy(() => import('./pages/Customers'));
 const Invoices = React.lazy(() => import('./pages/Invoices'));
+const Banks = React.lazy(() => import('./pages/Banks'));
 
 // Configuración de React Query
 const queryClient = new QueryClient({
@@ -53,10 +54,13 @@ function App() {
                   <Route path="/cobros" element={<Cobros />} />
                   <Route path="/inventario" element={<Inventory />} />
                   <Route path="/financiamientos" element={<Financing />} />
+                  <Route path="/bancos" element={<Banks />} />
                   <Route path="/reportes" element={<Reports />} />
                   <Route path="/configuracion" element={<Settings />} />
 
                   {/* Alias en Inglés & Catch-all Fallback */}
+                  <Route path="/banco" element={<Navigate to="/bancos" replace />} />
+                  <Route path="/banks" element={<Navigate to="/bancos" replace />} />
                   <Route path="/receivables" element={<Navigate to="/cobros" replace />} />
                   <Route path="/finanzas" element={<Navigate to="/financiamientos" replace />} />
                   <Route path="/inventory" element={<Navigate to="/inventario" replace />} />

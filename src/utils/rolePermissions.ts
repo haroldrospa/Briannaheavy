@@ -146,6 +146,8 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/inventario': 'Inventario',
   '/cobros': 'Cobros',
   '/financiamientos': 'Financiamientos',
+  '/bancos': 'Financiamientos',
+  '/banco': 'Financiamientos',
   '/reportes': 'Reportes',
   '/configuracion': 'Configuración',
   '/usuarios': 'Configuración'
