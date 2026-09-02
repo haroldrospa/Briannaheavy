@@ -111,11 +111,18 @@ export const createFinancing = async (
   financingData: Omit<Financing, 'id' | 'created_at'>,
   installments: Omit<Installment, 'id' | 'financing_id'>[]
 ): Promise<Financing> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sanitizedData = {
+    ...financingData,
+    customer_id: financingData.customer_id && uuidRegex.test(financingData.customer_id) ? financingData.customer_id : null,
+    item_id: financingData.item_id && uuidRegex.test(financingData.item_id) ? financingData.item_id : null,
+  };
+
   if (isSupabaseConfigured()) {
     try {
       const { data: fin, error: finErr } = await supabase
         .from('financings')
-        .insert([financingData])
+        .insert([sanitizedData])
         .select()
         .single();
 
@@ -124,22 +131,37 @@ export const createFinancing = async (
           ...inst,
           financing_id: fin.id,
         }));
-        await supabase.from('installments').insert(preparedInstallments);
-        return { ...fin, installments: preparedInstallments as Installment[] } as Financing;
+        const { data: instData, error: instErr } = await supabase
+          .from('installments')
+          .insert(preparedInstallments)
+          .select();
+
+        const fullFinancing: Financing = {
+          ...fin,
+          installments: (!instErr && instData && instData.length > 0) ? (instData as Installment[]) : (preparedInstallments as Installment[]),
+        };
+
+        const current = getLocalStorageFinancings();
+        saveLocalStorageFinancings([fullFinancing, ...current.filter(f => f.id !== fullFinancing.id)]);
+        return fullFinancing;
+      } else if (finErr) {
+        console.warn('Supabase financing insert warning:', finErr);
       }
     } catch (err) {
       console.warn('Error creating financing in Supabase:', err);
     }
   }
 
+  // Fallback to local storage
+  const genFinId = `fin-${Date.now()}`;
   const newFinancing: Financing = {
     ...financingData,
-    id: Date.now().toString(),
+    id: genFinId,
     created_at: new Date().toISOString(),
     installments: installments.map((inst, idx) => ({
       ...inst,
-      id: `${Date.now()}-${idx}`,
-      financing_id: Date.now().toString(),
+      id: `inst-${Date.now()}-${idx + 1}`,
+      financing_id: genFinId,
     })),
   };
 
@@ -148,10 +170,15 @@ export const createFinancing = async (
   return newFinancing;
 };
 
-export const markInstallmentPaid = async (installmentId: string, paidAmount: number): Promise<boolean> => {
-  if (isSupabaseConfigured()) {
+export const markInstallmentPaid = async (
+  financingId: string,
+  installmentId: string,
+  paidAmount: number
+): Promise<boolean> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (isSupabaseConfigured() && uuidRegex.test(installmentId)) {
     try {
-      const { error } = await supabase
+      await supabase
         .from('installments')
         .update({
           paid_amount: paidAmount,
@@ -159,7 +186,6 @@ export const markInstallmentPaid = async (installmentId: string, paidAmount: num
           paid_date: new Date().toISOString(),
         })
         .eq('id', installmentId);
-      if (!error) return true;
     } catch (err) {
       console.warn('Error updating installment in Supabase:', err);
     }
@@ -167,15 +193,35 @@ export const markInstallmentPaid = async (installmentId: string, paidAmount: num
 
   const current = getLocalStorageFinancings();
   const updatedList = current.map(fin => {
-    if (!fin.installments) return fin;
-    const updatedInstallments = fin.installments.map(inst => {
-      if (inst.id === installmentId) {
-        return { ...inst, paid_amount: paidAmount, status: 'Pagado' as const, paid_date: new Date().toISOString() };
+    if (fin.id !== financingId && String(fin.id) !== String(financingId)) {
+      return fin;
+    }
+    const updatedInstallments = (fin.installments || []).map(inst => {
+      if (inst.id === installmentId || String(inst.installment_number) === String(installmentId)) {
+        return {
+          ...inst,
+          paid_amount: paidAmount,
+          status: 'Pagado' as const,
+          paid_date: new Date().toISOString(),
+        };
       }
       return inst;
     });
-    return { ...fin, installments: updatedInstallments };
+
+    const allPaid = updatedInstallments.length > 0 && updatedInstallments.every(i => i.status === 'Pagado');
+    const newStatus = allPaid ? ('Pagado' as const) : fin.status;
+
+    if (allPaid && isSupabaseConfigured() && uuidRegex.test(fin.id)) {
+      supabase.from('financings').update({ status: 'Pagado' }).eq('id', fin.id).then();
+    }
+
+    return {
+      ...fin,
+      status: newStatus,
+      installments: updatedInstallments,
+    };
   });
+
   saveLocalStorageFinancings(updatedList);
   return true;
 };

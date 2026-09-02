@@ -9,23 +9,36 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
-import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
+import { 
+  fetchFinancings, 
+  getLocalStorageFinancings, 
+  createFinancing, 
+  markInstallmentPaid, 
+  type Installment 
+} from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 
-const mapFinancingsToState = (dbF: any[]) => {
-  if (!dbF || dbF.length === 0) return [];
-  return dbF.map((f, idx) => ({
-    id: f.id || idx + 1,
-    customer: f.customer_name,
-    rnc: f.customer_id || '101-00000-1',
-    item: f.item_name,
-    amount: f.financed_amount,
-    rate: f.interest_rate,
-    status: f.status === 'Activo' ? 'Al día' : f.status,
-    nextPayment: f.start_date || '2026-08-15',
-  }));
-};
+export interface MappedInstallment {
+  id: number;
+  dbId?: string;
+  dueDate: string;
+  capital: number;
+  interest: number;
+  amount?: number;
+  penalty: number;
+  total: number;
+  status: string;
+  isPaid: boolean;
+  paidAmount?: number;
+  paidDate?: string;
+  daysOverdue: number;
+  inGracePeriod: boolean;
+  isInterestWaived?: boolean;
+  isPenaltyWaived?: boolean;
+  originalInterest?: number;
+  originalPenalty?: number;
+}
 
 // Automatic grace period mora calculator with editable days limit
 const getInstallmentMoraAndStatus = (dueDateStr: string, isPaid: boolean, daysLimit: number = 15) => {
@@ -33,10 +46,11 @@ const getInstallmentMoraAndStatus = (dueDateStr: string, isPaid: boolean, daysLi
     return { status: 'Pagado', penalty: 0, daysOverdue: 0, inGracePeriod: false };
   }
 
-  const parts = dueDateStr.split('-');
-  const dueDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  const today = new Date(2026, 3, 5); // Reference April 5, 2026
-  
+  const dueDate = new Date(dueDateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
   const diffMs = today.getTime() - dueDate.getTime();
   const daysOverdue = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
@@ -59,30 +73,124 @@ const getInstallmentMoraAndStatus = (dueDateStr: string, isPaid: boolean, daysLi
     return {
       status: 'Pendiente',
       penalty: 0,
-      daysOverdue: 0,
+      daysOverdue: Math.max(0, daysOverdue),
       inGracePeriod: false
     };
   }
 };
 
-const dummyInstallments = Array.from({ length: 18 }).map((_, i) => {
-  const isPaid = i < 2;
-  const dueDateStr = `2026-${String((i % 12) + 1).padStart(2, '0')}-15`;
-  const evalResult = getInstallmentMoraAndStatus(dueDateStr, isPaid);
+const generateAmortizationSchedule = (
+  financedAmount: number,
+  annualRate: number,
+  months: number,
+  startDateStr: string
+) => {
+  const schedule = [];
+  const mRate = (annualRate / 100) / 12;
+  const mPayment = mRate > 0 && months > 0
+    ? (financedAmount * mRate * Math.pow(1 + mRate, months)) / (Math.pow(1 + mRate, months) - 1)
+    : (financedAmount / (months || 1));
 
-  return {
-    id: i + 1,
-    dueDate: dueDateStr,
-    capital: 1700,
-    interest: 750,
-    penalty: evalResult.penalty,
-    total: 2450 + evalResult.penalty,
-    status: evalResult.status,
-    isPaid,
-    daysOverdue: evalResult.daysOverdue,
-    inGracePeriod: evalResult.inGracePeriod
-  };
-});
+  let balance = financedAmount;
+  const baseDate = startDateStr ? new Date(startDateStr) : new Date();
+
+  for (let i = 1; i <= months; i++) {
+    const interest = balance * mRate;
+    const capital = Math.min(balance, mPayment - interest);
+    balance = Math.max(0, balance - capital);
+
+    const pDate = new Date(baseDate);
+    pDate.setMonth(pDate.getMonth() + (i - 1));
+    const dueDate = pDate.toISOString().split('T')[0];
+
+    schedule.push({
+      id: i,
+      dbId: `gen-${i}`,
+      dueDate,
+      capital: Math.round(capital * 100) / 100,
+      interest: Math.round(interest * 100) / 100,
+      amount: Math.round(mPayment * 100) / 100,
+      penalty: 0,
+      total: Math.round(mPayment * 100) / 100,
+      status: 'Pendiente',
+      isPaid: false,
+      paidAmount: 0,
+      daysOverdue: 0,
+      inGracePeriod: false,
+    });
+  }
+  return schedule;
+};
+
+const mapFinancingsToState = (dbF: any[]): any[] => {
+  if (!dbF || dbF.length === 0) return [];
+  return dbF.map((f, idx) => {
+    let installments: any[] = [];
+    if (f.installments && Array.isArray(f.installments) && f.installments.length > 0) {
+      installments = f.installments.map((inst: any, iIdx: number) => {
+        const isPaid = inst.status === 'Pagado' || (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) >= Number(inst.amount));
+        const dueDate = inst.due_date ? String(inst.due_date).split('T')[0] : `2026-08-${String(iIdx + 1).padStart(2, '0')}`;
+        const evalResult = getInstallmentMoraAndStatus(dueDate, isPaid, 15);
+        const cap = Number(inst.principal_amount) || 0;
+        const int = Number(inst.interest_amount) || 0;
+        const pen = evalResult.penalty;
+
+        return {
+          id: inst.installment_number || iIdx + 1,
+          dbId: inst.id,
+          dueDate,
+          capital: cap,
+          interest: int,
+          penalty: pen,
+          total: (cap + int) + pen,
+          status: isPaid ? 'Pagado' : evalResult.status,
+          isPaid,
+          paidAmount: Number(inst.paid_amount) || 0,
+          paidDate: inst.paid_date,
+          daysOverdue: evalResult.daysOverdue,
+          inGracePeriod: evalResult.inGracePeriod,
+        };
+      });
+    } else {
+      const finAmount = Number(f.financed_amount) || Number(f.total_amount) || 100000;
+      const rate = Number(f.interest_rate) || 16;
+      const months = Number(f.installments_count) || 24;
+      const start = f.start_date || new Date().toISOString().split('T')[0];
+      installments = generateAmortizationSchedule(finAmount, rate, months, start);
+    }
+
+    const hasOverdue = installments.some(i => i.status === 'Atrasado' && !i.isPaid);
+    const allPaid = installments.length > 0 && installments.every(i => i.isPaid);
+    const computedStatus = allPaid ? 'Pagado' : (hasOverdue ? 'En mora' : 'Al día');
+
+    const firstUnpaid = installments.find(i => !i.isPaid);
+    const nextPay = firstUnpaid ? firstUnpaid.dueDate : (f.start_date || new Date().toISOString().split('T')[0]);
+
+    return {
+      id: f.id || idx + 1,
+      rawId: f.id,
+      customer: f.customer_name || 'Cliente Sin Nombre',
+      rnc: f.customer_rnc || f.customer_id || '101-00000-1',
+      phone: f.customer_phone || '',
+      item: f.item_name || 'Equipo / Maquinaria',
+      chassis: f.chassis || '',
+      amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
+      totalValue: Number(f.total_amount) || 0,
+      downPayment: Number(f.down_payment) || 0,
+      rate: Number(f.interest_rate) || 16,
+      months: Number(f.installments_count) || installments.length,
+      status: computedStatus,
+      nextPayment: nextPay,
+      startDate: f.start_date || new Date().toISOString().split('T')[0],
+      guarantor: f.guarantor || '',
+      guarantorRnc: f.guarantor_rnc || '',
+      guarantorPhone: f.guarantor_phone || '',
+      guarantorRelation: f.guarantor_relation || '',
+      guarantorAddress: f.guarantor_address || '',
+      installments,
+    };
+  });
+};
 
 const generateWhatsAppLink = (financing: any, installments: any[]) => {
   const paidTotal = installments.filter(i => i.status === 'Pagado').reduce((sum, i) => sum + i.total, 0);
@@ -154,6 +262,33 @@ export default function Financing() {
       if (isMounted) {
         if (dbF && dbF.length > 0) {
           setFinancingsList(mapFinancingsToState(dbF));
+        } else {
+          const sample1 = {
+            customer_name: 'Constructora del Caribe S.R.L.',
+            item_name: 'Camión Volquete Mack Granite 2024',
+            total_amount: 1500000,
+            down_payment: 300000,
+            financed_amount: 1200000,
+            interest_rate: 16,
+            installments_count: 24,
+            frequency: 'Mensual' as const,
+            start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            status: 'Activo' as const,
+          };
+          const schedule1 = generateAmortizationSchedule(1200000, 16, 24, sample1.start_date).map(inst => ({
+            installment_number: inst.id,
+            due_date: inst.dueDate,
+            amount: inst.amount,
+            principal_amount: inst.capital,
+            interest_amount: inst.interest,
+            paid_amount: 0,
+            status: 'Pendiente' as const,
+          }));
+          createFinancing(sample1, schedule1).then(created => {
+            if (isMounted && created) {
+              setFinancingsList(mapFinancingsToState([created]));
+            }
+          });
         }
         if (custs && custs.length > 0) {
           setCustomersList(custs);
@@ -203,6 +338,8 @@ export default function Financing() {
   };
 
   // Comprehensive New Financing Form State (Fast & Streamlined)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
+  const [selectedItemId, setSelectedItemId] = useState<string | undefined>(undefined);
   const [newCustomer, setNewCustomer] = useState('');
   const [newRnc, setNewRnc] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -226,6 +363,7 @@ export default function Financing() {
 
   // Fast Auto-fill Handlers (1-Click)
   const handleSelectCustomer = (c: Customer) => {
+    setSelectedCustomerId(c.id);
     setNewCustomer(c.name);
     setNewRnc(c.document_id || '');
     setNewPhone(c.phone || '');
@@ -233,6 +371,7 @@ export default function Financing() {
   };
 
   const handleSelectInventoryItem = (item: InventoryItem) => {
+    setSelectedItemId(String(item.id));
     setNewItem(item.name);
     setNewChassis(item.vin || item.chassis_number || item.part_number || '');
     if (item.price > 0) {
@@ -310,50 +449,88 @@ export default function Financing() {
     return schedule;
   }, [modalFinancedAmount, modalMonthlyPayment, modalNumMonths, modalMonthlyRate, newNextPayment]);
 
-  const handleCreateFinancing = (e: React.FormEvent) => {
+  const handleCreateFinancing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomer || !newItem) return;
+    if (!newCustomer.trim() || !newItem.trim()) {
+      setFormValidationNotice(true);
+      return;
+    }
 
-    const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : (parseFloat(newTotalValue) || 50000);
+    const finalTotal = modalValTotal > 0 ? modalValTotal : 750000;
+    const finalInicial = modalInicial;
+    const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : Math.max(0, finalTotal - finalInicial);
+    const finalMonths = modalNumMonths || 24;
+    const finalRate = modalAnnualRate || 16;
+    const baseDate = newNextPayment ? new Date(newNextPayment) : new Date();
 
-    const newEntry = {
-      id: financingsList.length + 1,
-      customer: newCustomer,
-      rnc: newRnc,
-      phone: newPhone,
-      item: newItem,
-      chassis: newChassis,
-      amount: finalFinanced,
-      rate: modalAnnualRate || 16,
-      months: modalNumMonths,
-      monthlyPayment: modalMonthlyPayment,
-      guarantor: newGuarantorName,
-      guarantorRnc: newGuarantorRnc,
-      guarantorPhone: newGuarantorPhone,
-      guarantorRelation: newGuarantorRelation,
-      guarantorAddress: newGuarantorAddress,
-      status: 'Al día',
-      nextPayment: newNextPayment || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]
+    let balance = finalFinanced;
+    const mRate = (finalRate / 100) / 12;
+    const mPayment = modalMonthlyPayment > 0 ? modalMonthlyPayment : (finalFinanced / finalMonths);
+    const installmentsToCreate: Omit<Installment, 'id' | 'financing_id'>[] = [];
+
+    for (let i = 1; i <= finalMonths; i++) {
+      const interest = balance * mRate;
+      const capital = Math.min(balance, mPayment - interest);
+      balance = Math.max(0, balance - capital);
+
+      const pDate = new Date(baseDate);
+      pDate.setMonth(pDate.getMonth() + (i - 1));
+
+      installmentsToCreate.push({
+        installment_number: i,
+        due_date: pDate.toISOString().split('T')[0],
+        amount: Math.round(mPayment * 100) / 100,
+        principal_amount: Math.round(capital * 100) / 100,
+        interest_amount: Math.round(interest * 100) / 100,
+        paid_amount: 0,
+        status: 'Pendiente',
+      });
+    }
+
+    const financingPayload = {
+      customer_id: selectedCustomerId,
+      item_id: selectedItemId,
+      customer_name: newCustomer.trim(),
+      item_name: newItem.trim(),
+      total_amount: finalTotal,
+      down_payment: finalInicial,
+      financed_amount: finalFinanced,
+      interest_rate: finalRate,
+      installments_count: finalMonths,
+      frequency: 'Mensual' as const,
+      start_date: newNextPayment || new Date().toISOString().split('T')[0],
+      status: 'Activo' as const,
+      guarantor_address: newGuarantorAddress || undefined,
     };
 
-    setFinancingsList([newEntry, ...financingsList]);
-    setIsNewFormOpen(false);
-    
-    // Reset Form
-    setFormValidationNotice(false);
-    setNewCustomer('');
-    setNewRnc('');
-    setNewPhone('');
-    setNewItem('');
-    setNewChassis('');
-    setNewTotalValue('750,000');
-    setNewDownPayment('150,000');
-    setNewGuarantorName('');
-    setNewGuarantorRnc('');
-    setNewGuarantorPhone('');
-    setNewGuarantorRelation('Socio / Propietario');
-    setNewGuarantorAddress('');
-    setShowGuarantorSection(false);
+    try {
+      const created = await createFinancing(financingPayload, installmentsToCreate);
+      const mapped = mapFinancingsToState([created]);
+      if (mapped.length > 0) {
+        setFinancingsList(prev => [mapped[0], ...prev]);
+      }
+      setIsNewFormOpen(false);
+      
+      // Reset Form
+      setFormValidationNotice(false);
+      setNewCustomer('');
+      setNewRnc('');
+      setNewPhone('');
+      setNewItem('');
+      setNewChassis('');
+      setNewTotalValue('750,000');
+      setNewDownPayment('150,000');
+      setNewGuarantorName('');
+      setNewGuarantorRnc('');
+      setNewGuarantorPhone('');
+      setNewGuarantorRelation('Socio / Propietario');
+      setNewGuarantorAddress('');
+      setShowGuarantorSection(false);
+      setSelectedCustomerId(undefined);
+      setSelectedItemId(undefined);
+    } catch (err) {
+      console.error('Error creating financing:', err);
+    }
   };
   const [selectedFinancing, setSelectedFinancing] = useState<any>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -422,11 +599,17 @@ export default function Financing() {
     });
   }, [financingsList, searchCustomer, mainStatusFilter]);
 
-  const currentInstallments = useMemo(() => {
-    return dummyInstallments.map(inst => {
-      const evalResult = getInstallmentMoraAndStatus(inst.dueDate, inst.isPaid, graceDays);
+  const currentInstallments: MappedInstallment[] = useMemo(() => {
+    if (!selectedFinancing) return [];
+    const rawList: any[] = (selectedFinancing.installments && selectedFinancing.installments.length > 0)
+      ? selectedFinancing.installments
+      : [];
 
-      if (inst.isPaid) {
+    return rawList.map((inst: any): MappedInstallment => {
+      const isPaid = inst.isPaid || inst.status === 'Pagado';
+      const evalResult = getInstallmentMoraAndStatus(inst.dueDate, isPaid, graceDays);
+
+      if (isPaid) {
         return {
           ...inst,
           status: 'Pagado',
@@ -460,29 +643,29 @@ export default function Financing() {
         originalPenalty: evalResult.penalty
       };
     });
-  }, [graceDays, waivedRowInterests, waivedRowPenalties]);
+  }, [selectedFinancing, graceDays, waivedRowInterests, waivedRowPenalties]);
 
-  const displayedInstallments = currentInstallments.filter(inst => {
+  const displayedInstallments: MappedInstallment[] = currentInstallments.filter((inst: MappedInstallment) => {
     if (filterStatus === 'Todos') return true;
     if (filterStatus === 'Pagados') return inst.status === 'Pagado';
     if (filterStatus === 'Pendientes') return inst.status !== 'Pagado';
     return true;
   });
 
-  const selectedInsts = currentInstallments.filter(inst => selectedInstallmentIds.includes(inst.id));
-  const totalSelectedCapital = selectedInsts.reduce((sum, inst) => sum + inst.capital, 0);
-  const totalSelectedInterest = selectedInsts.reduce((sum, inst) => sum + inst.interest, 0);
-  const totalSelectedPenalty = selectedInsts.reduce((sum, inst) => sum + inst.penalty, 0);
-  const totalSelectedAmount = selectedInsts.reduce((sum, inst) => sum + inst.total, 0);
+  const selectedInsts: MappedInstallment[] = currentInstallments.filter((inst: MappedInstallment) => selectedInstallmentIds.includes(inst.id));
+  const totalSelectedCapital = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.capital, 0);
+  const totalSelectedInterest = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.interest, 0);
+  const totalSelectedPenalty = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.penalty, 0);
+  const totalSelectedAmount = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.total, 0);
 
   const numAbono = parseCurrencyInput(abonoAmount);
   const effectivePayAmount = paymentType === 'abono' ? numAbono : totalSelectedAmount;
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
   const handleToggleSequentialInstallment = (targetInstId: number) => {
-    const unpaidList = currentInstallments
-      .filter(i => i.status !== 'Pagado')
-      .sort((a, b) => a.id - b.id);
+    const unpaidList: MappedInstallment[] = currentInstallments
+      .filter((i: MappedInstallment) => i.status !== 'Pagado')
+      .sort((a: MappedInstallment, b: MappedInstallment) => a.id - b.id);
 
     const isCurrentlySelected = selectedInstallmentIds.includes(targetInstId);
 
@@ -492,10 +675,84 @@ export default function Financing() {
     } else {
       // Select target & all prior unpaid installments (id <= targetInstId)
       const idsToInclude = unpaidList
-        .filter(i => i.id <= targetInstId)
-        .map(i => i.id);
+        .filter((i: MappedInstallment) => i.id <= targetInstId)
+        .map((i: MappedInstallment) => i.id);
 
       setSelectedInstallmentIds(prev => Array.from(new Set([...prev, ...idsToInclude])));
+    }
+  };
+
+  const handleConfirmAndProcessPayment = async () => {
+    if (!selectedFinancing) return;
+
+    if (paymentType === 'cuotas') {
+      if (selectedInstallmentIds.length === 0) return;
+
+      const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
+        if (selectedInstallmentIds.includes(inst.id)) {
+          const paidInstTotal = inst.total;
+          if (inst.dbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, paidInstTotal);
+          }
+          return {
+            ...inst,
+            status: 'Pagado',
+            isPaid: true,
+            paidAmount: paidInstTotal,
+            paidDate: new Date().toISOString(),
+          };
+        }
+        return inst;
+      });
+
+      const allPaid = updatedInsts.every((i: any) => i.isPaid);
+      const updatedFin = {
+        ...selectedFinancing,
+        status: allPaid ? 'Pagado' : selectedFinancing.status,
+        installments: updatedInsts,
+      };
+
+      setSelectedFinancing(updatedFin);
+      setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
+      setSelectedInstallmentIds([]);
+      setHasPrintedReceipt(false);
+      setShowReceipt(true);
+    } else {
+      if (numAbono <= 0) return;
+      let remainingAbono = numAbono;
+      const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
+        if (!inst.isPaid && remainingAbono > 0) {
+          const applied = Math.min(inst.capital, remainingAbono);
+          remainingAbono -= applied;
+          const newCapital = Math.max(0, inst.capital - applied);
+          const isFullyPaid = newCapital <= 0;
+          if (inst.dbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, applied);
+          }
+          return {
+            ...inst,
+            capital: newCapital,
+            isPaid: isFullyPaid,
+            status: isFullyPaid ? 'Pagado' : inst.status,
+            total: newCapital + inst.interest + inst.penalty,
+          };
+        }
+        return inst;
+      });
+
+      const allPaid = updatedInsts.every((i: any) => i.isPaid);
+      const updatedFin = {
+        ...selectedFinancing,
+        amount: Math.max(0, selectedFinancing.amount - numAbono),
+        status: allPaid ? 'Pagado' : selectedFinancing.status,
+        installments: updatedInsts,
+      };
+
+      setSelectedFinancing(updatedFin);
+      setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
+      setAbonoAmount('');
+      setHasPrintedReceipt(false);
+      setShowReceipt(true);
     }
   };
 
@@ -1427,7 +1684,7 @@ export default function Financing() {
                               <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${numAbono.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                             </tr>
                           ) : (
-                            selectedInsts.map(inst => (
+                            selectedInsts.map((inst: MappedInstallment) => (
                               <tr key={inst.id}>
                                 <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota N° #{inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -1541,7 +1798,7 @@ export default function Financing() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                          {currentInstallments.map(inst => (
+                          {currentInstallments.map((inst: MappedInstallment) => (
                             <tr key={inst.id} className={inst.status === 'Pagado' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}>
                               <td className="py-2.5 font-bold">#{inst.id}/{currentInstallments.length}</td>
                               <td className="py-2.5">{inst.dueDate}</td>
@@ -1565,15 +1822,15 @@ export default function Financing() {
                       <div className="w-full sm:w-1/2 space-y-2">
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Total Pagado:</span>
-                          <span className="font-bold text-green-600 text-base">${currentInstallments.filter(i => i.status === 'Pagado').reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-green-600 text-base">${currentInstallments.filter((i: MappedInstallment) => i.status === 'Pagado').reduce((sum: number, i: MappedInstallment) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">Total Pendiente:</span>
-                          <span className="font-bold text-gray-900 dark:text-white text-base">${currentInstallments.filter(i => i.status !== 'Pagado').reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-bold text-gray-900 dark:text-white text-base">${currentInstallments.filter((i: MappedInstallment) => i.status !== 'Pagado').reduce((sum: number, i: MappedInstallment) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-800 pt-2 mt-2">
                           <span className="font-bold text-gray-900 dark:text-white uppercase">Balance Total (con intereses):</span>
-                          <span className="font-black text-gray-900 dark:text-white text-xl">${currentInstallments.reduce((sum, i) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                          <span className="font-black text-gray-900 dark:text-white text-xl">${currentInstallments.reduce((sum: number, i: MappedInstallment) => sum + i.total, 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
                         </div>
                       </div>
                     </div>
@@ -1709,7 +1966,7 @@ export default function Financing() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60">
-                                {displayedInstallments.map((inst) => {
+                                {displayedInstallments.map((inst: MappedInstallment) => {
                                   const isSelected = selectedInstallmentIds.includes(inst.id);
                                   return (
                                     <tr 
@@ -1742,7 +1999,7 @@ export default function Financing() {
                                       <td className="px-3 py-2.5 text-right font-medium">
                                         <div className="flex flex-col items-end gap-0.5">
                                           {inst.interest === 0 && !inst.isPaid && inst.isInterestWaived ? (
-                                            <span className="text-gray-400 line-through">${inst.originalInterest.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
+                                            <span className="text-gray-400 line-through">${(inst.originalInterest ?? inst.interest).toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                           ) : (
                                             <span className="text-gray-900 dark:text-white font-bold">${inst.interest.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                           )}
@@ -1770,7 +2027,7 @@ export default function Financing() {
                                               </span>
                                             </>
                                           ) : inst.penalty === 0 && inst.status === 'Atrasado' && inst.isPenaltyWaived ? (
-                                            <span className="text-gray-400 line-through">${inst.originalPenalty.toLocaleString('en-US', {minimumFractionDigits:2})}</span>
+                                            <span className="text-gray-400 line-through">${(inst.originalPenalty ?? 0).toLocaleString('en-US', {minimumFractionDigits:2})}</span>
                                           ) : (
                                             <span className={`font-bold ${inst.penalty > 0 ? 'text-red-600 dark:text-red-400 font-black' : 'text-gray-900 dark:text-white'}`}>
                                               ${inst.penalty.toLocaleString('en-US', {minimumFractionDigits:2})}
@@ -1872,7 +2129,7 @@ export default function Financing() {
 
                     <div className="pt-4 mt-6">
                       <button 
-                        onClick={() => { setShowReceipt(true); }} 
+                        onClick={handleConfirmAndProcessPayment} 
                         className="w-full flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white py-4 px-4 rounded-full font-bold transition-all shadow-md text-lg cursor-pointer"
                       >
                         <CheckCircleIcon className="h-6 w-6" />
