@@ -24,6 +24,8 @@ const routeNames: Record<string, string> = {
   '/configuracion': 'Configuración del Sistema',
   '/usuarios': 'Gestión de Usuarios',
   '/facturas': 'Historial de Facturas',
+  '/bancos': 'Banco & Cuentas',
+  '/banco': 'Banco & Cuentas',
 };
 
 const roleConfig: Record<UserRole, {
