@@ -3,7 +3,6 @@ import {
   BuildingLibraryIcon, 
   ArrowDownCircleIcon, 
   ArrowUpCircleIcon, 
-  PlusIcon, 
   PrinterIcon,
   MagnifyingGlassIcon,
   DocumentDuplicateIcon,
@@ -17,7 +16,6 @@ import {
   calculateBankAccountsSummary, 
   type BankTransaction 
 } from '../services/bankService';
-import NewBankTransactionModal from '../components/finance/NewBankTransactionModal';
 import logo from '../assets/logo.png';
 
 export default function Banks() {
@@ -29,7 +27,6 @@ export default function Banks() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [copiedAccId, setCopiedAccId] = useState<string | null>(null);
   const [copiedRefId, setCopiedRefId] = useState<string | null>(null);
 
@@ -146,13 +143,10 @@ export default function Banks() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* 1. Header Minimalista con el Diseño de la App */}
+      {/* 1. Header Minimalista con el Diseño de la App (sin repetir título) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Banco & Cuentas
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400 font-medium">
             Historial consolidado de transferencias, depósitos y cuentas empresariales.
           </p>
         </div>
@@ -162,7 +156,7 @@ export default function Banks() {
             type="button"
             onClick={loadData}
             title="Recargar transacciones"
-            className="p-2.5 bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-full text-gray-500 hover:text-gray-900 dark:hover:text-white transition-all cursor-pointer shadow-2xs hover:rotate-180 duration-500"
+            className="p-2 bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-full text-gray-500 hover:text-gray-900 dark:hover:text-white transition-all cursor-pointer shadow-2xs hover:rotate-180 duration-500"
           >
             <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -170,19 +164,10 @@ export default function Banks() {
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-full font-bold text-xs shadow-2xs transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-full font-bold text-xs shadow-2xs transition-all cursor-pointer"
           >
             <PrinterIcon className="w-4 h-4" />
             <span>Imprimir Extracto</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
-          >
-            <PlusIcon className="w-4 h-4 stroke-[2.5]" />
-            <span>Nueva Transacción</span>
           </button>
         </div>
       </div>
@@ -492,19 +477,11 @@ export default function Banks() {
         {/* Tabla de Transacciones */}
         <div className="overflow-x-auto">
           {filteredTransactions.length === 0 ? (
-            <div className="py-14 text-center space-y-3">
+            <div className="py-14 text-center space-y-2">
               <BuildingLibraryIcon className="w-10 h-10 text-gray-300 dark:text-zinc-700 mx-auto" />
               <p className="text-xs font-bold text-gray-500 dark:text-zinc-400">
                 No se encontraron transacciones bancarias con los filtros seleccionados.
               </p>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
-                className="px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
-              >
-                <PlusIcon className="w-4 h-4 stroke-[2.5]" />
-                <span>Registrar Transacción</span>
-              </button>
             </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
@@ -628,16 +605,6 @@ export default function Banks() {
           )}
         </div>
       </div>
-
-      {/* Modal de Nueva Transacción Bancaria */}
-      <NewBankTransactionModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-          loadData();
-        }}
-        initialBankId={selectedBankFilter !== 'all' ? selectedBankFilter : undefined}
-      />
     </div>
   );
 }
