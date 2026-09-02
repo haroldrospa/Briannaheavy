@@ -35,6 +35,9 @@ export interface Invoice {
   ecf_dgii_status?: string;
   credit_days?: number;
   due_date?: string;
+  bank_account_id?: string;
+  bank_account_name?: string;
+  transfer_reference?: string;
 }
 
 export const formatInvoiceNumber = (num?: string): string => {

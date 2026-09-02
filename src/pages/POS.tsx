@@ -911,6 +911,8 @@ const CheckoutModal = memo(({
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
+    bankAccountId?: string;
+    bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
   }) => Promise<void>;
@@ -924,12 +926,17 @@ const CheckoutModal = memo(({
   const [transferReference, setTransferReference] = useState<string>('');
   const [creditDays, setCreditDays] = useState<number>(15);
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
+  const [selectedBankId, setSelectedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setAmountReceived(total.toFixed(2));
-      setBankAccounts(getCompanyBankAccounts());
+      const accs = getCompanyBankAccounts();
+      setBankAccounts(accs);
+      if (accs.length > 0 && !selectedBankId) {
+        setSelectedBankId(accs[0].id);
+      }
       setCreditDays(15);
     }
   }, [isOpen, total]);
@@ -987,6 +994,7 @@ const CheckoutModal = memo(({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEmit) return;
+    const chosenBank = bankAccounts.find(a => a.id === selectedBankId) || bankAccounts[0];
     onCompleteSale({
       billingMode,
       electronicDocType,
@@ -994,6 +1002,8 @@ const CheckoutModal = memo(({
       paymentMethod: isCotizacion ? 'Efectivo' : paymentMethod,
       amountReceived: isCotizacion ? total.toFixed(2) : amountReceived,
       transferReference: isCotizacion ? '' : transferReference,
+      bankAccountId: paymentMethod === 'Transferencia' ? chosenBank?.id : undefined,
+      bankAccountName: paymentMethod === 'Transferencia' ? chosenBank?.bankName : undefined,
       creditDays: paymentMethod === 'Crédito' ? effectiveCreditDays : undefined,
       dueDate: paymentMethod === 'Crédito' ? isoDueDate : undefined,
     });
@@ -1286,44 +1296,73 @@ const CheckoutModal = memo(({
                       <span className="font-mono text-[9px] text-gray-400 dark:text-zinc-500">RNC: 132-61036-2</span>
                     </div>
 
-                    <div className="space-y-1">
-                      {bankAccounts.map((acc) => (
-                        <div
-                          key={acc.id}
-                          onClick={() => {
-                            navigator.clipboard.writeText(acc.accountNumber);
-                            setCopiedBankId(acc.id);
-                            setTimeout(() => setCopiedBankId(null), 2000);
-                          }}
-                          className="group flex items-center justify-between px-3 py-2 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl border border-gray-200/60 dark:border-zinc-800 transition-all cursor-pointer shadow-2xs"
-                          title="Haz clic para copiar"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[11px] font-bold text-gray-900 dark:text-zinc-100 truncate">
-                              {acc.bankName}
-                            </span>
-                            <span className="text-[9px] font-semibold text-gray-400 dark:text-zinc-500">
-                              {acc.accountType === 'Cta. Corriente' ? 'Corriente' : 'Ahorros'}
-                            </span>
-                          </div>
+                    <div className="space-y-1.5">
+                      {bankAccounts.map((acc) => {
+                        const isSelected = selectedBankId === acc.id;
+                        return (
+                          <div
+                            key={acc.id}
+                            onClick={() => setSelectedBankId(acc.id)}
+                            className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-500 ring-2 ring-blue-500/25 shadow-xs'
+                                : 'bg-white dark:bg-zinc-900 border-gray-200/70 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all shrink-0 ${
+                                isSelected 
+                                  ? 'border-blue-600 bg-blue-600 text-white' 
+                                  : 'border-gray-300 dark:border-zinc-600 bg-transparent'
+                              }`}>
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                              </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-mono font-bold text-xs text-gray-800 dark:text-zinc-200 group-hover:text-[#ED1C24] transition-colors tracking-wide">
-                              {acc.accountNumber}
-                            </span>
-                            <span className="p-1 rounded-md text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                              {copiedBankId === acc.id ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                  <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />
-                                  <span>Copiado</span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] font-black text-gray-900 dark:text-white truncate">
+                                    {acc.bankName}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.2 bg-blue-600 text-white rounded-md tracking-tight">
+                                      Elegida
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[9px] font-semibold text-gray-400 dark:text-zinc-400 block">
+                                  {acc.accountType} • {acc.currency}
                                 </span>
-                              ) : (
-                                <DocumentDuplicateIcon className="w-3.5 h-3.5" />
-                              )}
-                            </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono font-bold text-xs text-gray-800 dark:text-zinc-200 tracking-wide">
+                                {acc.accountNumber}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(acc.accountNumber);
+                                  setCopiedBankId(acc.id);
+                                  setTimeout(() => setCopiedBankId(null), 2000);
+                                }}
+                                className="p-1 rounded-md text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer"
+                                title="Copiar número de cuenta"
+                              >
+                                {copiedBankId === acc.id ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                    <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />
+                                    <span>Copiado</span>
+                                  </span>
+                                ) : (
+                                  <DocumentDuplicateIcon className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <p className="text-[9px] text-gray-400 dark:text-zinc-500 text-center font-medium pt-0.5">
@@ -1760,6 +1799,8 @@ export default function POS() {
     receivedAmount?: number;
     changeAmount?: number;
     transferReference?: string;
+    bankAccountId?: string;
+    bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
   }>({});
@@ -1778,7 +1819,15 @@ export default function POS() {
     creditDays?: number;
     dueDate?: string;
     items: { description: string; quantity: number; unit_price: number; total_price: number }[];
-    lastPaymentInfo: { receivedAmount?: number; changeAmount?: number; transferReference?: string; creditDays?: number; dueDate?: string };
+    lastPaymentInfo: { 
+      receivedAmount?: number; 
+      changeAmount?: number; 
+      transferReference?: string; 
+      bankAccountId?: string;
+      bankAccountName?: string;
+      creditDays?: number; 
+      dueDate?: string 
+    };
     lastEcfData: ElectronicInvoiceResponse | null;
     date: Date;
   } | null>(null);
@@ -1896,13 +1945,26 @@ export default function POS() {
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
+    bankAccountId?: string;
+    bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
   }) => {
     if (isTransmitting) return;
 
     setIsTransmitting(true);
-    const { billingMode, electronicDocType, internalDocType, paymentMethod, amountReceived, transferReference, creditDays, dueDate } = saleParams;
+    const { 
+      billingMode, 
+      electronicDocType, 
+      internalDocType, 
+      paymentMethod, 
+      amountReceived, 
+      transferReference, 
+      bankAccountId,
+      bankAccountName,
+      creditDays, 
+      dueDate 
+    } = saleParams;
     setBillingMode(billingMode);
     setElectronicDocType(electronicDocType);
     setInternalDocType(internalDocType);
@@ -1914,6 +1976,8 @@ export default function POS() {
       receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
       changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
       transferReference: transferReference || undefined,
+      bankAccountId: bankAccountId || undefined,
+      bankAccountName: bankAccountName || undefined,
       creditDays: paymentMethod === 'Crédito' ? creditDays : undefined,
       dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
     });
@@ -2065,6 +2129,8 @@ export default function POS() {
           receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
           changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
           transferReference: transferReference || undefined,
+          bankAccountId: bankAccountId || undefined,
+          bankAccountName: bankAccountName || undefined,
           creditDays: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
           dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
         },
@@ -2109,6 +2175,9 @@ export default function POS() {
         tax_amount: tax,
         total_amount: total,
         payment_method: internalDocType === 'CT' ? 'Cotización' : paymentMethod,
+        bank_account_id: paymentMethod === 'Transferencia' ? bankAccountId : undefined,
+        bank_account_name: paymentMethod === 'Transferencia' ? bankAccountName : undefined,
+        transfer_reference: paymentMethod === 'Transferencia' ? transferReference : undefined,
         credit_days: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
         due_date: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
@@ -2126,6 +2195,9 @@ export default function POS() {
       (async () => {
         try {
           await createInvoice(invoicePayload, saleItems);
+          if (paymentMethod === 'Transferencia') {
+            window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+          }
           if (internalDocType !== 'CT') {
             await Promise.all(cartItemsSnapshot.map(item => {
               if (item.product && item.product.id) {
@@ -2936,6 +3008,7 @@ export default function POS() {
           receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
           changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
           transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
+          bankAccountName={lastCompletedSale?.lastPaymentInfo.bankAccountName ?? lastPaymentInfo.bankAccountName}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,
@@ -2971,6 +3044,7 @@ export default function POS() {
           receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
           changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
           transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
+          bankAccountName={lastCompletedSale?.lastPaymentInfo.bankAccountName ?? lastPaymentInfo.bankAccountName}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,

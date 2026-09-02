@@ -24,6 +24,7 @@ export interface LetterInvoiceProps {
   receivedAmount?: number;
   changeAmount?: number;
   transferReference?: string;
+  bankAccountName?: string;
   cashierName?: string;
   items: LetterInvoiceItem[];
   subtotal: number;
@@ -55,6 +56,7 @@ export default function LetterInvoice({
   receivedAmount,
   changeAmount,
   transferReference,
+  bankAccountName,
   cashierName = 'Cajero POS',
   items = [],
   subtotal,
@@ -226,6 +228,12 @@ export default function LetterInvoice({
           <p className="text-zinc-700">
             <strong className="text-zinc-900 font-semibold">Atendido por:</strong> {cashierName}
           </p>
+          {!isCotizacion && bankAccountName && (
+            <p className="text-zinc-700">
+              <strong className="text-zinc-900 font-semibold">Banco Destino:</strong>{' '}
+              <span className="font-bold text-zinc-900">{bankAccountName}</span>
+            </p>
+          )}
           {!isCotizacion && transferReference && (
             <p className="text-zinc-700">
               <strong className="text-zinc-900 font-semibold">Referencia:</strong>{' '}

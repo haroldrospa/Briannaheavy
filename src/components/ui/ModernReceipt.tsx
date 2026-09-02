@@ -28,6 +28,7 @@ export interface ModernReceiptProps {
   receivedAmount?: number;
   changeAmount?: number;
   transferReference?: string;
+  bankAccountName?: string;
   cashierName?: string;
   items: ReceiptItem[];
   subtotal: number;
@@ -59,6 +60,7 @@ export default function ModernReceipt({
   receivedAmount,
   changeAmount,
   transferReference,
+  bankAccountName,
   cashierName = 'Cajero POS',
   items = [],
   subtotal,
@@ -280,10 +282,20 @@ export default function ModernReceipt({
           </div>
         )}
 
-        {paymentMethod === 'Transferencia' && transferReference && (
-          <div className="bg-white rounded-xl p-2 border border-zinc-300 flex justify-between text-zinc-700" style={{ fontSize: '0.8em' }}>
-            <span>Referencia Bancaria:</span>
-            <span className="font-mono font-bold uppercase text-black">{transferReference}</span>
+        {paymentMethod === 'Transferencia' && (bankAccountName || transferReference) && (
+          <div className="bg-white rounded-xl p-2 border border-zinc-300 flex flex-col gap-1 text-zinc-700" style={{ fontSize: '0.8em' }}>
+            {bankAccountName && (
+              <div className="flex justify-between">
+                <span>Banco Destino:</span>
+                <span className="font-black text-black">{bankAccountName}</span>
+              </div>
+            )}
+            {transferReference && (
+              <div className="flex justify-between">
+                <span>Referencia:</span>
+                <span className="font-mono font-bold uppercase text-black">{transferReference}</span>
+              </div>
+            )}
           </div>
         )}
       </div>

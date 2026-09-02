@@ -119,14 +119,21 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
       const txId = `inv-${inv.id}`;
       if (!seenIds.has(txId)) {
         seenIds.add(txId);
+        const assignedBankId = inv.bank_account_id || defaultBank.id;
+        let assignedBankName = inv.bank_account_name;
+        if (!assignedBankName) {
+          const matchBank = bankAccounts.find(b => b.id === assignedBankId);
+          assignedBankName = matchBank ? matchBank.bankName : defaultBank.bankName;
+        }
+
         aggregated.push({
           id: txId,
-          bank_account_id: defaultBank.id,
-          bank_account_name: defaultBank.bankName,
+          bank_account_id: assignedBankId,
+          bank_account_name: assignedBankName,
           type: 'Ingreso',
           amount: Number(inv.total_amount) || 0,
           concept: `Cobro Venta Factura ${inv.ncf || inv.invoice_number} - ${inv.customer_name}`,
-          reference: (inv as any).transferReference || undefined,
+          reference: inv.transfer_reference || (inv as any).transferReference || undefined,
           category: 'Venta / Facturación',
           date: inv.created_at || new Date().toISOString(),
           created_by: inv.cashier_name || 'Caja Principal',
