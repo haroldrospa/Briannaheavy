@@ -2174,6 +2174,7 @@ export default function POS() {
 
       // 4. Clear Cart and show Confirmation Modal
       const cartItemsSnapshot = [...cart];
+      const clientSnapshot = selectedClient ? { ...selectedClient } : null;
       setCart([]);
       setSelectedClient(null);
       setGlobalDiscount(0);
@@ -2186,8 +2187,8 @@ export default function POS() {
         invoice_number: finalInvoiceNumber,
         ncf: finalNcf,
         ncf_type: finalNcfType,
-        customer_name: selectedClient ? selectedClient.name : (isElectronic ? 'Venta de Contado (e-CF)' : (internalDocType === 'CT' ? 'Cliente Cotización' : 'Venta Interna (No Fiscal)')),
-        customer_rnc: selectedClient ? selectedClient.rnc : '',
+        customer_name: clientSnapshot ? clientSnapshot.name : (isElectronic ? 'Venta de Contado (e-CF)' : (internalDocType === 'CT' ? 'Consumidor Final (Venta de Contado)' : 'Venta Interna (No Fiscal)')),
+        customer_rnc: clientSnapshot ? clientSnapshot.rnc : '',
         subtotal,
         tax_amount: tax,
         total_amount: total,
@@ -2218,14 +2219,17 @@ export default function POS() {
           if (internalDocType === 'CT') {
             createQuotation({
               quotation_number: invoicePayload.invoice_number,
-              customer: selectedClient ? {
-                id: selectedClient.id,
-                name: selectedClient.name,
-                rnc: selectedClient.rnc,
-                phone: selectedClient.phone,
-                email: selectedClient.email,
-                address: selectedClient.address
-              } : undefined,
+              customer: clientSnapshot ? {
+                id: clientSnapshot.id,
+                name: clientSnapshot.name,
+                rnc: clientSnapshot.rnc,
+                phone: clientSnapshot.phone,
+                email: clientSnapshot.email,
+                address: clientSnapshot.address
+              } : {
+                name: 'Consumidor Final (Venta de Contado)',
+                rnc: ''
+              },
               items: cartItemsSnapshot.map(it => ({
                 product: {
                   id: it.product.id,
@@ -2373,48 +2377,6 @@ export default function POS() {
     setLastCompletedSale(saleDetails);
     setIsSuccessModalOpen(true);
   }, []);
-
-  const handleSaveCartAsQuotation = useCallback(() => {
-    if (cart.length === 0) return;
-    const newQ = createQuotation({
-      customer: selectedClient ? {
-        id: selectedClient.id,
-        name: selectedClient.name,
-        rnc: selectedClient.rnc,
-        phone: selectedClient.phone,
-        email: selectedClient.email,
-        address: selectedClient.address
-      } : undefined,
-      items: cart.map(it => ({
-        product: {
-          id: it.product.id,
-          name: it.product.name,
-          price: it.product.price,
-          stock: it.product.stock,
-          part_number: it.product.part_number,
-          barcode: it.product.barcode,
-          category: it.product.category,
-          image_url: it.product.image_url
-        },
-        quantity: it.quantity,
-        unitPrice: it.product.price,
-        totalPrice: it.product.price * it.quantity,
-        discount: it.discount,
-        discountType: it.discountType
-      })),
-      subtotal,
-      tax_amount: tax,
-      total_amount: total,
-      notes: 'Cotización guardada desde carrito POS',
-      cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado'
-    });
-
-    showAlert({
-      title: '✓ Cotización Guardada',
-      description: `Se guardó la cotización ${newQ.quotation_number} con vigencia de 30 días. Puedes verla o facturarla desde el botón "Cotizaciones".`,
-      variant: 'success'
-    });
-  }, [cart, selectedClient, subtotal, tax, total, showAlert]);
 
   return (
     <div className="h-[100dvh] w-full max-w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] text-gray-900 dark:text-white flex flex-col transition-colors duration-300 overflow-hidden font-sans">
@@ -2891,18 +2853,6 @@ export default function POS() {
             </div>
           </div>
           
-
-          {cart.length > 0 && (
-            <button
-              type="button"
-              onClick={handleSaveCartAsQuotation}
-              className="w-full mb-2 flex items-center justify-center gap-1.5 rounded-full py-2.5 px-3 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-300 font-bold text-xs border border-blue-200/60 dark:border-blue-900/60 transition-all cursor-pointer active:scale-[0.98]"
-              title="Guardar estos repuestos como Cotización con 30 días de vigencia"
-            >
-              <ClipboardDocumentListIcon className="h-4 w-4 stroke-[2]" />
-              <span>Guardar como Cotización (30 días)</span>
-            </button>
-          )}
 
           <motion.button 
             whileHover={{ scale: cart.length > 0 ? 1.02 : 1 }}
