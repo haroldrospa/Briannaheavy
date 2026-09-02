@@ -1395,108 +1395,54 @@ const CheckoutModal = memo(({
               )}
 
               {paymentMethod === 'Crédito' && (
-                <div className="space-y-2 pt-0.5 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl p-3 border border-amber-200/90 dark:border-amber-900/50 space-y-2.5">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-300">
-                        <ClockIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span className="text-[11px] font-black uppercase tracking-wider">Plazo de Crédito</span>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300/70 dark:border-amber-700/60">
-                        Por Defecto: 15 Días
+                <div className="bg-gray-50 dark:bg-zinc-850/70 rounded-xl p-3 border border-gray-200/80 dark:border-zinc-800 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-gray-700 dark:text-zinc-300">
+                      <ClockIcon className="w-3.5 h-3.5 text-gray-400" />
+                      <span className="text-xs font-bold">Plazo de Crédito</span>
+                    </div>
+                    <span className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">
+                      Vence: <strong className="text-gray-900 dark:text-white font-bold capitalize">{calculatedDueDate}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={creditDays}
+                        onChange={e => {
+                          const val = parseInt(e.target.value, 10);
+                          setCreditDays(isNaN(val) ? ('' as any) : Math.max(1, val));
+                        }}
+                        onBlur={() => {
+                          if (!creditDays || Number(creditDays) < 1) setCreditDays(15);
+                        }}
+                        className="w-full bg-white dark:bg-[#15161b] border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                        placeholder="15"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none">
+                        días
                       </span>
                     </div>
 
-                    {/* Stepper + Input */}
-                    <div className="flex items-center gap-1.5 bg-white dark:bg-[#15161b] rounded-xl p-1.5 border border-amber-200 dark:border-amber-800/60 shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setCreditDays(prev => Math.max(1, (Number(prev) || 15) - 5))}
-                        className="h-8 px-2 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-bold text-xs transition-colors cursor-pointer shrink-0"
-                        title="Restar 5 días"
-                      >
-                        -5d
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreditDays(prev => Math.max(1, (Number(prev) || 15) - 1))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-sm flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title="Restar 1 día"
-                      >
-                        -
-                      </button>
-
-                      <div className="flex-1 flex items-center justify-center gap-1">
-                        <input
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={creditDays}
-                          onChange={e => {
-                            const val = parseInt(e.target.value, 10);
-                            setCreditDays(isNaN(val) ? ('' as any) : Math.max(1, val));
-                          }}
-                          onBlur={() => {
-                            if (!creditDays || Number(creditDays) < 1) setCreditDays(15);
-                          }}
-                          className="w-16 text-center text-lg font-black font-mono text-gray-900 dark:text-white outline-none bg-transparent"
-                        />
-                        <span className="text-xs font-bold text-gray-400 uppercase select-none">días</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setCreditDays(prev => Math.min(365, (Number(prev) || 15) + 1))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-sm flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                        title="Sumar 1 día"
-                      >
-                        +
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreditDays(prev => Math.min(365, (Number(prev) || 15) + 5))}
-                        className="h-8 px-2 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 font-bold text-xs transition-colors cursor-pointer shrink-0"
-                        title="Sumar 5 días"
-                      >
-                        +5d
-                      </button>
-                    </div>
-
-                    {/* Quick Preset Chips */}
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {[
-                        { days: 7, label: '7 Días' },
-                        { days: 15, label: '15 Días (Defecto)' },
-                        { days: 30, label: '30 Días' },
-                        { days: 60, label: '60 Días' },
-                      ].map(preset => {
-                        const isSelected = Number(creditDays) === preset.days;
-                        return (
-                          <button
-                            key={preset.days}
-                            type="button"
-                            onClick={() => setCreditDays(preset.days)}
-                            className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer text-center truncate ${
-                              isSelected
-                                ? 'bg-amber-600 text-white font-black shadow-xs ring-1 ring-amber-700'
-                                : 'bg-white/90 dark:bg-zinc-850 text-gray-700 dark:text-zinc-300 hover:bg-white border border-amber-200/70 dark:border-amber-900/50'
-                            }`}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Calculated Due Date banner */}
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200/70 dark:border-amber-900/40">
-                      <span className="text-amber-800 dark:text-amber-300 font-medium text-[11px]">
-                        📅 Fecha Vencimiento:
-                      </span>
-                      <strong className="text-amber-950 dark:text-amber-100 font-mono font-bold capitalize text-[11px]">
-                        {calculatedDueDate}
-                      </strong>
+                    <div className="flex items-center gap-1">
+                      {[15, 30, 45, 60].map(days => (
+                        <button
+                          key={days}
+                          type="button"
+                          onClick={() => setCreditDays(days)}
+                          className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            Number(creditDays) === days
+                              ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
+                              : 'bg-white dark:bg-[#15161b] border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          {days}d
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
