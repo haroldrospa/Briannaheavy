@@ -1,9 +1,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { PlusIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhotoIcon, TrashIcon, TagIcon, PrinterIcon } from '@heroicons/react/24/outline';
+import { 
+  PlusIcon, 
+  MagnifyingGlassIcon, 
+  ExclamationTriangleIcon, 
+  PhotoIcon, 
+  TrashIcon, 
+  TagIcon, 
+  PrinterIcon,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon
+} from '@heroicons/react/24/outline';
 import ItemModal from '../components/inventory/ItemModal';
 import BarcodePrintModal from '../components/inventory/BarcodePrintModal';
 import BulkBarcodePrintModal from '../components/inventory/BulkBarcodePrintModal';
+import ImportInventoryModal from '../components/inventory/ImportInventoryModal';
+import { exportInventoryToExcel } from '../utils/inventoryExcelService';
 import { fetchInventory, getLocalStorageInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, type InventoryItem } from '../services/inventoryService';
 import { useConfirm } from '../contexts/ConfirmContext';
 
@@ -17,6 +29,7 @@ export default function Inventory() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [stockFilter, setStockFilter] = useState('Todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<InventoryItem | null>(null);
   const [itemToPrintBarcode, setItemToPrintBarcode] = useState<InventoryItem | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
@@ -192,24 +205,59 @@ export default function Inventory() {
         <div>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400">Control de stock de camiones, maquinarias y piezas.</p>
         </div>
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          {/* Botón Importar */}
+          <motion.button 
+            whileHover={{ scale: 1.03 }} 
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            title="Cargar artículos masivamente desde Excel (.xlsx) o CSV"
+          >
+            <ArrowUpTrayIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Importar</span>
+          </motion.button>
+
+          {/* Botón Exportar */}
+          <motion.button 
+            whileHover={{ scale: 1.03 }} 
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => {
+              const toExport = selectedItemsList.length > 0 
+                ? selectedItemsList 
+                : filteredInventory.length > 0 
+                  ? filteredInventory 
+                  : inventory;
+              exportInventoryToExcel(toExport);
+            }}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            title="Descargar inventario completo o filtrado en Excel (.xlsx)"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span>Exportar {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
+          </motion.button>
+
+          {/* Botón Impresión Masiva */}
           <motion.button 
             whileHover={{ scale: 1.03 }} 
             whileTap={{ scale: 0.97 }}
             type="button"
             onClick={() => setIsBulkPrintOpen(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-4 sm:px-5 py-2.5 sm:py-3 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
             title="Imprimir etiquetas de múltiples artículos a la vez"
           >
             <PrinterIcon className="h-4 w-4 text-[#ED1C24]" />
-            <span>Impresión Masiva {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
+            <span>Impresión {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
           </motion.button>
 
+          {/* Botón Agregar Artículo */}
           <motion.button 
             whileHover={{ scale: 1.03 }} 
             whileTap={{ scale: 0.97 }}
             onClick={() => { setItemToEdit(null); setIsModalOpen(true); }}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-xs sm:text-sm"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-xs sm:text-sm"
           >
             <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
             Agregar Artículo
@@ -613,6 +661,18 @@ export default function Inventory() {
             items={selectedItemsList.length > 0 ? selectedItemsList : filteredInventory}
             onClose={() => setIsBulkPrintOpen(false)}
             onClearSelection={() => setSelectedItemIds(new Set())}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <ImportInventoryModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            onSuccess={() => {
+              loadData();
+            }}
           />
         )}
       </AnimatePresence>

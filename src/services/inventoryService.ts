@@ -215,3 +215,63 @@ export const deleteInventoryItem = async (id: string): Promise<boolean> => {
   saveLocalStorageInventory(filtered);
   return true;
 };
+
+/**
+ * Inserta un lote masivo de artículos directamente a la base de datos Supabase
+ */
+export const createBulkInventoryItems = async (items: Omit<InventoryItem, 'id'>[]): Promise<{ count: number; items: InventoryItem[] }> => {
+  if (items.length === 0) return { count: 0, items: [] };
+
+  const sanitizedPayloads = items.map(it => sanitizeForSupabase(it));
+
+  if (isSupabaseConfigured()) {
+    try {
+      const BATCH_SIZE = 50;
+      const insertedResults: InventoryItem[] = [];
+
+      for (let i = 0; i < sanitizedPayloads.length; i += BATCH_SIZE) {
+        const chunk = sanitizedPayloads.slice(i, i + BATCH_SIZE);
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .insert(chunk)
+          .select();
+
+        if (!error && data) {
+          insertedResults.push(...(data as InventoryItem[]));
+        } else if (error) {
+          console.error('Error in batch insert chunk:', error);
+        }
+      }
+
+      if (insertedResults.length > 0) {
+        const current = getLocalStorageInventory();
+        const merged = [...insertedResults, ...current];
+        saveLocalStorageInventory(merged);
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+        }
+
+        return { count: insertedResults.length, items: insertedResults };
+      }
+    } catch (err) {
+      console.error('Error importing bulk inventory items to Supabase:', err);
+    }
+  }
+
+  // Fallback local
+  const createdFallback: InventoryItem[] = items.map((it, idx) => ({
+    ...it,
+    id: `${Date.now()}-${idx}`,
+    created_at: new Date().toISOString()
+  }));
+  const current = getLocalStorageInventory();
+  const merged = [...createdFallback, ...current];
+  saveLocalStorageInventory(merged);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+  }
+
+  return { count: createdFallback.length, items: createdFallback };
+};
