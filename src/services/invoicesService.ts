@@ -56,11 +56,9 @@ export const formatInvoiceNumber = (num?: string): string => {
 export const DEFAULT_INVOICES: Invoice[] = [];
 const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 
-// In-memory cache + deduplication + TTL
+// In-memory cache + deduplication
 let inMemoryInvoices: Invoice[] | null = null;
 let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
-let lastInvoicesFetch = 0;
-const INVOICES_CACHE_TTL = 60_000; // 60 seconds TTL
 
 export const getLocalStorageInvoices = (): Invoice[] => {
   if (inMemoryInvoices !== null) return inMemoryInvoices;
@@ -88,46 +86,40 @@ export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
 };
 
 export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> => {
-  const now = Date.now();
   const localList = getLocalStorageInvoices();
 
-  // Return cached data if within TTL and not forced
-  if (!forceRefresh && inMemoryInvoices !== null && (now - lastInvoicesFetch) < INVOICES_CACHE_TTL) {
-    return inMemoryInvoices;
-  }
-
-  // Deduplicate concurrent requests
-  if (!forceRefresh && inFlightInvoicesPromise) {
-    return inFlightInvoicesPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightInvoicesPromise) {
+      return inFlightInvoicesPromise;
+    }
+
     inFlightInvoicesPromise = (async () => {
       try {
-        const supabasePromise = supabase
+        const { data, error } = await supabase
           .from('invoices')
           .select('*, items:invoice_items(*)')
           .order('created_at', { ascending: false })
-          .limit(200);
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 3500)
-        );
+          .limit(300);
 
-        const res = await Promise.race([supabasePromise, timeoutPromise]);
-        if (!res.error && res.data) {
-          const supabaseInvoices = res.data as Invoice[];
+        if (!error && data) {
+          const supabaseInvoices = data as Invoice[];
 
-          // Merge local and Supabase invoices so local sales are NEVER lost
+          // Supabase es la fuente oficial y definitiva de verdad.
+          // Deducplicamos por invoice_number para eliminar cualquier duplicado local temporal.
           const map = new Map<string, Invoice>();
-          localList.forEach(inv => map.set(inv.id, inv));
+
+          // 1. Añadimos primero todas las facturas de la base de datos Supabase
           supabaseInvoices.forEach(inv => {
-            const existing = map.get(inv.id);
-            map.set(inv.id, {
-              ...inv,
-              bank_account_id: existing?.bank_account_id || (inv as any).bank_account_id,
-              bank_account_name: existing?.bank_account_name || (inv as any).bank_account_name,
-              transfer_reference: existing?.transfer_reference || (inv as any).transfer_reference,
-            });
+            const key = inv.invoice_number || inv.id;
+            map.set(key, inv);
+          });
+
+          // 2. Solo incluimos facturas locales si están verdaderamente pendientes de sincronización
+          localList.forEach(inv => {
+            const key = inv.invoice_number || inv.id;
+            if (!map.has(key) && !inv.id.startsWith('inv-seed-') && !inv.invoice_number?.startsWith('TEST-')) {
+              map.set(key, inv);
+            }
           });
 
           const merged = Array.from(map.values()).sort((a, b) => 
@@ -135,9 +127,8 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           );
 
           saveLocalStorageInvoices(merged);
-          lastInvoicesFetch = Date.now();
 
-          // Auto-align local sequence counters with database highest values
+          // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
           let maxCt = 0;
           for (const inv of merged) {

@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { fetchInvoices, getLocalStorageInvoices, saveLocalStorageInvoices, type Invoice } from './invoicesService';
-import { fetchInventory, getLocalStorageInventory, saveLocalStorageInventory, type InventoryItem } from './inventoryService';
-import { fetchCustomers, getLocalStorageCustomers, saveLocalStorageCustomers, type Customer } from './customersService';
+import { fetchInvoices, getLocalStorageInvoices } from './invoicesService';
+import { fetchInventory } from './inventoryService';
+import { fetchCustomers } from './customersService';
 
 let isRealtimeInitialized = false;
 
@@ -98,24 +98,9 @@ export const initRealtimeSync = (): (() => void) => {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'invoices' },
-      async (payload) => {
+      async () => {
         try {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          const current = getLocalStorageInvoices();
-
-          if (eventType === 'INSERT' && newRecord) {
-            const exists = current.some(i => i.id === (newRecord as any).id || i.invoice_number === (newRecord as any).invoice_number);
-            if (!exists) {
-              saveLocalStorageInvoices([newRecord as Invoice, ...current]);
-            }
-          } else if (eventType === 'UPDATE' && newRecord) {
-            const updated = current.map(i => i.id === (newRecord as any).id ? { ...i, ...newRecord } : i);
-            saveLocalStorageInvoices(updated);
-          } else if (eventType === 'DELETE' && oldRecord) {
-            const updated = current.filter(i => i.id !== (oldRecord as any).id);
-            saveLocalStorageInvoices(updated);
-          }
-
+          await fetchInvoices(true);
           window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
           window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
           window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
@@ -132,24 +117,9 @@ export const initRealtimeSync = (): (() => void) => {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'inventory_items' },
-      async (payload) => {
+      async () => {
         try {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          const current = getLocalStorageInventory();
-
-          if (eventType === 'INSERT' && newRecord) {
-            const exists = current.some(i => i.id === (newRecord as any).id);
-            if (!exists) {
-              saveLocalStorageInventory([newRecord as InventoryItem, ...current]);
-            }
-          } else if (eventType === 'UPDATE' && newRecord) {
-            const updated = current.map(i => i.id === (newRecord as any).id ? { ...i, ...newRecord } : i);
-            saveLocalStorageInventory(updated);
-          } else if (eventType === 'DELETE' && oldRecord) {
-            const updated = current.filter(i => i.id !== (oldRecord as any).id);
-            saveLocalStorageInventory(updated);
-          }
-
+          await fetchInventory(true);
           window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
         } catch (err) {
           console.warn('Inventory realtime error:', err);
@@ -164,24 +134,9 @@ export const initRealtimeSync = (): (() => void) => {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'customers' },
-      async (payload) => {
+      async () => {
         try {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          const current = getLocalStorageCustomers();
-
-          if (eventType === 'INSERT' && newRecord) {
-            const exists = current.some(c => c.id === (newRecord as any).id);
-            if (!exists) {
-              saveLocalStorageCustomers([newRecord as Customer, ...current]);
-            }
-          } else if (eventType === 'UPDATE' && newRecord) {
-            const updated = current.map(c => c.id === (newRecord as any).id ? { ...c, ...newRecord } : c);
-            saveLocalStorageCustomers(updated);
-          } else if (eventType === 'DELETE' && oldRecord) {
-            const updated = current.filter(c => c.id !== (oldRecord as any).id);
-            saveLocalStorageCustomers(updated);
-          }
-
+          await fetchCustomers(true);
           window.dispatchEvent(new CustomEvent('brianna_customers_updated'));
         } catch (err) {
           console.warn('Customers realtime error:', err);
@@ -197,4 +152,5 @@ export const initRealtimeSync = (): (() => void) => {
     isRealtimeInitialized = false;
   };
 };
+
 
