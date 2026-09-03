@@ -86,8 +86,6 @@ export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
 };
 
 export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> => {
-  const localList = getLocalStorageInvoices();
-
   if (isSupabaseConfigured()) {
     if (!forceRefresh && inFlightInvoicesPromise) {
       return inFlightInvoicesPromise;
@@ -103,35 +101,12 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
 
         if (!error && data) {
           const supabaseInvoices = data as Invoice[];
-
-          // Supabase es la fuente oficial y definitiva de verdad.
-          // Deducplicamos por invoice_number para eliminar cualquier duplicado local temporal.
-          const map = new Map<string, Invoice>();
-
-          // 1. Añadimos primero todas las facturas de la base de datos Supabase
-          supabaseInvoices.forEach(inv => {
-            const key = inv.invoice_number || inv.id;
-            map.set(key, inv);
-          });
-
-          // 2. Solo incluimos facturas locales si están verdaderamente pendientes de sincronización
-          localList.forEach(inv => {
-            const key = inv.invoice_number || inv.id;
-            if (!map.has(key) && !inv.id.startsWith('inv-seed-') && !inv.invoice_number?.startsWith('TEST-')) {
-              map.set(key, inv);
-            }
-          });
-
-          const merged = Array.from(map.values()).sort((a, b) => 
-            new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
-          );
-
-          saveLocalStorageInvoices(merged);
+          saveLocalStorageInvoices(supabaseInvoices);
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
           let maxCt = 0;
-          for (const inv of merged) {
+          for (const inv of supabaseInvoices) {
             const num = inv.invoice_number || '';
             if (num.startsWith('CT-')) {
               const p = parseInt(num.replace(/\D/g, ''), 10);
@@ -154,20 +129,20 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
             }
           }
 
-          return merged;
+          return supabaseInvoices;
         }
       } catch (err) {
         console.warn('Error fetching invoices from Supabase, returning local:', err);
       } finally {
         inFlightInvoicesPromise = null;
       }
-      return localList.filter(inv => !inv.id.startsWith('inv-seed-'));
+      return getLocalStorageInvoices();
     })();
 
     return inFlightInvoicesPromise;
   }
 
-  return localList.filter(inv => !inv.id.startsWith('inv-seed-'));
+  return getLocalStorageInvoices();
 };
 
 /**
