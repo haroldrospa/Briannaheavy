@@ -48,7 +48,7 @@ export default function Invoices() {
 
 
   const loadData = async () => {
-    const data = await fetchInvoices();
+    const data = await fetchInvoices(true);
     setInvoices(data);
   };
 
@@ -58,8 +58,19 @@ export default function Invoices() {
     const handleRoleUpdate = () => {
       setCurrentRole(getActiveRole());
     };
+    const handleInvoicesUpdate = () => {
+      loadData();
+    };
+
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
-    return () => window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+    window.addEventListener('brianna_invoices_updated', handleInvoicesUpdate);
+    window.addEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+      window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);
+      window.removeEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+    };
   }, []);
 
   const isAdmin = currentRole === 'Administrador';

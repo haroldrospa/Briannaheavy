@@ -53,7 +53,7 @@ export const getLocalStorageInventory = (): InventoryItem[] => {
   }
 };
 
-const saveLocalStorageInventory = (items: InventoryItem[]): void => {
+export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
   inMemoryInventory = items;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));

@@ -38,7 +38,7 @@ export const getLocalStorageCustomers = (): Customer[] => {
   }
 };
 
-const saveLocalStorageCustomers = (customers: Customer[]): void => {
+export const saveLocalStorageCustomers = (customers: Customer[]): void => {
   inMemoryCustomers = customers;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(customers));
