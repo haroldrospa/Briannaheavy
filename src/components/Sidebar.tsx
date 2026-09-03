@@ -70,18 +70,18 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
 
 
   const SidebarContent = (
-    <div className="w-[280px] max-w-[85vw] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-5 sm:p-6 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300 shadow-xl lg:shadow-none">
+    <div className="w-[240px] xl:w-[260px] max-w-[85vw] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-3.5 xl:p-5 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300 shadow-xl lg:shadow-none">
       {/* Brand Logo Header */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200/60 dark:border-zinc-800/80">
-        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-3 group">
-          <div className="h-10 w-24 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
+      <div className="flex items-center justify-between mb-4 xl:mb-6 pb-3 xl:pb-4 border-b border-gray-200/60 dark:border-zinc-800/80">
+        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
+          <div className="h-9 w-20 xl:h-10 xl:w-24 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
             <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain" />
           </div>
           <div className="flex flex-col">
-            <span className="font-black text-xs text-gray-900 dark:text-white uppercase tracking-tight leading-none">
+            <span className="font-black text-[11px] xl:text-xs text-gray-900 dark:text-white uppercase tracking-tight leading-none">
               Brianna
             </span>
-            <span className="text-[10px] font-bold text-[#ED1C24] uppercase tracking-wider leading-none mt-1">
+            <span className="text-[9px] xl:text-[10px] font-bold text-[#ED1C24] uppercase tracking-wider leading-none mt-1">
               Heavy Equipment
             </span>
           </div>
@@ -98,7 +98,7 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-2">
+      <nav className="flex-1 space-y-1 xl:space-y-1.5">
         {filteredNavigation.map((item) => {
           const isActive = location.pathname.startsWith(item.href);
           return (
@@ -107,26 +107,26 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
               to={item.href}
               onClick={onClose}
               className={cn(
-                'group flex items-center justify-between px-5 py-3.5 text-sm font-bold rounded-full transition-all duration-300',
+                'group flex items-center justify-between px-3.5 py-2 xl:px-4 xl:py-2.5 text-xs xl:text-sm font-bold rounded-full transition-all duration-300',
                 isActive 
-                  ? 'bg-[#ED1C24] text-white shadow-md shadow-red-900/20' 
-                  : 'bg-transparent text-gray-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#121318] hover:text-gray-900 dark:hover:text-zinc-100 hover:shadow-sm'
+                  ? 'bg-[#ED1C24] text-white shadow-md shadow-red-900/20 font-black' 
+                  : 'bg-transparent text-gray-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#121318] hover:text-gray-900 dark:hover:text-zinc-100 hover:shadow-2xs'
               )}
             >
-              <div className="flex items-center">
+              <div className="flex items-center min-w-0">
                 <item.icon
                   className={cn(
-                    'mr-4 flex-shrink-0 h-5 w-5 transition-colors',
+                    'mr-3 flex-shrink-0 h-4 w-4 xl:h-5 xl:w-5 transition-colors',
                     isActive ? 'text-white' : 'text-gray-500 dark:text-zinc-400 group-hover:text-gray-900 dark:group-hover:text-zinc-100'
                   )}
                   aria-hidden="true"
                 />
-                {item.name}
+                <span className="truncate">{item.name}</span>
               </div>
               
               {item.badge && (
                 <span className={cn(
-                  "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
+                  "flex h-4 w-4 xl:h-5 xl:w-5 items-center justify-center rounded-full text-[9px] xl:text-[10px] font-bold shrink-0 ml-1.5",
                   isActive ? "bg-white/20 text-white" : "bg-red-100 dark:bg-red-950/60 text-[#ED1C24]"
                 )}>
                   {item.badge}

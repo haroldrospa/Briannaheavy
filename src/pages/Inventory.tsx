@@ -200,29 +200,33 @@ export default function Inventory() {
   }, [inventory, selectedItemIds]);
 
   return (
-    <div className="space-y-4 sm:space-y-6 relative">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="space-y-4 sm:space-y-6 relative max-w-full">
+      {/* Top Header Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 sm:gap-4">
         <div>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400">Control de stock de camiones, maquinarias y piezas.</p>
+          <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-zinc-100 tracking-tight">Inventario</h2>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400 mt-0.5">Control de stock de camiones, maquinarias y piezas.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+        
+        {/* Action Buttons Bar */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {/* Botón Importar */}
           <motion.button 
-            whileHover={{ scale: 1.03 }} 
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }} 
+            whileTap={{ scale: 0.98 }}
             type="button"
             onClick={() => setIsImportModalOpen(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            className="flex items-center justify-center gap-1.5 bg-white dark:bg-zinc-800/90 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3 sm:px-3.5 py-2 rounded-full border border-gray-200/90 dark:border-zinc-700 shadow-2xs transition-all cursor-pointer text-xs"
             title="Cargar artículos masivamente desde Excel (.xlsx) o CSV"
           >
-            <ArrowUpTrayIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <ArrowUpTrayIcon className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Importar</span>
           </motion.button>
 
           {/* Botón Exportar */}
           <motion.button 
-            whileHover={{ scale: 1.03 }} 
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }} 
+            whileTap={{ scale: 0.98 }}
             type="button"
             onClick={() => {
               const toExport = selectedItemsList.length > 0 
@@ -232,50 +236,52 @@ export default function Inventory() {
                   : inventory;
               exportInventoryToExcel(toExport);
             }}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            className="flex items-center justify-center gap-1.5 bg-white dark:bg-zinc-800/90 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3 sm:px-3.5 py-2 rounded-full border border-gray-200/90 dark:border-zinc-700 shadow-2xs transition-all cursor-pointer text-xs"
             title="Descargar inventario completo o filtrado en Excel (.xlsx)"
           >
-            <ArrowDownTrayIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <ArrowDownTrayIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             <span>Exportar {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
           </motion.button>
 
           {/* Botón Impresión Masiva */}
           <motion.button 
-            whileHover={{ scale: 1.03 }} 
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }} 
+            whileTap={{ scale: 0.98 }}
             type="button"
             onClick={() => setIsBulkPrintOpen(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer text-xs sm:text-sm shadow-2xs"
+            className="flex items-center justify-center gap-1.5 bg-white dark:bg-zinc-800/90 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3 sm:px-3.5 py-2 rounded-full border border-gray-200/90 dark:border-zinc-700 shadow-2xs transition-all cursor-pointer text-xs"
             title="Imprimir etiquetas de múltiples artículos a la vez"
           >
-            <PrinterIcon className="h-4 w-4 text-[#ED1C24]" />
+            <PrinterIcon className="h-3.5 w-3.5 text-[#ED1C24]" />
             <span>Impresión {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
           </motion.button>
 
           {/* Botón Agregar Artículo */}
           <motion.button 
-            whileHover={{ scale: 1.03 }} 
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }} 
+            whileTap={{ scale: 0.98 }}
             onClick={() => { setItemToEdit(null); setIsModalOpen(true); }}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-xs sm:text-sm"
+            className="flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white font-black px-3.5 sm:px-4 py-2 rounded-full shadow-md shadow-red-900/20 transition-all cursor-pointer text-xs"
           >
-            <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-            Agregar Artículo
+            <PlusIcon className="h-4 w-4" />
+            <span>Agregar Artículo</span>
           </motion.button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-transparent dark:border-zinc-800/80">
-        <div className="p-2 sm:p-4 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4 items-stretch sm:items-center">
-          <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-hide -mx-1 px-1">
+      {/* Main Container Card */}
+      <div className="bg-white dark:bg-[#121318] shadow-xs rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-4 border border-transparent dark:border-zinc-800/80">
+        <div className="p-1 sm:p-2 mb-2 flex flex-col xl:flex-row justify-between gap-3 items-stretch xl:items-center">
+          {/* Tabs */}
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-1 xl:pb-0 scrollbar-hide -mx-1 px-1 shrink-0">
             {INVENTORY_TABS.map(tab => (
               <button 
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === tab 
                     ? 'bg-[#ED1C24] text-white shadow-xs font-black' 
-                    : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-50 dark:hover:bg-zinc-800/50'
+                    : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-800/50'
                 }`}
               >
                 {tab}
@@ -283,25 +289,26 @@ export default function Inventory() {
             ))}
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 w-full sm:w-auto">
-            <div className="relative w-full sm:w-72">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 sm:pl-4 pointer-events-none">
-                <MagnifyingGlassIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-zinc-500" />
+          {/* Search & Stock Filter */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full xl:w-auto">
+            <div className="relative flex-1 sm:w-60 md:w-72">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 dark:text-zinc-500" />
               </div>
               <input
                 type="text"
-                className="block w-full pl-10 sm:pl-11 pr-4 py-2.5 sm:py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-xs sm:text-sm font-medium text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all"
+                className="block w-full pl-9.5 pr-4 py-2 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-xs font-medium text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all"
                 placeholder="Buscar por marca, modelo o código..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             
-            <div className="w-full sm:w-auto">
+            <div className="w-full sm:w-44 shrink-0">
               <select 
                 value={stockFilter}
                 onChange={(e) => setStockFilter(e.target.value)}
-                className="block w-full px-4 py-2.5 sm:py-3 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-xs sm:text-sm font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all cursor-pointer"
+                className="block w-full px-3.5 py-2 bg-[#f4f3f1] dark:bg-zinc-800/60 border-none rounded-full text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all cursor-pointer"
               >
                 <option value="Todos">Todo el inventario</option>
                 <option value="Bajo">Stock Bajo</option>
@@ -441,11 +448,11 @@ export default function Inventory() {
             </div>
 
             {/* Desktop Table (hidden md:block) */}
-            <div className="hidden md:block overflow-x-auto scrollbar-hide">
-              <table className="w-full text-left border-collapse">
+            <div className="hidden md:block overflow-x-auto scrollbar-thin">
+              <table className="w-full min-w-[820px] text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-[10px] sm:text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-3.5 sm:py-4 pl-4 pr-1 w-10 text-center">
+                  <tr className="border-b border-gray-100 dark:border-zinc-800 text-gray-400 dark:text-zinc-500 text-[10px] xl:text-[11px] font-black uppercase tracking-wider">
+                    <th className="py-3 pl-3 pr-1 w-8 text-center">
                       <input
                         type="checkbox"
                         checked={filteredInventory.length > 0 && selectedItemIds.size === filteredInventory.length}
@@ -454,13 +461,13 @@ export default function Inventory() {
                         title="Seleccionar todos"
                       />
                     </th>
-                    <th className="py-3.5 sm:py-4 px-4 sm:px-5">Artículo</th>
-                    <th className="py-4 px-5">Tipo / Marca</th>
-                    <th className="py-4 px-5">Costo</th>
-                    <th className="py-4 px-5">Precio Venta</th>
-                    <th className="py-4 px-5">Stock</th>
-                    <th className="py-4 px-5">Estado</th>
-                    <th className="py-4 px-6 text-right">Acciones</th>
+                    <th className="py-3 px-3 xl:px-4">Artículo</th>
+                    <th className="py-3 px-3 xl:px-4">Tipo / Marca</th>
+                    <th className="py-3 px-3 xl:px-4">Costo</th>
+                    <th className="py-3 px-3 xl:px-4">Precio Venta</th>
+                    <th className="py-3 px-3 xl:px-4 text-center">Stock</th>
+                    <th className="py-3 px-3 xl:px-4">Estado</th>
+                    <th className="py-3 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-zinc-800/50">
@@ -479,7 +486,7 @@ export default function Inventory() {
                             : 'hover:bg-gray-50 dark:hover:bg-zinc-800/40'
                         }`}
                       >
-                        <td className="py-4 pl-4 pr-1 w-10 text-center">
+                        <td className="py-3 pl-3 pr-1 w-8 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -487,18 +494,18 @@ export default function Inventory() {
                             className="rounded text-[#ED1C24] focus:ring-[#ED1C24] w-4 h-4 cursor-pointer align-middle"
                           />
                         </td>
-                        <td className="py-4 px-4 sm:px-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden">
+                        <td className="py-3 px-3 xl:px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden">
                               {item.image_url ? (
                                 <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                               ) : (
-                                <PhotoIcon className="w-6 h-6" />
+                                <PhotoIcon className="w-5 h-5" />
                               )}
                             </div>
-                            <div>
-                              <div className="font-bold text-gray-900 dark:text-zinc-100">{item.name}</div>
-                              <div className="text-[11px] text-gray-400 dark:text-zinc-500 font-mono flex items-center gap-2 flex-wrap mt-0.5">
+                            <div className="min-w-0">
+                              <div className="font-bold text-xs xl:text-sm text-gray-900 dark:text-zinc-100 truncate max-w-[200px] xl:max-w-xs">{item.name}</div>
+                              <div className="text-[10px] xl:text-[11px] text-gray-400 dark:text-zinc-500 font-mono flex items-center gap-1.5 flex-wrap mt-0.5">
                                 {item.part_number && <span>Cód: <strong className="text-gray-600 dark:text-zinc-300">{item.part_number}</strong></span>}
                                 {item.barcode && <span>Bar: <strong className="text-gray-600 dark:text-zinc-300">{item.barcode}</strong></span>}
                                 {item.vin && <span>VIN: <strong className="text-gray-600 dark:text-zinc-300">{item.vin}</strong></span>}
@@ -506,18 +513,18 @@ export default function Inventory() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-5">
-                          <div className="text-sm font-medium text-gray-900 dark:text-zinc-200">
+                        <td className="py-3 px-3 xl:px-4">
+                          <div className="text-xs xl:text-sm font-medium text-gray-900 dark:text-zinc-200 truncate max-w-[140px]">
                             {item.brand} {item.model}
                           </div>
-                          <div className="text-xs text-gray-400 font-bold uppercase">{item.type}</div>
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">{item.type}</div>
                         </td>
-                        <td className="py-4 px-5 font-bold text-gray-500 dark:text-zinc-400 text-sm">
+                        <td className="py-3 px-3 xl:px-4 font-bold text-gray-500 dark:text-zinc-400 text-xs xl:text-sm">
                           RD$ {(item.cost || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-4 px-5 font-black text-gray-900 dark:text-zinc-100 text-sm">
+                        <td className="py-3 px-3 xl:px-4 font-black text-gray-900 dark:text-zinc-100 text-xs xl:text-sm">
                           <div>RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
-                          <div className="text-[10px] font-bold mt-0.5">
+                          <div className="text-[9px] xl:text-[10px] font-bold mt-0.5">
                             {item.itbis_type === 'exento' ? (
                               <span className="text-amber-600 dark:text-amber-400">Exento</span>
                             ) : item.includes_itbis === false || item.itbis_type === 'adicional' ? (
@@ -527,30 +534,30 @@ export default function Inventory() {
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-5">
-                          <div className="flex items-center gap-2">
+                        <td className="py-3 px-3 xl:px-4 text-center">
+                          <div className="inline-flex items-center gap-1.5">
                             <button 
                               onClick={() => updateStock(item.id, (item.stock ?? 1) - 1)}
-                              className="w-6 h-6 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center font-bold hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
+                              className="w-5 h-5 xl:w-6 xl:h-6 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
                             >
                               -
                             </button>
-                            <span className={`font-bold ${isLowStock ? 'text-red-500 font-black' : 'text-gray-800 dark:text-zinc-200'}`}>
+                            <span className={`text-xs xl:text-sm font-bold min-w-4 ${isLowStock ? 'text-red-500 font-black' : 'text-gray-800 dark:text-zinc-200'}`}>
                               {item.stock ?? 1}
                             </span>
                             <button 
                               onClick={() => updateStock(item.id, (item.stock ?? 1) + 1)}
-                              className="w-6 h-6 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center font-bold hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
+                              className="w-5 h-5 xl:w-6 xl:h-6 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center text-xs font-bold hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
                             >
                               +
                             </button>
                             {isLowStock && (
-                              <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 ml-1" title="Stock bajo" />
+                              <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 ml-0.5" title="Stock bajo" />
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-5">
-                          <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                        <td className="py-3 px-3 xl:px-4">
+                          <span className={`px-2.5 py-0.5 text-[10px] xl:text-xs font-bold rounded-full ${
                             item.status === 'Disponible' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400' :
                             item.status === 'Reservado' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400' :
                             'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300'
@@ -558,28 +565,27 @@ export default function Inventory() {
                             {item.status}
                           </span>
                         </td>
-                        <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
+                        <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                           <button 
                             type="button"
                             onClick={() => setItemToPrintBarcode(item)}
-                            className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-zinc-800 font-bold text-xs hover:bg-gray-200 text-gray-800 dark:text-zinc-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer border border-gray-200/80 dark:border-zinc-700 shadow-2xs"
                             title="Imprimir etiquetas con código de barras"
                           >
                             <TagIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
-                            <span>Etiqueta</span>
                           </button>
                           <button 
                             onClick={() => { setItemToEdit(item); setIsModalOpen(true); }}
-                            className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-zinc-800 font-bold text-xs hover:bg-gray-200 text-gray-800 dark:text-zinc-200"
+                            className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-zinc-800 font-bold text-xs hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 border border-gray-200/80 dark:border-zinc-700 shadow-2xs transition-colors"
                           >
                             Editar
                           </button>
                           <button 
                             onClick={() => handleDeleteItem(item.id, item.name)}
-                            className="px-2 py-1.5 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors cursor-pointer border border-red-200/60 dark:border-red-900/40"
                             title="Eliminar artículo"
                           >
-                            <TrashIcon className="w-4 h-4" />
+                            <TrashIcon className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       </motion.tr>
