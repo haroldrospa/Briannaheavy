@@ -294,8 +294,6 @@ export const createInvoice = async (
         ecf_track_id: invoiceData.ecf_track_id || null,
         ecf_qr_url: invoiceData.ecf_qr_url || null,
         ecf_dgii_status: invoiceData.ecf_dgii_status || null,
-        credit_days: invoiceData.credit_days !== undefined ? invoiceData.credit_days : null,
-        due_date: invoiceData.due_date || null,
         created_at: nowIso
       };
       if (invoiceData.ncf) dbPayload.ncf = invoiceData.ncf;

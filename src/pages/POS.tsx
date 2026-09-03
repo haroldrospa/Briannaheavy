@@ -1674,6 +1674,7 @@ export default function POS() {
       }
       if (invs) {
         setSessionSales(filterInvoicesByShift(invs).map(mapInvoiceToSessionSale));
+        setActiveQuotationsCount(getActiveQuotationsCount());
       }
     };
     loadPosData();

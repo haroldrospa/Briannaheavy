@@ -1,4 +1,4 @@
-import { getLocalStorageInvoices } from './invoicesService';
+import { getLocalStorageInvoices, saveLocalStorageInvoices, deleteInvoice } from './invoicesService';
 
 export interface QuotationProduct {
   id: string | number;
@@ -47,7 +47,32 @@ export interface Quotation {
 }
 
 const QUOTATIONS_STORAGE_KEY = 'brianna_quotations';
+const DELETED_QUOTATIONS_KEY = 'brianna_deleted_quotations';
 const QUOTATION_VALIDITY_DAYS = 30;
+
+const getDeletedQuotationIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_QUOTATIONS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch (err) {
+    console.error('Error reading deleted quotations list:', err);
+  }
+  return new Set();
+};
+
+const markQuotationAsDeletedInStorage = (id?: string, num?: string): void => {
+  try {
+    const deleted = getDeletedQuotationIds();
+    if (id) deleted.add(id);
+    if (num) deleted.add(num);
+    localStorage.setItem(DELETED_QUOTATIONS_KEY, JSON.stringify(Array.from(deleted)));
+  } catch (err) {
+    console.error('Error recording deleted quotation:', err);
+  }
+};
 
 /**
  * Calcula los días restantes de vigencia de una cotización
@@ -64,12 +89,15 @@ export const getQuotationDaysRemaining = (q: Quotation): number => {
  */
 export const fetchQuotations = (): Quotation[] => {
   let list: Quotation[] = [];
+  const deletedSet = getDeletedQuotationIds();
 
   try {
     const raw = localStorage.getItem(QUOTATIONS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) list = parsed;
+      if (Array.isArray(parsed)) {
+        list = parsed.filter(q => !deletedSet.has(q.id) && !deletedSet.has(q.quotation_number));
+      }
     }
   } catch (err) {
     console.error('Error al leer cotizaciones:', err);
@@ -79,9 +107,11 @@ export const fetchQuotations = (): Quotation[] => {
   try {
     const invoices = getLocalStorageInvoices();
     const ctInvoices = invoices.filter(inv => 
-      inv.invoice_number?.startsWith('CT-') || 
-      inv.payment_method === 'Cotización' || 
-      inv.status === 'Cotización'
+      !deletedSet.has(inv.id) &&
+      !deletedSet.has(inv.invoice_number) &&
+      (inv.invoice_number?.startsWith('CT-') || 
+       inv.payment_method === 'Cotización' || 
+       inv.status === 'Cotización')
     );
 
     ctInvoices.forEach(inv => {
@@ -231,15 +261,48 @@ export const markQuotationAsBilled = (quotationId: string, invoiceNumber: string
 };
 
 /**
- * Elimina una cotización
+ * Elimina una cotización y la sincroniza con el historial de facturas
  */
-export const deleteQuotation = (quotationId: string): void => {
+export const deleteQuotation = async (quotationId: string): Promise<void> => {
   const list = fetchQuotations();
-  const filtered = list.filter(q => q.id !== quotationId && q.quotation_number !== quotationId);
+  const target = list.find(q => q.id === quotationId || q.quotation_number === quotationId);
+  const qNum = target?.quotation_number || (quotationId.startsWith('CT-') ? quotationId : undefined);
+
+  // 1. Guardar en blacklist de eliminados para que no se auto-reimporte
+  markQuotationAsDeletedInStorage(target?.id || quotationId, qNum);
+
+  // 2. Eliminar del almacenamiento local de cotizaciones
+  const filtered = list.filter(q => q.id !== quotationId && q.quotation_number !== quotationId && (qNum ? q.quotation_number !== qNum : true));
   saveQuotationsToStorage(filtered);
+
+  // 3. Eliminar también de las facturas locales para sincronización limpia
+  const currentInvoices = getLocalStorageInvoices();
+  const matchingInvoice = currentInvoices.find(inv => 
+    inv.id === quotationId || 
+    (qNum && inv.invoice_number === qNum) || 
+    inv.invoice_number === quotationId
+  );
+
+  const filteredInvoices = currentInvoices.filter(inv => 
+    inv.id !== quotationId && 
+    (!qNum || inv.invoice_number !== qNum) && 
+    inv.invoice_number !== quotationId
+  );
+  saveLocalStorageInvoices(filteredInvoices);
+
+  // 4. Si existe en la base de datos de invoices / Supabase, eliminarlo
+  const idToDelete = matchingInvoice?.id || target?.id || quotationId;
+  if (idToDelete) {
+    try {
+      await deleteInvoice(idToDelete);
+    } catch (err) {
+      console.warn('Advertencia eliminando cotización de base de datos:', err);
+    }
+  }
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
+    window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
   }
 };
 
@@ -250,3 +313,4 @@ export const getActiveQuotationsCount = (): number => {
   const list = fetchQuotations();
   return list.filter(q => q.status === 'Vigente').length;
 };
+

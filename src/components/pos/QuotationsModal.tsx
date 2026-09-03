@@ -20,6 +20,7 @@ import {
   getQuotationDaysRemaining,
   type Quotation
 } from '../../services/quotationsService';
+import { fetchInvoices } from '../../services/invoicesService';
 
 interface QuotationsModalProps {
   isOpen: boolean;
@@ -39,9 +40,13 @@ export default function QuotationsModal({
   const [statusFilter, setStatusFilter] = useState<'all' | 'Vigente' | 'Facturada' | 'Expirada'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const loadData = () => {
+  const loadData = async () => {
     const list = fetchQuotations();
     setQuotations(list);
+    try {
+      await fetchInvoices();
+      setQuotations(fetchQuotations());
+    } catch {}
   };
 
   useEffect(() => {
@@ -56,10 +61,10 @@ export default function QuotationsModal({
     return () => window.removeEventListener('brianna_quotations_updated', handleUpdate);
   }, []);
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('¿Estás seguro de que deseas eliminar esta cotización?')) {
-      deleteQuotation(id);
+      await deleteQuotation(id);
       loadData();
     }
   };
