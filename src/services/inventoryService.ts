@@ -32,8 +32,6 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [];
 
 let inMemoryInventory: InventoryItem[] | null = null;
 let inFlightInventoryPromise: Promise<InventoryItem[]> | null = null;
-let lastInventoryFetch = 0;
-const INVENTORY_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageInventory = (): InventoryItem[] => {
   if (inMemoryInventory !== null) {
@@ -72,35 +70,22 @@ export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
 };
 
 export const fetchInventory = async (forceRefresh = false): Promise<InventoryItem[]> => {
-  const now = Date.now();
-
-  // Return cached data if within TTL and not forced
-  if (!forceRefresh && inMemoryInventory !== null && (now - lastInventoryFetch) < INVENTORY_CACHE_TTL) {
-    return inMemoryInventory;
-  }
-
-  // Deduplicate in-flight requests
-  if (!forceRefresh && inFlightInventoryPromise) {
-    return inFlightInventoryPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightInventoryPromise) {
+      return inFlightInventoryPromise;
+    }
+
     inFlightInventoryPromise = (async () => {
       try {
-        const supabasePromise = supabase
+        const { data, error } = await supabase
           .from('inventory_items')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(300);
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2500)
-        );
+          .limit(500);
 
-        const res = await Promise.race([supabasePromise, timeoutPromise]);
-        if (!res.error && res.data) {
-          const items = res.data as InventoryItem[];
+        if (!error && data) {
+          const items = data as InventoryItem[];
           saveLocalStorageInventory(items);
-          lastInventoryFetch = Date.now();
           return items;
         }
       } catch (err) {

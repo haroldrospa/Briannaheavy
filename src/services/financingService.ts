@@ -35,8 +35,6 @@ const LOCAL_STORAGE_KEY = 'brianna_local_financings';
 
 let inMemoryFinancings: Financing[] | null = null;
 let inFlightFinancingsPromise: Promise<Financing[]> | null = null;
-let lastFinancingsFetch = 0;
-const FINANCINGS_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageFinancings = (): Financing[] => {
   if (inMemoryFinancings !== null) {
@@ -63,34 +61,22 @@ const saveLocalStorageFinancings = (items: Financing[]): void => {
 };
 
 export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]> => {
-  const now = Date.now();
-
-  // Return cached data if within TTL and not forced
-  if (!forceRefresh && inMemoryFinancings !== null && (now - lastFinancingsFetch) < FINANCINGS_CACHE_TTL) {
-    return inMemoryFinancings;
-  }
-
-  if (!forceRefresh && inFlightFinancingsPromise) {
-    return inFlightFinancingsPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightFinancingsPromise) {
+      return inFlightFinancingsPromise;
+    }
+
     inFlightFinancingsPromise = (async () => {
       try {
-        const supabasePromise = supabase
+        const { data, error } = await supabase
           .from('financings')
           .select('*, installments(*)')
           .order('created_at', { ascending: false })
-          .limit(150);
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 6000)
-        );
+          .limit(200);
 
-        const res = await Promise.race([supabasePromise, timeoutPromise]);
-        if (!res.error && res.data) {
-          const financings = res.data as Financing[];
+        if (!error && data) {
+          const financings = data as Financing[];
           saveLocalStorageFinancings(financings);
-          lastFinancingsFetch = Date.now();
           return financings;
         }
       } catch (err) {

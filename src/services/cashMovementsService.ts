@@ -19,8 +19,6 @@ const SHIFT_FUND_STORAGE_KEY = 'brianna_initial_cash_fund';
 
 let inMemoryMovements: CashMovement[] | null = null;
 let inFlightMovementsPromise: Promise<CashMovement[]> | null = null;
-let lastMovementsFetch = 0;
-const MOVEMENTS_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageMovements = (): CashMovement[] => {
   if (inMemoryMovements !== null) return inMemoryMovements;
@@ -45,56 +43,35 @@ export const saveLocalStorageMovements = (movements: CashMovement[]): void => {
 };
 
 export const fetchCashMovements = async (forceRefresh = false): Promise<CashMovement[]> => {
-  const now = Date.now();
-  const localMovements = getLocalStorageMovements();
-
-  if (!forceRefresh && inMemoryMovements !== null && (now - lastMovementsFetch) < MOVEMENTS_CACHE_TTL) {
-    return inMemoryMovements;
-  }
-
-  if (!forceRefresh && inFlightMovementsPromise) {
-    return inFlightMovementsPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightMovementsPromise) {
+      return inFlightMovementsPromise;
+    }
+
     inFlightMovementsPromise = (async () => {
       try {
-        const supabasePromise = supabase
+        const { data, error } = await supabase
           .from('cash_movements')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100);
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 1500)
-        );
+          .limit(200);
 
-        const res = await Promise.race([supabasePromise, timeoutPromise]);
-        if (!res.error && res.data) {
-          const supabaseList = res.data as CashMovement[];
-          // Merge Supabase movements with Local Storage movements so local entries are NEVER lost
-          const map = new Map<string, CashMovement>();
-          localMovements.forEach(m => map.set(m.id, m));
-          supabaseList.forEach(m => map.set(m.id, m));
-
-          const merged = Array.from(map.values()).sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-
-          saveLocalStorageMovements(merged);
-          lastMovementsFetch = Date.now();
-          return merged;
+        if (!error && data) {
+          const supabaseList = data as CashMovement[];
+          saveLocalStorageMovements(supabaseList);
+          return supabaseList;
         }
       } catch (err) {
         console.warn('Error fetching cash movements from Supabase, returning local movements:', err);
       } finally {
         inFlightMovementsPromise = null;
       }
-      return localMovements;
+      return getLocalStorageMovements();
     })();
     return inFlightMovementsPromise;
   }
 
-  return localMovements;
+  return getLocalStorageMovements();
 };
 
 export const createCashMovement = async (

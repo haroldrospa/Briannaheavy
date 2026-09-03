@@ -30,8 +30,6 @@ const CLOSURES_STORAGE_KEY = 'brianna_cash_closures';
 
 let inMemoryCashClosures: CashClosure[] | null = null;
 let inFlightCashClosuresPromise: Promise<CashClosure[]> | null = null;
-let lastCashClosuresFetch = 0;
-const CASH_CLOSURES_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageCashClosures = (): CashClosure[] => {
   if (inMemoryCashClosures !== null) return inMemoryCashClosures;
@@ -56,48 +54,34 @@ export const saveLocalStorageCashClosures = (closures: CashClosure[]): void => {
 };
 
 export const fetchCashClosures = async (forceRefresh = false): Promise<CashClosure[]> => {
-  const now = Date.now();
-  const localList = getLocalStorageCashClosures();
-
-  if (!forceRefresh && inMemoryCashClosures !== null && (now - lastCashClosuresFetch) < CASH_CLOSURES_CACHE_TTL) {
-    return inMemoryCashClosures;
-  }
-
-  if (!forceRefresh && inFlightCashClosuresPromise) {
-    return inFlightCashClosuresPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightCashClosuresPromise) {
+      return inFlightCashClosuresPromise;
+    }
+
     inFlightCashClosuresPromise = (async () => {
       try {
         const { data, error } = await supabase
           .from('cash_closures')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100);
+          .limit(200);
 
         if (!error && data) {
-          const map = new Map<string, CashClosure>();
-          localList.forEach(c => map.set(c.id, c));
-          (data as CashClosure[]).forEach(c => map.set(c.id, c));
-
-          const merged = Array.from(map.values()).sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-          saveLocalStorageCashClosures(merged);
-          lastCashClosuresFetch = Date.now();
-          return merged;
+          const supabaseClosures = data as CashClosure[];
+          saveLocalStorageCashClosures(supabaseClosures);
+          return supabaseClosures;
         }
       } catch (err) {
         console.warn('Error fetching cash closures from Supabase:', err);
       } finally {
         inFlightCashClosuresPromise = null;
       }
-      return localList;
+      return getLocalStorageCashClosures();
     })();
     return inFlightCashClosuresPromise;
   }
-  return localList;
+  return getLocalStorageCashClosures();
 };
 
 export const createCashClosure = async (

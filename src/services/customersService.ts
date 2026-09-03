@@ -17,8 +17,6 @@ export const DEFAULT_CUSTOMERS: Customer[] = [];
 
 let inMemoryCustomers: Customer[] | null = null;
 let inFlightCustomersPromise: Promise<Customer[]> | null = null;
-let lastCustomersFetch = 0;
-const CUSTOMERS_CACHE_TTL = 60_000; // 60 seconds
 
 export const getLocalStorageCustomers = (): Customer[] => {
   if (inMemoryCustomers !== null) {
@@ -48,35 +46,22 @@ export const saveLocalStorageCustomers = (customers: Customer[]): void => {
 };
 
 export const fetchCustomers = async (forceRefresh = false): Promise<Customer[]> => {
-  const now = Date.now();
-
-  // Return cached data if within TTL and not forced
-  if (!forceRefresh && inMemoryCustomers !== null && (now - lastCustomersFetch) < CUSTOMERS_CACHE_TTL) {
-    return inMemoryCustomers;
-  }
-
-  // Deduplicate in-flight requests
-  if (!forceRefresh && inFlightCustomersPromise) {
-    return inFlightCustomersPromise;
-  }
-
   if (isSupabaseConfigured()) {
+    if (!forceRefresh && inFlightCustomersPromise) {
+      return inFlightCustomersPromise;
+    }
+
     inFlightCustomersPromise = (async () => {
       try {
-        const supabasePromise = supabase
+        const { data, error } = await supabase
           .from('customers')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(200);
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Timeout') }), 2500)
-        );
+          .limit(500);
 
-        const res = await Promise.race([supabasePromise, timeoutPromise]);
-        if (!res.error && res.data) {
-          const customers = res.data as Customer[];
+        if (!error && data) {
+          const customers = data as Customer[];
           saveLocalStorageCustomers(customers);
-          lastCustomersFetch = Date.now();
           return customers;
         }
       } catch (err) {
