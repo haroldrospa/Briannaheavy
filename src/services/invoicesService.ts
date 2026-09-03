@@ -244,27 +244,8 @@ export const createInvoice = async (
   items: Omit<InvoiceItem, 'id' | 'invoice_id'>[]
 ): Promise<Invoice> => {
   const nowIso = new Date().toISOString();
-  const localId = `FAC-${Date.now().toString().slice(-6)}`;
-  const localInvoice: Invoice = {
-    ...invoiceData,
-    id: localId,
-    created_at: nowIso,
-    items: items.map((it, idx) => ({ ...it, id: `${Date.now()}-${idx}` })),
-  };
 
-  // 1. Instant save to local cache (0 ms latency)
-  const current = getLocalStorageInvoices();
-  const updated = [localInvoice, ...current];
-  saveLocalStorageInvoices(updated);
-
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('brianna_invoices_updated', { detail: localInvoice }));
-    if (localInvoice.payment_method?.toLowerCase().includes('transf') || localInvoice.bank_account_id) {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: localInvoice }));
-    }
-  }
-
-  // 2. Sync to Supabase
+  // 1. Guardado directo y autoritativo en Supabase
   if (isSupabaseConfigured()) {
     try {
       const dbPayload: Record<string, any> = {
@@ -296,7 +277,7 @@ export const createInvoice = async (
         .select()
         .single();
 
-      // If unique constraint conflict (409 / 23505), resolve collision automatically
+      // Resolución automática de colisiones si el número ya existía
       if (
         res.error &&
         (res.error.code === '23505' ||
@@ -304,9 +285,6 @@ export const createInvoice = async (
           res.error.message?.includes('duplicate key') ||
           res.error.message?.includes('unique constraint'))
       ) {
-        console.warn('Invoice sequence collision (409) detected in Supabase. Auto-resolving next unique sequence...');
-
-        // Find highest existing invoice number in Supabase
         const { data: latestRows } = await supabase
           .from('invoices')
           .select('invoice_number')
@@ -320,7 +298,6 @@ export const createInvoice = async (
             if (!isNaN(parsed) && parsed > highest) highest = parsed;
           }
         }
-
         const currentStored = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
         const resolvedSeq = Math.max(highest + 1, currentStored);
         const resolvedNum = String(resolvedSeq).padStart(6, '0');
@@ -331,7 +308,6 @@ export const createInvoice = async (
         }
         localStorage.setItem('brianna_seq_invoice', String(resolvedSeq + 1));
 
-        // Retry insert with guaranteed unique number
         res = await supabase
           .from('invoices')
           .insert([dbPayload])
@@ -348,28 +324,44 @@ export const createInvoice = async (
           total_price: item.total_price,
           invoice_id: inv.id,
         }));
-        await supabase.from('invoice_items').insert(preparedItems);
-        
-        // Update local item with official Supabase id and updated invoice_number/ncf
-        const list = getLocalStorageInvoices();
-        const idx = list.findIndex(i => i.id === localInvoice.id);
-        if (idx !== -1) {
-          list[idx] = { 
-            ...localInvoice, 
-            ...inv, 
-            bank_account_id: localInvoice.bank_account_id || (inv as any).bank_account_id,
-            bank_account_name: localInvoice.bank_account_name || (inv as any).bank_account_name,
-            transfer_reference: localInvoice.transfer_reference || (inv as any).transfer_reference,
-            items: preparedItems 
-          } as Invoice;
-          saveLocalStorageInvoices(list);
+        if (preparedItems.length > 0) {
+          await supabase.from('invoice_items').insert(preparedItems);
         }
+
+        const completeInvoice: Invoice = {
+          ...inv,
+          items: preparedItems,
+          bank_account_id: invoiceData.bank_account_id,
+          bank_account_name: invoiceData.bank_account_name,
+          transfer_reference: invoiceData.transfer_reference,
+        };
+
+        const currentList = getLocalStorageInvoices();
+        const updatedList = [completeInvoice, ...currentList.filter(i => i.invoice_number !== completeInvoice.invoice_number && i.id !== completeInvoice.id)];
+        saveLocalStorageInvoices(updatedList);
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('brianna_invoices_updated', { detail: completeInvoice }));
+          window.dispatchEvent(new CustomEvent('brianna_invoices_changed', { detail: completeInvoice }));
+        }
+
+        return completeInvoice;
       }
     } catch (err) {
-      console.warn('Invoice sync notice (data safely kept in local storage):', err);
+      console.error('Error guardando factura directamente en Supabase:', err);
     }
   }
 
+  // Fallback si Supabase no responde
+  const localId = `FAC-${Date.now().toString().slice(-6)}`;
+  const localInvoice: Invoice = {
+    ...invoiceData,
+    id: localId,
+    created_at: nowIso,
+    items: items.map((it, idx) => ({ ...it, id: `${Date.now()}-${idx}` })),
+  };
+  const current = getLocalStorageInvoices();
+  saveLocalStorageInvoices([localInvoice, ...current]);
   return localInvoice;
 };
 
@@ -400,23 +392,36 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice>): Prom
   return updatedInvoice;
 };
 
-export const deleteInvoice = async (id: string): Promise<boolean> => {
+export const deleteInvoice = async (idOrNumber: string): Promise<boolean> => {
   if (isSupabaseConfigured()) {
     try {
-      await supabase.from('invoice_items').delete().eq('invoice_id', id);
-      const { error } = await supabase.from('invoices').delete().eq('id', id);
-      if (!error) {
-        const current = getLocalStorageInvoices();
-        const filtered = current.filter(inv => inv.id !== id);
-        saveLocalStorageInvoices(filtered);
-        return true;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrNumber);
+      
+      let invoiceId = idOrNumber;
+      if (!isUuid) {
+        const { data } = await supabase.from('invoices').select('id').eq('invoice_number', idOrNumber).maybeSingle();
+        if (data?.id) invoiceId = data.id;
       }
+
+      await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId);
+      await supabase.from('invoices').delete().or(`id.eq.${invoiceId},invoice_number.eq.${idOrNumber}`);
+      
+      const current = getLocalStorageInvoices();
+      const filtered = current.filter(inv => inv.id !== invoiceId && inv.invoice_number !== idOrNumber);
+      saveLocalStorageInvoices(filtered);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+        window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
+        window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
+      }
+      return true;
     } catch (err) {
-      console.warn('Error deleting invoice from Supabase:', err);
+      console.warn('Error eliminando factura de Supabase:', err);
     }
   }
   const current = getLocalStorageInvoices();
-  const filtered = current.filter(inv => inv.id !== id);
+  const filtered = current.filter(inv => inv.id !== idOrNumber && inv.invoice_number !== idOrNumber);
   saveLocalStorageInvoices(filtered);
   return true;
 };
