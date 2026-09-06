@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   XMarkIcon, 
@@ -194,7 +194,7 @@ export default function NewBankTransactionModal({
                       className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-red-50/50 dark:bg-red-950/20 border-[#ED1C24] ring-1 ring-[#ED1C24]'
-                          : 'bg-white dark:bg-zinc-850/60 border-gray-200/80 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700'
+                          : 'bg-white dark:bg-zinc-900 border-gray-200/80 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -243,7 +243,7 @@ export default function NewBankTransactionModal({
                     placeholder="0.00"
                     value={amountStr}
                     onChange={(e) => setAmountStr(e.target.value)}
-                    className="w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-zinc-850 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-mono font-black text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
+                    className="w-full pl-7 pr-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-black text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
                   />
                 </div>
               </div>
@@ -258,7 +258,7 @@ export default function NewBankTransactionModal({
                     type="date"
                     value={dateStr}
                     onChange={(e) => setDateStr(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 bg-gray-50 dark:bg-zinc-850 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
+                    className="w-full pl-8 pr-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
                   />
                 </div>
               </div>
@@ -274,7 +274,7 @@ export default function NewBankTransactionModal({
                 placeholder="Ej. TRANS-849201, VOUCHER-9921"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-850 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none"
               />
             </div>
 
@@ -289,7 +289,7 @@ export default function NewBankTransactionModal({
                 placeholder={type === 'Ingreso' ? 'Ej. Depósito por venta, Aporte de capital...' : 'Ej. Pago suplidor, Retiro autorizado...'}
                 value={concept}
                 onChange={(e) => setConcept(e.target.value)}
-                className="w-full px-3 py-1.5 bg-gray-50 dark:bg-zinc-850 border border-gray-200 dark:border-zinc-700/80 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none resize-none"
+                className="w-full px-3 py-1.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-[#ED1C24] focus:outline-none resize-none"
               />
             </div>
 

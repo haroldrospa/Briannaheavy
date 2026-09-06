@@ -632,7 +632,7 @@ export default function Settings() {
                   )}
                   
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 items-start">
-                    <div className="sm:col-span-6 flex items-center gap-4 p-2.5 bg-[#f4f3f1] dark:bg-zinc-850 rounded-xl border border-gray-200/50 dark:border-zinc-800">
+                    <div className="sm:col-span-6 flex items-center gap-4 p-2.5 bg-[#f4f3f1] dark:bg-zinc-800 rounded-xl border border-gray-200/50 dark:border-zinc-800">
                       <div className="h-14 w-28 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
                         <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain mx-auto my-auto" />
                       </div>
@@ -755,7 +755,7 @@ export default function Settings() {
                     {bankAccounts.map((acc) => (
                       <div
                         key={acc.id}
-                        className="p-4 bg-[#f4f3f1] dark:bg-zinc-850 rounded-2xl border border-gray-200/60 dark:border-zinc-800 flex flex-col justify-between gap-3 shadow-2xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
+                        className="p-4 bg-[#f4f3f1] dark:bg-zinc-800 rounded-2xl border border-gray-200/60 dark:border-zinc-800 flex flex-col justify-between gap-3 shadow-2xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
                       >
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-2">
@@ -828,7 +828,7 @@ export default function Settings() {
                     ))}
 
                     {bankAccounts.length === 0 && (
-                      <div className="col-span-full p-8 text-center bg-[#f4f3f1] dark:bg-zinc-850 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 space-y-2">
+                      <div className="col-span-full p-8 text-center bg-[#f4f3f1] dark:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 space-y-2">
                         <BanknotesIcon className="w-8 h-8 text-gray-400 mx-auto" />
                         <p className="text-sm font-bold text-gray-700 dark:text-zinc-300">No hay cuentas bancarias registradas</p>
                         <p className="text-xs text-gray-400">Añade las cuentas bancarias de la empresa para habilitar transferencias rápidas en el POS.</p>
@@ -1435,7 +1435,7 @@ export default function Settings() {
                 </div>
 
                 {/* Precios Incluyen Impuestos Banner */}
-                <div className="flex items-center justify-between bg-[#f4f3f1] dark:bg-zinc-850 px-3.5 py-2 rounded-xl border border-gray-200/50 dark:border-zinc-800">
+                <div className="flex items-center justify-between bg-[#f4f3f1] dark:bg-zinc-800 px-3.5 py-2 rounded-xl border border-gray-200/50 dark:border-zinc-800">
                   <div className="flex items-center gap-2.5">
                     <input id="tax-inclusive" name="tax-inclusive" type="checkbox" defaultChecked className="focus:ring-[#ED1C24] h-4 w-4 text-[#ED1C24] border-gray-300 rounded cursor-pointer" />
                     <div>
@@ -1551,7 +1551,7 @@ export default function Settings() {
 
                 {/* Compact Permissions Matrix Table */}
                 <div className="bg-white dark:bg-zinc-900/90 rounded-xl border border-gray-200/70 dark:border-zinc-800/80 shadow-xs overflow-hidden">
-                  <div className="px-3 py-1.5 bg-gray-50 dark:bg-zinc-850 flex items-center justify-between border-b border-gray-200/60 dark:border-zinc-800">
+                  <div className="px-3 py-1.5 bg-gray-50 dark:bg-zinc-800 flex items-center justify-between border-b border-gray-200/60 dark:border-zinc-800">
                     <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-300">
                       Permisos para: <span className="text-gray-900 dark:text-white font-black">{selectedRole === 'Repuestos' ? 'Cajero / Repuestos' : selectedRole}</span>
                     </span>
@@ -1599,7 +1599,7 @@ export default function Settings() {
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
                       <thead>
-                        <tr className="bg-gray-50/50 dark:bg-zinc-850/50 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                        <tr className="bg-gray-50/50 dark:bg-zinc-800/50 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
                           <th scope="col" className="py-1.5 pl-4 pr-2 text-left">Módulo</th>
                           <th scope="col" className="px-2 py-1.5 text-center">Ver</th>
                           <th scope="col" className="px-2 py-1.5 text-center">Crear</th>

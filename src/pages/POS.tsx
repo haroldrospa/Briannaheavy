@@ -663,7 +663,7 @@ const SelectClientModal = memo(({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar por nombre, RNC o teléfono..."
-                  className="w-full pl-9 pr-8 py-2 bg-gray-100 dark:bg-zinc-850 border-none rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all"
+                  className="w-full pl-9 pr-8 py-2 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:ring-2 focus:ring-[#ED1C24]/30 outline-none transition-all"
                 />
                 {searchTerm && (
                   <button
@@ -709,7 +709,7 @@ const SelectClientModal = memo(({
                   className={`w-full p-2.5 rounded-xl text-left transition-colors flex items-center justify-between cursor-pointer ${
                     !selectedClient
                       ? 'bg-red-50/80 dark:bg-red-950/30 text-gray-900 dark:text-white'
-                      : 'hover:bg-gray-100/70 dark:hover:bg-zinc-850/50 text-gray-700 dark:text-zinc-300'
+                      : 'hover:bg-gray-100/70 dark:hover:bg-zinc-800/60 text-gray-700 dark:text-zinc-300'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -741,7 +741,7 @@ const SelectClientModal = memo(({
                     className={`w-full p-2.5 rounded-xl text-left transition-colors flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? 'bg-red-50/80 dark:bg-red-950/30 text-gray-900 dark:text-white'
-                        : 'hover:bg-gray-100/70 dark:hover:bg-zinc-850/50 text-gray-700 dark:text-zinc-300'
+                        : 'hover:bg-gray-100/70 dark:hover:bg-zinc-800/60 text-gray-700 dark:text-zinc-300'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0 pr-2">
@@ -802,7 +802,7 @@ const SelectClientModal = memo(({
                     }
                   }}
                   placeholder="Ej. 131-45678-9"
-                  className="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                  className="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
                 />
                 <button
                   type="button"
@@ -843,7 +843,7 @@ const SelectClientModal = memo(({
                 value={newClient.name}
                 onChange={(e) => setNewClient(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Nombre oficial o empresa"
-                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white uppercase focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg text-xs font-bold text-gray-900 dark:text-white uppercase focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
               />
             </div>
 
@@ -855,37 +855,47 @@ const SelectClientModal = memo(({
                   value={newClient.phone}
                   onChange={(e) => setNewClient(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="(809) 555-5555"
-                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">Email</label>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">Email (Opcional)</label>
                 <input
                   type="email"
                   value={newClient.email}
                   onChange={(e) => setNewClient(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="correo@ejemplo.com"
-                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-850 border-none rounded-lg text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+                  placeholder="cliente@correo.com"
+                  className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg text-xs font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
                 />
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-gray-100 dark:border-zinc-800">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1">Dirección (Opcional)</label>
+              <input
+                type="text"
+                value={newClient.address}
+                onChange={(e) => setNewClient(prev => ({ ...prev, address: e.target.value }))}
+                placeholder="Calle, Ciudad, Provincia..."
+                className="w-full px-3 py-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-lg text-xs font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/30 outline-none"
+              />
+            </div>
+
+            <div className="pt-2 flex gap-2">
               <button
                 type="button"
                 onClick={() => setIsCreating(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                className="flex-1 py-2 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold rounded-lg text-xs hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-4 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                className="flex-1 py-2 bg-[#ED1C24] hover:bg-red-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isSaving && <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />}
-                <span>Guardar Cliente</span>
+                {isSaving ? 'Guardando...' : 'Guardar Cliente'}
               </button>
             </div>
           </form>
@@ -1067,13 +1077,13 @@ const CheckoutModal = memo(({
             </div>
 
             {/* Switch Mode */}
-            <div className="grid grid-cols-2 gap-1.5 bg-gray-100 dark:bg-zinc-850 p-1 rounded-xl">
+            <div className="grid grid-cols-2 gap-1.5 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800/80 p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setBillingMode('electronic')}
                 className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   billingMode === 'electronic'
-                    ? 'bg-white dark:bg-[#15161b] text-[#ED1C24] shadow-xs'
+                    ? 'bg-white dark:bg-zinc-800 text-[#ED1C24] dark:text-red-400 shadow-xs'
                     : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
@@ -1084,7 +1094,7 @@ const CheckoutModal = memo(({
                 onClick={() => setBillingMode('internal')}
                 className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   billingMode === 'internal'
-                    ? 'bg-white dark:bg-[#15161b] text-gray-900 dark:text-white shadow-xs'
+                    ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
                     : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
@@ -1110,8 +1120,8 @@ const CheckoutModal = memo(({
                         onClick={() => setElectronicDocType(c.id)}
                         className={`p-2 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
-                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
-                            : 'bg-gray-50 dark:bg-zinc-850/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-black'
+                            : 'bg-gray-50 dark:bg-zinc-900 border-gray-200/60 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
                         }`}
                       >
                         <div className="text-xs font-black">{c.code}</div>
@@ -1137,8 +1147,8 @@ const CheckoutModal = memo(({
                         onClick={() => setInternalDocType(d.id)}
                         className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs'
-                            : 'bg-gray-50 dark:bg-zinc-850/60 border-transparent text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
+                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-black'
+                            : 'bg-gray-50 dark:bg-zinc-900 border-gray-200/60 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
                         }`}
                       >
                         <p className="text-xs font-black">{d.title}</p>
@@ -1168,12 +1178,12 @@ const CheckoutModal = memo(({
               </button>
             </div>
             {selectedClient ? (
-              <div className="flex items-center justify-between bg-gray-100 dark:bg-zinc-850 rounded-xl px-3 py-2">
+              <div className="flex items-center justify-between bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl px-3 py-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <UserIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                  <UserIcon className="w-4 h-4 text-gray-500 dark:text-zinc-400 shrink-0" />
                   <div className="truncate">
                     <p className="text-xs font-bold text-gray-900 dark:text-white leading-tight truncate">{selectedClient.name}</p>
-                    {selectedClient.rnc && <p className="text-[10px] font-mono text-gray-500 font-medium">{selectedClient.rnc}</p>}
+                    {selectedClient.rnc && <p className="text-[10px] font-mono text-gray-500 dark:text-zinc-400 font-medium">{selectedClient.rnc}</p>}
                   </div>
                 </div>
                 <button
@@ -1190,14 +1200,14 @@ const CheckoutModal = memo(({
                 className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs cursor-pointer transition-all ${
                   clientMissing
                     ? 'border-[#ED1C24] bg-red-50/50 dark:bg-red-950/20 text-[#ED1C24] font-bold'
-                    : 'border-transparent bg-gray-100 dark:bg-zinc-850 text-gray-600 dark:text-zinc-400 font-bold hover:bg-gray-200 dark:hover:bg-zinc-800'
+                    : 'border-transparent dark:border-zinc-800 bg-gray-100 dark:bg-zinc-900 text-gray-600 dark:text-zinc-300 font-bold hover:bg-gray-200 dark:hover:bg-zinc-800'
                 }`}
               >
                 <span className="flex items-center gap-2 truncate">
-                  <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                  <UserIcon className="w-4 h-4 text-gray-400 dark:text-zinc-500 shrink-0" />
                   {clientMissing ? 'RNC / Cliente Requerido para este comprobante' : 'Consumidor Final (Venta de Contado)'}
                 </span>
-                <span className="text-[10px] font-bold text-gray-400 uppercase shrink-0">Buscar ➔</span>
+                <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase shrink-0">Buscar ➔</span>
               </div>
             )}
           </div>
@@ -1210,7 +1220,7 @@ const CheckoutModal = memo(({
                 <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
                   3. Método de Pago
                 </span>
-                <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-zinc-850 p-1 rounded-xl">
+                <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800/80 p-1 rounded-xl">
                   {([
                     { id: 'Efectivo', label: 'Efectivo', icon: BanknotesIcon },
                     { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCardIcon },
@@ -1226,7 +1236,7 @@ const CheckoutModal = memo(({
                         onClick={() => setPaymentMethod(m.id as PaymentMethodType)}
                         className={`py-2 px-1 rounded-lg text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                           isActive
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 shadow-2xs'
+                            ? 'bg-white dark:bg-zinc-800 text-[#ED1C24] dark:text-red-400 shadow-2xs font-black'
                             : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                         }`}
                       >
@@ -1245,13 +1255,13 @@ const CheckoutModal = memo(({
                     <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
                       Monto Recibido
                     </span>
-                    <span className={`text-xs font-bold font-mono ${change > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-bold font-mono ${change > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-zinc-500'}`}>
                       Devuelta: ${change.toFixed(2)}
                     </span>
                   </div>
 
-                  <div className="relative flex items-center bg-gray-100 dark:bg-zinc-850 rounded-xl px-3.5 py-2.5">
-                    <span className="text-base font-black text-gray-400 font-mono select-none mr-2">
+                  <div className="relative flex items-center bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl px-3.5 py-2.5 focus-within:ring-2 focus-within:ring-[#ED1C24]/30">
+                    <span className="text-base font-black text-gray-400 dark:text-zinc-500 font-mono select-none mr-2">
                       RD$
                     </span>
                     <input
@@ -1271,7 +1281,7 @@ const CheckoutModal = memo(({
                     <button
                       type="button"
                       onClick={() => setAmountReceived(String(total))}
-                      className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap"
+                      className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer whitespace-nowrap"
                     >
                       Exacto
                     </button>
@@ -1283,7 +1293,7 @@ const CheckoutModal = memo(({
                           key={val}
                           type="button"
                           onClick={() => setAmountReceived(String(val))}
-                          className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 cursor-pointer whitespace-nowrap font-mono"
+                          className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer whitespace-nowrap font-mono"
                         >
                           ${val.toLocaleString('es-DO')}
                         </button>
@@ -1295,7 +1305,7 @@ const CheckoutModal = memo(({
               {paymentMethod === 'Transferencia' && (
                 <div className="space-y-2.5 pt-0.5">
                   {/* Cuentas Bancarias Minimalistas */}
-                  <div className="bg-[#f4f3f1] dark:bg-zinc-850/70 rounded-2xl p-3 border border-gray-200/70 dark:border-zinc-700/60 space-y-2">
+                  <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-3 border border-gray-200/70 dark:border-zinc-800 space-y-2">
                     <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400 px-0.5">
                       <div className="flex items-center gap-1.5">
                         <BuildingLibraryIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400" />
@@ -1320,8 +1330,8 @@ const CheckoutModal = memo(({
                             <div className="flex items-center gap-2.5 min-w-0">
                               <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all shrink-0 ${
                                 isSelected 
-                                  ? 'border-blue-600 bg-blue-600 text-white' 
-                                  : 'border-gray-300 dark:border-zinc-600 bg-transparent'
+                                ? 'border-blue-600 bg-blue-600 text-white' 
+                                : 'border-gray-300 dark:border-zinc-600 bg-transparent'
                               }`}>
                                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
                               </div>
@@ -1387,7 +1397,7 @@ const CheckoutModal = memo(({
                       type="text"
                       value={transferReference}
                       onChange={e => setTransferReference(e.target.value)}
-                      className="w-full bg-gray-100 dark:bg-zinc-850 rounded-xl px-3.5 py-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 uppercase"
+                      className="w-full bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 uppercase"
                       placeholder="Nº Confirmación o Banco..."
                     />
                   </div>
@@ -1395,7 +1405,7 @@ const CheckoutModal = memo(({
               )}
 
               {paymentMethod === 'Crédito' && (
-                <div className="bg-gray-50 dark:bg-zinc-850/70 rounded-xl p-3 border border-gray-200/80 dark:border-zinc-800 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                <div className="bg-gray-50 dark:bg-zinc-900 rounded-xl p-3 border border-gray-200/80 dark:border-zinc-800 space-y-2 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-gray-700 dark:text-zinc-300">
                       <ClockIcon className="w-3.5 h-3.5 text-gray-400" />
@@ -1420,7 +1430,7 @@ const CheckoutModal = memo(({
                         onBlur={() => {
                           if (!creditDays || Number(creditDays) < 1) setCreditDays(15);
                         }}
-                        className="w-full bg-white dark:bg-[#15161b] border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                        className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                         placeholder="15"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none">
@@ -1437,7 +1447,7 @@ const CheckoutModal = memo(({
                           className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                             Number(creditDays) === days
                               ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
-                              : 'bg-white dark:bg-[#15161b] border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
+                              : 'bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800'
                           }`}
                         >
                           {days}d

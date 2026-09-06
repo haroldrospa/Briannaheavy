@@ -164,7 +164,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 onClick={() => setPaymentMethod('Efectivo')}
                 className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   paymentMethod === 'Efectivo'
-                    ? 'bg-white dark:bg-zinc-850 text-gray-900 dark:text-white shadow-xs font-black'
+                    ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                     : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
@@ -213,7 +213,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                       className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
                         isSelected
                           ? 'bg-white dark:bg-zinc-900 border-blue-600 dark:border-blue-500 shadow-xs ring-1 ring-blue-600'
-                          : 'bg-white/70 dark:bg-zinc-850/60 border-blue-200/60 dark:border-blue-900/40 hover:bg-white dark:hover:bg-zinc-800'
+                          : 'bg-white/70 dark:bg-zinc-900/60 border-blue-200/60 dark:border-blue-900/40 hover:bg-white dark:hover:bg-zinc-800'
                       }`}
                     >
                       <div className="min-w-0">

@@ -88,7 +88,7 @@ interface InspectionItemRowProps {
 
 const InspectionItemRow = React.memo(({ item, idx, status, obs, onStatusChange, onObsChange }: InspectionItemRowProps) => {
   return (
-    <tr className="border-b border-gray-200/80 dark:border-zinc-800/80 print:border-gray-300 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors odd:bg-white dark:odd:bg-zinc-900 even:bg-gray-50/50 dark:even:bg-zinc-850/50 print:odd:bg-white print:even:bg-gray-50/70">
+    <tr className="border-b border-gray-200/80 dark:border-zinc-800/80 print:border-gray-300 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors odd:bg-white dark:odd:bg-zinc-900 even:bg-gray-50/50 dark:even:bg-zinc-800/30 print:odd:bg-white print:even:bg-gray-50/70">
       {/* 1. Item Name - Fits on 1 line without awkward wrap */}
       <td className="py-1 px-1.5 sm:py-1.5 sm:px-2 print:py-0.5 print:px-1 text-[10px] sm:text-[10.5px] print:text-[8px] font-bold text-gray-800 dark:text-zinc-200 print:text-black leading-tight align-middle w-[44%] print:w-[44%] whitespace-nowrap">
         <span className="text-[8.5px] text-gray-400 dark:text-zinc-500 font-mono mr-1 print:hidden">{String(idx + 1).padStart(2, '0')}.</span>
@@ -709,7 +709,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                 <circle cx="85" cy="92" r="6" className="fill-gray-900 print:fill-black" />
                 
                 {/* Remolque / Caja de carga */}
-                <rect x="105" y="20" width="320" height="70" rx="6" className="fill-gray-100/80 dark:fill-zinc-850/60 print:fill-gray-50" />
+                <rect x="105" y="20" width="320" height="70" rx="6" className="fill-gray-100/80 dark:fill-zinc-800/60 print:fill-gray-50" />
                 <line x1="105" y1="55" x2="425" y2="55" strokeDasharray="3 3" className="stroke-gray-300" />
                 
                 {/* Ejes remolque */}
