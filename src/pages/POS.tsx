@@ -30,7 +30,10 @@ import {
   MoonIcon,
   ClockIcon,
   TagIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  MinusIcon,
+  PlusIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import QuotationsModal from '../components/pos/QuotationsModal';
 import { 
@@ -1531,7 +1534,8 @@ export default function POS() {
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [globalDiscountType, setGlobalDiscountType] = useState<'%' | '$'>('%');
   const [isEditingGlobalDiscount, setIsEditingGlobalDiscount] = useState(false);
-  const [editingDiscountId, setEditingDiscountId] = useState<number | null>(null);
+  const [editingDiscountId, setEditingDiscountId] = useState<string | number | null>(null);
+  const [editingPriceId, setEditingPriceId] = useState<string | number | null>(null);
   const [searchTerm, setSearchTerm] = useState(''); // debounced filter value
   const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Piezas' | 'Camiones' | 'Equipos'>('Todas');
   const [searchCriteria, setSearchCriteria] = useState<'all' | 'barcode' | 'internal_code' | 'name'>('all');
@@ -1873,11 +1877,54 @@ export default function POS() {
     return () => window.removeEventListener('afterprint', handleAfterPrint);
   }, []);
 
-  const removeFromCart = useCallback((id: number) => {
+  const removeFromCart = useCallback((id: string | number) => {
     setCart(prev => prev.filter(item => item.product.id !== id));
   }, []);
 
-  const setItemDiscount = useCallback((id: number, discount: number, type: '%' | '$') => {
+  const updateItemQuantity = useCallback((id: string | number, deltaOrValue: number, isAbsolute = false) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item.product.id === id) {
+          const newQty = isAbsolute ? deltaOrValue : item.quantity + deltaOrValue;
+          return newQty > 0 ? { ...item, quantity: newQty } : null;
+        }
+        return item;
+      }).filter(Boolean) as typeof prev;
+    });
+  }, []);
+
+  const updateItemPrice = useCallback((id: string | number, newPrice: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.product.id === id) {
+        return {
+          ...item,
+          product: {
+            ...item.product,
+            price: Math.max(0, newPrice),
+            originalPrice: item.product.originalPrice ?? item.product.price
+          }
+        };
+      }
+      return item;
+    }));
+  }, []);
+
+  const resetItemPrice = useCallback((id: string | number) => {
+    setCart(prev => prev.map(item => {
+      if (item.product.id === id && item.product.originalPrice !== undefined) {
+        return {
+          ...item,
+          product: {
+            ...item.product,
+            price: item.product.originalPrice
+          }
+        };
+      }
+      return item;
+    }));
+  }, []);
+
+  const setItemDiscount = useCallback((id: string | number, discount: number, type: '%' | '$') => {
     setCart(prev => prev.map(item => 
       item.product.id === id ? { ...item, discount, discountType: type } : item
     ));
@@ -2668,74 +2715,248 @@ export default function POS() {
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.12 }}
                     key={item.product.id} 
-                    className="flex flex-col gap-2.5 sm:gap-3 bg-[#f4f3f1]/70 dark:bg-[#222222]/60 border border-gray-100 dark:border-zinc-800/80 p-3.5 sm:p-4 rounded-2xl"
+                    className="flex flex-col gap-2.5 bg-white dark:bg-[#1a1a1a] border border-gray-200/90 dark:border-zinc-800 p-3 sm:p-3.5 rounded-2xl shadow-xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
                   >
-                    <div className="flex justify-between items-start gap-2.5 sm:gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs sm:text-sm font-black text-gray-900 dark:text-white tracking-tight">{item.product.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <p className="text-xs sm:text-sm font-bold text-gray-500 dark:text-zinc-400 font-mono">${item.product.price.toFixed(2)} <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium">x {item.quantity}</span></p>
-                          {item.discount && item.discount > 0 ? (
-                            <span className="text-[10px] sm:text-xs font-black text-green-700 dark:text-green-400 bg-green-100/70 dark:bg-green-950/60 px-2 py-0.5 rounded-md">
-                              -{item.discountType === '%' ? `${item.discount}%` : `$${item.discount}`}
+                    {/* Fila Principal: Nombre del Producto, SKU/Código y Total */}
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-black text-gray-900 dark:text-zinc-100 tracking-tight leading-snug">
+                          {item.product.name}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          {item.product.part_number && (
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 font-mono">
+                              PN: {item.product.part_number}
                             </span>
-                          ) : null}
+                          )}
+                          {item.product.barcode && (
+                            <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono">
+                              {item.product.part_number ? '• ' : ''}{item.product.barcode}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 sm:gap-2">
-                        <p className="text-xs sm:text-sm font-black text-gray-900 dark:text-white font-mono">${calculateItemTotal(item).toFixed(2)}</p>
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={() => setEditingDiscountId(editingDiscountId === item.product.id ? null : item.product.id)}
-                            className="bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:text-[#ED1C24] p-1 sm:p-1.5 rounded-full transition-colors shadow-xs text-[9px] sm:text-[10px] font-black border border-gray-200 dark:border-zinc-700 px-2 cursor-pointer"
-                            title="Aplicar Descuento a este producto"
-                          >
-                            % DESC
-                          </button>
-                          <button onClick={() => removeFromCart(item.product.id)} className="bg-white dark:bg-zinc-800 text-gray-400 hover:text-red-500 p-1 sm:p-1.5 rounded-full transition-colors shadow-xs border border-gray-200 dark:border-zinc-700 cursor-pointer">
-                            <TrashIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          </button>
-                        </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
+                          ${calculateItemTotal(item).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => removeFromCart(item.product.id)} 
+                          className="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 p-1.5 rounded-xl transition-colors cursor-pointer"
+                          title="Eliminar producto"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
-                    
-                    {/* Panel de Descuento de Artículo */}
-                    {editingDiscountId === item.product.id && (
-                      <div className="pt-2 border-t border-dashed border-gray-200 dark:border-zinc-700/80 flex items-center gap-2">
-                        <div className="flex shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-                          <button
-                            type="button"
-                            onClick={() => setItemDiscount(item.product.id, item.discount || 0, '%')}
-                            className={`px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${item.discountType === '%' || !item.discountType ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
-                          >
-                            %
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setItemDiscount(item.product.id, item.discount || 0, '$')}
-                            className={`px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${item.discountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
-                          >
-                            $
-                          </button>
-                        </div>
+
+                    {/* Fila de Controles: Cantidad, Modificador de Precio y Descuento */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-zinc-800/80">
+                      {/* Control de Cantidad (- / Qty / +) */}
+                      <div className="flex items-center bg-gray-100 dark:bg-zinc-800/90 rounded-xl p-0.5 border border-gray-200/60 dark:border-zinc-700/60">
+                        <button
+                          type="button"
+                          onClick={() => updateItemQuantity(item.product.id, -1)}
+                          className="w-6 h-6 flex items-center justify-center text-gray-600 dark:text-zinc-300 hover:text-[#ED1C24] hover:bg-white dark:hover:bg-zinc-700 rounded-lg transition-colors cursor-pointer"
+                          title="Disminuir cantidad"
+                        >
+                          <MinusIcon className="w-3 h-3 stroke-[3]" />
+                        </button>
                         <input
                           type="number"
-                          placeholder="Valor descuento"
-                          className="w-full min-w-0 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
-                          value={item.discount || ''}
+                          min="1"
+                          value={item.quantity}
                           onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            setItemDiscount(item.product.id, val, item.discountType || '%');
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val) && val > 0) updateItemQuantity(item.product.id, val, true);
                           }}
+                          className="w-8 text-center text-xs font-black text-gray-900 dark:text-white bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
                         />
                         <button
                           type="button"
-                          onClick={() => setEditingDiscountId(null)}
-                          className="ml-auto text-xs font-black text-[#ED1C24] hover:underline whitespace-nowrap cursor-pointer"
+                          onClick={() => updateItemQuantity(item.product.id, 1)}
+                          className="w-6 h-6 flex items-center justify-center text-gray-600 dark:text-zinc-300 hover:text-[#ED1C24] hover:bg-white dark:hover:bg-zinc-700 rounded-lg transition-colors cursor-pointer"
+                          title="Aumentar cantidad"
                         >
-                          Listo
+                          <PlusIcon className="w-3 h-3 stroke-[3]" />
                         </button>
                       </div>
+
+                      {/* Botón / Pastilla de Modificar Precio */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editingPriceId === item.product.id) {
+                            setEditingPriceId(null);
+                          } else {
+                            setEditingPriceId(item.product.id);
+                            setEditingDiscountId(null);
+                          }
+                        }}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-mono font-bold transition-all border cursor-pointer ${
+                          editingPriceId === item.product.id
+                            ? 'bg-[#ED1C24]/10 text-[#ED1C24] border-[#ED1C24]/40 dark:border-[#ED1C24]/50 ring-2 ring-[#ED1C24]/20'
+                            : item.product.originalPrice !== undefined && item.product.originalPrice !== item.product.price
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800/80 font-black'
+                              : 'bg-gray-50 dark:bg-zinc-800/60 text-gray-700 dark:text-zinc-300 border-gray-200/80 dark:border-zinc-700/70 hover:border-gray-300 dark:hover:border-zinc-600'
+                        }`}
+                        title="Clic para modificar el precio de este producto"
+                      >
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-sans">c/u:</span>
+                        <span>${item.product.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 opacity-70 ml-0.5" />
+                      </button>
+
+                      {/* Botón de Descuento */}
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (editingDiscountId === item.product.id) {
+                            setEditingDiscountId(null);
+                          } else {
+                            setEditingDiscountId(item.product.id);
+                            setEditingPriceId(null);
+                          }
+                        }}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          item.discount && item.discount > 0
+                            ? 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 ring-2 ring-green-500/20'
+                            : editingDiscountId === item.product.id
+                              ? 'bg-[#ED1C24]/10 text-[#ED1C24] border-[#ED1C24]/40 dark:border-[#ED1C24]/50'
+                              : 'bg-gray-50 dark:bg-zinc-800/60 text-gray-600 dark:text-zinc-400 border-gray-200/80 dark:border-zinc-700/70 hover:border-gray-300'
+                        }`}
+                        title="Aplicar descuento a este producto"
+                      >
+                        <TagIcon className="w-3 h-3" />
+                        <span>{item.discount && item.discount > 0 ? (item.discountType === '%' ? `-${item.discount}%` : `-$${item.discount}`) : '% Desc'}</span>
+                      </button>
+                    </div>
+
+                    {/* Desplegable: Modificar Precio */}
+                    {editingPriceId === item.product.id && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="pt-2 border-t border-dashed border-gray-200 dark:border-zinc-700/80 flex flex-col gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black uppercase text-gray-600 dark:text-zinc-400 tracking-wider flex items-center gap-1">
+                            <PencilSquareIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                            Modificar Precio Unitario
+                          </span>
+                          {item.product.originalPrice !== undefined && item.product.originalPrice !== item.product.price && (
+                            <button
+                              type="button"
+                              onClick={() => resetItemPrice(item.product.id)}
+                              className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 hover:text-[#ED1C24] underline cursor-pointer"
+                            >
+                              Restablecer ($ {item.product.originalPrice.toFixed(2)})
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 dark:text-zinc-500 font-mono">$</span>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              autoFocus
+                              placeholder="Nuevo precio"
+                              className="w-full pl-6 pr-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                              defaultValue={item.product.price}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = parseFloat((e.target as HTMLInputElement).value);
+                                  if (!isNaN(val)) updateItemPrice(item.product.id, val);
+                                  setEditingPriceId(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingPriceId(null);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) updateItemPrice(item.product.id, val);
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPriceId(null)}
+                            className="px-3 py-1.5 bg-[#ED1C24] text-white text-xs font-black rounded-xl hover:bg-[#c9141b] transition-colors cursor-pointer shadow-xs"
+                          >
+                            Listo
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Desplegable: Descuento de Artículo */}
+                    {editingDiscountId === item.product.id && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="pt-2 border-t border-dashed border-gray-200 dark:border-zinc-700/80 flex flex-col gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black uppercase text-gray-600 dark:text-zinc-400 tracking-wider flex items-center gap-1">
+                            <TagIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                            Descuento al Artículo
+                          </span>
+                          {item.discount && item.discount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => setItemDiscount(item.product.id, 0, '%')}
+                              className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
+                            >
+                              Quitar Descuento
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 rounded-xl overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() => setItemDiscount(item.product.id, item.discount || 0, '%')}
+                              className={`px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${item.discountType === '%' || !item.discountType ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                            >
+                              %
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setItemDiscount(item.product.id, item.discount || 0, '$')}
+                              className={`px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${item.discountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                            >
+                              $
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Valor de descuento"
+                            className="w-full min-w-0 px-2.5 py-1.5 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                            value={item.discount || ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setItemDiscount(item.product.id, val, item.discountType || '%');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') setEditingDiscountId(null);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditingDiscountId(null)}
+                            className="px-3 py-1.5 bg-[#ED1C24] text-white text-xs font-black rounded-xl hover:bg-[#c9141b] transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                          >
+                            Listo
+                          </button>
+                        </div>
+                      </motion.div>
                     )}
                   </motion.li>
                 ))}
