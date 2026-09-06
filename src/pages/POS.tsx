@@ -2416,16 +2416,16 @@ export default function POS() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto scrollbar-hide py-0.5">
-          {/* Direct Access to Cotizaciones (Guardadas por 30 días) */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-0.5">
+          {/* Direct Access to Cotizaciones */}
           <button
             type="button"
             onClick={() => setIsQuotationsModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-300 active:scale-[0.98] text-xs font-black transition-all cursor-pointer border border-blue-200/60 dark:border-blue-900/60 shadow-2xs whitespace-nowrap"
-            title="Ver cotizaciones guardadas (vigentes por 30 días) para facturar en el POS"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+            title="Cotizaciones guardadas (vigentes 30 días)"
           >
-            <ClipboardDocumentListIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
-            <span className="hidden xs:inline">Cotizaciones</span>
+            <ClipboardDocumentListIcon className="h-4 w-4 text-blue-500 stroke-[2.2]" />
+            <span className="hidden md:inline">Cotizaciones</span>
             {activeQuotationsCount > 0 && (
               <span className="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
                 {activeQuotationsCount}
@@ -2433,93 +2433,99 @@ export default function POS() {
             )}
           </button>
 
-          {/* Direct Access to Inventario if permitted for this role */}
+          {/* Direct Access to Inventario */}
           {hasPermission(getActiveRole(), 'Inventario', 'ver') && (
             <Link
               to="/inventario"
-              className="flex items-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-[#ED1C24] dark:text-red-300 active:scale-[0.98] text-xs font-black transition-all cursor-pointer border border-red-200/60 dark:border-red-900/60 shadow-2xs whitespace-nowrap"
-              title="Abrir módulo de inventario de repuestos"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+              title="Módulo de Inventario de Repuestos"
             >
-              <WrenchScrewdriverIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
-              <span className="hidden xs:inline">Inventario</span>
+              <WrenchScrewdriverIcon className="h-4 w-4 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
+              <span className="hidden md:inline">Inventario</span>
             </Link>
           )}
 
-          {/* User Name & Profile Badge */}
+          {/* User Profile Badge */}
           <div 
-            className="flex items-center gap-1.5 bg-gray-50 dark:bg-[#222222] p-1 sm:pl-1.5 sm:pr-3 sm:py-1.5 rounded-full border border-gray-100 dark:border-zinc-800 shadow-2xs"
+            className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 rounded-xl border border-zinc-200/70 dark:border-zinc-800 shadow-2xs"
             title={`${currentUserName} (${getActiveRole() === 'Repuestos' ? 'Cajero' : getActiveRole()})`}
           >
-            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-red-100 dark:bg-red-950/60 text-[#ED1C24] font-black text-[11px] sm:text-xs flex items-center justify-center shrink-0">
+            <div className="w-5 h-5 rounded-lg bg-red-100 dark:bg-red-950/60 text-[#ED1C24] font-black text-[11px] flex items-center justify-center shrink-0">
               {(currentUserName || 'U').charAt(0).toUpperCase()}
             </div>
             <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-black text-gray-900 dark:text-white leading-none max-w-[120px] truncate">
+              <span className="text-xs font-bold text-gray-900 dark:text-white leading-none max-w-[110px] truncate">
                 {currentUserName}
               </span>
-              <span className="text-[9px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider leading-none mt-0.5">
+              <span className="text-[8.5px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider leading-none mt-0.5">
                 {getActiveRole() === 'Repuestos' ? 'Cajero' : getActiveRole()}
               </span>
             </div>
           </div>
 
-          {/* Ventas de la Sesión Button */}
-          <button
-            type="button"
-            onClick={() => setIsSessionSalesOpen(true)}
-            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
-            title="Ventas de la Sesión"
-          >
-            <ReceiptPercentIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
-            <span className="hidden sm:inline">Ventas</span>
-            <span className="bg-[#ED1C24] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
-              {sessionSales.length}
-            </span>
-          </button>
+          {/* Operations Dock: Ventas, Movimientos, Cierre */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 p-1 rounded-2xl gap-1 shadow-2xs">
+            {/* Ventas de la Sesión */}
+            <button
+              type="button"
+              onClick={() => setIsSessionSalesOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
+              title="Ventas de la Sesión"
+            >
+              <ReceiptPercentIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
+              <span className="hidden sm:inline">Ventas</span>
+              <span className="bg-[#ED1C24] text-white text-[9.5px] font-mono font-black px-1.5 py-0.2 rounded-full leading-none">
+                {sessionSales.length}
+              </span>
+            </button>
 
-          {/* Movimiento de Caja Button */}
-          <button
-            type="button"
-            onClick={() => setIsCashMovementOpen(true)}
-            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-full bg-gray-50 dark:bg-[#222222] hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 active:scale-[0.98] text-xs font-bold transition-all cursor-pointer border border-gray-100 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
-            title="Movimientos de Caja"
-          >
-            <BanknotesIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-600 dark:text-zinc-400 stroke-[2.5]" />
-            <span className="hidden sm:inline">Movimientos</span>
-          </button>
+            {/* Movimientos de Caja */}
+            <button
+              type="button"
+              onClick={() => setIsCashMovementOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
+              title="Movimientos de Caja"
+            >
+              <BanknotesIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
+              <span className="hidden sm:inline">Movimientos</span>
+            </button>
 
-          {/* Cierre de Caja Button */}
-          <button
-            type="button"
-            onClick={() => setIsCashClosureOpen(true)}
-            className="flex items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-2xs transition-all cursor-pointer whitespace-nowrap"
-          >
-            <CalculatorIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[2.5]" />
-            <span>Cierre</span>
-          </button>
+            {/* Cierre de Caja */}
+            <button
+              type="button"
+              onClick={() => setIsCashClosureOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
+              title="Cierre y Arqueo de Caja"
+            >
+              <CalculatorIcon className="h-3.5 w-3.5 stroke-[2.5]" />
+              <span>Cierre</span>
+            </button>
+          </div>
 
-          {/* Dark / Light Mode Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className="p-1.5 sm:p-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-amber-300 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-2xs flex items-center justify-center cursor-pointer"
-            title={isDark ? "Modo claro" : "Modo oscuro"}
-          >
-            {isDark ? (
-              <SunIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 stroke-[2.5]" />
-            ) : (
-              <MoonIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-700 stroke-[2.5]" />
-            )}
-          </button>
+          {/* Theme & Logout Utility Controls */}
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 p-1 rounded-2xl gap-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="p-1.5 rounded-xl hover:bg-white dark:hover:bg-zinc-800 text-zinc-600 dark:text-amber-400 transition-all flex items-center justify-center cursor-pointer"
+              title={isDark ? "Modo claro" : "Modo oscuro"}
+            >
+              {isDark ? (
+                <SunIcon className="h-4 w-4 stroke-[2.2]" />
+              ) : (
+                <MoonIcon className="h-4 w-4 text-zinc-700 stroke-[2.2]" />
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => navigate('/login')}
-            className="p-1.5 sm:p-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors border border-gray-200/80 dark:border-zinc-700 shadow-2xs flex items-center justify-center cursor-pointer"
-            title="Cerrar Sesión"
-          >
-            <ArrowRightOnRectangleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
-          </button>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-all flex items-center justify-center cursor-pointer"
+              title="Cerrar Sesión"
+            >
+              <ArrowRightOnRectangleIcon className="h-4 w-4 stroke-[2.2]" />
+            </button>
+          </div>
         </div>
       </header>
 
