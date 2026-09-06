@@ -1857,7 +1857,63 @@ export default function Settings() {
                   </div>
                 )}
 
-                {/* Section 1: e-CF DGII */}
+                {/* Section 1: Facturación Interna y Cotizaciones */}
+                <div>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                    <span>Facturación Interna & Cotizaciones (Comerciales)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {/* Factura Interna INT- */}
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                          Factura Interna (No Fiscal)
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded">FAC-INT / INT-</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Número Secuencial (6 dígitos)</label>
+                        <input 
+                          type="text" 
+                          value={sequences.seqInternalInvoice || '000001'} 
+                          onChange={(e) => setSequences(prev => ({ ...prev, seqInternalInvoice: e.target.value }))}
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
+                          placeholder="000001"
+                        />
+                        <p className="text-[9px] text-gray-400 dark:text-zinc-500 mt-1">
+                          Ejemplo generado en POS: <strong className="font-mono text-gray-700 dark:text-zinc-300">INT-{String(sequences.seqInternalInvoice || '1').padStart(6, '0')}</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Cotización CT- */}
+                    <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                          Cotización Comercial
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded">CT-</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Número Secuencial (6 dígitos)</label>
+                        <input 
+                          type="text" 
+                          value={sequences.seqQuotation || '000001'} 
+                          onChange={(e) => setSequences(prev => ({ ...prev, seqQuotation: e.target.value }))}
+                          className="w-full px-2.5 py-1 bg-[#f4f3f1] dark:bg-zinc-800/80 border-none rounded-lg text-xs font-mono font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#ED1C24]/20 outline-none" 
+                          placeholder="000001"
+                        />
+                        <p className="text-[9px] text-gray-400 dark:text-zinc-500 mt-1">
+                          Ejemplo generado en POS: <strong className="font-mono text-gray-700 dark:text-zinc-300">CT-{String(sequences.seqQuotation || '1').padStart(6, '0')}</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: e-CF DGII */}
                 <div>
                   <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-1.5 flex items-center gap-1.5">
                     <span>Comprobantes Fiscales Electrónicos (e-CF • DGII)</span>

@@ -2074,7 +2074,7 @@ export default function POS() {
 
           setLastEcfData({
             success: true,
-            trackId: `INT-${Date.now().toString().slice(-6)}`,
+            trackId: `INT-${finalInvoiceNumber}`,
             eNcf: finalNcf,
             securityCode: internalSecurityCode,
             qrCodeUrl: internalQrUrl,
@@ -2152,7 +2152,7 @@ export default function POS() {
         },
         lastEcfData: ecfRes || (internalDocType === 'CT' ? {
           success: true,
-          trackId: `CT-${Date.now().toString().slice(-6)}`,
+          trackId: `CT-${finalInvoiceNumber}`,
           eNcf: finalNcf,
           securityCode: '',
           qrCodeUrl: '',
@@ -2160,7 +2160,7 @@ export default function POS() {
           issuedAt: new Date().toISOString(),
         } : {
           success: true,
-          trackId: `INT-${Date.now().toString().slice(-6)}`,
+          trackId: `INT-${finalInvoiceNumber}`,
           eNcf: finalNcf,
           securityCode: generateSecurityCode(),
           qrCodeUrl: `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${generateSecurityCode()}&monto=${total.toFixed(2)}`,

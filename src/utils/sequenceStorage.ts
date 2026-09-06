@@ -7,6 +7,10 @@ export interface SequenceSettings {
   expiryE32: string;
   expiryE45: string;
   
+  // Facturación Interna y Cotizaciones
+  seqInternalInvoice: string; // Factura Interna (INT-)
+  seqQuotation: string; // Cotización (CT-)
+
   // Secuencias Operativas
   seqInspection: string;
   seqWorkOrder: string;
@@ -28,6 +32,8 @@ export const DEFAULT_SEQUENCES: SequenceSettings = {
   expiryE31: '2027-12-31',
   expiryE32: '2027-12-31',
   expiryE45: '2027-12-31',
+  seqInternalInvoice: '000001',
+  seqQuotation: '000001',
   seqInspection: '0001',
   seqWorkOrder: '0001',
   seqReport: '1',
@@ -38,6 +44,14 @@ export const DEFAULT_SEQUENCES: SequenceSettings = {
   expiryB02: '2027-12-31',
   expiryB15: '2027-12-31',
 };
+
+export function formatSequence6Digits(val: string): string {
+  if (!val) return '000001';
+  const clean = val.replace(/\D/g, '');
+  const num = parseInt(clean, 10);
+  if (isNaN(num) || num < 1 || num > 500000) return '000001';
+  return String(num).padStart(6, '0');
+}
 
 export function formatSequence10Digits(val: string): string {
   if (!val) return '0000000001';
@@ -59,6 +73,9 @@ export function loadSequenceSettings(): SequenceSettings {
   const expiryE32 = localStorage.getItem('brianna_expiry_e32') || localStorage.getItem('brianna_expiry_b02') || DEFAULT_SEQUENCES.expiryE32;
   const expiryE45 = localStorage.getItem('brianna_expiry_e45') || localStorage.getItem('brianna_expiry_b15') || DEFAULT_SEQUENCES.expiryE45;
 
+  const rawInt = localStorage.getItem('brianna_seq_invoice') || DEFAULT_SEQUENCES.seqInternalInvoice;
+  const rawCt = localStorage.getItem('brianna_seq_ct') || DEFAULT_SEQUENCES.seqQuotation;
+
   return {
     seqE31: formatSequence10Digits(e31),
     seqE32: formatSequence10Digits(e32),
@@ -66,6 +83,8 @@ export function loadSequenceSettings(): SequenceSettings {
     expiryE31,
     expiryE32,
     expiryE45,
+    seqInternalInvoice: formatSequence6Digits(rawInt),
+    seqQuotation: formatSequence6Digits(rawCt),
     seqInspection: localStorage.getItem('brianna_inspection_seq') || DEFAULT_SEQUENCES.seqInspection,
     seqWorkOrder: localStorage.getItem('brianna_workorder_seq') || DEFAULT_SEQUENCES.seqWorkOrder,
     seqReport: localStorage.getItem('brianna_report_seq') || DEFAULT_SEQUENCES.seqReport,
@@ -133,6 +152,15 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
     localStorage.setItem('brianna_expiry_b15', settings.expiryB15);
   }
 
+  if (settings.seqInternalInvoice !== undefined) {
+    const val = formatSequence6Digits(settings.seqInternalInvoice);
+    localStorage.setItem('brianna_seq_invoice', val);
+  }
+  if (settings.seqQuotation !== undefined) {
+    const val = formatSequence6Digits(settings.seqQuotation);
+    localStorage.setItem('brianna_seq_ct', val);
+  }
+
   if (settings.seqInspection !== undefined) localStorage.setItem('brianna_inspection_seq', settings.seqInspection);
   if (settings.seqWorkOrder !== undefined) localStorage.setItem('brianna_workorder_seq', settings.seqWorkOrder);
   if (settings.seqReport !== undefined) localStorage.setItem('brianna_report_seq', settings.seqReport);
@@ -142,18 +170,20 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
 
 export function resetAllSequencesToZero(): SequenceSettings {
   const zeroSettings: SequenceSettings = {
-    seqE31: '00000001',
-    seqE32: '00000001',
-    seqE45: '00000001',
+    seqE31: '0000000001',
+    seqE32: '0000000001',
+    seqE45: '0000000001',
     expiryE31: '2027-12-31',
     expiryE32: '2027-12-31',
     expiryE45: '2027-12-31',
+    seqInternalInvoice: '000001',
+    seqQuotation: '000001',
     seqInspection: '0001',
     seqWorkOrder: '0001',
     seqReport: '1',
-    seqB01: '00000001',
-    seqB02: '00000001',
-    seqB15: '00000001',
+    seqB01: '0000000001',
+    seqB02: '0000000001',
+    seqB15: '0000000001',
     expiryB01: '2027-12-31',
     expiryB02: '2027-12-31',
     expiryB15: '2027-12-31',

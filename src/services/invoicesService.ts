@@ -85,6 +85,34 @@ export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
   }
 };
 
+const parseInternalSeqNum = (inv: { invoice_number?: string; ncf?: string; is_electronic?: boolean; billing_mode?: string }): number | null => {
+  if (inv.is_electronic || inv.billing_mode === 'electronic') return null;
+  const num = String(inv.invoice_number || '').trim();
+  const ncf = String(inv.ncf || '').trim();
+  if (num.startsWith('E') || num.startsWith('B') || num.startsWith('CT-') || ncf.startsWith('E') || ncf.startsWith('B') || ncf.startsWith('CT-')) {
+    return null;
+  }
+  const clean = num.replace(/^(INT|FAC-INT)-?/i, '').replace(/\D/g, '');
+  if (!clean) return null;
+  const parsed = parseInt(clean, 10);
+  if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
+    return parsed;
+  }
+  return null;
+};
+
+const parseCtSeqNum = (inv: { invoice_number?: string; ncf?: string }): number | null => {
+  const num = String(inv.invoice_number || inv.ncf || '').trim();
+  if (!num.startsWith('CT-')) return null;
+  const clean = num.replace(/^CT-?/i, '').replace(/\D/g, '');
+  if (!clean) return null;
+  const parsed = parseInt(clean, 10);
+  if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
+    return parsed;
+  }
+  return null;
+};
+
 export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> => {
   if (isSupabaseConfigured()) {
     if (!forceRefresh && inFlightInvoicesPromise) {
@@ -107,23 +135,22 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           let maxInv = 0;
           let maxCt = 0;
           for (const inv of supabaseInvoices) {
-            const num = inv.invoice_number || '';
-            if (num.startsWith('CT-')) {
-              const p = parseInt(num.replace(/\D/g, ''), 10);
-              if (!isNaN(p) && p > maxCt) maxCt = p;
-            } else {
-              const p = parseInt(num.replace(/\D/g, ''), 10);
-              if (!isNaN(p) && p > maxInv) maxInv = p;
-            }
+            const ct = parseCtSeqNum(inv);
+            if (ct !== null && ct > maxCt) maxCt = ct;
+
+            const intNum = parseInternalSeqNum(inv);
+            if (intNum !== null && intNum > maxInv) maxInv = intNum;
           }
           if (maxInv > 0) {
-            const localSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+            const rawSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+            const localSeq = (rawSeq > 0 && rawSeq < 500000) ? rawSeq : 1;
             if (localSeq <= maxInv) {
               localStorage.setItem('brianna_seq_invoice', String(maxInv + 1));
             }
           }
           if (maxCt > 0) {
-            const localCt = parseInt(localStorage.getItem('brianna_seq_ct') || '1', 10);
+            const rawCt = parseInt(localStorage.getItem('brianna_seq_ct') || '1', 10);
+            const localCt = (rawCt > 0 && rawCt < 500000) ? rawCt : 1;
             if (localCt <= maxCt) {
               localStorage.setItem('brianna_seq_ct', String(maxCt + 1));
             }
@@ -158,14 +185,11 @@ export const syncAndGetNextInvoiceSequence = async (
 
   // 1. Scan localStorage invoices
   for (const inv of localList) {
-    const num = inv.invoice_number || '';
-    if (num.startsWith('CT-')) {
-      const parsed = parseInt(num.replace(/\D/g, ''), 10);
-      if (!isNaN(parsed) && parsed > maxCtSeq) maxCtSeq = parsed;
-    } else {
-      const parsed = parseInt(num.replace(/\D/g, ''), 10);
-      if (!isNaN(parsed) && parsed > maxInternalSeq) maxInternalSeq = parsed;
-    }
+    const ct = parseCtSeqNum(inv);
+    if (ct !== null && ct > maxCtSeq) maxCtSeq = ct;
+
+    const intNum = parseInternalSeqNum(inv);
+    if (intNum !== null && intNum > maxInternalSeq) maxInternalSeq = intNum;
   }
 
   // 2. Scan Supabase invoices for the latest sequence
@@ -173,20 +197,17 @@ export const syncAndGetNextInvoiceSequence = async (
     try {
       const { data } = await supabase
         .from('invoices')
-        .select('invoice_number')
+        .select('invoice_number, ncf, is_electronic, billing_mode')
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (data && Array.isArray(data)) {
         for (const row of data) {
-          const num = row.invoice_number || '';
-          if (num.startsWith('CT-')) {
-            const parsed = parseInt(num.replace(/\D/g, ''), 10);
-            if (!isNaN(parsed) && parsed > maxCtSeq) maxCtSeq = parsed;
-          } else {
-            const parsed = parseInt(num.replace(/\D/g, ''), 10);
-            if (!isNaN(parsed) && parsed > maxInternalSeq) maxInternalSeq = parsed;
-          }
+          const ct = parseCtSeqNum(row);
+          if (ct !== null && ct > maxCtSeq) maxCtSeq = ct;
+
+          const intNum = parseInternalSeqNum(row);
+          if (intNum !== null && intNum > maxInternalSeq) maxInternalSeq = intNum;
         }
       }
     } catch (err) {
@@ -194,9 +215,12 @@ export const syncAndGetNextInvoiceSequence = async (
     }
   }
 
-  // 3. Stored localStorage sequence counter
-  const storedInv = parseInt(localStorage.getItem('brianna_seq_invoice') || '0', 10);
-  const storedCt = parseInt(localStorage.getItem('brianna_seq_ct') || '0', 10);
+  // 3. Stored localStorage sequence counter (sanitized to valid range < 500000)
+  const rawStoredInv = parseInt(localStorage.getItem('brianna_seq_invoice') || '0', 10);
+  const storedInv = (rawStoredInv > 0 && rawStoredInv < 500000) ? rawStoredInv : 0;
+
+  const rawStoredCt = parseInt(localStorage.getItem('brianna_seq_ct') || '0', 10);
+  const storedCt = (rawStoredCt > 0 && rawStoredCt < 500000) ? rawStoredCt : 0;
 
   const effectiveMaxInternal = Math.max(maxInternalSeq, storedInv > 0 ? storedInv - 1 : 0);
   const effectiveMaxCt = Math.max(maxCtSeq, storedCt > 0 ? storedCt - 1 : 0);
@@ -262,18 +286,19 @@ export const createInvoice = async (
       ) {
         const { data: latestRows } = await supabase
           .from('invoices')
-          .select('invoice_number')
+          .select('invoice_number, ncf, is_electronic, billing_mode')
           .order('created_at', { ascending: false })
           .limit(20);
 
         let highest = 0;
         if (latestRows) {
           for (const r of latestRows) {
-            const parsed = parseInt(String(r.invoice_number).replace(/\D/g, ''), 10);
-            if (!isNaN(parsed) && parsed > highest) highest = parsed;
+            const parsed = parseInternalSeqNum(r);
+            if (parsed !== null && parsed > highest) highest = parsed;
           }
         }
-        const currentStored = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+        const rawStored = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
+        const currentStored = (rawStored > 0 && rawStored < 500000) ? rawStored : 1;
         const resolvedSeq = Math.max(highest + 1, currentStored);
         const resolvedNum = String(resolvedSeq).padStart(6, '0');
 
