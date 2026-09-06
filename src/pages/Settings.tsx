@@ -434,6 +434,7 @@ export default function Settings() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [userPassword, setUserPassword] = useState('');
   const [showUserPassword, setShowUserPassword] = useState(false);
+  const [userMustChangePassword, setUserMustChangePassword] = useState(true);
   const [userModalError, setUserModalError] = useState<string | null>(null);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [showUsersToast, setShowUsersToast] = useState(false);
@@ -457,6 +458,7 @@ export default function Settings() {
     setUserModalError(null);
     setEditingUser(user);
     setUserPassword(user?.password || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456'));
+    setUserMustChangePassword(user ? Boolean(user.must_change_password) : true);
     setShowUserPassword(false);
     setIsUserModalOpen(true);
   };
@@ -489,6 +491,7 @@ export default function Settings() {
           role: isSuperAdmin ? 'Administrador' : roleVal,
           status: isSuperAdmin ? 'Activo' : statusVal,
           password: passwordVal,
+          must_change_password: isSuperAdmin ? false : userMustChangePassword,
         });
       } else {
         // Check for duplicate email
@@ -504,6 +507,7 @@ export default function Settings() {
           role: roleVal,
           status: statusVal,
           password: passwordVal,
+          must_change_password: userMustChangePassword,
         });
       }
 
@@ -1302,8 +1306,13 @@ export default function Settings() {
                                             </span>
                                           )}
                                         </div>
-                                        <div className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                                          {user.email || 'Sin correo'}
+                                        <div className="text-xs text-gray-500 dark:text-zinc-400 font-medium flex items-center gap-2">
+                                          <span>{user.email || 'Sin correo'}</span>
+                                          {!isSuperAdmin && user.must_change_password && (
+                                            <span className="text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                                              Clave provisional
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -2480,6 +2489,25 @@ export default function Settings() {
                       {showUserPassword ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                     </button>
                   </div>
+                  {(!editingUser || editingUser.email?.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()) && (
+                    <div className="flex items-start gap-2 pt-1.5">
+                      <input 
+                        type="checkbox" 
+                        id="settings-must-change"
+                        checked={userMustChangePassword}
+                        onChange={(e) => setUserMustChangePassword(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 text-[#ED1C24] rounded border-gray-300 focus:ring-[#ED1C24] cursor-pointer"
+                      />
+                      <label htmlFor="settings-must-change" className="text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer select-none">
+                        {editingUser ? 'Requerir cambio de contraseña en el próximo acceso' : 'Requerir cambio de contraseña en el primer acceso'}
+                        <span className="block text-[10px] text-gray-400 font-normal">
+                          {editingUser 
+                            ? 'Se le solicitará al usuario cambiar su clave en cuanto intente iniciar sesión.'
+                            : 'Al entrar por primera vez con esta clave, el usuario deberá crear su propia clave personal.'}
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

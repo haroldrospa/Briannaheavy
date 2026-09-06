@@ -9,6 +9,7 @@ export interface UserProfile {
   status: string;
   password?: string;
   created_at?: string;
+  must_change_password?: boolean;
 }
 
 export const SUPER_ADMIN_EMAIL = 'Haroldrospa@gmail.com';
@@ -56,7 +57,8 @@ const initialLocalUsers: UserProfile[] = [
     role: 'Administrador', 
     status: 'Activo', 
     email: SUPER_ADMIN_EMAIL,
-    password: 'admin123'
+    password: 'admin123',
+    must_change_password: false
   },
   {
     id: '2',
@@ -64,7 +66,8 @@ const initialLocalUsers: UserProfile[] = [
     role: 'Repuestos',
     status: 'Activo',
     email: 'cajero1@gmail.com',
-    password: '123456'
+    password: '123456',
+    must_change_password: true
   },
   {
     id: '3',
@@ -72,7 +75,8 @@ const initialLocalUsers: UserProfile[] = [
     role: 'Oficina',
     status: 'Activo',
     email: 'carlos@briannaheavy.com',
-    password: '123456'
+    password: '123456',
+    must_change_password: true
   }
 ];
 
@@ -117,6 +121,9 @@ export const getLocalStorageUsers = (): UserProfile[] => {
     parsed = parsed.map(u => {
       const emailKey = (u.email || '').trim().toLowerCase();
       const userPass = u.password || passwords[emailKey] || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
+      const mustChange = u.must_change_password !== undefined 
+        ? u.must_change_password 
+        : (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? false : (userPass === '123456'));
       
       if (emailKey === SUPER_ADMIN_EMAIL.toLowerCase()) {
         return {
@@ -125,13 +132,15 @@ export const getLocalStorageUsers = (): UserProfile[] => {
           email: SUPER_ADMIN_EMAIL,
           role: 'Administrador' as UserRole,
           status: 'Activo',
-          password: userPass
+          password: userPass,
+          must_change_password: false
         };
       }
 
       return {
         ...u,
-        password: userPass
+        password: userPass,
+        must_change_password: mustChange
       };
     });
 
@@ -239,8 +248,11 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
   return getLocalStorageUsers();
 };
 
-export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: string }): Promise<UserProfile> => {
+export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: string; must_change_password?: boolean }): Promise<UserProfile> => {
   const userPassword = user.password || '123456';
+  const mustChange = user.must_change_password !== undefined 
+    ? user.must_change_password 
+    : (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? false : true);
   
   if (user.email) {
     await saveStoredPassword(user.email, userPassword);
@@ -254,7 +266,8 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
         full_name: user.full_name,
         email: user.email,
         role: user.role,
-        status: user.status
+        status: user.status,
+        must_change_password: mustChange
       };
       const { data, error } = await supabase.from('profiles').insert([cleanUser]).select().single();
       if (!error && data) {
@@ -266,7 +279,7 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
   }
 
   const current = getLocalStorageUsers();
-  const newUser: UserProfile = { ...user, id: createdId, password: userPassword };
+  const newUser: UserProfile = { ...user, id: createdId, password: userPassword, must_change_password: mustChange };
   const updated = [...current, newUser];
   saveLocalStorageUsers(updated);
   lastUsersFetch = 0;
@@ -285,6 +298,7 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
       if (updates.email !== undefined) cleanUpdates.email = updates.email;
       if (updates.role !== undefined) cleanUpdates.role = updates.role;
       if (updates.status !== undefined) cleanUpdates.status = updates.status;
+      if (updates.must_change_password !== undefined) cleanUpdates.must_change_password = updates.must_change_password;
 
       if (Object.keys(cleanUpdates).length > 0) {
         await supabase.from('profiles').update(cleanUpdates).eq('id', id);
@@ -302,6 +316,7 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
       if (u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || updates.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
         finalUpdates.role = 'Administrador';
         finalUpdates.status = 'Activo';
+        finalUpdates.must_change_password = false;
       }
       updatedUser = { ...u, ...finalUpdates };
       return updatedUser;
@@ -317,6 +332,37 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
   }
 
   return updatedUser;
+};
+
+export const changeUserPassword = async (email: string, newPassword: string): Promise<UserProfile | null> => {
+  if (!email || !newPassword) return null;
+  const cleanEmail = email.trim().toLowerCase();
+  
+  await saveStoredPassword(cleanEmail, newPassword);
+
+  const current = getLocalStorageUsers();
+  const targetUser = current.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+  if (!targetUser) {
+    // If not in users list, just save password
+    return null;
+  }
+
+  return await updateUser(targetUser.id, {
+    password: newPassword,
+    must_change_password: false
+  });
+};
+
+export const userRequiresPasswordChange = (user: UserProfile | null | undefined, passwordEntered?: string): boolean => {
+  if (!user) return false;
+  const isSuperAdmin = user.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase();
+  if (isSuperAdmin) {
+    return user.must_change_password === true;
+  }
+  if (user.must_change_password === true) return true;
+  if (user.must_change_password === false) return false;
+  // Fallback: if must_change_password is unset and password is default 123456
+  return passwordEntered === '123456' || user.password === '123456';
 };
 
 export const deleteUser = async (id: string): Promise<boolean> => {

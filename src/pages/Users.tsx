@@ -55,8 +55,10 @@ export default function Users() {
   const [showCardPasswords, setShowCardPasswords] = useState<Record<string, boolean>>({});
   const [editPassword, setEditPassword] = useState('');
   const [showEditPassword, setShowEditPassword] = useState(false);
+  const [editMustChangePassword, setEditMustChangePassword] = useState(false);
   const [createPassword, setCreatePassword] = useState('123456');
   const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [createMustChangePassword, setCreateMustChangePassword] = useState(true);
 
   const loadData = async (force = true) => {
     const data = await fetchUsers(force);
@@ -97,6 +99,7 @@ export default function Users() {
     setFormError(null);
     setEditingUser(user);
     setEditPassword(user.password || (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456'));
+    setEditMustChangePassword(Boolean(user.must_change_password));
     setShowEditPassword(false);
     setIsEditModalOpen(true);
   };
@@ -104,6 +107,7 @@ export default function Users() {
   const openCreateModal = () => {
     setFormError(null);
     setCreatePassword('123456');
+    setCreateMustChangePassword(true);
     setShowCreatePassword(false);
     setIsCreateModalOpen(true);
   };
@@ -125,6 +129,7 @@ export default function Users() {
         role: isSuperAdmin ? 'Administrador' : (formData.get('role') as any),
         status: isSuperAdmin ? 'Activo' : (formData.get('status') as string),
         password: editPassword.trim() || '123456',
+        must_change_password: isSuperAdmin ? false : editMustChangePassword,
       };
       
       await apiUpdateUser(editingUser.id, updates);
@@ -159,6 +164,7 @@ export default function Users() {
         role: formData.get('role') as any,
         status: formData.get('status') as string,
         password: createPassword.trim() || '123456',
+        must_change_password: createMustChangePassword,
       };
       
       await apiCreateUser(newUser);
@@ -328,10 +334,17 @@ export default function Users() {
 
                 <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">{user.full_name}</h3>
                 
-                <div className="flex items-center gap-1.5 text-xs font-black text-[#ED1C24] mb-3">
+                <div className="flex items-center gap-1.5 text-xs font-black text-[#ED1C24] mb-2">
                   <ShieldCheckIcon className="w-4 h-4" />
                   Rol: {user.role}
                 </div>
+
+                {!isSuperAdmin && user.must_change_password && (
+                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 text-[11px] font-bold mb-3">
+                    <KeyIcon className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Clave provisional (cambio pendiente)</span>
+                  </div>
+                )}
 
                 <div className="space-y-2 text-xs text-gray-500 dark:text-zinc-400 font-medium">
                   <div className="flex items-center gap-2">
@@ -462,6 +475,23 @@ export default function Users() {
                     </button>
                   </div>
                   <p className="text-[10px] text-gray-400 mt-1">Como Administrador puedes ver o cambiar la contraseña de esta cuenta.</p>
+                  {!isUserSuperAdmin(editingUser) && (
+                    <div className="flex items-start gap-2 pt-2">
+                      <input 
+                        type="checkbox" 
+                        id="edit-must-change"
+                        checked={editMustChangePassword}
+                        onChange={(e) => setEditMustChangePassword(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 text-[#ED1C24] rounded border-gray-300 focus:ring-[#ED1C24] cursor-pointer"
+                      />
+                      <label htmlFor="edit-must-change" className="text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer select-none">
+                        Requerir cambio de contraseña en el próximo inicio
+                        <span className="block text-[10px] text-gray-400 font-normal">
+                          El usuario deberá definir su propia contraseña tan pronto inicie sesión.
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">Rol de Acceso</label>
@@ -559,6 +589,21 @@ export default function Users() {
                     >
                       {showCreatePassword ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                     </button>
+                  </div>
+                  <div className="flex items-start gap-2 pt-2">
+                    <input 
+                      type="checkbox" 
+                      id="create-must-change"
+                      checked={createMustChangePassword}
+                      onChange={(e) => setCreateMustChangePassword(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 text-[#ED1C24] rounded border-gray-300 focus:ring-[#ED1C24] cursor-pointer"
+                    />
+                    <label htmlFor="create-must-change" className="text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer select-none">
+                      Requerir cambio de contraseña en el primer acceso
+                      <span className="block text-[10px] text-gray-400 font-normal">
+                        Al entrar por primera vez con esta clave ({createPassword || '123456'}), el usuario deberá crear su propia clave personal.
+                      </span>
+                    </label>
                   </div>
                 </div>
                 <div>
