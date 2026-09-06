@@ -102,6 +102,18 @@ export default function Invoices() {
   };
 
   const filteredInvoices = invoices.filter(inv => {
+    // Si no es Administrador, solo mostrar facturas emitidas por este usuario
+    if (!isAdmin) {
+      const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+      if (currentUserName) {
+        const cLower = currentUserName.toLowerCase().trim();
+        const invCashier = (inv.cashier_name || '').toLowerCase().trim();
+        if (invCashier && !invCashier.includes(cLower) && !cLower.includes(invCashier)) {
+          return false;
+        }
+      }
+    }
+
     const matchesSearch = 
       inv.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||

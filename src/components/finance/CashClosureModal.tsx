@@ -34,6 +34,7 @@ import {
   CASH_REGISTERS,
   type ActiveShift 
 } from '../../services/shiftsService';
+import { getActiveRole } from '../../utils/rolePermissions';
 
 interface CashClosureModalProps {
   isOpen: boolean;
@@ -61,11 +62,15 @@ export default function CashClosureModal({
   defaultRegister = 'Caja 1 - Repuestos',
   defaultCashier 
 }: CashClosureModalProps) {
-  // Multi-Caja Selector State
+  const currentRole = getActiveRole();
+  const isAdmin = currentRole === 'Administrador';
+  const loggedInUserName = defaultCashier || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
+
+  // Multi-Caja Selector State (non-admins cannot select 'todas' consolidado)
   const [selectedRegister, setSelectedRegister] = useState<string>(defaultRegister);
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
-  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('todos');
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => isAdmin ? 'todos' : loggedInUserName);
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
   const [allMovements, setAllMovements] = useState<CashMovement[]>([]);
@@ -75,7 +80,7 @@ export default function CashClosureModal({
   const [tempFund, setTempFund] = useState('0');
 
   const [counts, setCounts] = useState<Record<number, number>>({});
-  const [cashierName, setCashierName] = useState(() => localStorage.getItem('brianna_user_name') || 'Harold Rosado');
+  const [cashierName, setCashierName] = useState(() => loggedInUserName);
   const [supervisorName, setSupervisorName] = useState('Carlos Díaz');
   const [notes, setNotes] = useState('');
 
@@ -108,7 +113,11 @@ export default function CashClosureModal({
     if (defaultRegister && defaultRegister !== selectedRegister) {
       setSelectedRegister(defaultRegister);
     }
-  }, [isOpen, defaultRegister]);
+    if (!isAdmin) {
+      setSelectedCashierFilter(loggedInUserName);
+      setCashierName(loggedInUserName);
+    }
+  }, [isOpen, defaultRegister, isAdmin, loggedInUserName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -121,11 +130,15 @@ export default function CashClosureModal({
     setInitialFund(fund);
     setTempFund(String(fund));
 
-    const localUser = defaultCashier || localStorage.getItem('brianna_user_name');
-    if (localUser) {
-      setCashierName(localUser);
-    } else if (shift?.cashier_name) {
-      setCashierName(shift.cashier_name);
+    if (!isAdmin) {
+      setCashierName(loggedInUserName);
+    } else {
+      const localUser = defaultCashier || localStorage.getItem('brianna_user_name');
+      if (localUser) {
+        setCashierName(localUser);
+      } else if (shift?.cashier_name) {
+        setCashierName(shift.cashier_name);
+      }
     }
 
     const loadData = async () => {
@@ -138,7 +151,7 @@ export default function CashClosureModal({
     };
 
     loadData();
-  }, [isOpen, selectedRegister]);
+  }, [isOpen, selectedRegister, isAdmin, loggedInUserName]);
 
   // Filtrar facturas garantizando unicidad por Caja y Cajero
   const scopedInvoices = useMemo(() => {
@@ -469,36 +482,45 @@ Observaciones: ${notes || 'Sin observaciones'}
                       </button>
                     );
                   })}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRegister('todas')}
-                    className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer text-xs ${
-                      selectedRegister === 'todas'
-                        ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-bold'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    Todas (Consolidado)
-                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRegister('todas')}
+                      className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer text-xs ${
+                        selectedRegister === 'todas'
+                          ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-bold'
+                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                      }`}
+                    >
+                      Todas (Consolidado)
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Cashier Filter & Time Range Selector */}
               <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {/* Cajera Filter */}
-                <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 border border-zinc-200/80 dark:border-zinc-700/60 px-2.5 py-1 rounded-xl shadow-2xs">
-                  <UserCircleIcon className="w-4 h-4 text-zinc-400" />
-                  <select
-                    value={selectedCashierFilter}
-                    onChange={(e) => setSelectedCashierFilter(e.target.value)}
-                    className="bg-transparent font-medium text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer text-xs"
-                  >
-                    <option value="todos">Todos los Cajeros</option>
-                    {availableCashiers.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Cajera Filter / Badge */}
+                {isAdmin ? (
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 border border-zinc-200/80 dark:border-zinc-700/60 px-2.5 py-1 rounded-xl shadow-2xs">
+                    <UserCircleIcon className="w-4 h-4 text-zinc-400" />
+                    <select
+                      value={selectedCashierFilter}
+                      onChange={(e) => setSelectedCashierFilter(e.target.value)}
+                      className="bg-transparent font-medium text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer text-xs"
+                    >
+                      <option value="todos">Todos los Cajeros</option>
+                      {availableCashiers.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 px-2.5 py-1 rounded-xl shadow-2xs text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                    <UserCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Cajero(a): {loggedInUserName}</span>
+                  </div>
+                )}
 
                 {/* Scope Time Pills */}
                 <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl text-[11px] font-medium">
@@ -812,8 +834,11 @@ Observaciones: ${notes || 'Sin observaciones'}
                         <input 
                           type="text" 
                           value={cashierName}
-                          onChange={(e) => setCashierName(e.target.value)}
-                          className="w-full h-8 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-900 dark:text-white outline-none focus:border-zinc-400 transition-all"
+                          readOnly={!isAdmin}
+                          onChange={(e) => isAdmin && setCashierName(e.target.value)}
+                          className={`w-full h-8 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-900 dark:text-white outline-none focus:border-zinc-400 transition-all ${
+                            !isAdmin ? 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 cursor-not-allowed' : ''
+                          }`}
                         />
                       </div>
                       <div>

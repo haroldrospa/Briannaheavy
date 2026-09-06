@@ -1,5 +1,6 @@
 import type { Invoice } from './invoicesService';
 import type { CashMovement } from './cashMovementsService';
+import { getActiveRole } from '../utils/rolePermissions';
 
 export const CASH_REGISTERS = [
   'Caja 1 - Repuestos',
@@ -143,7 +144,8 @@ export const updateActiveShiftFund = (newFund: number, registerName = 'Caja 1 - 
 };
 
 /**
- * Filtra facturas/ventas garantizando unicidad por Caja y Cajero
+ * Filtra facturas/ventas garantizando unicidad por Caja y Cajero.
+ * Los usuarios que no son Administradores sólo pueden ver lo que ellos mismos han facturado.
  */
 export const filterInvoicesByShift = (
   invoices: Invoice[],
@@ -154,9 +156,18 @@ export const filterInvoicesByShift = (
 ): Invoice[] => {
   let list = invoices;
 
-  // 1. Filtrar por Cajera/Usuario si se seleccionó una en específico
-  if (selectedCashier !== 'todos' && selectedCashier.trim() !== '') {
-    const cLower = selectedCashier.toLowerCase().trim();
+  const currentRole = getActiveRole();
+  const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+
+  // Si el usuario no es Administrador, SIEMPRE forzar el filtro a sus propias facturas
+  let effectiveCashier = selectedCashier;
+  if (currentRole !== 'Administrador' && currentUserName) {
+    effectiveCashier = currentUserName;
+  }
+
+  // 1. Filtrar por Cajera/Usuario si se seleccionó una en específico o si no es admin
+  if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+    const cLower = effectiveCashier.toLowerCase().trim();
     list = list.filter(inv => {
       const cashier = (inv.cashier_name || '').toLowerCase().trim();
       return cashier.includes(cLower) || cLower.includes(cashier);
@@ -222,7 +233,8 @@ export const filterInvoicesByShift = (
 };
 
 /**
- * Filtra movimientos de efectivo por Caja y Cajero
+ * Filtra movimientos de efectivo por Caja y Cajero.
+ * Los usuarios que no son Administradores sólo pueden ver sus propios movimientos.
  */
 export const filterMovementsByShift = (
   movements: CashMovement[],
@@ -233,8 +245,17 @@ export const filterMovementsByShift = (
 ): CashMovement[] => {
   let list = movements;
 
-  if (selectedCashier !== 'todos' && selectedCashier.trim() !== '') {
-    const cLower = selectedCashier.toLowerCase().trim();
+  const currentRole = getActiveRole();
+  const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+
+  // Si el usuario no es Administrador, SIEMPRE forzar el filtro a sus propios movimientos
+  let effectiveCashier = selectedCashier;
+  if (currentRole !== 'Administrador' && currentUserName) {
+    effectiveCashier = currentUserName;
+  }
+
+  if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+    const cLower = effectiveCashier.toLowerCase().trim();
     list = list.filter(m => {
       const user = (m.created_by || '').toLowerCase().trim();
       return user.includes(cLower) || cLower.includes(user);

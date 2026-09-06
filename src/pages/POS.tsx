@@ -1650,7 +1650,7 @@ export default function POS() {
 
     const localInvs = getLocalStorageInvoices();
     if (localInvs) {
-      setSessionSales(localInvs.map(mapInvoiceToSessionSale));
+      setSessionSales(filterInvoicesByShift(localInvs).map(mapInvoiceToSessionSale));
     }
 
     // 2. Async background sync with Supabase
