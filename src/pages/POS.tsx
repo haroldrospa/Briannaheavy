@@ -33,7 +33,10 @@ import {
   ClipboardDocumentListIcon,
   MinusIcon,
   PlusIcon,
-  PencilSquareIcon
+  PencilSquareIcon,
+  Squares2X2Icon,
+  ListBulletIcon,
+  SquaresPlusIcon
 } from '@heroicons/react/24/outline';
 import QuotationsModal from '../components/pos/QuotationsModal';
 import { 
@@ -122,47 +125,219 @@ const playBeep = () => {
 
 type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
 
-// ─── Memoized Product Card ────────────────────────────────────────────────────
-// Extracted to prevent the entire grid from re-rendering on every cart/state change
-const ProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+// ─── Rich Catalog Showcase Components ─────────────────────────────────────────
+
+// 1. Vista de Catálogo (Cuadrícula enriquecida)
+const CatalogProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
   const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
+
+  const stockBadge = useMemo(() => {
+    if (product.stock > 5) {
+      return (
+        <span className="bg-emerald-500/90 backdrop-blur-md text-white font-bold text-[9.5px] sm:text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
+          Stock: {product.stock}
+        </span>
+      );
+    }
+    if (product.stock > 0) {
+      return (
+        <span className="bg-amber-500/90 backdrop-blur-md text-white font-bold text-[9.5px] sm:text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
+          Poco Stock ({product.stock})
+        </span>
+      );
+    }
+    return (
+      <span className="bg-rose-500/90 backdrop-blur-md text-white font-bold text-[9.5px] sm:text-[10px] px-2.5 py-0.5 rounded-full shadow-xs">
+        Agotado
+      </span>
+    );
+  }, [product.stock]);
+
   return (
     <div
-      className="bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm cursor-pointer hover:shadow-md hover:border-[#ED1C24]/40 dark:hover:border-[#ED1C24]/40 transition-all duration-150 active:scale-[0.98] group flex flex-col justify-between"
       onClick={handleClick}
+      className="bg-white dark:bg-[#181818] border border-gray-200/90 dark:border-zinc-800 rounded-3xl p-3.5 sm:p-4 shadow-2xs hover:shadow-xl hover:border-[#ED1C24]/50 dark:hover:border-[#ED1C24]/50 transition-all duration-200 active:scale-[0.98] group flex flex-col justify-between cursor-pointer relative overflow-hidden"
     >
-      <div className="h-24 sm:h-32 bg-[#f4f3f1] dark:bg-[#222222] rounded-xl sm:rounded-2xl mb-2.5 sm:mb-4 flex flex-col items-center justify-center text-gray-400 dark:text-zinc-500 group-hover:bg-red-50/50 dark:group-hover:bg-red-950/20 transition-colors relative overflow-hidden">
+      {/* Visual Image Showcase */}
+      <div className="relative aspect-[16/10] bg-gradient-to-br from-gray-100 to-gray-200 dark:from-zinc-900 dark:to-zinc-800/80 rounded-2xl mb-3 overflow-hidden flex items-center justify-center">
         {product.image_url ? (
           <img
             src={product.image_url}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <>
-            <ShoppingCartIcon className="h-6 w-6 sm:h-8 sm:w-8 text-gray-300 dark:text-zinc-600 group-hover:text-[#ED1C24] transition-colors mb-1" />
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-400 group-hover:text-[#ED1C24]">Añadir</span>
-          </>
+          <div className="flex flex-col items-center justify-center text-gray-400 dark:text-zinc-600 group-hover:text-[#ED1C24] transition-colors">
+            <ShoppingCartIcon className="h-8 w-8 sm:h-10 sm:w-10 opacity-60 mb-1" />
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 group-hover:text-[#ED1C24]">Catálogo</span>
+          </div>
+        )}
+
+        {/* Floating Category Pill */}
+        <div className="absolute top-2.5 left-2.5">
+          <span className="bg-black/60 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-lg border border-white/10 uppercase tracking-wider">
+            {product.category || 'Repuesto'}
+          </span>
+        </div>
+
+        {/* Floating Stock Badge */}
+        <div className="absolute top-2.5 right-2.5">
+          {stockBadge}
+        </div>
+      </div>
+
+      {/* Product Content Details */}
+      <div className="flex-1 flex flex-col justify-between space-y-2.5">
+        <div>
+          {product.brand && (
+            <span className="text-[9.5px] font-black uppercase tracking-widest text-[#ED1C24] dark:text-[#ff4d52]">
+              {product.brand}
+            </span>
+          )}
+          <h3 className="text-xs sm:text-sm font-black text-gray-900 dark:text-zinc-100 line-clamp-2 leading-snug tracking-tight group-hover:text-[#ED1C24] transition-colors">
+            {product.name}
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {product.part_number && (
+              <span className="text-[9.5px] font-bold text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md font-mono">
+                P/N: {product.part_number}
+              </span>
+            )}
+            {product.barcode && (
+              <span className="text-[9.5px] font-medium text-gray-400 dark:text-zinc-500 bg-gray-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md font-mono">
+                BAR: {product.barcode}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Price & Action Button */}
+        <div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+          <div className="flex flex-col">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">Precio</span>
+            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
+              ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-900 dark:bg-zinc-800 text-white text-xs font-black group-hover:bg-[#ED1C24] transition-all shadow-xs"
+          >
+            <PlusIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span className="hidden sm:inline">Agregar</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// 2. Vista de Lista / Tabla Rápida
+const CatalogProductListItem = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+  const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
+
+  return (
+    <div
+      onClick={handleClick}
+      className="flex items-center gap-3 sm:gap-4 p-3 bg-white dark:bg-[#181818] border border-gray-200/90 dark:border-zinc-800 rounded-2xl hover:border-[#ED1C24]/50 dark:hover:border-[#ED1C24]/50 hover:shadow-md transition-all active:scale-[0.99] group cursor-pointer"
+    >
+      <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-xl bg-gray-100 dark:bg-zinc-800 overflow-hidden flex items-center justify-center">
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+            loading="lazy"
+          />
+        ) : (
+          <ShoppingCartIcon className="w-6 h-6 text-gray-400 dark:text-zinc-600 group-hover:text-[#ED1C24]" />
         )}
       </div>
-      <div className="flex-1 flex flex-col justify-between">
-        <div>
-          <h4 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white line-clamp-2 leading-snug tracking-tight">{product.name}</h4>
-          {(product.part_number || product.barcode || product.vin) && (
-            <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 font-mono mt-1 truncate">
-              {product.part_number ? `P/N: ${product.part_number}` : product.barcode ? `BAR: ${product.barcode}` : `VIN: ${product.vin}`}
-            </p>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          {product.brand && (
+            <span className="text-[9px] font-black uppercase tracking-wider text-[#ED1C24]">
+              {product.brand}
+            </span>
           )}
-        </div>
-        <div className="mt-2 sm:mt-3 flex flex-wrap items-baseline justify-between gap-1">
-          <span className="text-xs sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
-            ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          <span className="text-[9.5px] font-bold text-gray-400 dark:text-zinc-500 uppercase">
+            {product.category || 'Repuesto'}
           </span>
-          <span className="text-[9px] sm:text-xs font-bold px-2 py-0.5 bg-[#f4f3f1] dark:bg-[#222222] text-gray-600 dark:text-zinc-400 rounded-full shrink-0 whitespace-nowrap">
+        </div>
+        <h4 className="text-xs sm:text-sm font-black text-gray-900 dark:text-zinc-100 truncate group-hover:text-[#ED1C24] transition-colors">
+          {product.name}
+        </h4>
+        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+          {product.part_number && (
+            <span className="text-[10px] font-bold font-mono text-gray-500 dark:text-zinc-400">
+              P/N: {product.part_number}
+            </span>
+          )}
+          {product.barcode && (
+            <span className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
+              • {product.barcode}
+            </span>
+          )}
+          <span className={`text-[9.5px] font-black px-1.5 py-0.2 rounded-md ${
+            product.stock > 5 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400' :
+            product.stock > 0 ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400' :
+            'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400'
+          }`}>
             Stock: {product.stock}
           </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 shrink-0">
+        <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono">
+          ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+        </span>
+        <button
+          type="button"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-gray-900 dark:bg-zinc-800 text-white text-xs font-black group-hover:bg-[#ED1C24] transition-colors"
+        >
+          <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// 3. Vista Compacta (Malla de Mosaicos)
+const CatalogProductCompactCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+  const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
+  return (
+    <div
+      onClick={handleClick}
+      className="bg-white dark:bg-[#181818] border border-gray-200/90 dark:border-zinc-800 rounded-2xl p-2.5 shadow-2xs hover:border-[#ED1C24]/50 hover:shadow-md transition-all active:scale-[0.98] group flex flex-col justify-between cursor-pointer"
+    >
+      <div className="h-20 bg-gray-100 dark:bg-zinc-800/80 rounded-xl mb-2 overflow-hidden flex items-center justify-center relative">
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        ) : (
+          <ShoppingCartIcon className="w-6 h-6 text-gray-400 dark:text-zinc-600 group-hover:text-[#ED1C24]" />
+        )}
+        <span className="absolute top-1 right-1 text-[8.5px] font-black bg-black/60 text-white px-1.5 py-0.2 rounded-md">
+          {product.stock}
+        </span>
+      </div>
+      <div>
+        <h4 className="text-[11px] font-black text-gray-900 dark:text-zinc-100 line-clamp-1 leading-snug group-hover:text-[#ED1C24]">
+          {product.name}
+        </h4>
+        <p className="text-[9px] font-mono text-gray-400 dark:text-zinc-500 truncate">
+          {product.part_number || product.barcode || ''}
+        </p>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
+            ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          </span>
+          <PlusIcon className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#ED1C24]" />
         </div>
       </div>
     </div>
@@ -1539,6 +1714,8 @@ export default function POS() {
   const [searchTerm, setSearchTerm] = useState(''); // debounced filter value
   const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Piezas' | 'Camiones' | 'Equipos'>('Todas');
   const [searchCriteria, setSearchCriteria] = useState<'all' | 'barcode' | 'internal_code' | 'name'>('all');
+  const [viewMode, setViewMode] = useState<'catalog' | 'compact' | 'list'>(() => (localStorage.getItem('brianna_pos_view_mode') as any) || 'catalog');
+  const [sortBy, setSortBy] = useState<'default' | 'name' | 'price_asc' | 'price_desc' | 'stock'>('default');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [activeRegister] = useState<string>(() => {
     const role = getActiveRole();
@@ -1734,7 +1911,7 @@ export default function POS() {
 
   const filteredProducts = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase();
-    return dbProducts.filter(product => {
+    const list = dbProducts.filter((product: any) => {
       // 1. Filtrar por categoría
       const matchesCategory = selectedCategory === 'Todas' || product.category === selectedCategory;
       if (!matchesCategory) return false;
@@ -1774,13 +1951,27 @@ export default function POS() {
 
       return matchesBarcode || matchesPartNumber || matchesVin || matchesId || matchesName || matchesBrand || matchesModel || matchesDesc;
     });
-  }, [dbProducts, selectedCategory, searchTerm, searchCriteria]);
+
+    if (sortBy === 'name') {
+      return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    if (sortBy === 'price_asc') {
+      return [...list].sort((a, b) => (a.price || 0) - (b.price || 0));
+    }
+    if (sortBy === 'price_desc') {
+      return [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
+    }
+    if (sortBy === 'stock') {
+      return [...list].sort((a, b) => (b.stock || 0) - (a.stock || 0));
+    }
+    return list;
+  }, [dbProducts, selectedCategory, searchTerm, searchCriteria, sortBy]);
   
   // High-performance windowing/pagination for fast initial render
   const [displayCount, setDisplayCount] = useState(48);
   useEffect(() => {
     setDisplayCount(48);
-  }, [searchTerm, selectedCategory, searchCriteria]);
+  }, [searchTerm, selectedCategory, searchCriteria, sortBy]);
 
   const visibleProducts = useMemo(() => {
     return filteredProducts.slice(0, displayCount);
@@ -2604,23 +2795,92 @@ export default function POS() {
         <div className="h-full flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-6 print:hidden">
       {/* Products Grid */}
       <div className={`flex-1 flex-col overflow-hidden ${mobileTab === 'cart' ? 'hidden md:flex' : 'flex'}`}>
-        <div className="pb-2.5 sm:pb-4 space-y-2 sm:space-y-3">
-          {/* Categories Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide -mx-0.5 px-0.5 shrink-0">
-            {(['Todas', 'Piezas', 'Camiones', 'Equipos'] as const).map((cat) => (
-              <button 
-                key={cat} 
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl sm:rounded-full text-xs whitespace-nowrap transition-all cursor-pointer ${
-                  selectedCategory === cat 
-                    ? 'bg-[#ED1C24] text-white shadow-2xs font-black' 
-                    : 'bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold'
-                }`}
+        <div className="pb-2.5 sm:pb-4 space-y-2.5 sm:space-y-3">
+          {/* Categories Chips & Catalog Controls Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Categories Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide -mx-0.5 px-0.5 shrink-0">
+              {(['Todas', 'Piezas', 'Camiones', 'Equipos'] as const).map((cat) => (
+                <button 
+                  key={cat} 
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl sm:rounded-full text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === cat 
+                      ? 'bg-[#ED1C24] text-white shadow-2xs font-black' 
+                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 font-bold'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Catalog Controls: Sort & View Mode Switcher */}
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              {/* Sort Selector */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold rounded-xl px-2.5 py-1.5 outline-none cursor-pointer focus:ring-2 focus:ring-[#ED1C24]/30 shadow-2xs"
+                title="Ordenar catálogo"
               >
-                {cat}
-              </button>
-            ))}
+                <option value="default">Orden: Relevancia</option>
+                <option value="name">Nombre (A - Z)</option>
+                <option value="price_asc">Menor Precio</option>
+                <option value="price_desc">Mayor Precio</option>
+                <option value="stock">Mayor Stock</option>
+              </select>
+
+              {/* View Mode Toggle */}
+              <div className="flex items-center bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 p-0.5 rounded-xl shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('catalog');
+                    localStorage.setItem('brianna_pos_view_mode', 'catalog');
+                  }}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'catalog'
+                      ? 'bg-[#ED1C24] text-white shadow-2xs'
+                      : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Vista Catálogo (Tarjetas Grandes)"
+                >
+                  <Squares2X2Icon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('compact');
+                    localStorage.setItem('brianna_pos_view_mode', 'compact');
+                  }}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'compact'
+                      ? 'bg-[#ED1C24] text-white shadow-2xs'
+                      : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Vista Malla Compacta"
+                >
+                  <SquaresPlusIcon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('list');
+                    localStorage.setItem('brianna_pos_view_mode', 'list');
+                  }}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'list'
+                      ? 'bg-[#ED1C24] text-white shadow-2xs'
+                      : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                  title="Vista Lista / Tabla"
+                >
+                  <ListBulletIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Search Bar Input & Integrated Criteria & Scanner */}
@@ -2649,11 +2909,41 @@ export default function POS() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {visibleProducts.map(product => (
-                  <ProductCard key={product.id} product={product} onAdd={addToCart} />
-                ))}
+              {/* Product Counter and Info */}
+              <div className="flex items-center justify-between px-1 mb-3">
+                <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">
+                  {filteredProducts.length} {filteredProducts.length === 1 ? 'producto encontrado' : 'productos en catálogo'}
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 dark:text-zinc-500">
+                  {viewMode === 'catalog' ? 'Vista Catálogo' : viewMode === 'compact' ? 'Vista Malla' : 'Vista Lista'}
+                </span>
               </div>
+
+              {/* Multi-Mode View Render */}
+              {viewMode === 'catalog' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5">
+                  {visibleProducts.map((product: any) => (
+                    <CatalogProductCard key={product.id} product={product} onAdd={addToCart} />
+                  ))}
+                </div>
+              )}
+
+              {viewMode === 'compact' && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {visibleProducts.map((product: any) => (
+                    <CatalogProductCompactCard key={product.id} product={product} onAdd={addToCart} />
+                  ))}
+                </div>
+              )}
+
+              {viewMode === 'list' && (
+                <div className="flex flex-col space-y-2.5">
+                  {visibleProducts.map((product: any) => (
+                    <CatalogProductListItem key={product.id} product={product} onAdd={addToCart} />
+                  ))}
+                </div>
+              )}
+
               {filteredProducts.length > visibleProducts.length && (
                 <div className="pt-6 pb-2 text-center">
                   <button
