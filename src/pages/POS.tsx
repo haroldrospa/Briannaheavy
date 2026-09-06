@@ -1248,15 +1248,15 @@ const CheckoutModal = memo(({
                 </div>
               </div>
 
-              {/* 4. Efectivo: Amount & Quick Presets */}
+              {/* 4. Efectivo: Amount & Quick Presets & Devuelta Grande y Céntrica */}
               {paymentMethod === 'Efectivo' && (
-                <div className="space-y-1.5 pt-0.5">
+                <div className="space-y-2 pt-0.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
                       Monto Recibido
                     </span>
-                    <span className={`text-xs font-bold font-mono ${change > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-zinc-500'}`}>
-                      Devuelta: ${change.toFixed(2)}
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
+                      Total a pagar: <strong className="font-mono text-gray-900 dark:text-white">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </span>
                   </div>
 
@@ -1298,6 +1298,48 @@ const CheckoutModal = memo(({
                           ${val.toLocaleString('es-DO')}
                         </button>
                       ))}
+                  </div>
+
+                  {/* Devuelta Grande y Céntrica */}
+                  <div className={`p-3 rounded-2xl border text-center transition-all ${
+                    numReceived >= total && change > 0
+                      ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 shadow-sm'
+                      : numReceived === total
+                      ? 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50'
+                      : numReceived > 0 && numReceived < total
+                      ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800/50'
+                      : 'bg-gray-50 dark:bg-zinc-900/60 border-gray-200/80 dark:border-zinc-800'
+                  }`}>
+                    <span className={`block text-[11px] font-black uppercase tracking-wider mb-0.5 ${
+                      numReceived >= total && change > 0
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : numReceived === total
+                        ? 'text-blue-700 dark:text-blue-300'
+                        : numReceived > 0 && numReceived < total
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-gray-400 dark:text-zinc-500'
+                    }`}>
+                      {numReceived >= total && change > 0
+                        ? '💵 Devuelta a Entregar'
+                        : numReceived === total
+                        ? '✓ Pago Exacto (Sin Devuelta)'
+                        : numReceived > 0 && numReceived < total
+                        ? '⚠️ Faltante por Recibir'
+                        : 'Devuelta'}
+                    </span>
+                    <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${
+                      numReceived >= total && change > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : numReceived === total
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : numReceived > 0 && numReceived < total
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-gray-400 dark:text-zinc-600'
+                    }`}>
+                      RD$ {numReceived > 0 && numReceived < total
+                        ? (total - numReceived).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : change.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
                 </div>
               )}
