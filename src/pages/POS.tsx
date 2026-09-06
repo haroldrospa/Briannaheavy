@@ -247,38 +247,12 @@ const POSSearchBar = memo(({
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => onSearch(val), 80);
-
-    const clean = val.trim().toLowerCase();
-    if (clean.length >= 4) {
-      let exactMatch = null;
-      if (searchCriteria === 'barcode') {
-        exactMatch = dbProductsRef.current.find(p => p.barcode && p.barcode.toLowerCase() === clean);
-      } else if (searchCriteria === 'internal_code') {
-        exactMatch = dbProductsRef.current.find(p =>
-          (p.part_number && p.part_number.toLowerCase() === clean) ||
-          (p.vin && p.vin.toLowerCase() === clean) ||
-          (p.id && String(p.id).toLowerCase() === clean)
-        );
-      } else if (searchCriteria === 'all') {
-        exactMatch = dbProductsRef.current.find(p =>
-          (p.barcode && p.barcode.toLowerCase() === clean) ||
-          (p.part_number && p.part_number.toLowerCase() === clean)
-        );
-      }
-
-      if (exactMatch) {
-        onEnterMatch(exactMatch);
-        setTimeout(() => {
-          inputRef.current?.focus();
-          inputRef.current?.select();
-        }, 15);
-      }
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       const clean = inputValue.trim().toLowerCase();
       if (!clean) return;
 
@@ -314,6 +288,8 @@ const POSSearchBar = memo(({
 
       if (match) {
         onEnterMatch(match);
+        setInputValue('');
+        onSearch('');
       }
 
       setTimeout(() => {
@@ -1617,7 +1593,16 @@ export default function POS() {
     description: item.description || '',
   }), []);
 
+  const lastScanRef = useRef<{ id: string | number; time: number }>({ id: '', time: 0 });
+
   const addToCart = useCallback((product: any) => {
+    const now = Date.now();
+    // Prevent duplicate bursts from hardware scanners or bubbling (under 250ms on same product)
+    if (lastScanRef.current.id === product.id && now - lastScanRef.current.time < 250) {
+      return;
+    }
+    lastScanRef.current = { id: product.id, time: now };
+
     setTimeout(playBeep, 0);
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
@@ -1638,8 +1623,19 @@ export default function POS() {
     let lastKeyTime = Date.now();
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is inside a modal dialog
+      // Ignore if user is inside an input, textarea, select, or editable element
       const activeEl = document.activeElement as HTMLElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+         activeEl.tagName === 'TEXTAREA' ||
+         activeEl.tagName === 'SELECT' ||
+         activeEl.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Ignore if user is inside a modal dialog
       const isInsideModal = activeEl?.closest('.fixed.z-50') !== null;
       if (isInsideModal) return;
 
