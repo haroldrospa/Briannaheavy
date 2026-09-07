@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CreditCardIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -32,6 +32,7 @@ import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '..
 import { fetchCashMovements, type CashMovement } from '../services/cashMovementsService';
 import { verifyAdminMasterKey } from '../utils/scheduleStorage';
 import { getNextReceiptNumber, peekCurrentReceiptNumber } from '../utils/sequenceStorage';
+import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
 
@@ -49,7 +50,7 @@ export interface PaymentReceiptData {
   cashierName: string;
   financingId: string;
   qrUrl: string;
-  paymentMethod?: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
+  paymentMethod?: 'Efectivo' | 'Transferencia' | 'Cheque';
   amountReceived?: number;
   changeGiven?: number;
   bankName?: string;
@@ -814,13 +815,23 @@ export default function Financing() {
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
   const [viewingReceipt, setViewingReceipt] = useState<FinancingPaymentReceipt | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque'>('Efectivo');
+  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Cheque'>('Efectivo');
+  const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
+  const [selectedBankId, setSelectedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
   const [cashReceived, setCashReceived] = useState<string>('');
-  const [bankName, setBankName] = useState<string>('Banco Popular');
+  const [bankName, setBankName] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
-  const [cardBrand, setCardBrand] = useState<string>('Visa');
-  const [cardLastDigits, setCardLastDigits] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
+
+  // Sincronizar cuentas bancarias si cambian en Configuración o Bancos
+  useEffect(() => {
+    const handleAccountsChanged = (e: any) => {
+      if (e.detail) setBankAccounts(e.detail);
+      else setBankAccounts(getCompanyBankAccounts());
+    };
+    window.addEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+    return () => window.removeEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+  }, []);
 
   // Print & Exit Confirmation State
   const [hasPrintedReceipt, setHasPrintedReceipt] = useState(false);
@@ -1061,12 +1072,10 @@ export default function Financing() {
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
       const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
       const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
-      const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
-        ? bankName 
-        : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
-      const finalRef = paymentMethod === 'Tarjeta'
-        ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
-        : referenceNumber;
+      const selectedAccount = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
+      const finalBank = paymentMethod === 'Transferencia' 
+        ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
+        : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1096,7 +1105,7 @@ export default function Financing() {
         amountReceived: amountRec,
         changeGiven: change,
         bankName: finalBank,
-        referenceNumber: finalRef?.trim() || undefined,
+        referenceNumber: referenceNumber?.trim() || undefined,
         paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
         createdAt: new Date().toISOString(),
@@ -1139,7 +1148,6 @@ export default function Financing() {
       setSelectedInstallmentIds([]);
       setCashReceived('');
       setReferenceNumber('');
-      setCardLastDigits('');
       setPaymentNotes('');
       setHasPrintedReceipt(false);
       setShowReceipt(true);
@@ -1154,12 +1162,10 @@ export default function Financing() {
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
       const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : paidAbono) : paidAbono;
       const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - paidAbono) : 0;
-      const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
-        ? bankName 
-        : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
-      const finalRef = paymentMethod === 'Tarjeta'
-        ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
-        : referenceNumber;
+      const selectedAccount = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
+      const finalBank = paymentMethod === 'Transferencia' 
+        ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
+        : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1182,7 +1188,7 @@ export default function Financing() {
         amountReceived: amountRec,
         changeGiven: change,
         bankName: finalBank,
-        referenceNumber: finalRef?.trim() || undefined,
+        referenceNumber: referenceNumber?.trim() || undefined,
         paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
         createdAt: new Date().toISOString(),
@@ -1229,7 +1235,6 @@ export default function Financing() {
       setAbonoAmount('');
       setCashReceived('');
       setReferenceNumber('');
-      setCardLastDigits('');
       setPaymentNotes('');
       setHasPrintedReceipt(false);
       setShowReceipt(true);
@@ -1248,12 +1253,10 @@ export default function Financing() {
     const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
     const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
     const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
-    const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
-      ? bankName 
-      : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
-    const finalRef = paymentMethod === 'Tarjeta'
-      ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
-      : referenceNumber;
+    const selectedAccount = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
+    const finalBank = paymentMethod === 'Transferencia' 
+      ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
+      : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
     return {
       receiptNumber: recNumber,
@@ -1273,10 +1276,10 @@ export default function Financing() {
       amountReceived: amountRec,
       changeGiven: change,
       bankName: finalBank,
-      referenceNumber: finalRef?.trim() || undefined,
+      referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankName, cardBrand, cardLastDigits, referenceNumber, paymentNotes]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2665,21 +2668,11 @@ export default function Financing() {
                           </div>
                         ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
                           <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
-                            <span>Banco: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
+                            <span>Cuenta / Banco: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
                             {activeReceiptData.referenceNumber && (
                               <>
                                 <span className="text-gray-300 dark:text-zinc-600">•</span>
                                 <span>Ref: <strong className="font-mono font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.referenceNumber}</strong></span>
-                              </>
-                            )}
-                          </div>
-                        ) : activeReceiptData.paymentMethod === 'Tarjeta' ? (
-                          <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
-                            <span>Tarjeta: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName || 'Tarjeta'}</strong></span>
-                            {activeReceiptData.referenceNumber && (
-                              <>
-                                <span className="text-gray-300 dark:text-zinc-600">•</span>
-                                <span>Voucher: <strong className="font-mono font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.referenceNumber}</strong></span>
                               </>
                             )}
                           </div>
@@ -3412,11 +3405,10 @@ export default function Financing() {
                           <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-2.5">
                             Forma / Método de Pago Recibido
                           </label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                          <div className="grid grid-cols-3 gap-2.5">
                             {[
                               { id: 'Efectivo' as const, label: 'Efectivo', icon: BanknotesIcon },
                               { id: 'Transferencia' as const, label: 'Transferencia', icon: BuildingLibraryIcon },
-                              { id: 'Tarjeta' as const, label: 'Tarjeta', icon: CreditCardIcon },
                               { id: 'Cheque' as const, label: 'Cheque', icon: DocumentTextIcon },
                             ].map(({ id, label, icon: Icon }) => (
                               <button
@@ -3534,27 +3526,53 @@ export default function Financing() {
 
                         {paymentMethod === 'Transferencia' && (
                           <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
-                            <div>
-                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                                Banco Receptor / Destino
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                                <BuildingLibraryIcon className="w-4 h-4 text-[#ED1C24]" />
+                                <span>Cuenta Bancaria Receptora</span>
                               </label>
-                              <select
-                                value={bankName}
-                                onChange={(e) => setBankName(e.target.value)}
-                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
-                              >
-                                <option value="Banco Popular Dominicano">Banco Popular Dominicano</option>
-                                <option value="Banco de Reservas (Banreservas)">Banco de Reservas (Banreservas)</option>
-                                <option value="Banco BHD">Banco BHD</option>
-                                <option value="Scotiabank República Dominicana">Scotiabank República Dominicana</option>
-                                <option value="Banco Santa Cruz">Banco Santa Cruz</option>
-                                <option value="Banco Promerica">Banco Promerica</option>
-                                <option value="Banco BDI">Banco BDI</option>
-                                <option value="Banco Vimenca">Banco Vimenca</option>
-                                <option value="Otro Banco">Otro Banco</option>
-                              </select>
+                              <span className="text-[10px] font-bold text-gray-400">
+                                {bankAccounts.length} cuentas disponibles
+                              </span>
                             </div>
-                            <div>
+
+                            {/* Cuentas Bancarias Registradas de la Empresa */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              {bankAccounts.map((acc) => {
+                                const isSelected = selectedBankId === acc.id;
+                                return (
+                                  <div
+                                    key={acc.id}
+                                    onClick={() => setSelectedBankId(acc.id)}
+                                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                                      isSelected
+                                        ? 'bg-red-50/40 dark:bg-red-950/30 border-[#ED1C24] shadow-xs ring-2 ring-[#ED1C24]/30'
+                                        : 'bg-gray-50/60 dark:bg-zinc-800/60 border-gray-200 dark:border-zinc-700 hover:border-red-200 dark:hover:border-zinc-600'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <span className="text-xs font-black text-gray-900 dark:text-white truncate">
+                                        {acc.bankName}
+                                      </span>
+                                      {isSelected ? (
+                                        <CheckCircleIcon className="w-4 h-4 text-[#ED1C24] shrink-0" />
+                                      ) : (
+                                        <div className="w-3.5 h-3.5 rounded-full border border-gray-300 dark:border-zinc-600" />
+                                      )}
+                                    </div>
+                                    <p className="text-xs font-mono font-black text-gray-800 dark:text-zinc-200 tracking-tight">
+                                      {acc.accountNumber}
+                                    </p>
+                                    <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-zinc-400 mt-1">
+                                      <span>{acc.accountType}</span>
+                                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{acc.currency}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="pt-1">
                               <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
                                 No. de Referencia / Comprobante de Transferencia
                               </label>
@@ -3562,54 +3580,7 @@ export default function Financing() {
                                 type="text"
                                 value={referenceNumber}
                                 onChange={(e) => setReferenceNumber(e.target.value)}
-                                placeholder="Ej: TRANS-98421045"
-                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {paymentMethod === 'Tarjeta' && (
-                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                                  Red / Tipo de Tarjeta
-                                </label>
-                                <select
-                                  value={cardBrand}
-                                  onChange={(e) => setCardBrand(e.target.value)}
-                                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
-                                >
-                                  <option value="Visa">Visa</option>
-                                  <option value="Mastercard">Mastercard</option>
-                                  <option value="American Express">American Express</option>
-                                  <option value="Tarjeta de Débito / Otra">Débito / Otra</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                                  Últimos 4 Dígitos (Opcional)
-                                </label>
-                                <input
-                                  type="text"
-                                  maxLength={4}
-                                  value={cardLastDigits}
-                                  onChange={(e) => setCardLastDigits(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                                  placeholder="Ej: 4242"
-                                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                                No. de Aprobación / Voucher
-                              </label>
-                              <input
-                                type="text"
-                                value={referenceNumber}
-                                onChange={(e) => setReferenceNumber(e.target.value)}
-                                placeholder="Ej: AUT-054921"
+                                placeholder="Ej: TRANS-98421045 / No. Confirmación..."
                                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
                               />
                             </div>
@@ -4169,21 +4140,11 @@ export default function Financing() {
                 </div>
               ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
                 <div className="flex items-center gap-2.5 text-gray-700">
-                  <span>Banco: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
+                  <span>Cuenta / Banco: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
                   {activeReceiptData.referenceNumber && (
                     <>
                       <span className="text-gray-400">•</span>
                       <span>Ref / Comprobante: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
-                    </>
-                  )}
-                </div>
-              ) : activeReceiptData.paymentMethod === 'Tarjeta' ? (
-                <div className="flex items-center gap-2.5 text-gray-700">
-                  <span>Tarjeta: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Tarjeta'}</strong></span>
-                  {activeReceiptData.referenceNumber && (
-                    <>
-                      <span className="text-gray-400">•</span>
-                      <span>Voucher / Aut: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
                     </>
                   )}
                 </div>
