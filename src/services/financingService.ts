@@ -103,6 +103,174 @@ const saveLocalStorageFinancings = (items: Financing[]): void => {
   }
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const mapStatusToDb = (status?: string): 'Activo' | 'Pagado' | 'Vencido' | 'Cancelado' => {
+  if (!status) return 'Activo';
+  if (status === 'Pagado') return 'Pagado';
+  if (status === 'Cancelado') return 'Cancelado';
+  if (status === 'Vencido') return 'Vencido';
+  // Front-end calculated statuses ('Al día', 'En mora', etc.) map to 'Activo' in DB
+  return 'Activo';
+};
+
+const insertFinancingToSupabase = async (
+  financingData: Omit<Financing, 'id' | 'created_at'>,
+  installments: Omit<Installment, 'id' | 'financing_id'>[]
+): Promise<Financing | null> => {
+  if (!isSupabaseConfigured()) return null;
+
+  const validCustomerId = financingData.customer_id && UUID_REGEX.test(financingData.customer_id)
+    ? financingData.customer_id
+    : null;
+  const validItemId = financingData.item_id && UUID_REGEX.test(financingData.item_id)
+    ? financingData.item_id
+    : null;
+
+  const fullPayload: any = {
+    customer_id: validCustomerId,
+    item_id: validItemId,
+    customer_name: financingData.customer_name || 'Cliente',
+    item_name: financingData.item_name || 'Equipo',
+    total_amount: Number(financingData.total_amount) || 0,
+    down_payment: Number(financingData.down_payment) || 0,
+    financed_amount: Number(financingData.financed_amount) || 0,
+    interest_rate: Number(financingData.interest_rate) || 0,
+    installments_count: Number(financingData.installments_count) || 1,
+    frequency: financingData.frequency || 'Mensual',
+    start_date: financingData.start_date || new Date().toISOString().split('T')[0],
+    status: mapStatusToDb(financingData.status),
+    customer_rnc: financingData.customer_rnc || null,
+    customer_phone: financingData.customer_phone || null,
+    chassis: financingData.chassis || null,
+    item_brand: financingData.item_brand || null,
+    item_model: financingData.item_model || null,
+    item_year: financingData.item_year ? String(financingData.item_year) : null,
+    item_color: financingData.item_color || null,
+    item_plate: financingData.item_plate || null,
+    item_engine_number: financingData.item_engine_number || null,
+    item_mileage_hours: financingData.item_mileage_hours ? String(financingData.item_mileage_hours) : null,
+    item_type: financingData.item_type || null,
+    guarantor: financingData.guarantor || null,
+    guarantor_rnc: financingData.guarantor_rnc || null,
+    guarantor_phone: financingData.guarantor_phone || null,
+    guarantor_relation: financingData.guarantor_relation || null,
+    guarantor_address: financingData.guarantor_address || null,
+  };
+
+  try {
+    let { data: fin, error: finErr } = await supabase
+      .from('financings')
+      .insert([fullPayload])
+      .select()
+      .single();
+
+    // Fallback: if table doesn't have extended columns yet, retry with core schema columns
+    if (finErr) {
+      console.warn('Supabase extended insert error, retrying with core schema columns:', finErr);
+      const corePayload = {
+        customer_id: fullPayload.customer_id,
+        item_id: fullPayload.item_id,
+        customer_name: fullPayload.customer_name,
+        item_name: fullPayload.item_name,
+        total_amount: fullPayload.total_amount,
+        down_payment: fullPayload.down_payment,
+        financed_amount: fullPayload.financed_amount,
+        interest_rate: fullPayload.interest_rate,
+        installments_count: fullPayload.installments_count,
+        frequency: fullPayload.frequency,
+        start_date: fullPayload.start_date,
+        status: fullPayload.status,
+      };
+
+      const retryRes = await supabase
+        .from('financings')
+        .insert([corePayload])
+        .select()
+        .single();
+
+      fin = retryRes.data;
+      finErr = retryRes.error;
+    }
+
+    if (!finErr && fin) {
+      let createdInstallments: Installment[] = [];
+      if (installments && installments.length > 0) {
+        const preparedInstallments = installments.map(inst => ({
+          financing_id: fin.id,
+          installment_number: Number(inst.installment_number),
+          due_date: inst.due_date,
+          amount: Number(inst.amount) || 0,
+          principal_amount: Number(inst.principal_amount) || 0,
+          interest_amount: Number(inst.interest_amount) || 0,
+          paid_amount: Number(inst.paid_amount) || 0,
+          status: inst.status === 'Pagado' ? 'Pagado' : 'Pendiente',
+          paid_date: inst.paid_date || null,
+        }));
+
+        const { data: instData, error: instErr } = await supabase
+          .from('installments')
+          .insert(preparedInstallments)
+          .select();
+
+        if (!instErr && instData && instData.length > 0) {
+          createdInstallments = instData as Installment[];
+        } else {
+          createdInstallments = preparedInstallments as Installment[];
+        }
+      }
+
+      return {
+        ...fin,
+        ...financingData,
+        id: fin.id,
+        created_at: fin.created_at,
+        installments: createdInstallments,
+      };
+    }
+  } catch (err) {
+    console.error('Error inserting financing into Supabase:', err);
+  }
+
+  return null;
+};
+
+let isSyncing = false;
+export const syncPendingLocalFinancings = async (): Promise<void> => {
+  if (!isSupabaseConfigured() || isSyncing) return;
+  isSyncing = true;
+
+  try {
+    const deletedIds = getDeletedFinancingIds();
+    const local = getLocalStorageFinancings();
+    const pending = local.filter(f => String(f.id).startsWith('fin-') && !deletedIds.has(String(f.id)));
+
+    if (pending.length === 0) {
+      isSyncing = false;
+      return;
+    }
+
+    console.log(`[FinancingSync] Sincronizando ${pending.length} financiamientos locales a Supabase...`);
+
+    let currentList = [...getLocalStorageFinancings()];
+
+    for (const item of pending) {
+      const { id: oldLocalId, created_at, ...cleanData } = item;
+      const uploaded = await insertFinancingToSupabase(cleanData, item.installments || []);
+      if (uploaded) {
+        console.log(`[FinancingSync] Sincronizado: ${oldLocalId} -> ${uploaded.id}`);
+        currentList = currentList.map(f => f.id === oldLocalId ? uploaded : f);
+      }
+    }
+
+    saveLocalStorageFinancings(currentList);
+  } catch (err) {
+    console.warn('[FinancingSync] Error en sincronización:', err);
+  } finally {
+    isSyncing = false;
+  }
+};
+
 export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]> => {
   const deletedIds = getDeletedFinancingIds();
 
@@ -113,6 +281,9 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
 
     inFlightFinancingsPromise = (async () => {
       try {
+        // Sincronizar automáticamente cualquier financiamiento pendiente offline/local
+        await syncPendingLocalFinancings();
+
         const { data, error } = await supabase
           .from('financings')
           .select('*, installments(*)')
@@ -142,48 +313,16 @@ export const createFinancing = async (
   financingData: Omit<Financing, 'id' | 'created_at'>,
   installments: Omit<Installment, 'id' | 'financing_id'>[]
 ): Promise<Financing> => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const sanitizedData = {
-    ...financingData,
-    customer_id: financingData.customer_id && uuidRegex.test(financingData.customer_id) ? financingData.customer_id : null,
-    item_id: financingData.item_id && uuidRegex.test(financingData.item_id) ? financingData.item_id : null,
-  };
-
   if (isSupabaseConfigured()) {
-    try {
-      const { data: fin, error: finErr } = await supabase
-        .from('financings')
-        .insert([sanitizedData])
-        .select()
-        .single();
-
-      if (!finErr && fin) {
-        const preparedInstallments = installments.map(inst => ({
-          ...inst,
-          financing_id: fin.id,
-        }));
-        const { data: instData, error: instErr } = await supabase
-          .from('installments')
-          .insert(preparedInstallments)
-          .select();
-
-        const fullFinancing: Financing = {
-          ...fin,
-          installments: (!instErr && instData && instData.length > 0) ? (instData as Installment[]) : (preparedInstallments as Installment[]),
-        };
-
-        const current = getLocalStorageFinancings();
-        saveLocalStorageFinancings([fullFinancing, ...current.filter(f => f.id !== fullFinancing.id)]);
-        return fullFinancing;
-      } else if (finErr) {
-        console.warn('Supabase financing insert warning:', finErr);
-      }
-    } catch (err) {
-      console.warn('Error creating financing in Supabase:', err);
+    const createdInSupabase = await insertFinancingToSupabase(financingData, installments);
+    if (createdInSupabase) {
+      const current = getLocalStorageFinancings();
+      saveLocalStorageFinancings([createdInSupabase, ...current.filter(f => f.id !== createdInSupabase.id)]);
+      return createdInSupabase;
     }
   }
 
-  // Fallback to local storage
+  // Fallback a almacenamiento local si no hay conexión
   const genFinId = `fin-${Date.now()}`;
   const newFinancing: Financing = {
     ...financingData,
@@ -206,31 +345,59 @@ export const updateFinancing = async (
   financingData: Partial<Financing>,
   newInstallments?: Omit<Installment, 'id' | 'financing_id'>[]
 ): Promise<Financing | null> => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const isDbUuid = uuidRegex.test(id);
+  const isDbUuid = UUID_REGEX.test(id);
 
   if (isSupabaseConfigured() && isDbUuid) {
     try {
-      const sanitizedData = { ...financingData };
-      delete (sanitizedData as any).installments;
-      if (sanitizedData.customer_id && !uuidRegex.test(sanitizedData.customer_id)) {
-        sanitizedData.customer_id = undefined;
+      const sanitizedData: any = { ...financingData };
+      delete sanitizedData.installments;
+      delete sanitizedData.id;
+      delete sanitizedData.created_at;
+
+      if (sanitizedData.customer_id && !UUID_REGEX.test(sanitizedData.customer_id)) {
+        sanitizedData.customer_id = null;
       }
-      if (sanitizedData.item_id && !uuidRegex.test(sanitizedData.item_id)) {
-        sanitizedData.item_id = undefined;
+      if (sanitizedData.item_id && !UUID_REGEX.test(sanitizedData.item_id)) {
+        sanitizedData.item_id = null;
+      }
+      if (sanitizedData.status) {
+        sanitizedData.status = mapStatusToDb(sanitizedData.status);
       }
 
-      await supabase
+      const updateRes = await supabase
         .from('financings')
         .update(sanitizedData)
         .eq('id', id);
 
+      if (updateRes.error) {
+        console.warn('Supabase extended update error, falling back to core columns:', updateRes.error);
+        const coreUpdate: any = {};
+        const allowedCore = [
+          'customer_id', 'item_id', 'customer_name', 'item_name',
+          'total_amount', 'down_payment', 'financed_amount',
+          'interest_rate', 'installments_count', 'frequency',
+          'start_date', 'status'
+        ];
+        allowedCore.forEach(col => {
+          if (sanitizedData[col] !== undefined) {
+            coreUpdate[col] = sanitizedData[col];
+          }
+        });
+        await supabase.from('financings').update(coreUpdate).eq('id', id);
+      }
+
       if (newInstallments && newInstallments.length > 0) {
-        // Delete previous unpaid installments and replace or update
         await supabase.from('installments').delete().eq('financing_id', id);
         const prepared = newInstallments.map(inst => ({
-          ...inst,
           financing_id: id,
+          installment_number: Number(inst.installment_number),
+          due_date: inst.due_date,
+          amount: Number(inst.amount) || 0,
+          principal_amount: Number(inst.principal_amount) || 0,
+          interest_amount: Number(inst.interest_amount) || 0,
+          paid_amount: Number(inst.paid_amount) || 0,
+          status: inst.status === 'Pagado' ? 'Pagado' : 'Pendiente',
+          paid_date: inst.paid_date || null,
         }));
         await supabase.from('installments').insert(prepared);
       }
@@ -239,7 +406,7 @@ export const updateFinancing = async (
     }
   }
 
-  // Local storage update
+  // Actualización en local storage
   const current = getLocalStorageFinancings();
   let updatedRecord: Financing | null = null;
 

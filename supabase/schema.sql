@@ -144,6 +144,23 @@ CREATE TABLE IF NOT EXISTS public.financings (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS customer_rnc TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS chassis TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_brand TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_model TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_year TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_color TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_plate TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_engine_number TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_mileage_hours TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS item_type TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS guarantor TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS guarantor_rnc TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS guarantor_phone TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS guarantor_relation TEXT;
+ALTER TABLE public.financings ADD COLUMN IF NOT EXISTS guarantor_address TEXT;
+
 CREATE TABLE IF NOT EXISTS public.installments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     financing_id UUID REFERENCES public.financings(id) ON DELETE CASCADE,
