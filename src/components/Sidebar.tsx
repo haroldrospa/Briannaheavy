@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import logo from '../assets/logo.png';
@@ -70,12 +71,16 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
     [currentRole, permsVersion]
   );
 
-
-  const SidebarContent = (
-    <div className="w-[240px] xl:w-[260px] max-w-[85vw] h-full flex flex-col bg-[#f4f3f1] dark:bg-[#0c0d10] p-3.5 xl:p-5 border-r border-gray-200/60 dark:border-zinc-800/80 overflow-y-auto scrollbar-hide transition-colors duration-300 shadow-xl lg:shadow-none">
+  const renderSidebarContent = (isMobile: boolean) => (
+    <div className={cn(
+      "h-full flex flex-col overflow-y-auto scrollbar-hide transition-colors duration-300",
+      isMobile 
+        ? "w-[285px] sm:w-[320px] max-w-[85vw] bg-white dark:bg-[#0c0d10] p-4 sm:p-5 shadow-2xl" 
+        : "w-[240px] xl:w-[260px] max-w-[85vw] bg-[#f4f3f1] dark:bg-[#0c0d10] p-3.5 xl:p-5 border-r border-gray-200/60 dark:border-zinc-800/80 shadow-none"
+    )}>
       {/* Brand Logo Header */}
       <div className="flex items-center justify-between mb-4 xl:mb-6 pb-3 xl:pb-4 border-b border-gray-200/60 dark:border-zinc-800/80">
-        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
+        <Link to="/dashboard" onClick={isMobile ? onClose : undefined} className="flex items-center gap-2.5 group">
           <div className="h-9 w-20 xl:h-10 xl:w-24 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-center p-1 shadow-2xs group-hover:scale-105 transition-transform shrink-0">
             <img src={logo} alt="Brianna Heavy Logo" className="max-h-full max-w-full object-contain" />
           </div>
@@ -90,13 +95,16 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
         </Link>
 
         {/* Mobile Close Button */}
-        <button 
-          onClick={onClose} 
-          className="lg:hidden p-1.5 rounded-full bg-gray-200/80 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:bg-gray-300 cursor-pointer"
-          title="Cerrar Menú"
-        >
-          <XMarkIcon className="h-5 w-5" />
-        </button>
+        {isMobile && (
+          <button 
+            type="button"
+            onClick={onClose} 
+            className="p-2 rounded-full bg-gray-100 hover:bg-red-50 dark:bg-zinc-800/80 dark:hover:bg-red-950/40 text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 transition-colors cursor-pointer"
+            title="Cerrar Menú"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -107,12 +115,12 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
             <Link
               key={item.name}
               to={item.href}
-              onClick={onClose}
+              onClick={isMobile ? onClose : undefined}
               className={cn(
-                'group flex items-center justify-between px-3.5 py-2 xl:px-4 xl:py-2.5 text-xs xl:text-sm font-bold rounded-full transition-all duration-300',
+                'group flex items-center justify-between px-3.5 py-2.5 xl:px-4 xl:py-2.5 text-xs xl:text-sm font-bold rounded-2xl transition-all duration-200',
                 isActive 
                   ? 'bg-[#ED1C24] text-white shadow-md shadow-red-900/20 font-black' 
-                  : 'bg-transparent text-gray-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-[#121318] hover:text-gray-900 dark:hover:text-zinc-100 hover:shadow-2xs'
+                  : 'bg-transparent text-gray-600 dark:text-zinc-400 hover:bg-gray-100/80 dark:hover:bg-[#16171e] hover:text-gray-900 dark:hover:text-zinc-100'
               )}
             >
               <div className="flex items-center min-w-0">
@@ -140,7 +148,7 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
       </nav>
       
       {/* Bottom Action Area */}
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-3 pt-3 border-t border-gray-200/60 dark:border-zinc-800/80">
         {(currentRole === 'Administrador' || currentRole === 'Oficina') && (
           <button
             type="button"
@@ -171,7 +179,6 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
           Cerrar Sesión
         </button>
       </div>
-
     </div>
   );
 
@@ -179,32 +186,39 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
     <>
       {/* Desktop Sidebar */}
       <div className="hidden lg:block h-full">
-        {SidebarContent}
+        {renderSidebarContent(false)}
       </div>
 
-      {/* Mobile Drawer Sidebar */}
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={onClose}
-              className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-xs"
-            />
-            <motion.div
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 z-50 lg:hidden h-full"
-            >
-              {SidebarContent}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Mobile Drawer Sidebar rendered via Portal to guarantee top stacking and prevent any header bleed */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isOpen && (
+            <div className="fixed inset-0 z-[9999] lg:hidden">
+              {/* Dimmed Overlay covering the whole screen including header */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-black/70 backdrop-blur-xs"
+              />
+
+              {/* Drawer Container */}
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+                className="fixed inset-y-0 left-0 h-full w-[285px] sm:w-[320px] max-w-[85vw] bg-white dark:bg-[#0c0d10] shadow-2xl border-r border-gray-200/80 dark:border-zinc-800 flex flex-col z-[10000]"
+              >
+                {renderSidebarContent(true)}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
