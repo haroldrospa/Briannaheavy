@@ -1223,7 +1223,7 @@ const CheckoutModal = memo(({
                 billingMode === 'electronic'
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
                   : isCotizacion
-                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                  ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700'
                   : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
               }`}>
                 {billingMode === 'electronic' ? 'Fiscal DGII (e-CF)' : isCotizacion ? 'Cotización (Presupuesto)' : 'No Fiscal (Interno)'}
@@ -1454,47 +1454,23 @@ const CheckoutModal = memo(({
                       ))}
                   </div>
 
-                  {/* Devuelta Grande y Céntrica */}
-                  <div className={`p-3 rounded-2xl border text-center transition-all ${
-                    numReceived >= total && change > 0
-                      ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/60 shadow-sm'
-                      : numReceived === total
-                      ? 'bg-blue-50/80 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50'
-                      : numReceived > 0 && numReceived < total
-                      ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800/50'
-                      : 'bg-gray-50 dark:bg-zinc-900/60 border-gray-200/80 dark:border-zinc-800'
-                  }`}>
-                    <span className={`block text-[11px] font-black uppercase tracking-wider mb-0.5 ${
-                      numReceived >= total && change > 0
-                        ? 'text-emerald-700 dark:text-emerald-300'
-                        : numReceived === total
-                        ? 'text-blue-700 dark:text-blue-300'
-                        : numReceived > 0 && numReceived < total
-                        ? 'text-amber-700 dark:text-amber-300'
-                        : 'text-gray-400 dark:text-zinc-500'
-                    }`}>
-                      {numReceived >= total && change > 0
-                        ? '💵 Devuelta a Entregar'
-                        : numReceived === total
-                        ? '✓ Pago Exacto (Sin Devuelta)'
-                        : numReceived > 0 && numReceived < total
-                        ? '⚠️ Faltante por Recibir'
-                        : 'Devuelta'}
-                    </span>
-                    <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${
-                      numReceived >= total && change > 0
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : numReceived === total
-                        ? 'text-blue-600 dark:text-blue-400'
-                        : numReceived > 0 && numReceived < total
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-gray-400 dark:text-zinc-600'
-                    }`}>
-                      RD$ {numReceived > 0 && numReceived < total
-                        ? (total - numReceived).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                        : change.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {/* Cambio / Devuelta Minimalista */}
+                  {numReceived > total && (
+                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-xl text-xs">
+                      <span className="font-bold text-gray-700 dark:text-zinc-300">Devuelta</span>
+                      <span className="font-mono font-black text-gray-900 dark:text-white text-sm">
+                        RD$ {change.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
-                  </div>
+                  )}
+                  {numReceived > 0 && numReceived < total && (
+                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-xl text-xs">
+                      <span className="font-bold text-red-600 dark:text-red-400">Faltante por cobrar</span>
+                      <span className="font-mono font-black text-red-600 dark:text-red-400 text-sm">
+                        RD$ {(total - numReceived).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1664,7 +1640,7 @@ const CheckoutModal = memo(({
               className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
                 canEmit
                   ? isCotizacion
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white active:scale-[0.99]'
+                    ? 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
                     : paymentMethod === 'Crédito'
                     ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.99] shadow-amber-900/20'
                     : 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
