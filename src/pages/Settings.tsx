@@ -197,8 +197,8 @@ export default function Settings() {
     accountNumber: '',
     accountType: 'Cta. Corriente',
     currency: 'DOP',
-    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-    rnc: '132-61036-2',
+    holderName: 'BRIANNA HEAVY EQUIPMENT',
+    rnc: '131-48841-7',
   });
   const [showBankToast, setShowBankToast] = useState(false);
   const [bankToastMessage, setBankToastMessage] = useState('');
@@ -209,10 +209,10 @@ export default function Settings() {
     setBankForm({
       bankName: 'Banco Popular Dominicano',
       accountNumber: '',
-      accountType: 'Cta. Corriente',
+      accountType: 'Cuenta Corriente',
       currency: 'DOP',
-      holderName: companyProfile.name || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-      rnc: companyProfile.rnc || '132-61036-2',
+      holderName: companyProfile.name || 'BRIANNA HEAVY EQUIPMENT',
+      rnc: companyProfile.rnc || '131-48841-7',
     });
     setIsBankModalOpen(true);
   };
@@ -2692,7 +2692,7 @@ export default function Settings() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: 798-234156-2"
+                    placeholder="Ej: 850244369"
                     value={bankForm.accountNumber}
                     onChange={(e) => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))}
                     required

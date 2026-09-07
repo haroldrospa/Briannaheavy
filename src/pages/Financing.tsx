@@ -3747,8 +3747,11 @@ export default function Financing() {
                                     <p className="text-xs font-mono font-black text-gray-800 dark:text-zinc-200 tracking-tight">
                                       {acc.accountNumber}
                                     </p>
-                                    <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-zinc-400 mt-1">
-                                      <span>{acc.accountType}</span>
+                                    <p className="text-[10px] font-semibold text-gray-500 dark:text-zinc-400 truncate mt-0.5" title={acc.holderName}>
+                                      {acc.holderName}
+                                    </p>
+                                    <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-zinc-400 mt-1 pt-1 border-t border-gray-200/50 dark:border-zinc-700/50">
+                                      <span className="font-medium">{acc.accountType}</span>
                                       <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{acc.currency}</span>
                                     </div>
                                   </div>

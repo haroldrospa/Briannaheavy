@@ -152,41 +152,56 @@ export const DEFAULT_BANK_ACCOUNTS: CompanyBankAccount[] = [
   {
     id: 'bpd',
     bankName: 'Banco Popular Dominicano',
-    accountNumber: '798-234156-2',
-    accountType: 'Cta. Corriente',
+    accountNumber: '850244369',
+    accountType: 'Cuenta Corriente',
     currency: 'DOP',
-    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-    rnc: '132-61036-2',
+    holderName: 'BRIANNA HEAVY EQUIPMENT',
+    rnc: '131-48841-7',
   },
   {
     id: 'banreservas',
     bankName: 'Banreservas',
-    accountNumber: '960-128453-1',
-    accountType: 'Cta. Corriente',
+    accountNumber: '9606170450',
+    accountType: 'Cuenta Corriente',
     currency: 'DOP',
-    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-    rnc: '132-61036-2',
+    holderName: 'BRIANNA HEAVY EQUIPMENT',
+    rnc: '131-48841-7',
   },
   {
     id: 'bhd',
     bankName: 'Banco BHD',
-    accountNumber: '035-489201-9',
-    accountType: 'Cta. Corriente',
+    accountNumber: '38533960015',
+    accountType: 'Cuenta de Ahorros',
     currency: 'DOP',
-    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-    rnc: '132-61036-2',
+    holderName: 'JENNIFFER DEL CARMEN PERALTA POLANCO',
+    rnc: '131-48841-7',
   }
 ];
 
 const BANK_STORAGE_KEY = 'brianna_company_bank_accounts';
+const BANK_STORAGE_VERSION_KEY = 'brianna_bank_accounts_version';
+const CURRENT_BANK_VERSION = 'v2_real_accounts_2026';
 
 export const getCompanyBankAccounts = (): CompanyBankAccount[] => {
   try {
+    const version = localStorage.getItem(BANK_STORAGE_VERSION_KEY);
     const raw = localStorage.getItem(BANK_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+
+    // Auto-migración si existen cuentas de prueba antiguas o no se ha fijado la versión real
+    const hasOldDummy = raw && (
+      raw.includes('798-234156-2') || 
+      raw.includes('960-128453-1') || 
+      raw.includes('035-489201-9')
+    );
+
+    if (version !== CURRENT_BANK_VERSION || hasOldDummy || !raw) {
+      localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(DEFAULT_BANK_ACCOUNTS));
+      localStorage.setItem(BANK_STORAGE_VERSION_KEY, CURRENT_BANK_VERSION);
+      return DEFAULT_BANK_ACCOUNTS;
     }
+
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
   } catch (err) {
     console.error('Error loading company bank accounts:', err);
   }
@@ -196,6 +211,7 @@ export const getCompanyBankAccounts = (): CompanyBankAccount[] => {
 export const saveCompanyBankAccounts = (accounts: CompanyBankAccount[]): void => {
   try {
     localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(accounts));
+    localStorage.setItem(BANK_STORAGE_VERSION_KEY, CURRENT_BANK_VERSION);
     window.dispatchEvent(new CustomEvent('brianna_bank_accounts_changed', { detail: accounts }));
   } catch (err) {
     console.error('Error saving company bank accounts:', err);
