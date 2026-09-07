@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -219,6 +219,7 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
       customer_id: f.customer_id,
       item_id: f.item_id,
       customer: f.customer_name || 'Cliente Sin Nombre',
+      customerPhoto: f.customer_photo || (f as any).customerPhoto || '',
       rnc: f.customer_rnc || f.customer_id || '101-00000-1',
       phone: f.customer_phone || '',
       item: f.item_name || 'Equipo / Maquinaria',
@@ -439,6 +440,8 @@ export default function Financing() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(undefined);
   const [newCustomer, setNewCustomer] = useState('');
+  const [newCustomerPhoto, setNewCustomerPhoto] = useState<string>('');
+  const [previewPhotoModal, setPreviewPhotoModal] = useState<{ url: string; title: string } | null>(null);
   const [newRnc, setNewRnc] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newItem, setNewItem] = useState('');
@@ -457,6 +460,42 @@ export default function Financing() {
   const [newMonths, setNewMonths] = useState('24');
   const [newNextPayment, setNewNextPayment] = useState(defaultNextMonthDate);
   const [formValidationNotice, setFormValidationNotice] = useState(false);
+
+  // Helper para comprimir y convertir fotos a Base64 sin exceder límites de almacenamiento
+  const handleCustomerPhotoFile = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+          setNewCustomerPhoto(dataUrl);
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
   
   // Garante / Fiador Solidario Detailed State
   const [newGuarantorName, setNewGuarantorName] = useState('');
@@ -473,6 +512,10 @@ export default function Financing() {
     setNewCustomer(c.name);
     setNewRnc(c.document_id || '');
     setNewPhone(c.phone || '');
+    const custPhoto = (c as any).photo || (c as any).customer_photo || (c as any).avatar || '';
+    if (custPhoto) {
+      setNewCustomerPhoto(custPhoto);
+    }
     if (formValidationNotice) setFormValidationNotice(false);
   };
 
@@ -498,6 +541,7 @@ export default function Financing() {
   const handleOpenNewForm = () => {
     setEditingFinancing(null);
     setNewCustomer('');
+    setNewCustomerPhoto('');
     setNewRnc('');
     setNewPhone('');
     setNewItem('');
@@ -531,6 +575,7 @@ export default function Financing() {
     if (e) e.stopPropagation();
     setEditingFinancing(fin);
     setNewCustomer(fin.customer || '');
+    setNewCustomerPhoto(fin.customerPhoto || fin.customer_photo || '');
     setNewRnc(fin.rnc || '');
     setNewPhone(fin.phone || '');
     setNewItem(fin.item || '');
@@ -707,6 +752,7 @@ export default function Financing() {
       customer_id: selectedCustomerId,
       item_id: selectedItemId,
       customer_name: newCustomer.trim(),
+      customer_photo: newCustomerPhoto || undefined,
       customer_rnc: newRnc.trim() || undefined,
       customer_phone: newPhone.trim() || undefined,
       item_name: newItem.trim(),
@@ -773,6 +819,7 @@ export default function Financing() {
       // Reset Form
       setFormValidationNotice(false);
       setNewCustomer('');
+      setNewCustomerPhoto('');
       setNewRnc('');
       setNewPhone('');
       setNewItem('');
@@ -1513,21 +1560,94 @@ export default function Financing() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
-                      Nombre / Razón Social *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ej. Agropecuaria del Norte SRL"
-                      value={newCustomer}
-                      onChange={(e) => {
-                        setNewCustomer(e.target.value);
-                        if (formValidationNotice) setFormValidationNotice(false);
-                      }}
-                      className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
-                    />
+                  {/* Foto del Cliente + Nombre */}
+                  <div className="flex items-start gap-3">
+                    {/* Widget Foto */}
+                    <div className="shrink-0">
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Foto Cliente
+                      </label>
+                      <div className="relative group">
+                        {newCustomerPhoto ? (
+                          <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-red-500/80 shadow-md bg-zinc-900 flex items-center justify-center">
+                            <img
+                              src={newCustomerPhoto}
+                              alt="Foto cliente"
+                              className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => setPreviewPhotoModal({ url: newCustomerPhoto, title: newCustomer || 'Foto del Cliente' })}
+                              title="Click para ampliar foto"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNewCustomerPhoto('');
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-600 text-white rounded-full transition-colors cursor-pointer shadow"
+                              title="Eliminar foto"
+                            >
+                              <TrashIcon className="w-3 h-3" />
+                            </button>
+                            <label
+                              className="absolute bottom-0 inset-x-0 bg-black/60 hover:bg-black/80 text-[9px] text-white font-bold py-0.5 text-center cursor-pointer transition-colors"
+                              title="Cambiar foto"
+                            >
+                              Cambiar
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleCustomerPhotoFile(f);
+                                }}
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <label
+                            className="w-20 h-20 rounded-2xl border-2 border-dashed border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 hover:border-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 flex flex-col items-center justify-center text-gray-400 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 cursor-pointer transition-all shadow-2xs group"
+                            title="Subir foto del cliente o cédula"
+                          >
+                            <CameraIcon className="w-6 h-6 stroke-1.5 group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold mt-1">Subir Foto</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleCustomerPhotoFile(f);
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Nombre / Razón Social */}
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Nombre / Razón Social *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Agropecuaria del Norte SRL"
+                        value={newCustomer}
+                        onChange={(e) => {
+                          setNewCustomer(e.target.value);
+                          if (formValidationNotice) setFormValidationNotice(false);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1.5 flex items-center gap-1">
+                        <PhotoIcon className="w-3 h-3 text-red-500/70" />
+                        <span>Foto del cliente o cédula (opcional)</span>
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
@@ -2360,14 +2480,32 @@ export default function Financing() {
                   className="p-3.5 bg-gray-50/70 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/60 dark:border-zinc-800 space-y-2.5 cursor-pointer hover:border-red-500/30 transition-all"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-black text-gray-900 dark:text-white truncate">{item.customer}</h4>
-                      {item.rnc && (
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
-                          <IdentificationIcon className="h-3 w-3 text-red-500/70" />
-                          <span>RNC: {item.rnc}</span>
-                        </p>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {item.customerPhoto ? (
+                        <img
+                          src={item.customerPhoto}
+                          alt={item.customer}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewPhotoModal({ url: item.customerPhoto, title: item.customer });
+                          }}
+                          className="w-10 h-10 rounded-xl object-cover border border-red-500/50 shrink-0 shadow-2xs hover:opacity-90 cursor-pointer"
+                          title="Click para ver foto del cliente"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-gray-200 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 flex items-center justify-center shrink-0 font-bold text-xs">
+                          {item.customer ? item.customer.charAt(0).toUpperCase() : <UserIcon className="w-5 h-5" />}
+                        </div>
                       )}
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-gray-900 dark:text-white truncate">{item.customer}</h4>
+                        {item.rnc && (
+                          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
+                            <IdentificationIcon className="h-3 w-3 text-red-500/70" />
+                            <span>RNC: {item.rnc}</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full shrink-0 ${
                       item.status === 'Al día' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 
@@ -2481,13 +2619,33 @@ export default function Financing() {
                   {filteredFinancings.map((item) => (
                     <tr key={item.id} onClick={() => { setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="hover:bg-gray-50 dark:hover:bg-[#222222] transition-colors cursor-pointer">
                       <td className="px-6 py-5 whitespace-nowrap">
-                        <div className="text-sm font-bold text-gray-900 dark:text-white">{item.customer}</div>
-                        {item.rnc && (
-                          <div className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 flex items-center gap-1 mt-0.5">
-                            <IdentificationIcon className="h-3 w-3 text-red-500/70" />
-                            <span>RNC/Céd: {item.rnc}</span>
+                        <div className="flex items-center gap-3">
+                          {item.customerPhoto ? (
+                            <img
+                              src={item.customerPhoto}
+                              alt={item.customer}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewPhotoModal({ url: item.customerPhoto, title: item.customer });
+                              }}
+                              className="w-10 h-10 rounded-xl object-cover border border-red-500/50 shrink-0 shadow-2xs hover:scale-105 transition-transform cursor-pointer"
+                              title="Click para ampliar foto del cliente"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 flex items-center justify-center shrink-0 font-bold text-xs border border-gray-200/50 dark:border-zinc-700/50">
+                              {item.customer ? item.customer.charAt(0).toUpperCase() : <UserIcon className="w-5 h-5" />}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-[200px]">{item.customer}</div>
+                            {item.rnc && (
+                              <div className="text-[11px] font-medium text-gray-400 dark:text-zinc-500 flex items-center gap-1 mt-0.5 font-mono">
+                                <IdentificationIcon className="h-3 w-3 text-red-500/70" />
+                                <span>RNC/Céd: {item.rnc}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="text-sm font-bold text-gray-900 dark:text-white">{item.item}</div>
@@ -2805,9 +2963,20 @@ export default function Financing() {
 
                     {/* Client Info */}
                     <div className="grid grid-cols-2 gap-6 mb-8 bg-gray-50 dark:bg-[#222222] p-4 rounded-xl print:bg-transparent print:p-0 print:border print:border-gray-200">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
-                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.customer}</p>
+                      <div className="flex items-center gap-3">
+                        {selectedFinancing.customerPhoto && (
+                          <img
+                            src={selectedFinancing.customerPhoto}
+                            alt={selectedFinancing.customer}
+                            onClick={() => setPreviewPhotoModal({ url: selectedFinancing.customerPhoto, title: selectedFinancing.customer })}
+                            className="w-12 h-12 rounded-xl object-cover border border-red-500/50 print:border-gray-400 shrink-0 cursor-pointer shadow-sm"
+                            title="Click para ver foto ampliada"
+                          />
+                        )}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
+                          <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.customer}</p>
+                        </div>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Artículo Financiado</p>
@@ -2896,12 +3065,27 @@ export default function Financing() {
                 ) : !showPaymentForm ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                      <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
-                        <p className="font-black text-gray-900 dark:text-white text-base truncate">{selectedFinancing.customer}</p>
-                        {selectedFinancing.rnc && (
-                          <p className="text-[11px] text-gray-400 font-mono mt-0.5">RNC: {selectedFinancing.rnc}</p>
+                      <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 flex items-center gap-3.5">
+                        {selectedFinancing.customerPhoto ? (
+                          <img
+                            src={selectedFinancing.customerPhoto}
+                            alt={selectedFinancing.customer}
+                            onClick={() => setPreviewPhotoModal({ url: selectedFinancing.customerPhoto, title: selectedFinancing.customer })}
+                            className="w-12 h-12 rounded-2xl object-cover border-2 border-red-500/80 shrink-0 shadow-sm hover:scale-105 transition-transform cursor-pointer"
+                            title="Click para ampliar foto del cliente"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-gray-200 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 flex items-center justify-center shrink-0 font-bold text-sm border border-gray-300/40 dark:border-zinc-700">
+                            {selectedFinancing.customer ? selectedFinancing.customer.charAt(0).toUpperCase() : <UserIcon className="w-6 h-6" />}
+                          </div>
                         )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">Cliente</p>
+                          <p className="font-black text-gray-900 dark:text-white text-base truncate">{selectedFinancing.customer}</p>
+                          {selectedFinancing.rnc && (
+                            <p className="text-[11px] text-gray-400 font-mono mt-0.5">RNC: {selectedFinancing.rnc}</p>
+                          )}
+                        </div>
                       </div>
 
                       <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
@@ -4363,6 +4547,46 @@ export default function Financing() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Lightbox / Modal para ampliar foto del cliente */}
+        {previewPhotoModal && (
+          <div
+            className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 print:hidden"
+            onClick={() => setPreviewPhotoModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="relative max-w-2xl w-full bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl p-4 border border-zinc-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-3">
+                <div className="flex items-center gap-2">
+                  <PhotoIcon className="w-5 h-5 text-[#ED1C24]" />
+                  <h4 className="text-sm font-black text-gray-900 dark:text-white">
+                    {previewPhotoModal.title}
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhotoModal(null)}
+                  className="p-1.5 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex items-center justify-center bg-zinc-950 rounded-2xl overflow-hidden max-h-[75vh]">
+                <img
+                  src={previewPhotoModal.url}
+                  alt={previewPhotoModal.title}
+                  className="max-h-[75vh] w-auto max-w-full object-contain rounded-2xl"
+                />
               </div>
             </motion.div>
           </div>

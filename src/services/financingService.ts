@@ -20,6 +20,7 @@ export interface Financing {
   customer_name: string;
   customer_rnc?: string;
   customer_phone?: string;
+  customer_photo?: string;
   item_name: string;
   chassis?: string;
   item_brand?: string;
@@ -163,6 +164,7 @@ const insertFinancingToSupabase = async (
     status: mapStatusToDb(financingData.status),
     customer_rnc: financingData.customer_rnc || null,
     customer_phone: financingData.customer_phone || null,
+    customer_photo: financingData.customer_photo || null,
     chassis: financingData.chassis || null,
     item_brand: financingData.item_brand || null,
     item_model: financingData.item_model || null,
