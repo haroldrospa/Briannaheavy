@@ -25,6 +25,11 @@ export interface FinancingPaymentReceipt {
   cashierName: string;
   paymentMethod?: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
   registerName?: string;
+  amountReceived?: number;
+  changeGiven?: number;
+  bankName?: string;
+  referenceNumber?: string;
+  paymentNotes?: string;
   qrUrl: string;
   createdAt: string;
 }

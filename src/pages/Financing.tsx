@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -49,6 +49,12 @@ export interface PaymentReceiptData {
   cashierName: string;
   financingId: string;
   qrUrl: string;
+  paymentMethod?: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
+  amountReceived?: number;
+  changeGiven?: number;
+  bankName?: string;
+  referenceNumber?: string;
+  paymentNotes?: string;
 }
 
 export interface MappedInstallment {
@@ -809,6 +815,12 @@ export default function Financing() {
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
   const [viewingReceipt, setViewingReceipt] = useState<FinancingPaymentReceipt | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque'>('Efectivo');
+  const [cashReceived, setCashReceived] = useState<string>('');
+  const [bankName, setBankName] = useState<string>('Banco Popular');
+  const [referenceNumber, setReferenceNumber] = useState<string>('');
+  const [cardBrand, setCardBrand] = useState<string>('Visa');
+  const [cardLastDigits, setCardLastDigits] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
 
   // Print & Exit Confirmation State
   const [hasPrintedReceipt, setHasPrintedReceipt] = useState(false);
@@ -1046,6 +1058,16 @@ export default function Financing() {
       const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
+      const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+      const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
+      const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
+      const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
+        ? bankName 
+        : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
+      const finalRef = paymentMethod === 'Tarjeta'
+        ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
+        : referenceNumber;
+
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
         receiptNumber: recNumber,
@@ -1071,6 +1093,11 @@ export default function Financing() {
         cashierName: activeCashier,
         paymentMethod: paymentMethod,
         registerName: 'Caja Cobros & Financiamientos',
+        amountReceived: amountRec,
+        changeGiven: change,
+        bankName: finalBank,
+        referenceNumber: finalRef?.trim() || undefined,
+        paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
         createdAt: new Date().toISOString(),
       };
@@ -1110,6 +1137,10 @@ export default function Financing() {
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setSelectedInstallmentIds([]);
+      setCashReceived('');
+      setReferenceNumber('');
+      setCardLastDigits('');
+      setPaymentNotes('');
       setHasPrintedReceipt(false);
       setShowReceipt(true);
     } else {
@@ -1120,6 +1151,15 @@ export default function Financing() {
       const recNumber = getNextReceiptNumber();
       const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
+      const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+      const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : paidAbono) : paidAbono;
+      const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - paidAbono) : 0;
+      const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
+        ? bankName 
+        : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
+      const finalRef = paymentMethod === 'Tarjeta'
+        ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
+        : referenceNumber;
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1139,6 +1179,11 @@ export default function Financing() {
         cashierName: activeCashier,
         paymentMethod: paymentMethod,
         registerName: 'Caja Cobros & Financiamientos',
+        amountReceived: amountRec,
+        changeGiven: change,
+        bankName: finalBank,
+        referenceNumber: finalRef?.trim() || undefined,
+        paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
         createdAt: new Date().toISOString(),
       };
@@ -1182,6 +1227,10 @@ export default function Financing() {
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setAbonoAmount('');
+      setCashReceived('');
+      setReferenceNumber('');
+      setCardLastDigits('');
+      setPaymentNotes('');
       setHasPrintedReceipt(false);
       setShowReceipt(true);
     }
@@ -1196,6 +1245,16 @@ export default function Financing() {
       : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0));
     const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)))) : 0;
     const recNumber = peekCurrentReceiptNumber();
+    const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+    const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
+    const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
+    const finalBank = (paymentMethod === 'Transferencia' || paymentMethod === 'Cheque') 
+      ? bankName 
+      : (paymentMethod === 'Tarjeta' ? cardBrand : undefined);
+    const finalRef = paymentMethod === 'Tarjeta'
+      ? (cardLastDigits ? `${referenceNumber || 'VOUCHER'} (Term. ${cardLastDigits})` : referenceNumber)
+      : referenceNumber;
+
     return {
       receiptNumber: recNumber,
       date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
@@ -1209,9 +1268,15 @@ export default function Financing() {
       itemName: selectedFinancing?.item || 'Equipo Pesado',
       cashierName: 'Carlos Mendoza',
       financingId: String(selectedFinancing?.id || ''),
-      qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`
+      qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
+      paymentMethod: paymentMethod,
+      amountReceived: amountRec,
+      changeGiven: change,
+      bankName: finalBank,
+      referenceNumber: finalRef?.trim() || undefined,
+      paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankName, cardBrand, cardLastDigits, referenceNumber, paymentNotes]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2568,7 +2633,7 @@ export default function Financing() {
                     </div>
 
                     {/* Ficha Cliente & Detalles del Financiamiento */}
-                    <div className="grid grid-cols-3 gap-4 mb-8 bg-gray-50 dark:bg-[#222222] p-5 rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-50 print:border-gray-200">
+                    <div className="grid grid-cols-3 gap-4 mb-4 bg-gray-50 dark:bg-[#222222] p-5 rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-50 print:border-gray-200">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Datos del Cliente</p>
                         <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.customerName}</p>
@@ -2584,6 +2649,59 @@ export default function Financing() {
                         <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.cashierName}</p>
                         <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Rol: Cajero Principal</p>
                       </div>
+                    </div>
+
+                    {/* Forma de Pago & Transacción */}
+                    <div className="mb-6 p-3.5 bg-gray-50 dark:bg-[#222222] rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-50 print:border-gray-300 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="px-2.5 py-1 bg-red-100 dark:bg-red-950/50 text-[#ED1C24] dark:text-red-400 font-black text-[11px] uppercase tracking-wider rounded-lg print:bg-gray-200 print:text-black">
+                          {activeReceiptData.paymentMethod || 'Efectivo'}
+                        </span>
+                        {activeReceiptData.paymentMethod === 'Efectivo' || !activeReceiptData.paymentMethod ? (
+                          <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
+                            <span>Efectivo Recibido: <strong className="font-bold text-gray-900 dark:text-white print:text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                            <span className="text-gray-300 dark:text-zinc-600">•</span>
+                            <span>Devuelta / Cambio: <strong className="font-bold text-emerald-600 dark:text-emerald-400 print:text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                          </div>
+                        ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
+                          <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
+                            <span>Banco: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
+                            {activeReceiptData.referenceNumber && (
+                              <>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span>Ref: <strong className="font-mono font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.referenceNumber}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        ) : activeReceiptData.paymentMethod === 'Tarjeta' ? (
+                          <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
+                            <span>Tarjeta: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName || 'Tarjeta'}</strong></span>
+                            {activeReceiptData.referenceNumber && (
+                              <>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span>Voucher: <strong className="font-mono font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.referenceNumber}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
+                            {activeReceiptData.referenceNumber && (
+                              <span>Cheque No: <strong className="font-mono font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.referenceNumber}</strong></span>
+                            )}
+                            {activeReceiptData.bankName && (
+                              <>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span>Banco: <strong className="font-bold text-gray-900 dark:text-white print:text-black">{activeReceiptData.bankName}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {activeReceiptData.paymentNotes && (
+                        <div className="text-gray-500 dark:text-zinc-400 print:text-gray-700 italic text-[11px]">
+                          Obs: {activeReceiptData.paymentNotes}
+                        </div>
+                      )}
                     </div>
 
                     {/* Tabla de Desglose */}
@@ -3007,7 +3125,17 @@ export default function Financing() {
                                         </td>
                                         <td className="px-3 py-2.5">
                                           <span className="font-semibold text-gray-800 dark:text-zinc-200 block">{cuotasDesc}</span>
-                                          <span className="text-[10px] text-gray-400 font-mono">Saldo post-pago: ${(rc.newBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300">
+                                              {rc.paymentMethod || 'Efectivo'}
+                                            </span>
+                                            {rc.bankName && (
+                                              <span className="text-[10px] text-gray-400 truncate max-w-[140px]">
+                                                {rc.bankName}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-[10px] text-gray-400 font-mono block mt-0.5">Saldo post-pago: ${(rc.newBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                                         </td>
                                         <td className="px-3 py-2.5 text-gray-500 dark:text-zinc-400">
                                           {rc.cashierName || 'Caja Principal'}
@@ -3234,10 +3362,21 @@ export default function Financing() {
                   </>
                 ) : (
                   <div className="space-y-6">
-                    <div className="bg-[#f4f3f1] dark:bg-[#222222] p-6 rounded-3xl">
-                      <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">
-                        {paymentType === 'abono' ? 'Desglose de Abono a Capital' : 'Desglose de Pago'}
-                      </h4>
+                    <div className="bg-[#f4f3f1] dark:bg-[#222222] p-6 rounded-3xl space-y-6">
+                      <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
+                        <button
+                          type="button"
+                          onClick={() => setShowPaymentForm(false)}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white transition-colors cursor-pointer"
+                        >
+                          <ArrowLeftIcon className="h-4 w-4" />
+                          <span>Volver a selección</span>
+                        </button>
+                        <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                          {paymentType === 'abono' ? 'Desglose de Abono a Capital' : 'Desglose de Pago'}
+                        </h4>
+                      </div>
+
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm">
                           <span className="font-bold text-gray-500">
@@ -3265,41 +3404,286 @@ export default function Financing() {
                             ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
+                      </div>
 
-                        {/* Selector de Método de Pago */}
-                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
-                          <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-2">
-                            Método de Pago Recibido
+                      {/* Selector Profesional de Método de Pago */}
+                      <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
+                        <div>
+                          <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-2.5">
+                            Forma / Método de Pago Recibido
                           </label>
-                          <div className="grid grid-cols-4 gap-2">
-                            {(['Efectivo', 'Transferencia', 'Tarjeta', 'Cheque'] as const).map((method) => (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            {[
+                              { id: 'Efectivo' as const, label: 'Efectivo', icon: BanknotesIcon },
+                              { id: 'Transferencia' as const, label: 'Transferencia', icon: BuildingLibraryIcon },
+                              { id: 'Tarjeta' as const, label: 'Tarjeta', icon: CreditCardIcon },
+                              { id: 'Cheque' as const, label: 'Cheque', icon: DocumentTextIcon },
+                            ].map(({ id, label, icon: Icon }) => (
                               <button
-                                key={method}
+                                key={id}
                                 type="button"
-                                onClick={() => setPaymentMethod(method)}
-                                className={`py-2 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
-                                  paymentMethod === method
-                                    ? 'bg-[#ED1C24] text-white shadow-xs'
-                                    : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:border-red-300'
+                                onClick={() => setPaymentMethod(id)}
+                                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl font-bold text-xs transition-all cursor-pointer border ${
+                                  paymentMethod === id
+                                    ? 'bg-[#ED1C24] text-white border-[#ED1C24] shadow-md shadow-red-900/20'
+                                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-red-300 hover:bg-red-50/20'
                                 }`}
                               >
-                                {method}
+                                <Icon className="h-4 w-4 shrink-0" />
+                                <span>{label}</span>
                               </button>
                             ))}
                           </div>
                         </div>
+
+                        {/* Campos dinámicos según el método seleccionado */}
+                        {paymentMethod === 'Efectivo' && (
+                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300">
+                                Efectivo Recibido (Paga con):
+                              </label>
+                              <span className="text-[11px] font-bold text-gray-400">
+                                Total: ${effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center font-black text-gray-400 text-sm">
+                                RD$
+                              </span>
+                              <input
+                                type="text"
+                                value={cashReceived}
+                                onChange={(e) => setCashReceived(formatCurrencyInput(e.target.value))}
+                                placeholder={effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                className="w-full pl-14 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-lg focus:outline-none focus:border-[#ED1C24] transition-all"
+                              />
+                            </div>
+
+                            {/* Botones de sugerencia rápida de efectivo */}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setCashReceived(effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }))}
+                                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                              >
+                                Monto Exacto
+                              </button>
+                              {[500, 1000, 2000, 5000].map((addAmt) => (
+                                <button
+                                  key={addAmt}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = parseCurrencyInput(cashReceived) || effectivePayAmount;
+                                    setCashReceived(formatCurrencyInput(current + addAmt));
+                                  }}
+                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                >
+                                  +${addAmt.toLocaleString()}
+                                </button>
+                              ))}
+                              {cashReceived && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCashReceived('')}
+                                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                >
+                                  Limpiar
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Cálculo de Devuelta o Alerta de Faltante */}
+                            {(() => {
+                              const numCash = parseCurrencyInput(cashReceived);
+                              if (!cashReceived || numCash === 0) return null;
+                              if (numCash >= effectivePayAmount) {
+                                const change = numCash - effectivePayAmount;
+                                return (
+                                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between">
+                                    <div>
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 block">
+                                        Devuelta / Cambio a Entregar al Cliente
+                                      </span>
+                                      <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                                        RD$ {change.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                    <CheckCircleIcon className="h-8 w-8 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  </div>
+                                );
+                              } else {
+                                const missing = effectivePayAmount - numCash;
+                                return (
+                                  <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-center justify-between">
+                                    <div>
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 block">
+                                        Monto Recibido Insuficiente
+                                      </span>
+                                      <span className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                                        Faltan RD$ {missing.toLocaleString('en-US', { minimumFractionDigits: 2 })} para cubrir el total
+                                      </span>
+                                    </div>
+                                    <ExclamationTriangleIcon className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  </div>
+                                );
+                              }
+                            })()}
+                          </div>
+                        )}
+
+                        {paymentMethod === 'Transferencia' && (
+                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                Banco Receptor / Destino
+                              </label>
+                              <select
+                                value={bankName}
+                                onChange={(e) => setBankName(e.target.value)}
+                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                              >
+                                <option value="Banco Popular Dominicano">Banco Popular Dominicano</option>
+                                <option value="Banco de Reservas (Banreservas)">Banco de Reservas (Banreservas)</option>
+                                <option value="Banco BHD">Banco BHD</option>
+                                <option value="Scotiabank República Dominicana">Scotiabank República Dominicana</option>
+                                <option value="Banco Santa Cruz">Banco Santa Cruz</option>
+                                <option value="Banco Promerica">Banco Promerica</option>
+                                <option value="Banco BDI">Banco BDI</option>
+                                <option value="Banco Vimenca">Banco Vimenca</option>
+                                <option value="Otro Banco">Otro Banco</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                No. de Referencia / Comprobante de Transferencia
+                              </label>
+                              <input
+                                type="text"
+                                value={referenceNumber}
+                                onChange={(e) => setReferenceNumber(e.target.value)}
+                                placeholder="Ej: TRANS-98421045"
+                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {paymentMethod === 'Tarjeta' && (
+                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                  Red / Tipo de Tarjeta
+                                </label>
+                                <select
+                                  value={cardBrand}
+                                  onChange={(e) => setCardBrand(e.target.value)}
+                                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                                >
+                                  <option value="Visa">Visa</option>
+                                  <option value="Mastercard">Mastercard</option>
+                                  <option value="American Express">American Express</option>
+                                  <option value="Tarjeta de Débito / Otra">Débito / Otra</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                  Últimos 4 Dígitos (Opcional)
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={4}
+                                  value={cardLastDigits}
+                                  onChange={(e) => setCardLastDigits(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                  placeholder="Ej: 4242"
+                                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                No. de Aprobación / Voucher
+                              </label>
+                              <input
+                                type="text"
+                                value={referenceNumber}
+                                onChange={(e) => setReferenceNumber(e.target.value)}
+                                placeholder="Ej: AUT-054921"
+                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {paymentMethod === 'Cheque' && (
+                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                Banco Emisor del Cheque
+                              </label>
+                              <input
+                                type="text"
+                                value={bankName}
+                                onChange={(e) => setBankName(e.target.value)}
+                                placeholder="Ej: Banco Popular Dominicano"
+                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                                No. de Cheque
+                              </label>
+                              <input
+                                type="text"
+                                value={referenceNumber}
+                                onChange={(e) => setReferenceNumber(e.target.value)}
+                                placeholder="Ej: CHQ-001248"
+                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Observaciones Opcionales */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">
+                            Notas u Observaciones del Cobro (Opcional)
+                          </label>
+                          <input
+                            type="text"
+                            value={paymentNotes}
+                            onChange={(e) => setPaymentNotes(e.target.value)}
+                            placeholder="Ej: Pago de cuota realizado puntualmente..."
+                            className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:border-[#ED1C24]"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="pt-4 mt-6">
-                      <button 
-                        onClick={handleConfirmAndProcessPayment} 
-                        className="w-full flex items-center justify-center gap-2 bg-[#ED1C24] hover:bg-red-700 text-white py-4 px-4 rounded-full font-bold transition-all shadow-md text-lg cursor-pointer"
-                      >
-                        <CheckCircleIcon className="h-6 w-6" />
-                        Confirmar y Procesar Pago (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
-                      </button>
-                    </div>
+                    {(() => {
+                      const numCash = parseCurrencyInput(cashReceived);
+                      const isInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
+
+                      return (
+                        <div className="pt-4 mt-6">
+                          <button 
+                            disabled={isInsufficient}
+                            onClick={handleConfirmAndProcessPayment} 
+                            className={`w-full flex items-center justify-center gap-2 py-4 px-4 rounded-full font-bold transition-all shadow-md text-lg cursor-pointer ${
+                              isInsufficient
+                                ? 'bg-gray-300 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 cursor-not-allowed'
+                                : 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]'
+                            }`}
+                          >
+                            <CheckCircleIcon className="h-6 w-6" />
+                            {isInsufficient
+                              ? 'Efectivo Recibido Insuficiente'
+                              : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -3747,7 +4131,7 @@ export default function Financing() {
           </div>
 
           {/* Details Box */}
-          <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-300">
+          <div className="grid grid-cols-3 gap-4 mb-3 bg-gray-50 p-4 rounded-xl border border-gray-300">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Datos del Cliente</p>
               <p className="font-black text-black text-sm">{activeReceiptData.customerName}</p>
@@ -3769,6 +4153,59 @@ export default function Financing() {
               <p className="font-black text-black text-sm">{activeReceiptData.cashierName}</p>
               <p className="text-[11px] text-gray-700 font-medium mt-0.5">Rol: Cajero Principal</p>
             </div>
+          </div>
+
+          {/* Forma de Pago & Transacción (Impresión) */}
+          <div className="mb-6 p-3 bg-gray-50 rounded-xl border border-gray-300 flex flex-wrap items-center justify-between gap-3 text-xs text-black">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="px-2.5 py-0.5 bg-gray-200 text-black font-black text-[11px] uppercase tracking-wider rounded border border-gray-300">
+                {activeReceiptData.paymentMethod || 'Efectivo'}
+              </span>
+              {activeReceiptData.paymentMethod === 'Efectivo' || !activeReceiptData.paymentMethod ? (
+                <div className="flex items-center gap-2.5 text-gray-700">
+                  <span>Efectivo Recibido: <strong className="font-bold text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-gray-400">•</span>
+                  <span>Devuelta / Cambio: <strong className="font-bold text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
+              ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
+                <div className="flex items-center gap-2.5 text-gray-700">
+                  <span>Banco: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
+                  {activeReceiptData.referenceNumber && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span>Ref / Comprobante: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
+                    </>
+                  )}
+                </div>
+              ) : activeReceiptData.paymentMethod === 'Tarjeta' ? (
+                <div className="flex items-center gap-2.5 text-gray-700">
+                  <span>Tarjeta: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Tarjeta'}</strong></span>
+                  {activeReceiptData.referenceNumber && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span>Voucher / Aut: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5 text-gray-700">
+                  {activeReceiptData.referenceNumber && (
+                    <span>Cheque No: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
+                  )}
+                  {activeReceiptData.bankName && (
+                    <>
+                      <span className="text-gray-400">•</span>
+                      <span>Banco: <strong className="font-bold text-black">{activeReceiptData.bankName}</strong></span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            {activeReceiptData.paymentNotes && (
+              <div className="text-gray-600 italic text-[11px]">
+                Obs: {activeReceiptData.paymentNotes}
+              </div>
+            )}
           </div>
 
           {/* Table */}
