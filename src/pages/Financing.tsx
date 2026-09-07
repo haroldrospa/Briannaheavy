@@ -4,16 +4,19 @@ import {
   PlusIcon, BanknotesIcon, CalculatorIcon, XMarkIcon, ArrowLeftIcon, CheckCircleIcon, 
   PrinterIcon, UserIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
-  TruckIcon, ExclamationTriangleIcon,
-  CheckIcon, BoltIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon
+  TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
+  CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConfirm } from '../contexts/ConfirmContext';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import { 
   fetchFinancings, 
   getLocalStorageFinancings, 
   createFinancing, 
+  updateFinancing,
+  deleteFinancing,
   markInstallmentPaid, 
   type Installment 
 } from '../services/financingService';
@@ -109,21 +112,22 @@ const generateAmortizationSchedule = (
   // Compatibilidad: si una tasa previa era anual (> 8%), convertir a mensual
   const effectiveMonthlyRate = monthlyRatePercent > 8 ? (monthlyRatePercent / 12) : monthlyRatePercent;
   const mRate = effectiveMonthlyRate / 100;
-  const mPayment = mRate > 0 && months > 0
-    ? (financedAmount * mRate * Math.pow(1 + mRate, months)) / (Math.pow(1 + mRate, months) - 1)
-    : (financedAmount / (months || 1));
+  const numMonths = Math.max(1, months || 1);
+  const fixedCapital = Math.round((financedAmount / numMonths) * 100) / 100;
+  const fixedInterest = Math.round((financedAmount * mRate) * 100) / 100;
 
   let balance = financedAmount;
   const baseDate = startDateStr ? new Date(startDateStr) : new Date();
 
-  for (let i = 1; i <= months; i++) {
-    const interest = balance * mRate;
-    const capital = Math.min(balance, mPayment - interest);
+  for (let i = 1; i <= numMonths; i++) {
+    const capital = i === numMonths ? balance : fixedCapital;
+    const interest = fixedInterest;
     balance = Math.max(0, balance - capital);
 
     const pDate = new Date(baseDate);
     pDate.setMonth(pDate.getMonth() + (i - 1));
     const dueDate = pDate.toISOString().split('T')[0];
+    const totalInstallment = Math.round((capital + interest) * 100) / 100;
 
     schedule.push({
       id: i,
@@ -131,9 +135,9 @@ const generateAmortizationSchedule = (
       dueDate,
       capital: Math.round(capital * 100) / 100,
       interest: Math.round(interest * 100) / 100,
-      amount: Math.round(mPayment * 100) / 100,
+      amount: totalInstallment,
       penalty: 0,
-      total: Math.round(mPayment * 100) / 100,
+      total: totalInstallment,
       status: 'Pendiente',
       isPaid: false,
       paidAmount: 0,
@@ -191,11 +195,21 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
     return {
       id: f.id || idx + 1,
       rawId: f.id,
+      customer_id: f.customer_id,
+      item_id: f.item_id,
       customer: f.customer_name || 'Cliente Sin Nombre',
       rnc: f.customer_rnc || f.customer_id || '101-00000-1',
       phone: f.customer_phone || '',
       item: f.item_name || 'Equipo / Maquinaria',
       chassis: f.chassis || '',
+      itemBrand: f.item_brand || '',
+      itemModel: f.item_model || '',
+      itemYear: f.item_year || '',
+      itemColor: f.item_color || '',
+      itemPlate: f.item_plate || '',
+      itemEngineNumber: f.item_engine_number || '',
+      itemMileageHours: f.item_mileage_hours || '',
+      itemType: f.item_type || '',
       amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
       totalValue: Number(f.total_amount) || 0,
       downPayment: Number(f.down_payment) || 0,
@@ -265,6 +279,7 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
 };
 
 export default function Financing() {
+  const confirm = useConfirm();
   const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
@@ -291,13 +306,13 @@ export default function Financing() {
             total_amount: 1500000,
             down_payment: 300000,
             financed_amount: 1200000,
-            interest_rate: 16,
+            interest_rate: 2.0,
             installments_count: 24,
             frequency: 'Mensual' as const,
             start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             status: 'Activo' as const,
           };
-          const schedule1 = generateAmortizationSchedule(1200000, 16, 24, sample1.start_date).map(inst => ({
+          const schedule1 = generateAmortizationSchedule(1200000, 2.0, 24, sample1.start_date).map(inst => ({
             installment_number: inst.id,
             due_date: inst.dueDate,
             amount: inst.amount,
@@ -428,16 +443,25 @@ export default function Financing() {
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  // Comprehensive New Financing Form State (Fast & Streamlined)
+  // Comprehensive Financing Form State (Fast & Streamlined)
+  const [editingFinancing, setEditingFinancing] = useState<any | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>(undefined);
   const [newCustomer, setNewCustomer] = useState('');
   const [newRnc, setNewRnc] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newItem, setNewItem] = useState('');
+  const [newItemBrand, setNewItemBrand] = useState('');
+  const [newItemModel, setNewItemModel] = useState('');
+  const [newItemYear, setNewItemYear] = useState('');
   const [newChassis, setNewChassis] = useState('');
-  const [newTotalValue, setNewTotalValue] = useState('750,000');
-  const [newDownPayment, setNewDownPayment] = useState('150,000');
+  const [newItemEngine, setNewItemEngine] = useState('');
+  const [newItemPlate, setNewItemPlate] = useState('');
+  const [newItemColor, setNewItemColor] = useState('');
+  const [newItemMileageHours, setNewItemMileageHours] = useState('');
+  const [newItemType, setNewItemType] = useState('Equipo_Pesado');
+  const [newTotalValue, setNewTotalValue] = useState('0');
+  const [newDownPayment, setNewDownPayment] = useState('0');
   const [newRate, setNewRate] = useState('2.0');
   const [newMonths, setNewMonths] = useState('24');
   const [newNextPayment, setNewNextPayment] = useState(defaultNextMonthDate);
@@ -463,8 +487,16 @@ export default function Financing() {
 
   const handleSelectInventoryItem = (item: InventoryItem) => {
     setSelectedItemId(String(item.id));
-    setNewItem(item.name);
-    setNewChassis(item.vin || item.chassis_number || item.part_number || '');
+    setNewItem(item.name || `${item.brand || ''} ${item.model || ''}`.trim() || 'Equipo / Maquinaria');
+    setNewItemBrand(item.brand || '');
+    setNewItemModel(item.model || '');
+    setNewItemYear(item.year ? String(item.year) : '');
+    setNewChassis(item.vin || item.chassis_number || (item as any).serialNumber || item.part_number || '');
+    setNewItemEngine(item.engine_number || '');
+    setNewItemPlate((item as any).plate || '');
+    setNewItemColor((item as any).color || '');
+    setNewItemMileageHours(String(item.mileage_hours || (item as any).hours || (item as any).mileage || ''));
+    setNewItemType(item.type || 'Equipo_Pesado');
     if (item.price > 0) {
       setNewTotalValue(formatCurrencyInput(item.price));
       setNewDownPayment(formatCurrencyInput(Math.round(item.price * 0.2)));
@@ -472,18 +504,93 @@ export default function Financing() {
     if (formValidationNotice) setFormValidationNotice(false);
   };
 
-  const handleFillQuickExample = () => {
-    setNewCustomer('Constructora del Caribe S.R.L.');
-    setNewRnc('131-48841-7');
-    setNewPhone('809-555-0142');
-    setNewItem('Camión Volquete Mack Granite 2024');
-    setNewChassis('1M8GDM9A2KP09812');
-    setNewTotalValue('1,200,000');
-    setNewDownPayment('240,000');
+  const handleOpenNewForm = () => {
+    setEditingFinancing(null);
+    setNewCustomer('');
+    setNewRnc('');
+    setNewPhone('');
+    setNewItem('');
+    setNewItemBrand('');
+    setNewItemModel('');
+    setNewItemYear('');
+    setNewChassis('');
+    setNewItemEngine('');
+    setNewItemPlate('');
+    setNewItemColor('');
+    setNewItemMileageHours('');
+    setNewItemType('Equipo_Pesado');
+    setNewTotalValue('0');
+    setNewDownPayment('0');
     setNewRate('2.0');
-    setNewMonths('36');
+    setNewMonths('24');
     setNewNextPayment(defaultNextMonthDate());
-    if (formValidationNotice) setFormValidationNotice(false);
+    setNewGuarantorName('');
+    setNewGuarantorRnc('');
+    setNewGuarantorPhone('');
+    setNewGuarantorRelation('Socio / Propietario');
+    setNewGuarantorAddress('');
+    setShowGuarantorSection(false);
+    setSelectedCustomerId(undefined);
+    setSelectedItemId(undefined);
+    setFormValidationNotice(false);
+    setIsNewFormOpen(true);
+  };
+
+  const handleOpenEditForm = (fin: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingFinancing(fin);
+    setNewCustomer(fin.customer || '');
+    setNewRnc(fin.rnc || '');
+    setNewPhone(fin.phone || '');
+    setNewItem(fin.item || '');
+    setNewItemBrand(fin.itemBrand || '');
+    setNewItemModel(fin.itemModel || '');
+    setNewItemYear(fin.itemYear ? String(fin.itemYear) : '');
+    setNewChassis(fin.chassis || '');
+    setNewItemEngine(fin.itemEngineNumber || '');
+    setNewItemPlate(fin.itemPlate || '');
+    setNewItemColor(fin.itemColor || '');
+    setNewItemMileageHours(fin.itemMileageHours ? String(fin.itemMileageHours) : '');
+    setNewItemType(fin.itemType || 'Equipo_Pesado');
+    setNewTotalValue(formatCurrencyInput(fin.totalValue || fin.amount));
+    setNewDownPayment(formatCurrencyInput(fin.downPayment || 0));
+    setNewRate(String(fin.rate || 2.0));
+    setNewMonths(String(fin.months || fin.installments?.length || 24));
+    setNewNextPayment(fin.nextPayment || fin.startDate || defaultNextMonthDate());
+    setNewGuarantorName(fin.guarantor || '');
+    setNewGuarantorRnc(fin.guarantorRnc || '');
+    setNewGuarantorPhone(fin.guarantorPhone || '');
+    setNewGuarantorRelation(fin.guarantorRelation || 'Socio / Propietario');
+    setNewGuarantorAddress(fin.guarantorAddress || '');
+    setShowGuarantorSection(!!fin.guarantor);
+    setSelectedCustomerId(fin.customer_id);
+    setSelectedItemId(fin.item_id);
+    setFormValidationNotice(false);
+    setIsNewFormOpen(true);
+  };
+
+  const handleDeleteFinancing = async (fin: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const confirmed = await confirm({
+      title: '¿Eliminar Financiamiento?',
+      description: `¿Estás seguro de que deseas eliminar permanentemente el financiamiento de "${fin.customer}" (${fin.item}) por RD$ ${Number(fin.amount).toLocaleString('es-DO')}? Esta acción no se puede deshacer.`,
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (confirmed) {
+      try {
+        const finId = fin.rawId || String(fin.id);
+        await deleteFinancing(finId);
+        setFinancingsList(prev => prev.filter(f => f.rawId !== finId && f.id !== fin.id));
+        if (selectedFinancing && (selectedFinancing.rawId === finId || selectedFinancing.id === fin.id)) {
+          forceCloseAllModals();
+        }
+      } catch (err) {
+        console.error('Error deleting financing:', err);
+      }
+    }
   };
 
   // Live Calculations for Modal Form
@@ -491,17 +598,22 @@ export default function Financing() {
   const modalInicial = parseCurrencyInput(newDownPayment);
   const modalFinancedAmount = Math.max(0, modalValTotal - modalInicial);
   const modalMonthlyRateNum = parseFloat(newRate) || 0;
-  const modalNumMonths = parseInt(newMonths) || 36;
+  const modalNumMonths = parseInt(newMonths) || 24;
   const modalMonthlyRate = modalMonthlyRateNum / 100;
 
-  const modalMonthlyPayment = modalFinancedAmount > 0 && modalMonthlyRate > 0
-    ? (modalFinancedAmount * modalMonthlyRate * Math.pow(1 + modalMonthlyRate, modalNumMonths)) / (Math.pow(1 + modalMonthlyRate, modalNumMonths) - 1)
-    : (modalFinancedAmount / (modalNumMonths || 1));
+  const modalFixedCapital = modalNumMonths > 0 && modalFinancedAmount > 0
+    ? (modalFinancedAmount / modalNumMonths)
+    : 0;
+
+  const modalFixedInterest = modalFinancedAmount > 0
+    ? (modalFinancedAmount * modalMonthlyRate)
+    : 0;
+
+  const modalMonthlyPayment = modalFixedCapital + modalFixedInterest;
 
   const modalTotalInterest = useMemo(() => {
-    if (modalMonthlyPayment <= 0 || modalNumMonths <= 0 || modalFinancedAmount <= 0) return 0;
-    return Math.max(0, (modalMonthlyPayment * modalNumMonths) - modalFinancedAmount);
-  }, [modalMonthlyPayment, modalNumMonths, modalFinancedAmount]);
+    return modalFixedInterest * modalNumMonths;
+  }, [modalFixedInterest, modalNumMonths]);
 
   const modalTotalContract = useMemo(() => {
     return modalFinancedAmount + modalTotalInterest;
@@ -515,14 +627,16 @@ export default function Financing() {
   };
 
   const amortizationSchedulePreview = useMemo(() => {
-    if (modalFinancedAmount <= 0 || modalMonthlyPayment <= 0 || modalNumMonths <= 0) return [];
+    if (modalFinancedAmount <= 0 || modalNumMonths <= 0) return [];
+    const fixedCapital = Math.round((modalFinancedAmount / modalNumMonths) * 100) / 100;
+    const fixedInterest = Math.round((modalFinancedAmount * modalMonthlyRate) * 100) / 100;
     let balance = modalFinancedAmount;
     const schedule = [];
     const baseDate = newNextPayment ? new Date(newNextPayment) : new Date();
 
     for (let i = 1; i <= Math.min(modalNumMonths, 60); i++) {
-      const interest = balance * modalMonthlyRate;
-      const capital = Math.min(balance, modalMonthlyPayment - interest);
+      const capital = i === modalNumMonths ? balance : fixedCapital;
+      const interest = fixedInterest;
       balance = Math.max(0, balance - capital);
       
       const pDate = new Date(baseDate);
@@ -531,23 +645,23 @@ export default function Financing() {
       schedule.push({
         number: i,
         date: pDate.toISOString().split('T')[0],
-        payment: modalMonthlyPayment,
+        payment: Math.round((capital + interest) * 100) / 100,
         interest,
         capital,
-        balance
+        balance: Math.round(balance * 100) / 100
       });
     }
     return schedule;
-  }, [modalFinancedAmount, modalMonthlyPayment, modalNumMonths, modalMonthlyRate, newNextPayment]);
+  }, [modalFinancedAmount, modalNumMonths, modalMonthlyRate, newNextPayment]);
 
-  const handleCreateFinancing = async (e: React.FormEvent) => {
+  const handleSaveFinancing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomer.trim() || !newItem.trim()) {
+    if (!newCustomer.trim() || !newItem.trim() || modalValTotal <= 0) {
       setFormValidationNotice(true);
       return;
     }
 
-    const finalTotal = modalValTotal > 0 ? modalValTotal : 750000;
+    const finalTotal = modalValTotal;
     const finalInicial = modalInicial;
     const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : Math.max(0, finalTotal - finalInicial);
     const finalMonths = modalNumMonths || 24;
@@ -556,12 +670,13 @@ export default function Financing() {
 
     let balance = finalFinanced;
     const mRate = finalRate / 100;
-    const mPayment = modalMonthlyPayment > 0 ? modalMonthlyPayment : (finalFinanced / finalMonths);
+    const fixedCapital = Math.round((finalFinanced / finalMonths) * 100) / 100;
+    const fixedInterest = Math.round((finalFinanced * mRate) * 100) / 100;
     const installmentsToCreate: Omit<Installment, 'id' | 'financing_id'>[] = [];
 
     for (let i = 1; i <= finalMonths; i++) {
-      const interest = balance * mRate;
-      const capital = Math.min(balance, mPayment - interest);
+      const capital = i === finalMonths ? balance : fixedCapital;
+      const interest = fixedInterest;
       balance = Math.max(0, balance - capital);
 
       const pDate = new Date(baseDate);
@@ -570,7 +685,7 @@ export default function Financing() {
       installmentsToCreate.push({
         installment_number: i,
         due_date: pDate.toISOString().split('T')[0],
-        amount: Math.round(mPayment * 100) / 100,
+        amount: Math.round((capital + interest) * 100) / 100,
         principal_amount: Math.round(capital * 100) / 100,
         interest_amount: Math.round(interest * 100) / 100,
         paid_amount: 0,
@@ -578,11 +693,22 @@ export default function Financing() {
       });
     }
 
-    const financingPayload = {
+    const financingPayload: any = {
       customer_id: selectedCustomerId,
       item_id: selectedItemId,
       customer_name: newCustomer.trim(),
+      customer_rnc: newRnc.trim() || undefined,
+      customer_phone: newPhone.trim() || undefined,
       item_name: newItem.trim(),
+      chassis: newChassis.trim() || undefined,
+      item_brand: newItemBrand.trim() || undefined,
+      item_model: newItemModel.trim() || undefined,
+      item_year: newItemYear.trim() || undefined,
+      item_color: newItemColor.trim() || undefined,
+      item_plate: newItemPlate.trim() || undefined,
+      item_engine_number: newItemEngine.trim() || undefined,
+      item_mileage_hours: newItemMileageHours.trim() || undefined,
+      item_type: newItemType || undefined,
       total_amount: finalTotal,
       down_payment: finalInicial,
       financed_amount: finalFinanced,
@@ -590,17 +716,49 @@ export default function Financing() {
       installments_count: finalMonths,
       frequency: 'Mensual' as const,
       start_date: newNextPayment || new Date().toISOString().split('T')[0],
-      status: 'Activo' as const,
+      status: editingFinancing ? editingFinancing.status : ('Activo' as const),
+      guarantor: newGuarantorName.trim() || undefined,
+      guarantor_rnc: newGuarantorRnc.trim() || undefined,
+      guarantor_phone: newGuarantorPhone.trim() || undefined,
+      guarantor_relation: newGuarantorRelation || undefined,
       guarantor_address: newGuarantorAddress || undefined,
     };
 
     try {
-      const created = await createFinancing(financingPayload, installmentsToCreate);
-      const mapped = mapFinancingsToState([created]);
-      if (mapped.length > 0) {
-        setFinancingsList(prev => [mapped[0], ...prev]);
+      if (editingFinancing) {
+        // Mode: UPDATE
+        const finId = editingFinancing.rawId || String(editingFinancing.id);
+        const shouldRegenerateSchedule = 
+          Number(editingFinancing.amount) !== finalFinanced || 
+          Number(editingFinancing.months) !== finalMonths ||
+          Number(editingFinancing.rate) !== finalRate;
+
+        const updated = await updateFinancing(
+          finId, 
+          financingPayload, 
+          shouldRegenerateSchedule ? installmentsToCreate : undefined
+        );
+
+        if (updated) {
+          const mapped = mapFinancingsToState([updated]);
+          if (mapped.length > 0) {
+            setFinancingsList(prev => prev.map(f => (f.rawId === finId || f.id === finId || f.id === editingFinancing.id) ? mapped[0] : f));
+            if (selectedFinancing && (selectedFinancing.rawId === finId || selectedFinancing.id === editingFinancing.id)) {
+              setSelectedFinancing(mapped[0]);
+            }
+          }
+        }
+      } else {
+        // Mode: CREATE
+        const created = await createFinancing(financingPayload, installmentsToCreate);
+        const mapped = mapFinancingsToState([created]);
+        if (mapped.length > 0) {
+          setFinancingsList(prev => [mapped[0], ...prev]);
+        }
       }
+
       setIsNewFormOpen(false);
+      setEditingFinancing(null);
       
       // Reset Form
       setFormValidationNotice(false);
@@ -608,7 +766,15 @@ export default function Financing() {
       setNewRnc('');
       setNewPhone('');
       setNewItem('');
+      setNewItemBrand('');
+      setNewItemModel('');
+      setNewItemYear('');
       setNewChassis('');
+      setNewItemEngine('');
+      setNewItemPlate('');
+      setNewItemColor('');
+      setNewItemMileageHours('');
+      setNewItemType('Equipo_Pesado');
       setNewTotalValue('750,000');
       setNewDownPayment('150,000');
       setNewGuarantorName('');
@@ -620,7 +786,7 @@ export default function Financing() {
       setSelectedCustomerId(undefined);
       setSelectedItemId(undefined);
     } catch (err) {
-      console.error('Error creating financing:', err);
+      console.error('Error saving financing:', err);
     }
   };
   const [selectedFinancing, setSelectedFinancing] = useState<any>(null);
@@ -938,9 +1104,10 @@ export default function Financing() {
   const downPayment = parseCurrencyInput(downPaymentStr);
   const financedAmount = Math.max(0, amount - downPayment);
   const monthlyRate = rate / 100;
-  const monthlyPayment = financedAmount > 0 
-    ? (financedAmount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
-    : 0;
+  const simMonths = months || 1;
+  const simFixedCapital = financedAmount > 0 ? (financedAmount / simMonths) : 0;
+  const simFixedInterest = financedAmount > 0 ? (financedAmount * monthlyRate) : 0;
+  const monthlyPayment = simFixedCapital + simFixedInterest;
 
   return (
     <div className="space-y-6">
@@ -964,10 +1131,10 @@ export default function Financing() {
           <div className="relative">
             <button 
               onClick={() => setShowGraceDaysPopover(!showGraceDaysPopover)}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-500/30 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
               title="Configurar Días de Gracia para Mora"
             >
-              <ClockIcon className="h-4 w-4 text-amber-500" />
+              <ClockIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
               <span>Gracia: <strong>{graceDays}d</strong></span>
             </button>
 
@@ -975,7 +1142,7 @@ export default function Financing() {
               <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-72 bg-white dark:bg-[#14151b] border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in zoom-in-95">
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-zinc-800 mb-3">
                   <span className="text-xs font-black text-gray-900 dark:text-white uppercase flex items-center gap-1.5">
-                    <ClockIcon className="h-4 w-4 text-amber-500" />
+                    <ClockIcon className="h-4 w-4 text-gray-500" />
                     Días de Gracia para Mora
                   </span>
                   <button onClick={() => setShowGraceDaysPopover(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs cursor-pointer">
@@ -996,7 +1163,7 @@ export default function Financing() {
                       }}
                       className={`py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
                         graceDays === days
-                          ? 'bg-amber-500 text-white shadow-xs'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
                           : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700'
                       }`}
                     >
@@ -1016,11 +1183,11 @@ export default function Financing() {
                       max="90"
                       value={graceDays}
                       onChange={(e) => setGraceDays(Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full px-3 py-1.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500/30"
+                      className="w-full px-3 py-1.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900/20 dark:focus:ring-white/20"
                     />
                     <button
                       onClick={() => setShowGraceDaysPopover(false)}
-                      className="px-3.5 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-all cursor-pointer shrink-0"
+                      className="px-3.5 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-bold rounded-lg hover:bg-black dark:hover:bg-zinc-200 transition-all cursor-pointer shrink-0"
                     >
                       Aplicar
                     </button>
@@ -1033,29 +1200,29 @@ export default function Financing() {
           <button 
             type="button"
             onClick={() => setIsCashMovementOpen(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-emerald-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 cursor-pointer text-xs"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
             title="Registrar Ingreso o Egreso de Fondos"
           >
-            <ArrowsRightLeftIcon className="h-4 w-4 stroke-[2.5]" />
+            <ArrowsRightLeftIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
             <span>Movimientos (I/E)</span>
           </button>
 
           <button 
             onClick={() => setIsCashClosureOpen(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-[#fb3c44] text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-red-600 transition-all shadow-md shadow-red-500/20 cursor-pointer text-xs"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
           >
-            <BanknotesIcon className="h-4 w-4" />
-            Cierre de Caja
+            <BanknotesIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
+            <span>Cierre de Caja</span>
           </button>
           <button 
             onClick={() => setShowCalculator(!showCalculator)}
-            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-gray-50 dark:hover:bg-[#222222] transition-all shadow-sm border border-gray-100 dark:border-gray-800 cursor-pointer text-xs"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
           >
-            <CalculatorIcon className="h-4 w-4" />
-            Simulador
+            <CalculatorIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
+            <span>Simulador</span>
           </button>
           <button 
-            onClick={() => setIsNewFormOpen(!isNewFormOpen)}
+            onClick={() => (isNewFormOpen ? setIsNewFormOpen(false) : handleOpenNewForm())}
             className={`w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer text-xs ${
               isNewFormOpen 
                 ? 'bg-red-600 text-white hover:bg-red-700' 
@@ -1077,7 +1244,7 @@ export default function Financing() {
         </div>
       </div>
 
-      {/* Panel En Página: Nuevo Financiamiento (Directo en Pantalla, Sin Ventana Emergente) */}
+      {/* Panel En Página: Nuevo / Editar Financiamiento */}
       {isNewFormOpen && (
         <div className="bg-white dark:bg-[#15161c] rounded-3xl p-5 sm:p-7 shadow-sm border border-gray-200/90 dark:border-zinc-800 mb-6 transition-all animate-in fade-in duration-150 print:hidden">
           {/* Header */}
@@ -1088,10 +1255,10 @@ export default function Financing() {
               </div>
               <div>
                 <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-zinc-100 tracking-tight">
-                  Nuevo Contrato de Financiamiento
+                  {editingFinancing ? 'Editar Contrato de Financiamiento' : 'Nuevo Contrato de Financiamiento'}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                  Registro directo en página • Sin ventanas emergentes y con cálculo en tiempo real
+                  {editingFinancing ? `Modificando financiamiento ID #${editingFinancing.id}` : 'Registro directo en página • Sin ventanas emergentes y con cálculo en tiempo real'}
                 </p>
               </div>
             </div>
@@ -1099,17 +1266,10 @@ export default function Financing() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleFillQuickExample}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                title="Llenar datos de prueba en 1 clic"
-              >
-                <BoltIcon className="w-3.5 h-3.5 text-amber-500" />
-                <span>Llenar Rápido</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsNewFormOpen(false)}
+                onClick={() => {
+                  setIsNewFormOpen(false);
+                  setEditingFinancing(null);
+                }}
                 className="px-3.5 py-2 text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <XMarkIcon className="h-4 w-4" />
@@ -1126,7 +1286,7 @@ export default function Financing() {
                 setFormValidationNotice(true);
                 return;
               }
-              handleCreateFinancing(e);
+              handleSaveFinancing(e);
             }} 
             className="space-y-4"
           >
@@ -1211,21 +1371,21 @@ export default function Financing() {
                   </div>
                 </div>
 
-                {/* Bloque Equipo */}
+                {/* Bloque Equipo / Maquinaria / Vehículo Completo */}
                 <div className="p-3.5 bg-gray-50/70 dark:bg-zinc-800/30 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80 space-y-2.5">
                   <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-gray-200/60 dark:border-zinc-700/60">
                     <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-zinc-200 flex items-center gap-1.5">
                       <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-                      2. Datos del Equipo / Maquinaria
+                      2. Datos del Equipo / Maquinaria / Vehículo
                     </span>
                     {inventoryList.length > 0 && (
                       <select
                         onChange={(e) => {
-                          const it = inventoryList.find(x => x.id === e.target.value);
+                          const it = inventoryList.find(x => String(x.id) === e.target.value);
                           if (it) handleSelectInventoryItem(it);
                         }}
                         defaultValue=""
-                        className="text-[11px] font-medium text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800/90 border border-gray-200/90 dark:border-zinc-700 rounded-xl px-2.5 py-1 outline-none cursor-pointer hover:border-gray-400 dark:hover:border-zinc-500 shadow-2xs max-w-[190px] truncate transition-all"
+                        className="text-[11px] font-medium text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800/90 border border-gray-200/90 dark:border-zinc-700 rounded-xl px-2.5 py-1 outline-none cursor-pointer hover:border-gray-400 dark:hover:border-zinc-500 shadow-2xs max-w-[200px] truncate transition-all"
                       >
                         <option value="" disabled>Seleccionar del inventario...</option>
                         {inventoryList.map(it => (
@@ -1239,7 +1399,7 @@ export default function Financing() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
-                      Descripción del Equipo *
+                      Descripción del Equipo / Vehículo *
                     </label>
                     <input
                       type="text"
@@ -1254,17 +1414,112 @@ export default function Financing() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
-                      Número de Chasis / VIN / Serie
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="1M8GDM9A2KP09812"
-                      value={newChassis}
-                      onChange={(e) => setNewChassis(e.target.value.toUpperCase())}
-                      className="w-full px-3.5 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-zinc-100 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
-                    />
+                  {/* Fila Marca, Modelo, Año */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Marca
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Mack / CAT"
+                        value={newItemBrand}
+                        onChange={(e) => setNewItemBrand(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Modelo
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Granite / 6125M"
+                        value={newItemModel}
+                        onChange={(e) => setNewItemModel(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Año
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="2024"
+                        value={newItemYear}
+                        onChange={(e) => setNewItemYear(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fila Chasis / VIN y No. de Motor */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        No. Chasis / VIN / Serie
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="1M8GDM9A2KP09812"
+                        value={newChassis}
+                        onChange={(e) => setNewChassis(e.target.value.toUpperCase())}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-zinc-100 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        No. de Motor
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="MP8-445C-12948"
+                        value={newItemEngine}
+                        onChange={(e) => setNewItemEngine(e.target.value.toUpperCase())}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-zinc-100 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fila Placa, Color, Horas / Kilometraje */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Placa / Matrícula
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="L419208"
+                        value={newItemPlate}
+                        onChange={(e) => setNewItemPlate(e.target.value.toUpperCase())}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-medium text-gray-900 dark:text-zinc-100 uppercase focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Color
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Blanco / Amarillo"
+                        value={newItemColor}
+                        onChange={(e) => setNewItemColor(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-600 dark:text-zinc-400 mb-1">
+                        Horas / Km
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="2,400 Horas / Km"
+                        value={newItemMileageHours}
+                        onChange={(e) => setNewItemMileageHours(e.target.value)}
+                        className="w-full px-2.5 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1357,7 +1612,7 @@ export default function Financing() {
                           type="text"
                           inputMode="decimal"
                           required
-                          placeholder="750,000.00"
+                          placeholder="0.00"
                           value={newTotalValue}
                           onChange={(e) => setNewTotalValue(formatCurrencyInput(e.target.value))}
                           className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
@@ -1388,7 +1643,7 @@ export default function Financing() {
                         <input
                           type="text"
                           inputMode="decimal"
-                          placeholder="150,000.00"
+                          placeholder="0.00"
                           value={newDownPayment}
                           onChange={(e) => setNewDownPayment(formatCurrencyInput(e.target.value))}
                           className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-white transition-all"
@@ -1553,7 +1808,7 @@ export default function Financing() {
                 className="py-2.5 px-6 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-black text-xs transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2"
               >
                 <CheckIcon className="w-4 h-4 stroke-[3]" />
-                <span>Guardar y Crear Financiamiento</span>
+                <span>{editingFinancing ? 'Guardar Cambios' : 'Guardar y Crear Financiamiento'}</span>
               </button>
             </div>
           </form>
@@ -1567,7 +1822,7 @@ export default function Financing() {
             <div className="p-2.5 bg-red-50 dark:bg-red-900/30 rounded-full text-gray-900 dark:text-white">
               <CalculatorIcon className="h-6 w-6" />
             </div>
-            Simulador de Cuotas (Método Francés)
+            Simulador de Cuotas (Capital e Interés Fijo)
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <div>
@@ -1618,64 +1873,96 @@ export default function Financing() {
           <button
             type="button"
             onClick={() => setMainStatusFilter('Todos')}
-            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap cursor-pointer flex items-center ${
               mainStatusFilter === 'Todos'
-                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-xs'
+                : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            Todos ({financingsList.length})
+            <span>Todos</span>
+            <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              mainStatusFilter === 'Todos'
+                ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+            }`}>
+              {financingsList.length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainStatusFilter('En mora')}
-            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap flex items-center cursor-pointer ${
               mainStatusFilter === 'En mora'
-                ? 'bg-[#ED1C24] text-white shadow-xs'
-                : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'
+                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-xs'
+                : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            En Mora ({financingsList.filter(f => f.status === 'En mora').length})
+            <span>En Mora</span>
+            <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              mainStatusFilter === 'En mora'
+                ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+            }`}>
+              {financingsList.filter(f => f.status === 'En mora').length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainStatusFilter('Vence 1 dia')}
-            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap flex items-center cursor-pointer ${
               mainStatusFilter === 'Vence 1 dia'
-                ? 'bg-amber-500 text-white shadow-xs'
-                : 'text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-xs'
+                : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            <ClockIcon className="h-3.5 w-3.5" />
-            Vence en 1 Día ({financingsList.filter(f => isDueWithinDays(f.nextPayment, 1)).length})
+            <span>Vence en 1 Día</span>
+            <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              mainStatusFilter === 'Vence 1 dia'
+                ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+            }`}>
+              {financingsList.filter(f => isDueWithinDays(f.nextPayment, 1)).length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainStatusFilter('Al dia')}
-            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap flex items-center cursor-pointer ${
               mainStatusFilter === 'Al dia'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-xs'
+                : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            Al Día ({financingsList.filter(f => f.status === 'Al día').length})
+            <span>Al Día</span>
+            <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              mainStatusFilter === 'Al dia'
+                ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+            }`}>
+              {financingsList.filter(f => f.status === 'Al día').length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainStatusFilter('Movimientos')}
-            className={`px-4 py-2 font-black rounded-full transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap flex items-center cursor-pointer ${
               mainStatusFilter === 'Movimientos'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-bold shadow-xs'
+                : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
-            <span>Movimientos I/E ({movementsList.length})</span>
+            <span>Movimientos I/E</span>
+            <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              mainStatusFilter === 'Movimientos'
+                ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
+                : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
+            }`}>
+              {movementsList.length}
+            </span>
           </button>
         </div>
       </div>
@@ -1903,15 +2190,39 @@ export default function Financing() {
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-gray-600 dark:text-zinc-300 font-medium">
-                    {item.item}
-                  </p>
+                  <div>
+                    <p className="text-[11px] text-gray-900 dark:text-zinc-100 font-bold">
+                      {item.item}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-1 text-[10px]">
+                      {item.itemYear && (
+                        <span className="px-1.5 py-0.5 bg-gray-200 dark:bg-zinc-800 rounded font-semibold text-gray-700 dark:text-zinc-300">
+                          {item.itemYear}
+                        </span>
+                      )}
+                      {(item.itemBrand || item.itemModel) && (
+                        <span className="px-1.5 py-0.5 bg-gray-200 dark:bg-zinc-800 rounded font-semibold text-gray-700 dark:text-zinc-300">
+                          {item.itemBrand} {item.itemModel}
+                        </span>
+                      )}
+                      {item.chassis && (
+                        <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/50 rounded font-mono text-blue-700 dark:text-blue-300">
+                          VIN: {item.chassis}
+                        </span>
+                      )}
+                      {item.itemPlate && (
+                        <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/50 rounded font-mono text-amber-700 dark:text-amber-300">
+                          {item.itemPlate}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-zinc-800/60">
                     <div>
                       <span className="text-[9px] uppercase font-bold text-gray-400 block">Financiado</span>
                       <span className="text-sm font-black text-gray-900 dark:text-white font-mono">
-                        ${item.amount.toLocaleString()}
+                        RD$ {item.amount.toLocaleString()}
                       </span>
                     </div>
 
@@ -1928,7 +2239,23 @@ export default function Financing() {
                     </div>
                   </div>
 
-                  <div className="pt-1 border-t border-gray-200/50 dark:border-zinc-800/60 flex justify-end">
+                  <div className="pt-2 border-t border-gray-200/50 dark:border-zinc-800/60 flex items-center justify-between">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        onClick={(e) => handleOpenEditForm(item, e)} 
+                        className="px-2.5 py-1 text-gray-600 dark:text-zinc-300 hover:text-blue-600 bg-gray-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                      >
+                        <PencilSquareIcon className="h-3.5 w-3.5 text-blue-500" />
+                        <span>Editar</span>
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeleteFinancing(item, e)} 
+                        className="px-2.5 py-1 text-gray-600 dark:text-zinc-300 hover:text-red-600 bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                      >
+                        <TrashIcon className="h-3.5 w-3.5 text-red-500" />
+                        <span>Borrar</span>
+                      </button>
+                    </div>
                     <span className="text-xs font-bold text-[#ED1C24] dark:text-red-400">Ver Detalles →</span>
                   </div>
                 </div>
@@ -1941,11 +2268,11 @@ export default function Financing() {
                 <thead>
                   <tr>
                     <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Cliente</th>
-                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Artículo</th>
+                    <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Equipo / Vehículo</th>
                     <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Monto Financiado</th>
                     <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Próximo Pago</th>
                     <th scope="col" className="px-6 py-5 text-left text-[11px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
-                    <th scope="col" className="relative px-6 py-5"><span className="sr-only">Acciones</span></th>
+                    <th scope="col" className="px-6 py-5 text-right text-[11px] font-black text-gray-400 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-[#1a1a1a] divide-y divide-gray-50 dark:divide-gray-800/50">
@@ -1960,8 +2287,32 @@ export default function Financing() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-500 dark:text-gray-400">{item.item}</td>
-                      <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">${item.amount.toLocaleString()}</td>
+                      <td className="px-6 py-5">
+                        <div className="text-sm font-bold text-gray-900 dark:text-white">{item.item}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                          {item.itemYear && (
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded font-semibold text-gray-600 dark:text-zinc-300">
+                              {item.itemYear}
+                            </span>
+                          )}
+                          {(item.itemBrand || item.itemModel) && (
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded font-medium text-gray-600 dark:text-zinc-300">
+                              {item.itemBrand} {item.itemModel}
+                            </span>
+                          )}
+                          {item.chassis && (
+                            <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/40 rounded font-mono font-bold text-blue-700 dark:text-blue-300">
+                              VIN: {item.chassis}
+                            </span>
+                          )}
+                          {item.itemPlate && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/40 rounded font-mono font-bold text-amber-700 dark:text-amber-300">
+                              {item.itemPlate}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">RD$ {item.amount.toLocaleString()}</td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         <div>{item.nextPayment}</div>
                         {isDueWithinDays(item.nextPayment, 1) && (
@@ -1980,7 +2331,28 @@ export default function Financing() {
                         </span>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} className="text-gray-900 dark:text-white hover:text-red-900 dark:hover:text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-900/30 px-4 py-2 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50">Ver Detalles</button>
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setSelectedFinancing(item); setShowPaymentForm(false); setShowReceipt(false); setShowAccountStatement(false); }} 
+                            className="text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-900/30 px-3.5 py-1.5 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50 text-xs cursor-pointer"
+                          >
+                            Ver Detalles
+                          </button>
+                          <button 
+                            onClick={(e) => handleOpenEditForm(item, e)} 
+                            title="Editar financiamiento"
+                            className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => handleDeleteFinancing(item, e)} 
+                            title="Eliminar financiamiento"
+                            className="p-1.5 text-gray-500 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2264,11 +2636,13 @@ export default function Financing() {
                   </div>
                 ) : !showPaymentForm ? (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                       <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Cliente</p>
                         <p className="font-black text-gray-900 dark:text-white text-base truncate">{selectedFinancing.customer}</p>
-                        <p className="text-xs text-gray-500 font-medium truncate mt-0.5">{selectedFinancing.item}</p>
+                        {selectedFinancing.rnc && (
+                          <p className="text-[11px] text-gray-400 font-mono mt-0.5">RNC: {selectedFinancing.rnc}</p>
+                        )}
                       </div>
 
                       <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
@@ -2292,7 +2666,89 @@ export default function Financing() {
                             {selectedFinancing.status}
                           </span>
                         </div>
-                        <p className="font-black text-2xl tracking-tight text-white mt-1">${selectedFinancing.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</p>
+                        <p className="font-black text-2xl tracking-tight text-white mt-1">RD$ {selectedFinancing.amount.toLocaleString('es-DO', {minimumFractionDigits: 2})}</p>
+                      </div>
+                    </div>
+
+                    {/* Ficha Técnica del Equipo / Vehículo */}
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100/70 dark:from-zinc-900/80 dark:to-[#181920] p-4 sm:p-5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 mb-5 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-gray-200/60 dark:border-zinc-800">
+                        <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-zinc-200 flex items-center gap-1.5">
+                          <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                          Ficha Técnica del Equipo / Vehículo
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const target = selectedFinancing;
+                              handleAttemptCloseModal();
+                              setTimeout(() => handleOpenEditForm(target), 50);
+                            }}
+                            className="px-3 py-1 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-xs font-bold rounded-lg border border-gray-200 dark:border-zinc-700 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <PencilSquareIcon className="w-3.5 h-3.5 text-blue-500" />
+                            <span>Editar Datos</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFinancing(selectedFinancing)}
+                            className="px-3 py-1 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg border border-red-200 dark:border-red-900/50 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5 text-red-500" />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase block">Descripción</span>
+                          <span className="font-black text-gray-900 dark:text-white truncate block">{selectedFinancing.item}</span>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase block">Marca & Modelo</span>
+                          <span className="font-bold text-gray-900 dark:text-white truncate block">
+                            {selectedFinancing.itemBrand || selectedFinancing.itemModel 
+                              ? `${selectedFinancing.itemBrand || ''} ${selectedFinancing.itemModel || ''}`.trim()
+                              : 'No especificado'}
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase block">Año / Tipo</span>
+                          <span className="font-bold text-gray-900 dark:text-white truncate block">
+                            {selectedFinancing.itemYear || 'N/A'} {selectedFinancing.itemType ? `• ${selectedFinancing.itemType}` : ''}
+                          </span>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase block">Chasis / VIN</span>
+                          <span className="font-mono font-bold text-gray-900 dark:text-white truncate block text-[11px]">
+                            {selectedFinancing.chassis || 'No registrado'}
+                          </span>
+                        </div>
+
+                        {selectedFinancing.itemEngineNumber && (
+                          <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block">No. de Motor</span>
+                            <span className="font-mono font-bold text-gray-900 dark:text-white truncate block text-[11px]">{selectedFinancing.itemEngineNumber}</span>
+                          </div>
+                        )}
+                        {selectedFinancing.itemPlate && (
+                          <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block">Placa</span>
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 truncate block text-[11px]">{selectedFinancing.itemPlate}</span>
+                          </div>
+                        )}
+                        {selectedFinancing.itemColor && (
+                          <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block">Color</span>
+                            <span className="font-bold text-gray-900 dark:text-white truncate block">{selectedFinancing.itemColor}</span>
+                          </div>
+                        )}
+                        {selectedFinancing.itemMileageHours && (
+                          <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block">Horas / Kilometraje</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">{selectedFinancing.itemMileageHours}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2690,7 +3146,7 @@ export default function Financing() {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
-                      Sistema de Amortización Francés con cuotas fijas mensuales
+                      Sistema de Amortización con Capital e Interés Fijos
                     </p>
                   </div>
                 </div>
@@ -2866,9 +3322,9 @@ export default function Financing() {
                       </tr>
                       <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
                         <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Equipo / Vehículo:</td>
-                        <td style={{ padding: '6px 10px', fontWeight: '600' }}>{newItem || 'N/A'}</td>
-                        <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Chasis / VIN / Serie:</td>
-                        <td style={{ padding: '6px 10px', fontFamily: 'monospace', fontWeight: '700' }}>{newChassis || 'N/A'}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: '600' }}>{newItem || 'N/A'} {newItemBrand ? `(${newItemBrand} ${newItemModel})` : ''} {newItemYear ? `• Año ${newItemYear}` : ''}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Chasis / Motor / Placa:</td>
+                        <td style={{ padding: '6px 10px', fontFamily: 'monospace', fontWeight: '700' }}>{newChassis || 'N/A'} {newItemEngine ? `• Mot: ${newItemEngine}` : ''} {newItemPlate ? `• Placa: ${newItemPlate}` : ''}</td>
                       </tr>
                       <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
                         <td style={{ padding: '6px 10px', fontWeight: 'bold', backgroundColor: '#f9fafb', color: '#374151' }}>Garante / Fiador:</td>
@@ -3002,6 +3458,12 @@ export default function Financing() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Detalle del Equipo</p>
               <p className="font-black text-black text-sm">{activeReceiptData.itemName}</p>
+              {selectedFinancing?.chassis && (
+                <p className="text-[10px] text-gray-700 font-mono">VIN: {selectedFinancing.chassis}</p>
+              )}
+              {selectedFinancing?.itemPlate && (
+                <p className="text-[10px] text-gray-700 font-mono">Placa: {selectedFinancing.itemPlate}</p>
+              )}
               <p className="text-[11px] text-gray-700 font-medium mt-0.5">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
             </div>
             <div>

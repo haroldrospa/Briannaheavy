@@ -1895,10 +1895,10 @@ export default function Settings() {
                     <div className="bg-white dark:bg-zinc-900/90 border border-gray-200/70 dark:border-zinc-800/80 rounded-xl p-3 shadow-xs">
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-zinc-500"></span>
                           Cotización Comercial
                         </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded">CT-</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded">CT-</span>
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">Próximo Número Secuencial (6 dígitos)</label>

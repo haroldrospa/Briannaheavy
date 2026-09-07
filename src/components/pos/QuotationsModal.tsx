@@ -8,16 +8,13 @@ import {
   TrashIcon,
   CalendarDaysIcon,
   UserIcon,
-  ClockIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon
 } from '@heroicons/react/24/outline';
 import {
   fetchQuotations,
   deleteQuotation,
-  getQuotationDaysRemaining,
   type Quotation
 } from '../../services/quotationsService';
 import { fetchInvoices } from '../../services/invoicesService';
@@ -106,9 +103,9 @@ export default function QuotationsModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-fadeIn">
       <div className="bg-white dark:bg-[#18191E] w-full max-w-4xl rounded-3xl shadow-2xl border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gradient-to-r from-blue-50/60 to-transparent dark:from-blue-950/20">
+        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-[#18191E]">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 sm:p-3 bg-blue-600 text-white rounded-2xl shadow-md shadow-blue-500/20">
+            <div className="p-2.5 sm:p-3 bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 rounded-2xl shadow-xs">
               <ClipboardDocumentListIcon className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
@@ -116,9 +113,6 @@ export default function QuotationsModal({
                 <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
                   Cotizaciones Comerciales
                 </h3>
-                <span className="bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 text-xs font-black px-2.5 py-0.5 rounded-full">
-                  30 Días de Vigencia
-                </span>
               </div>
               <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
                 Almacén de presupuestos listos para pasar al Punto de Venta (POS) y facturar
@@ -140,10 +134,10 @@ export default function QuotationsModal({
             <button
               type="button"
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 statusFilter === 'all'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 hover:bg-gray-100'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs'
+                  : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700 hover:bg-gray-100'
               }`}
             >
               Todas ({counts.all})
@@ -151,22 +145,22 @@ export default function QuotationsModal({
             <button
               type="button"
               onClick={() => setStatusFilter('Vigente')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 statusFilter === 'Vigente'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900 hover:bg-emerald-50'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs'
+                  : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               Vigentes ({counts.vigente})
             </button>
             <button
               type="button"
               onClick={() => setStatusFilter('Facturada')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 statusFilter === 'Facturada'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-zinc-800 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900 hover:bg-indigo-50'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs'
+                  : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700 hover:bg-gray-100'
               }`}
             >
               Facturadas ({counts.facturada})
@@ -174,10 +168,10 @@ export default function QuotationsModal({
             <button
               type="button"
               onClick={() => setStatusFilter('Expirada')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 statusFilter === 'Expirada'
-                  ? 'bg-red-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-zinc-800 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900 hover:bg-red-50'
+                  ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs'
+                  : 'bg-white dark:bg-zinc-800 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/60 hover:bg-red-50 dark:hover:bg-red-950/30'
               }`}
             >
               Expiradas ({counts.expirada})
@@ -191,7 +185,7 @@ export default function QuotationsModal({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por Nº, cliente o repuesto..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl font-medium text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl font-medium text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 dark:focus:ring-zinc-700/50 dark:focus:border-zinc-700"
             />
           </div>
         </div>
@@ -205,18 +199,17 @@ export default function QuotationsModal({
                 No hay cotizaciones para mostrar
               </h4>
               <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-md mx-auto mt-1">
-                Al emitir una cotización (CT) desde el Punto de Venta, se guardará aquí automáticamente con una vigencia de 30 días.
+                Al emitir una cotización (CT) desde el Punto de Venta, se guardará aquí automáticamente.
               </p>
             </div>
           ) : (
             filteredQuotations.map((q) => {
-              const daysRemaining = getQuotationDaysRemaining(q);
               const isExpanded = expandedId === q.id;
 
               return (
                 <div
                   key={q.id}
-                  className="bg-white dark:bg-zinc-900 border border-gray-200/90 dark:border-zinc-800 rounded-2xl p-4 transition-all hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900/60"
+                  className="bg-white dark:bg-zinc-900 border border-gray-200/90 dark:border-zinc-800 rounded-2xl p-4 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-zinc-700"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     {/* Info */}
@@ -226,27 +219,13 @@ export default function QuotationsModal({
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-black font-mono text-blue-600 dark:text-blue-400">
+                          <span className="text-sm font-black font-mono text-gray-900 dark:text-white">
                             {q.quotation_number}
                           </span>
-                          {q.status === 'Facturada' ? (
+                          {q.status === 'Facturada' && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
                               <CheckCircleIcon className="w-3 h-3 stroke-[2.5]" />
                               Facturada {q.billed_invoice_number ? `(${q.billed_invoice_number})` : ''}
-                            </span>
-                          ) : q.status === 'Expirada' || daysRemaining <= 0 ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300">
-                              <ExclamationTriangleIcon className="w-3 h-3 stroke-[2.5]" />
-                              Expirada (+30 días)
-                            </span>
-                          ) : (
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              daysRemaining <= 7
-                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
-                            }`}>
-                              <ClockIcon className="w-3 h-3 stroke-[2.5]" />
-                              {daysRemaining === 1 ? 'Vence hoy' : `Vence en ${daysRemaining} días`}
                             </span>
                           )}
                         </div>
@@ -393,7 +372,7 @@ export default function QuotationsModal({
         {/* Footer */}
         <div className="px-5 py-3 sm:px-6 bg-gray-50 dark:bg-zinc-900/60 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between text-xs text-gray-500">
           <span>
-            Las cotizaciones se mantienen vigentes por <strong>30 días calendario</strong>.
+            Presupuestos listos para cargar al Punto de Venta.
           </span>
           <button
             type="button"

@@ -20,6 +20,7 @@ const Reports = React.lazy(() => import('./pages/Reports'));
 const Customers = React.lazy(() => import('./pages/Customers'));
 const Invoices = React.lazy(() => import('./pages/Invoices'));
 const Banks = React.lazy(() => import('./pages/Banks'));
+const Catalog = React.lazy(() => import('./pages/Catalog'));
 
 // Configuración de React Query
 const queryClient = new QueryClient({
@@ -45,6 +46,9 @@ function App() {
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 {/* Rutas Públicas */}
+                <Route path="/tienda" element={<Catalog isPublic={true} />} />
+                <Route path="/catalogo-publico" element={<Navigate to="/tienda" replace />} />
+                <Route path="/store" element={<Navigate to="/tienda" replace />} />
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<Login />} />
                 </Route>
@@ -59,6 +63,7 @@ function App() {
                   <Route path="/pos" element={<POS />} />
                   <Route path="/cobros" element={<Cobros />} />
                   <Route path="/inventario" element={<Inventory />} />
+                  <Route path="/catalogo" element={<Catalog />} />
                   <Route path="/financiamientos" element={<Financing />} />
                   <Route path="/bancos" element={<Banks />} />
                   <Route path="/reportes" element={<Reports />} />
@@ -70,6 +75,7 @@ function App() {
                   <Route path="/receivables" element={<Navigate to="/cobros" replace />} />
                   <Route path="/finanzas" element={<Navigate to="/financiamientos" replace />} />
                   <Route path="/inventory" element={<Navigate to="/inventario" replace />} />
+                  <Route path="/catalog" element={<Navigate to="/catalogo" replace />} />
                   <Route path="/customers" element={<Navigate to="/clientes" replace />} />
                   <Route path="/invoices" element={<Navigate to="/facturas" replace />} />
                   <Route path="/users" element={<Navigate to="/configuracion" replace />} />

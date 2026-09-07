@@ -1,4 +1,4 @@
-import { getLocalStorageInvoices, fetchInvoices, type Invoice } from './invoicesService';
+import { getLocalStorageInvoices, fetchInvoices, isQuotationInvoice, type Invoice } from './invoicesService';
 import { getLocalStorageCustomers, fetchCustomers, type Customer } from './customersService';
 import { getLocalStorageInventory, fetchInventory, type InventoryItem } from './inventoryService';
 import { getLocalStorageFinancings, fetchFinancings, type Financing } from './financingService';
@@ -21,8 +21,11 @@ export const computeDashboardMetrics = (
   inventory: InventoryItem[],
   financings: Financing[]
 ): DashboardMetrics => {
+  // Excluir cotizaciones de las métricas de ventas
+  const validInvoices = (invoices || []).filter(inv => !isQuotationInvoice(inv));
+
   // Metrics
-  const totalSalesMonth = invoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+  const totalSalesMonth = validInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
   const totalCustomers = customers.length;
   const totalInventoryItems = inventory.reduce((sum, item) => sum + (Number(item.stock) || 1), 0);
   const activeFinancings = financings.filter(f => f.status === 'Activo');
@@ -30,7 +33,7 @@ export const computeDashboardMetrics = (
 
   // Payment methods chart calculation
   const methodCounts: Record<string, number> = {};
-  invoices.forEach(inv => {
+  validInvoices.forEach(inv => {
     const method = inv.payment_method || 'Efectivo';
     methodCounts[method] = (methodCounts[method] || 0) + (Number(inv.total_amount) || 0);
   });
@@ -46,7 +49,7 @@ export const computeDashboardMetrics = (
   const monthsOrder = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const monthlySalesMap: Record<string, number> = {};
 
-  invoices.forEach(inv => {
+  validInvoices.forEach(inv => {
     if (inv.created_at) {
       const date = new Date(inv.created_at);
       const monthName = monthsOrder[date.getMonth()];
@@ -74,7 +77,7 @@ export const computeDashboardMetrics = (
     monthlySalesChart,
     paymentMethodsChart,
     topProductsChart,
-    recentInvoices: invoices.slice(0, 5),
+    recentInvoices: validInvoices.slice(0, 5),
   };
 };
 

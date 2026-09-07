@@ -69,8 +69,10 @@ export default function Inventory() {
       vin: item.vin || item.serialNumber || '',
       year: item.year ? Number(item.year) : undefined,
       description: item.compatibility || item.description || '',
-      image_url: item.image || item.image_url || '',
+      image_url: Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : (item.image || item.image_url || ''),
+      images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image || item.image_url ? [item.image || item.image_url] : []),
       department: item.department || 'Lote 1',
+      show_price: item.show_price !== undefined ? Boolean(item.show_price) : true,
     };
 
     // 1. Switch to 'Todos' or matching category so new item is always visible
@@ -347,11 +349,16 @@ export default function Inventory() {
                         />
                       </div>
 
-                      <div className="w-13 h-13 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden border border-gray-200/60 dark:border-zinc-700/60">
-                        {item.image_url ? (
-                          <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      <div className="relative w-13 h-13 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden border border-gray-200/60 dark:border-zinc-700/60">
+                        {item.images?.[0] || item.image_url ? (
+                          <img src={item.images?.[0] || item.image_url} alt={item.name} className="w-full h-full object-cover" />
                         ) : (
                           <PhotoIcon className="w-5 h-5" />
+                        )}
+                        {item.images && item.images.length > 1 && (
+                          <div className="absolute bottom-0 right-0 bg-black/80 text-white text-[7.5px] font-black px-1 rounded-tl-md">
+                            +{item.images.length}
+                          </div>
                         )}
                       </div>
 
@@ -384,7 +391,14 @@ export default function Inventory() {
                     {/* Price & Stock Row */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200/50 dark:border-zinc-800/60">
                       <div>
-                        <span className="text-[9px] uppercase font-bold text-gray-400 block">Precio Venta</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] uppercase font-bold text-gray-400 block">Precio Venta</span>
+                          {item.show_price === false && (
+                            <span className="text-[8px] font-bold px-1 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+                              Oculto
+                            </span>
+                          )}
+                        </div>
                         <span className="text-sm font-black text-gray-900 dark:text-white font-mono">
                           RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
@@ -496,11 +510,16 @@ export default function Inventory() {
                         </td>
                         <td className="py-3 px-3 xl:px-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden">
-                              {item.image_url ? (
-                                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                            <div className="relative w-10 h-10 xl:w-11 xl:h-11 rounded-xl bg-gray-100 dark:bg-zinc-800 flex items-center justify-center text-gray-400 shrink-0 overflow-hidden border border-gray-100 dark:border-zinc-800">
+                              {item.images?.[0] || item.image_url ? (
+                                <img src={item.images?.[0] || item.image_url} alt={item.name} className="w-full h-full object-cover" />
                               ) : (
                                 <PhotoIcon className="w-5 h-5" />
+                              )}
+                              {item.images && item.images.length > 1 && (
+                                <div className="absolute bottom-0 right-0 bg-black/80 text-white text-[7.5px] font-black px-1 rounded-tl-md">
+                                  +{item.images.length}
+                                </div>
                               )}
                             </div>
                             <div className="min-w-0">
@@ -523,7 +542,14 @@ export default function Inventory() {
                           RD$ {(item.cost || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-3 xl:px-4 font-black text-gray-900 dark:text-zinc-100 text-xs xl:text-sm">
-                          <div>RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span>RD$ {(item.price || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                            {item.show_price === false && (
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60" title="Precio oculto en catálogo y tienda digital">
+                                Oculto en Catálogo
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[9px] xl:text-[10px] font-bold mt-0.5">
                             {item.itbis_type === 'exento' ? (
                               <span className="text-amber-600 dark:text-amber-400">Exento</span>

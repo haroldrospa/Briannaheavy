@@ -20,9 +20,11 @@ export interface InventoryItem {
   min_stock?: number;
   description?: string;
   image_url?: string;
+  images?: string[];
   department?: string;
   includes_itbis?: boolean;
   itbis_type?: string;
+  show_price?: boolean;
   created_at?: string;
 }
 
@@ -60,7 +62,10 @@ export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
     try {
       const sanitized = items.map(item => ({
         ...item,
-        image_url: item.image_url && item.image_url.length > 200000 ? '' : item.image_url
+        image_url: item.image_url && item.image_url.length > 200000 ? '' : item.image_url,
+        images: Array.isArray(item.images) 
+          ? item.images.map(img => img.length > 200000 ? '' : img).filter(Boolean)
+          : undefined
       }));
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
     } catch (innerErr) {

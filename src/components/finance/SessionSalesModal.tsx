@@ -55,19 +55,29 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
     if (isOpen) loadMovements();
   }, [isOpen]);
 
-  const totalAmount = useMemo(() => sales.reduce((acc, s) => acc + s.total, 0), [sales]);
-  const cashAmount = useMemo(() => sales.filter(s => s.paymentMethod === 'Efectivo').reduce((acc, s) => acc + s.total, 0), [sales]);
+  const validSales = useMemo(() => {
+    return (sales || []).filter(s => {
+      const id = String(s.id || '').toUpperCase();
+      const ncf = String(s.ncf || '').toUpperCase();
+      const invType = String(s.invoiceType || '').toUpperCase();
+      const method = String(s.paymentMethod || '').toLowerCase();
+      return !id.startsWith('CT-') && !ncf.startsWith('CT') && invType !== 'CT' && !method.includes('cotiz');
+    });
+  }, [sales]);
+
+  const totalAmount = useMemo(() => validSales.reduce((acc, s) => acc + s.total, 0), [validSales]);
+  const cashAmount = useMemo(() => validSales.filter(s => s.paymentMethod === 'Efectivo').reduce((acc, s) => acc + s.total, 0), [validSales]);
   const totalIngresos = useMemo(() => cashMovements.filter(m => m.type === 'Ingreso').reduce((acc, m) => acc + Number(m.amount), 0), [cashMovements]);
   const totalEgresos = useMemo(() => cashMovements.filter(m => m.type === 'Egreso').reduce((acc, m) => acc + Number(m.amount), 0), [cashMovements]);
 
   const filteredSales = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    return sales.filter(s => {
+    return validSales.filter(s => {
       const matchSearch = !q || s.id.toLowerCase().includes(q) || s.client.toLowerCase().includes(q) || s.ncf.toLowerCase().includes(q);
       const matchMethod = methodFilter === 'Todos' || s.paymentMethod === methodFilter;
       return matchSearch && matchMethod;
     });
-  }, [sales, searchTerm, methodFilter]);
+  }, [validSales, searchTerm, methodFilter]);
 
   const filteredMovements = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -163,7 +173,7 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 font-medium'
                 }`}
               >
-                {tab === 'Facturas' ? `Facturas (${sales.length})` : `Movimientos (${cashMovements.length})`}
+                {tab === 'Facturas' ? `Facturas (${validSales.length})` : `Movimientos (${cashMovements.length})`}
               </button>
             ))}
           </div>

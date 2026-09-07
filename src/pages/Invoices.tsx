@@ -18,7 +18,7 @@ import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 
 
@@ -102,6 +102,8 @@ export default function Invoices() {
   };
 
   const filteredInvoices = invoices.filter(inv => {
+    if (isQuotationInvoice(inv)) return false;
+
     // Si no es Administrador, solo mostrar facturas emitidas por este usuario
     if (!isAdmin) {
       const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';

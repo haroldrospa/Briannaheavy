@@ -15,7 +15,8 @@ import {
   ArrowRightOnRectangleIcon,
   XMarkIcon,
   CurrencyDollarIcon,
-  BuildingLibraryIcon
+  BuildingLibraryIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermissions';
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Clientes', href: '/clientes', icon: UsersIcon },
   { name: 'Facturas', href: '/facturas', icon: DocumentTextIcon },
   { name: 'Inventario', href: '/inventario', icon: WrenchScrewdriverIcon },
+  { name: 'Catálogo', href: '/catalogo', icon: TruckIcon },
   { name: 'Finanzas', href: '/financiamientos', icon: BanknotesIcon },
   { name: 'Banco', href: '/bancos', icon: BuildingLibraryIcon },
   { name: 'Reportes', href: '/reportes', icon: DocumentChartBarIcon, badge: '2' },

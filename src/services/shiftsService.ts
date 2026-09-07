@@ -143,8 +143,27 @@ export const updateActiveShiftFund = (newFund: number, registerName = 'Caja 1 - 
   }
 };
 
+export const isQuotationInvoice = (inv: Invoice | any): boolean => {
+  if (!inv) return false;
+  const num = String(inv.invoice_number || inv.id || '').toUpperCase();
+  const ncf = String(inv.ncf || '').toUpperCase();
+  const ncfType = String(inv.ncf_type || '').toUpperCase();
+  const status = String(inv.status || '').toLowerCase();
+  const method = String(inv.payment_method || '').toLowerCase();
+  return (
+    num.startsWith('CT-') ||
+    ncf.startsWith('CT') ||
+    ncfType === 'CT' ||
+    status === 'cotización' ||
+    status === 'cotizacion' ||
+    method === 'cotización' ||
+    method === 'cotizacion'
+  );
+};
+
 /**
  * Filtra facturas/ventas garantizando unicidad por Caja y Cajero.
+ * Las cotizaciones nunca deben incluirse en ventas ni turnos de caja.
  * Los usuarios que no son Administradores sólo pueden ver lo que ellos mismos han facturado.
  */
 export const filterInvoicesByShift = (
@@ -154,7 +173,8 @@ export const filterInvoicesByShift = (
   selectedRegister = 'todas',
   selectedCashier = 'todos'
 ): Invoice[] => {
-  let list = invoices;
+  // Excluir SIEMPRE las cotizaciones de cualquier cálculo de caja o ventas
+  let list = (invoices || []).filter(inv => !isQuotationInvoice(inv));
 
   const currentRole = getActiveRole();
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';

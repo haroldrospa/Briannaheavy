@@ -18,7 +18,18 @@ export interface Financing {
   customer_id?: string;
   item_id?: string;
   customer_name: string;
+  customer_rnc?: string;
+  customer_phone?: string;
   item_name: string;
+  chassis?: string;
+  item_brand?: string;
+  item_model?: string;
+  item_year?: number | string;
+  item_color?: string;
+  item_plate?: string;
+  item_engine_number?: string;
+  item_mileage_hours?: string | number;
+  item_type?: string;
   total_amount: number;
   down_payment: number;
   financed_amount: number;
@@ -26,8 +37,13 @@ export interface Financing {
   installments_count: number;
   frequency: 'Semanal' | 'Quincenal' | 'Mensual';
   start_date: string;
-  status: 'Activo' | 'Pagado' | 'Vencido' | 'Cancelado';
+  status: 'Activo' | 'Pagado' | 'Vencido' | 'Cancelado' | 'Al día' | 'En mora';
   created_at?: string;
+  guarantor?: string;
+  guarantor_rnc?: string;
+  guarantor_phone?: string;
+  guarantor_relation?: string;
+  guarantor_address?: string;
   installments?: Installment[];
 }
 
@@ -154,6 +170,93 @@ export const createFinancing = async (
   const current = getLocalStorageFinancings();
   saveLocalStorageFinancings([newFinancing, ...current]);
   return newFinancing;
+};
+
+export const updateFinancing = async (
+  id: string,
+  financingData: Partial<Financing>,
+  newInstallments?: Omit<Installment, 'id' | 'financing_id'>[]
+): Promise<Financing | null> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isDbUuid = uuidRegex.test(id);
+
+  if (isSupabaseConfigured() && isDbUuid) {
+    try {
+      const sanitizedData = { ...financingData };
+      delete (sanitizedData as any).installments;
+      if (sanitizedData.customer_id && !uuidRegex.test(sanitizedData.customer_id)) {
+        sanitizedData.customer_id = undefined;
+      }
+      if (sanitizedData.item_id && !uuidRegex.test(sanitizedData.item_id)) {
+        sanitizedData.item_id = undefined;
+      }
+
+      await supabase
+        .from('financings')
+        .update(sanitizedData)
+        .eq('id', id);
+
+      if (newInstallments && newInstallments.length > 0) {
+        // Delete previous unpaid installments and replace or update
+        await supabase.from('installments').delete().eq('financing_id', id);
+        const prepared = newInstallments.map(inst => ({
+          ...inst,
+          financing_id: id,
+        }));
+        await supabase.from('installments').insert(prepared);
+      }
+    } catch (err) {
+      console.warn('Error updating financing in Supabase:', err);
+    }
+  }
+
+  // Local storage update
+  const current = getLocalStorageFinancings();
+  let updatedRecord: Financing | null = null;
+
+  const updatedList = current.map(fin => {
+    if (fin.id === id || String(fin.id) === String(id)) {
+      const mergedInstallments = newInstallments
+        ? newInstallments.map((inst, idx) => ({
+            ...inst,
+            id: `inst-${Date.now()}-${idx + 1}`,
+            financing_id: id,
+          }))
+        : (financingData.installments || fin.installments || []);
+
+      updatedRecord = {
+        ...fin,
+        ...financingData,
+        installments: mergedInstallments,
+      };
+      return updatedRecord;
+    }
+    return fin;
+  });
+
+  if (updatedRecord) {
+    saveLocalStorageFinancings(updatedList);
+  }
+  return updatedRecord;
+};
+
+export const deleteFinancing = async (id: string): Promise<boolean> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isDbUuid = uuidRegex.test(id);
+
+  if (isSupabaseConfigured() && isDbUuid) {
+    try {
+      await supabase.from('installments').delete().eq('financing_id', id);
+      await supabase.from('financings').delete().eq('id', id);
+    } catch (err) {
+      console.warn('Error deleting financing from Supabase:', err);
+    }
+  }
+
+  const current = getLocalStorageFinancings();
+  const filtered = current.filter(fin => fin.id !== id && String(fin.id) !== String(id));
+  saveLocalStorageFinancings(filtered);
+  return true;
 };
 
 export const markInstallmentPaid = async (

@@ -19,7 +19,7 @@ import {
   Squares2X2Icon
 } from '@heroicons/react/24/outline';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
-import { fetchInvoices, getLocalStorageInvoices } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice } from '../services/invoicesService';
 import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
@@ -27,9 +27,10 @@ import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cash
 
 const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], closures: any[] = []) => {
   const mappedData: Record<string, any[]> = {};
+  const validInvs = (invs || []).filter(inv => !isQuotationInvoice(inv));
 
-  if (invs && invs.length > 0) {
-    mappedData.ventas = invs.map(inv => ({
+  if (validInvs && validInvs.length > 0) {
+    mappedData.ventas = validInvs.map(inv => ({
       code: inv.invoice_number || `FAC-${inv.id}`,
       ncf: inv.ncf || 'N/A',
       ncf_type: inv.ncf_type || (inv.ncf ? inv.ncf.substring(0, 3) : 'Interna'),
@@ -43,7 +44,7 @@ const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], cl
     }));
 
     // Facturación Electrónica e-CF
-    const ecfList = invs.filter(inv => inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')));
+    const ecfList = validInvs.filter(inv => inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')));
     mappedData.ecf = ecfList.map(inv => {
       const ncfCode = inv.ncf || inv.invoice_number || `E3200000001`;
       let prefix = 'E32';
@@ -89,7 +90,7 @@ const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], cl
     });
 
     // Facturación Interna
-    const internalList = invs.filter(inv => inv.billing_mode === 'internal' || (inv.ncf && inv.ncf.startsWith('INT')) || !inv.ncf || (!inv.is_electronic && !inv.ncf?.startsWith('E')));
+    const internalList = validInvs.filter(inv => inv.billing_mode === 'internal' || (inv.ncf && inv.ncf.startsWith('INT')) || !inv.ncf || (!inv.is_electronic && !inv.ncf?.startsWith('E')));
     mappedData.internas = internalList.map(inv => ({
       code: inv.invoice_number || inv.ncf || `INT-${inv.id}`,
       date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',

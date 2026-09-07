@@ -53,6 +53,24 @@ export const formatInvoiceNumber = (num?: string): string => {
   return num;
 };
 
+export const isQuotationInvoice = (inv: { invoice_number?: string; ncf?: string; ncf_type?: string; status?: string; payment_method?: string; id?: string } | null | undefined): boolean => {
+  if (!inv) return false;
+  const num = String(inv.invoice_number || inv.id || '').toUpperCase();
+  const ncf = String(inv.ncf || '').toUpperCase();
+  const ncfType = String(inv.ncf_type || '').toUpperCase();
+  const status = String(inv.status || '').toLowerCase();
+  const method = String(inv.payment_method || '').toLowerCase();
+  return (
+    num.startsWith('CT-') ||
+    ncf.startsWith('CT') ||
+    ncfType === 'CT' ||
+    status === 'cotización' ||
+    status === 'cotizacion' ||
+    method === 'cotización' ||
+    method === 'cotizacion'
+  );
+};
+
 export const DEFAULT_INVOICES: Invoice[] = [];
 const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 
@@ -61,14 +79,20 @@ let inMemoryInvoices: Invoice[] | null = null;
 let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
 
 export const getLocalStorageInvoices = (): Invoice[] => {
-  if (inMemoryInvoices !== null) return inMemoryInvoices;
+  if (inMemoryInvoices !== null) {
+    return inMemoryInvoices.filter(inv => !isQuotationInvoice(inv));
+  }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      inMemoryInvoices = parsed;
-      return parsed;
+      const filtered = parsed.filter(inv => !isQuotationInvoice(inv));
+      inMemoryInvoices = filtered;
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+      }
+      return filtered;
     }
     return [];
   } catch {
@@ -77,9 +101,10 @@ export const getLocalStorageInvoices = (): Invoice[] => {
 };
 
 export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
-  inMemoryInvoices = invoices;
+  const filtered = (invoices || []).filter(inv => !isQuotationInvoice(inv));
+  inMemoryInvoices = filtered;
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(invoices));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
   } catch (e) {
     console.warn('Error saving invoices to localStorage:', e);
   }
@@ -128,13 +153,13 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           .limit(300);
 
         if (!error && data) {
-          const supabaseInvoices = data as Invoice[];
+          const supabaseInvoices = (data as Invoice[]).filter(inv => !isQuotationInvoice(inv));
           saveLocalStorageInvoices(supabaseInvoices);
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
           let maxCt = 0;
-          for (const inv of supabaseInvoices) {
+          for (const inv of (data as Invoice[])) {
             const ct = parseCtSeqNum(inv);
             if (ct !== null && ct > maxCt) maxCt = ct;
 

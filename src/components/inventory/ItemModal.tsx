@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, PhotoIcon, TrashIcon, TagIcon } from '@heroicons/react/24/outline';
+import { 
+  XMarkIcon, 
+  PhotoIcon, 
+  TrashIcon, 
+  TagIcon, 
+  EyeIcon, 
+  EyeSlashIcon,
+  PlusIcon,
+  StarIcon,
+  ArrowUpTrayIcon
+} from '@heroicons/react/24/outline';
 import { compressImage } from '../../utils/imageCompressor';
 
 export interface InventoryItem {
@@ -19,6 +29,7 @@ export interface InventoryItem {
   barcode?: string;
   image?: string;
   image_url?: string;
+  images?: string[];
   // Campos de Camiones
   year?: number | string;
   vin?: string;
@@ -35,6 +46,7 @@ export interface InventoryItem {
   description?: string;
   includes_itbis?: boolean;
   itbis_type?: 'incluido' | 'adicional' | 'exento';
+  show_price?: boolean;
 }
 
 interface ItemModalProps {
@@ -88,6 +100,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         setMarginPercent('30');
       }
 
+      const loadedImages = Array.isArray((targetItem as any).images) && (targetItem as any).images.length > 0
+        ? (targetItem as any).images
+        : ((targetItem as any).image_url ? [(targetItem as any).image_url] : ((targetItem as any).image ? [(targetItem as any).image] : []));
+
       setFormData({
         ...targetItem,
         id: targetItem.id || 0,
@@ -101,7 +117,8 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         stock: (targetItem.stock !== undefined && targetItem.stock !== null) ? targetItem.stock : '',
         barcode: (targetItem as any).barcode || '',
         partNumber: (targetItem as any).part_number ?? (targetItem as any).partNumber ?? '',
-        image: (targetItem as any).image_url ?? (targetItem as any).image ?? '',
+        image: loadedImages[0] || (targetItem as any).image_url || (targetItem as any).image || '',
+        images: loadedImages,
         serialNumber: (targetItem as any).vin ?? (targetItem as any).serialNumber ?? '',
         compatibility: (targetItem as any).description ?? (targetItem as any).compatibility ?? '',
         status: targetItem.status || 'Disponible',
@@ -109,7 +126,8 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         includes_itbis: (targetItem as any).includes_itbis !== undefined 
           ? Boolean((targetItem as any).includes_itbis) 
           : ((targetItem as any).itbis_type === 'adicional' ? false : true),
-        itbis_type: (targetItem as any).itbis_type || ((targetItem as any).includes_itbis === false ? 'adicional' : 'incluido')
+        itbis_type: (targetItem as any).itbis_type || ((targetItem as any).includes_itbis === false ? 'adicional' : 'incluido'),
+        show_price: (targetItem as any).show_price !== undefined ? Boolean((targetItem as any).show_price) : true
       });
     } else {
       setMarginPercent('30');
@@ -129,7 +147,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         partNumber: '',
         compatibility: '',
         includes_itbis: true,
-        itbis_type: 'incluido'
+        itbis_type: 'incluido',
+        show_price: true,
+        image: '',
+        images: []
       });
     }
   }, [targetItem]);
@@ -192,26 +213,80 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
   const profitMargin = currentCost > 0 ? (profitAmount / currentCost) * 100 : 0;
   const isLoss = currentCost > 0 && currentPrice < currentCost;
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const compressed = await compressImage(file, {
-          maxWidth: 800,
-          maxHeight: 800,
-          quality: 0.72,
-          mimeType: 'image/webp'
-        });
-        setFormData(prev => ({ ...prev, image: compressed }));
-      } catch (err) {
-        console.warn('Error compressing image:', err);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setFormData(prev => ({ ...prev, image: reader.result as string }));
+  const [isCompressingImages, setIsCompressingImages] = useState(false);
+
+  const handleMultipleImagesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsCompressingImages(true);
+    try {
+      const fileList = Array.from(files);
+      const compressedList = await Promise.all(
+        fileList.map(async (file) => {
+          try {
+            return await compressImage(file, {
+              maxWidth: 900,
+              maxHeight: 900,
+              quality: 0.75,
+              mimeType: 'image/webp'
+            });
+          } catch (err) {
+            console.warn('Error compressing image:', err);
+            return new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(file);
+            });
+          }
+        })
+      );
+
+      setFormData(prev => {
+        const currentList = Array.isArray(prev.images) && prev.images.length > 0 
+          ? prev.images 
+          : (prev.image ? [prev.image] : []);
+        const merged = [...currentList, ...compressedList];
+        return {
+          ...prev,
+          images: merged,
+          image: merged[0] || ''
         };
-        reader.readAsDataURL(file);
-      }
+      });
+    } finally {
+      setIsCompressingImages(false);
+      e.target.value = '';
     }
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    setFormData(prev => {
+      const currentList = Array.isArray(prev.images) && prev.images.length > 0 
+        ? prev.images 
+        : (prev.image ? [prev.image] : []);
+      const updated = currentList.filter((_, idx) => idx !== indexToRemove);
+      return {
+        ...prev,
+        images: updated,
+        image: updated[0] || ''
+      };
+    });
+  };
+
+  const handleSetMainImage = (indexToMakeMain: number) => {
+    setFormData(prev => {
+      const currentList = [...(Array.isArray(prev.images) && prev.images.length > 0 
+        ? prev.images 
+        : (prev.image ? [prev.image] : []))];
+      if (indexToMakeMain <= 0 || indexToMakeMain >= currentList.length) return prev;
+      const [selected] = currentList.splice(indexToMakeMain, 1);
+      const updated = [selected, ...currentList];
+      return {
+        ...prev,
+        images: updated,
+        image: updated[0] || ''
+      };
+    });
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -221,6 +296,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const finalImages = Array.isArray(formData.images) && formData.images.length > 0
+        ? formData.images
+        : (formData.image ? [formData.image] : []);
+
       await onSave({
         ...formData,
         id: isEditing ? formData.id : undefined,
@@ -232,7 +311,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         mileage: formData.mileage ? parseFloat(String(formData.mileage)) : undefined,
         hours: formData.hours ? parseFloat(String(formData.hours)) : undefined,
         includes_itbis: formData.includes_itbis ?? (formData.itbis_type !== 'adicional'),
-        itbis_type: formData.itbis_type || 'incluido'
+        itbis_type: formData.itbis_type || 'incluido',
+        show_price: formData.show_price !== undefined ? formData.show_price : true,
+        image: finalImages[0] || '',
+        images: finalImages
       });
       onClose();
     } catch (err) {
@@ -298,29 +380,54 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                 {/* Photo Thumbnail Uploader */}
                 <div className="shrink-0 flex sm:flex-col items-center gap-2">
                   <div className="relative group w-20 h-20 sm:w-22 sm:h-22 rounded-2xl overflow-hidden bg-gray-50 dark:bg-zinc-800/40 border-2 border-dashed border-gray-200 dark:border-zinc-700 flex items-center justify-center transition-all">
-                    {formData.image ? (
+                    {formData.image || (formData.images && formData.images.length > 0) ? (
                       <>
-                        <img src={formData.image} alt="Producto" className="w-full h-full object-cover" />
+                        <img 
+                          src={formData.image || formData.images?.[0]} 
+                          alt="Producto" 
+                          className="w-full h-full object-cover" 
+                        />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 backdrop-blur-[2px]">
-                          <label className="cursor-pointer p-1.5 bg-white text-gray-900 rounded-full hover:scale-110 transition-transform shadow-xs" title="Cambiar Foto">
+                          <label className="cursor-pointer p-1.5 bg-white text-gray-900 rounded-full hover:scale-110 transition-transform shadow-xs" title="Subir / Agregar Fotos">
                             <PhotoIcon className="w-3.5 h-3.5" />
-                            <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                            <input 
+                              type="file" 
+                              multiple 
+                              accept="image/*" 
+                              className="hidden" 
+                              disabled={isCompressingImages}
+                              onChange={handleMultipleImagesChange} 
+                            />
                           </label>
                           <button 
                             type="button" 
-                            onClick={() => setFormData(prev => ({ ...prev, image: undefined }))} 
+                            onClick={() => setFormData(prev => ({ ...prev, image: '', images: [] }))} 
                             className="p-1.5 bg-red-600 text-white rounded-full hover:scale-110 transition-transform shadow-xs cursor-pointer"
-                            title="Quitar Foto"
+                            title="Quitar Fotos"
                           >
                             <TrashIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                        {formData.images && formData.images.length > 1 && (
+                          <div className="absolute bottom-1 right-1 pointer-events-none">
+                            <span className="bg-black/80 text-white text-[8px] font-black px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                              +{formData.images.length}
+                            </span>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors p-1">
                         <PhotoIcon className="h-6 w-6 text-gray-400 dark:text-zinc-500 mb-0.5" />
-                        <span className="text-[10px] font-bold text-gray-600 dark:text-zinc-400">Subir Foto</span>
-                        <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                        <span className="text-[10px] font-bold text-gray-600 dark:text-zinc-400">Subir Fotos</span>
+                        <input 
+                          type="file" 
+                          multiple 
+                          accept="image/*" 
+                          className="hidden" 
+                          disabled={isCompressingImages}
+                          onChange={handleMultipleImagesChange} 
+                        />
                       </label>
                     )}
                   </div>
@@ -685,6 +792,57 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                     )}
                   </div>
                 )}
+
+                {/* 5. Visibilidad del Precio en Catálogo y Tienda Digital */}
+                <div className="mt-3.5 pt-3 border-t border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/60 dark:bg-[#16171d]/60 p-3 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight">
+                        Visibilidad del Precio en Catálogo / Tienda
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        formData.show_price !== false 
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' 
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60'
+                      }`}>
+                        {formData.show_price !== false ? 'Precio Visible' : 'Precio Oculto (A Consultar)'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
+                      {formData.show_price !== false 
+                        ? 'Los clientes podrán ver el precio numérico en el catálogo y tienda pública.' 
+                        : 'Se mostrará como "Precio a Consultar" para que el cliente contacte y cotice por WhatsApp.'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#12131a] rounded-xl border border-gray-200 dark:border-zinc-700/80 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, show_price: true }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        formData.show_price !== false
+                          ? 'bg-emerald-600 text-white shadow-xs font-black'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <EyeIcon className="w-3.5 h-3.5" />
+                      <span>Visible</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, show_price: false }))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        formData.show_price === false
+                          ? 'bg-amber-600 text-white shadow-xs font-black'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <EyeSlashIcon className="w-3.5 h-3.5" />
+                      <span>Ocultar Precio</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Campos Opcionales para Piezas */}
@@ -757,6 +915,131 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
 
                 </div>
               )}
+
+              {/* 4. Galería de Múltiples Fotos del Vehículo / Artículo */}
+              <div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80">
+                <div className="bg-gray-50/70 dark:bg-zinc-900/40 rounded-2xl p-4 border border-gray-200/80 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <PhotoIcon className="w-4 h-4 text-[#ED1C24]" />
+                        <h4 className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight">
+                          Galería de Fotos del Vehículo / Artículo
+                        </h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-[#ED1C24] dark:bg-red-950/80 dark:text-red-300">
+                          {formData.images?.length || (formData.image ? 1 : 0)} {(formData.images?.length === 1 || (!formData.images?.length && formData.image)) ? 'foto' : 'fotos'}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
+                        Sube varias fotos (frontal, laterales, interior, motor, etc.) para que los clientes las vean en el catálogo.
+                      </p>
+                    </div>
+
+                    <label className="cursor-pointer px-3.5 py-1.5 bg-[#ED1C24] hover:bg-[#c9141b] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs">
+                      <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                      <span>{isCompressingImages ? 'Procesando...' : '+ Subir Fotos'}</span>
+                      <input 
+                        type="file" 
+                        multiple 
+                        accept="image/*" 
+                        className="hidden" 
+                        disabled={isCompressingImages} 
+                        onChange={handleMultipleImagesChange} 
+                      />
+                    </label>
+                  </div>
+
+                  {/* Compressing indicator */}
+                  {isCompressingImages && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-[#ED1C24] text-xs font-bold animate-pulse">
+                      <span className="w-3.5 h-3.5 border-2 border-[#ED1C24] border-t-transparent rounded-full animate-spin"></span>
+                      <span>Optimizando imágenes para carga instantánea...</span>
+                    </div>
+                  )}
+
+                  {/* Thumbnails Grid */}
+                  {Array.isArray(formData.images) && formData.images.length > 0 ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2.5 pt-1">
+                      {formData.images.map((imgSrc, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`relative group rounded-xl overflow-hidden bg-white dark:bg-zinc-800 aspect-square border-2 transition-all ${
+                            idx === 0 
+                              ? 'border-[#ED1C24] ring-2 ring-[#ED1C24]/20 shadow-xs' 
+                              : 'border-gray-200 dark:border-zinc-700 hover:border-gray-400 dark:hover:border-zinc-500'
+                          }`}
+                        >
+                          <img src={imgSrc} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                          
+                          {/* Main Badge */}
+                          {idx === 0 && (
+                            <div className="absolute top-1 left-1">
+                              <span className="text-[8px] font-black bg-[#ED1C24] text-white px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5">
+                                <StarIcon className="w-2.5 h-2.5 fill-current" />
+                                Principal
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Hover Actions Overlay */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1 backdrop-blur-xs">
+                            {idx !== 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetMainImage(idx)}
+                                className="px-2 py-0.5 bg-white text-gray-900 hover:bg-[#ED1C24] hover:text-white rounded-md text-[9px] font-black transition-colors shadow-xs cursor-pointer"
+                                title="Establecer como foto principal"
+                              >
+                                Principal
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="p-1 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors shadow-xs cursor-pointer"
+                              title="Eliminar esta foto"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Add More Slot */}
+                      <label className="border-2 border-dashed border-gray-300 dark:border-zinc-700 hover:border-[#ED1C24] dark:hover:border-[#ED1C24] rounded-xl aspect-square flex flex-col items-center justify-center cursor-pointer text-gray-400 hover:text-[#ED1C24] dark:hover:text-[#ED1C24] transition-all bg-white/50 dark:bg-zinc-800/30 p-2 text-center group">
+                        <PlusIcon className="w-5 h-5 group-hover:scale-110 transition-transform mb-0.5" />
+                        <span className="text-[9px] font-bold">Añadir</span>
+                        <input 
+                          type="file" 
+                          multiple 
+                          accept="image/*" 
+                          className="hidden" 
+                          disabled={isCompressingImages} 
+                          onChange={handleMultipleImagesChange} 
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-200 dark:border-zinc-700 hover:border-[#ED1C24] dark:hover:border-[#ED1C24] rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer text-center group bg-white/40 dark:bg-zinc-800/20 transition-all">
+                      <PhotoIcon className="w-8 h-8 text-gray-300 dark:text-zinc-600 group-hover:text-[#ED1C24] transition-colors mb-1.5" />
+                      <span className="text-xs font-bold text-gray-700 dark:text-zinc-300 group-hover:text-[#ED1C24]">
+                        Haz clic para seleccionar fotos o arrástralas aquí
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                        Puedes subir múltiples imágenes del vehículo
+                      </span>
+                      <input 
+                        type="file" 
+                        multiple 
+                        accept="image/*" 
+                        className="hidden" 
+                        disabled={isCompressingImages} 
+                        onChange={handleMultipleImagesChange} 
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
 
             </form>
           </div>

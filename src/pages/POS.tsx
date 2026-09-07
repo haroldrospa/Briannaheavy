@@ -62,7 +62,7 @@ import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../ser
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
 import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
-import { filterInvoicesByShift } from '../services/shiftsService';
+import { filterInvoicesByShift, isQuotationInvoice } from '../services/shiftsService';
 
 const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {
   const dateObj = inv.created_at ? new Date(inv.created_at) : new Date();
@@ -1879,7 +1879,7 @@ export default function POS() {
 
     const localInvs = getLocalStorageInvoices();
     if (localInvs) {
-      setSessionSales(filterInvoicesByShift(localInvs).map(mapInvoiceToSessionSale));
+      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i))).map(mapInvoiceToSessionSale));
     }
 
     // 2. Async background sync with Supabase
@@ -1902,7 +1902,7 @@ export default function POS() {
         })));
       }
       if (invs) {
-        setSessionSales(filterInvoicesByShift(invs).map(mapInvoiceToSessionSale));
+        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i))).map(mapInvoiceToSessionSale));
         setActiveQuotationsCount(getActiveQuotationsCount());
       }
     };
@@ -1987,6 +1987,17 @@ export default function POS() {
   const [isSessionSalesOpen, setIsSessionSalesOpen] = useState(false);
 
   const [sessionSales, setSessionSales] = useState<SessionSale[]>([]);
+
+  // Garantizar que las cotizaciones nunca sumen en la cuenta de ventas de la sesión
+  const validSessionSales = useMemo(() => {
+    return sessionSales.filter(s => {
+      const id = String(s.id || '').toUpperCase();
+      const ncf = String(s.ncf || '').toUpperCase();
+      const invType = String(s.invoiceType || '').toUpperCase();
+      const method = String(s.paymentMethod || '').toLowerCase();
+      return !id.startsWith('CT-') && !ncf.startsWith('CT') && invType !== 'CT' && !method.includes('cotiz');
+    });
+  }, [sessionSales]);
 
   // Billing & e-CF Modes: 'internal' (Sistema / No DGII por defecto) vs 'electronic' (DGII e-CF)
   const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');
@@ -2332,25 +2343,27 @@ export default function POS() {
         }));
       }
 
-      // 2. Optimistic Session Sale Update (0 ms latency)
-      const newSessionSale: SessionSale = {
-        id: finalInvoiceNumber,
-        ncf: finalNcf,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : (internalDocType === 'CT' ? 'Cliente Cotización' : 'Venta de Contado')),
-        paymentMethod: paymentMethod,
-        invoiceType: finalNcfType,
-        total: total,
-        subtotal: subtotal,
-        tax_amount: tax,
-        items: cart.map(item => ({
-          description: item.product.name,
-          quantity: item.quantity,
-          unit_price: item.product.price,
-          total_price: calculateItemTotal(item),
-        }))
-      };
-      setSessionSales(prev => [newSessionSale, ...prev]);
+      // 2. Optimistic Session Sale Update (0 ms latency) - only for actual sales, never for quotations
+      if (internalDocType !== 'CT') {
+        const newSessionSale: SessionSale = {
+          id: finalInvoiceNumber,
+          ncf: finalNcf,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : 'Venta de Contado'),
+          paymentMethod: paymentMethod,
+          invoiceType: finalNcfType,
+          total: total,
+          subtotal: subtotal,
+          tax_amount: tax,
+          items: cart.map(item => ({
+            description: item.product.name,
+            quantity: item.quantity,
+            unit_price: item.product.price,
+            total_price: calculateItemTotal(item),
+          }))
+        };
+        setSessionSales(prev => [newSessionSale, ...prev]);
+      }
 
       // 3. Save completed sale details for receipt printing & confirmation modal
       const saleItems = cart.map(item => ({
@@ -2445,11 +2458,27 @@ export default function POS() {
       // Fire & forget background sync
       (async () => {
         try {
-          await createInvoice(invoicePayload, saleItems);
-          if (paymentMethod === 'Transferencia') {
-            window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
-          }
-          if (internalDocType === 'CT') {
+          if (internalDocType !== 'CT') {
+            await createInvoice(invoicePayload, saleItems);
+            if (paymentMethod === 'Transferencia') {
+              window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+            }
+            if (activeQuotationId) {
+              markQuotationAsBilled(activeQuotationId, finalNcf || finalInvoiceNumber);
+              setActiveQuotationId(null);
+            }
+            await Promise.all(cartItemsSnapshot.map(item => {
+              if (item.product && item.product.id) {
+                const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
+                const newStock = Math.max(0, currentStock - item.quantity);
+                return updateInventoryItem(String(item.product.id), { 
+                  stock: newStock,
+                  status: newStock === 0 && item.product.category !== 'Piezas' ? 'Vendido' : undefined
+                });
+              }
+              return Promise.resolve(null);
+            }));
+          } else {
             createQuotation({
               quotation_number: invoicePayload.invoice_number,
               customer: clientSnapshot ? {
@@ -2476,7 +2505,7 @@ export default function POS() {
                 },
                 quantity: it.quantity,
                 unitPrice: it.product.price,
-                totalPrice: it.product.price * it.quantity,
+                totalPrice: calculateItemTotal(it),
                 discount: it.discount,
                 discountType: it.discountType
               })),
@@ -2486,22 +2515,8 @@ export default function POS() {
               notes: 'Cotización emitida desde POS',
               cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado'
             });
-          } else {
-            if (activeQuotationId) {
-              markQuotationAsBilled(activeQuotationId, finalNcf || finalInvoiceNumber);
-              setActiveQuotationId(null);
-            }
-            await Promise.all(cartItemsSnapshot.map(item => {
-              if (item.product && item.product.id) {
-                const currentStock = typeof item.product.stock === 'number' ? item.product.stock : 0;
-                const newStock = Math.max(0, currentStock - item.quantity);
-                return updateInventoryItem(String(item.product.id), { 
-                  stock: newStock,
-                  status: newStock === 0 && item.product.category !== 'Piezas' ? 'Vendido' : undefined
-                });
-              }
-              return Promise.resolve(null);
-            }));
+            setActiveQuotationsCount(getActiveQuotationsCount());
+            window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
           }
         } catch (bgErr) {
           console.warn('Background sync warning:', bgErr);
@@ -2658,10 +2673,10 @@ export default function POS() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
             title="Cotizaciones guardadas (vigentes 30 días)"
           >
-            <ClipboardDocumentListIcon className="h-4 w-4 text-blue-500 stroke-[2.2]" />
+            <ClipboardDocumentListIcon className="h-4 w-4 text-zinc-600 dark:text-zinc-400 stroke-[2.2]" />
             <span className="hidden md:inline">Cotizaciones</span>
             {activeQuotationsCount > 0 && (
-              <span className="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+              <span className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
                 {activeQuotationsCount}
               </span>
             )}
@@ -2709,7 +2724,7 @@ export default function POS() {
               <ReceiptPercentIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
               <span className="hidden sm:inline">Ventas</span>
               <span className="bg-[#ED1C24] text-white text-[9.5px] font-mono font-black px-1.5 py-0.2 rounded-full leading-none">
-                {sessionSales.length}
+                {validSessionSales.length}
               </span>
             </button>
 
@@ -3619,7 +3634,7 @@ export default function POS() {
           <SessionSalesModal
             isOpen={isSessionSalesOpen}
             onClose={() => setIsSessionSalesOpen(false)}
-            sales={sessionSales}
+            sales={validSessionSales}
           />
         )}
       </AnimatePresence>
