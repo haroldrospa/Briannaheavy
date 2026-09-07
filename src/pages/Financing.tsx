@@ -5,10 +5,10 @@ import {
   PrinterIcon, UserIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
-  CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon
+  CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
+  LockClosedIcon, EyeIcon, EyeSlashIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useConfirm } from '../contexts/ConfirmContext';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import { 
@@ -23,6 +23,7 @@ import {
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 import { fetchCashMovements, type CashMovement } from '../services/cashMovementsService';
+import { verifyAdminMasterKey } from '../utils/scheduleStorage';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
 
@@ -279,7 +280,6 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
 };
 
 export default function Financing() {
-  const confirm = useConfirm();
   const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
@@ -540,27 +540,46 @@ export default function Financing() {
     setIsNewFormOpen(true);
   };
 
-  const handleDeleteFinancing = async (fin: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const confirmed = await confirm({
-      title: '¿Eliminar Financiamiento?',
-      description: `¿Estás seguro de que deseas eliminar permanentemente el financiamiento de "${fin.customer}" (${fin.item}) por RD$ ${Number(fin.amount).toLocaleString('es-DO')}? Esta acción no se puede deshacer.`,
-      confirmText: 'Sí, Eliminar',
-      cancelText: 'Cancelar',
-      variant: 'danger',
-    });
+  // Estado para eliminación protegida con Clave Maestra
+  const [financingToDelete, setFinancingToDelete] = useState<any | null>(null);
+  const [deleteMasterKey, setDeleteMasterKey] = useState('');
+  const [deleteMasterKeyError, setDeleteMasterKeyError] = useState('');
+  const [showDeleteMasterKeyText, setShowDeleteMasterKeyText] = useState(false);
+  const [isDeletingFinancing, setIsDeletingFinancing] = useState(false);
 
-    if (confirmed) {
-      try {
-        const finId = fin.rawId || String(fin.id);
-        await deleteFinancing(finId);
-        setFinancingsList(prev => prev.filter(f => f.rawId !== finId && f.id !== fin.id));
-        if (selectedFinancing && (selectedFinancing.rawId === finId || selectedFinancing.id === fin.id)) {
-          forceCloseAllModals();
-        }
-      } catch (err) {
-        console.error('Error deleting financing:', err);
+  const handleDeleteFinancing = (fin: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFinancingToDelete(fin);
+    setDeleteMasterKey('');
+    setDeleteMasterKeyError('');
+    setShowDeleteMasterKeyText(false);
+  };
+
+  const handleConfirmDeleteWithKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!financingToDelete || isDeletingFinancing) return;
+
+    if (!verifyAdminMasterKey(deleteMasterKey)) {
+      setDeleteMasterKeyError('Clave maestra incorrecta. Verifique e intente nuevamente.');
+      return;
+    }
+
+    setIsDeletingFinancing(true);
+    try {
+      const finId = financingToDelete.rawId || String(financingToDelete.id);
+      await deleteFinancing(finId);
+      setFinancingsList(prev => prev.filter(f => f.rawId !== finId && f.id !== financingToDelete.id));
+      if (selectedFinancing && (selectedFinancing.rawId === finId || selectedFinancing.id === financingToDelete.id)) {
+        forceCloseAllModals();
       }
+      setFinancingToDelete(null);
+      setDeleteMasterKey('');
+      setDeleteMasterKeyError('');
+    } catch (err) {
+      console.error('Error deleting financing:', err);
+      setDeleteMasterKeyError('Error al eliminar el financiamiento. Intente nuevamente.');
+    } finally {
+      setIsDeletingFinancing(false);
     }
   };
 
@@ -3551,6 +3570,99 @@ export default function Financing() {
         onClose={() => setIsCashClosureOpen(false)} 
         defaultRegister="Caja Cobros & Financiamientos"
       />
+
+      {/* Modal de Confirmación con Clave Maestra para Eliminar Financiamiento */}
+      <AnimatePresence>
+        {financingToDelete && (
+          <div className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="bg-white dark:bg-[#15161c] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800"
+            >
+              <div className="p-6 text-center">
+                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200/60 dark:border-red-900/40 mb-3 shadow-xs">
+                  <LockClosedIcon className="h-7 w-7 stroke-[2]" />
+                </div>
+
+                <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                  Autorización de Seguridad Requerida
+                </h3>
+
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1.5 px-2 leading-relaxed">
+                  Para eliminar el financiamiento de <strong className="text-gray-900 dark:text-white font-bold">{financingToDelete.customer}</strong> ({financingToDelete.item}) por <strong className="text-gray-900 dark:text-white font-bold">RD$ {Number(financingToDelete.amount).toLocaleString('es-DO')}</strong>, debe ingresar la <span className="text-[#ED1C24] font-bold">Clave Maestra</span> de administrador.
+                </p>
+
+                <form onSubmit={handleConfirmDeleteWithKey} className="mt-5 space-y-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 uppercase tracking-wider text-center">
+                      Clave Maestra
+                    </label>
+                    <div className="relative">
+                      <input
+                        autoFocus
+                        type={showDeleteMasterKeyText ? 'text' : 'password'}
+                        value={deleteMasterKey}
+                        onChange={(e) => {
+                          setDeleteMasterKey(e.target.value);
+                          setDeleteMasterKeyError('');
+                        }}
+                        placeholder="••••••"
+                        className="block w-full text-center py-2.5 px-10 text-lg font-bold font-mono tracking-widest bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24] focus:border-[#ED1C24] outline-none transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteMasterKeyText(!showDeleteMasterKeyText)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 p-1 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showDeleteMasterKeyText ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {deleteMasterKeyError && (
+                      <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-1 mt-1.5 text-center animate-in fade-in">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span>{deleteMasterKeyError}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isDeletingFinancing}
+                      onClick={() => {
+                        setFinancingToDelete(null);
+                        setDeleteMasterKey('');
+                        setDeleteMasterKeyError('');
+                      }}
+                      className="w-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-zinc-700 text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isDeletingFinancing || !deleteMasterKey.trim()}
+                      className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isDeletingFinancing ? (
+                        <span>Eliminando...</span>
+                      ) : (
+                        <>
+                          <TrashIcon className="w-4 h-4" />
+                          <span>Eliminar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
