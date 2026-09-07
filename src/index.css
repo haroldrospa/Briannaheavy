@@ -215,17 +215,14 @@ button, a, input, select, textarea {
     }
 
     /* Printable Financing Receipt Portal Formatting */
-    body.print-receipt-mode body > .printable-financing-receipt,
     body.print-receipt-mode .printable-financing-receipt {
       display: block !important;
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
+      position: relative !important;
       width: 100% !important;
-      max-width: 100% !important;
-      margin: 0 !important;
-      padding: 10mm 14mm !important;
+      max-width: 216mm !important;
+      min-height: 270mm !important;
+      margin: 0 auto !important;
+      padding: 12mm 16mm !important;
       box-sizing: border-box !important;
       background-color: #ffffff !important;
       color: #000000 !important;
@@ -384,3 +381,10 @@ button, a, input, select, textarea {
     }
   }
 }
+
+@media screen {
+  .printable-financing-receipt {
+    display: none !important;
+  }
+}
+

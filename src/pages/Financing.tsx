@@ -800,19 +800,34 @@ export default function Financing() {
 
   const handlePrintReceipt = () => {
     setHasPrintedReceipt(true);
+    document.body.classList.remove('print-ticket-mode', 'print-letter-mode', 'print-barcode-mode', 'print-closure-mode');
     document.body.classList.add('print-receipt-mode');
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 150);
+    });
   };
 
   useEffect(() => {
-    const handleAfterPrint = () => {
-      document.body.classList.remove('print-receipt-mode');
+    const handleBeforePrint = () => {
+      if (showReceipt) {
+        document.body.classList.remove('print-ticket-mode', 'print-letter-mode', 'print-barcode-mode', 'print-closure-mode');
+        document.body.classList.add('print-receipt-mode');
+      }
     };
+    const handleAfterPrint = () => {
+      setTimeout(() => {
+        document.body.classList.remove('print-receipt-mode');
+      }, 500);
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
     window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [showReceipt]);
 
   const handleAttemptCloseModal = () => {
     // If currently viewing a receipt and hasn't printed yet, ask for confirmation
@@ -3417,9 +3432,11 @@ export default function Financing() {
             )}
           </>
         )}
+      </AnimatePresence>
+
       {/* Isolated Print Portal for Payment Receipt (Rendered in document.body) */}
       {showReceipt && typeof document !== 'undefined' && createPortal(
-        <div className="hidden print:block printable-financing-receipt font-sans text-black bg-white">
+        <div className="printable-financing-receipt font-sans text-black bg-white">
           {/* Header */}
           <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-5">
             <div className="flex items-center gap-4">
@@ -3547,7 +3564,6 @@ export default function Financing() {
         </div>,
         document.body
       )}
-      </AnimatePresence>
 
       {/* Cash Movement Modal (Ingresos y Egresos) */}
       <AnimatePresence>
