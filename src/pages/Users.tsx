@@ -121,13 +121,18 @@ export default function Users() {
     try {
       const formData = new FormData(e.currentTarget);
       const newEmail = (formData.get('email') as string)?.trim();
+      const newName = (formData.get('name') as string)?.trim();
       const isSuperAdmin = editingUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
+      const targetEmail = isSuperAdmin ? SUPER_ADMIN_EMAIL : (newEmail || editingUser.email || '');
+      const targetRole = isSuperAdmin ? 'Administrador' : ((formData.get('role') as any) || editingUser.role || 'Oficina');
+      const targetStatus = isSuperAdmin ? 'Activo' : ((formData.get('status') as string) || editingUser.status || 'Activo');
+
       const updates: Partial<UserProfile> = {
-        full_name: formData.get('name') as string,
-        email: isSuperAdmin ? SUPER_ADMIN_EMAIL : newEmail,
-        role: isSuperAdmin ? 'Administrador' : (formData.get('role') as any),
-        status: isSuperAdmin ? 'Activo' : (formData.get('status') as string),
+        full_name: newName || editingUser.full_name,
+        email: targetEmail,
+        role: targetRole,
+        status: targetStatus,
         password: editPassword.trim() || '123456',
         must_change_password: isSuperAdmin ? false : editMustChangePassword,
       };
@@ -422,7 +427,7 @@ export default function Users() {
                 </div>
               )}
 
-              <form onSubmit={handleSaveUserChanges} className="space-y-3.5 sm:space-y-4">
+              <form key={editingUser.id} onSubmit={handleSaveUserChanges} className="space-y-3.5 sm:space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">Nombre Completo</label>
                   <input type="text" name="name" defaultValue={editingUser.full_name} required className="w-full px-4 py-2.5 sm:py-3 bg-[#f4f3f1] dark:bg-[#222] border-none rounded-xl text-xs sm:text-sm font-bold text-gray-900 dark:text-white outline-none" />

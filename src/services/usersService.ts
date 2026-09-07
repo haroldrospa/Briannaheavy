@@ -16,6 +16,7 @@ export const SUPER_ADMIN_EMAIL = 'Haroldrospa@gmail.com';
 
 const LOCAL_STORAGE_KEY = 'brianna_local_users';
 const PASSWORDS_STORAGE_KEY = 'brianna_user_passwords';
+const MUST_CHANGE_STORAGE_KEY = 'brianna_user_must_change';
 
 export const getStoredPasswords = (): Record<string, string> => {
   try {
@@ -35,7 +36,11 @@ export const saveStoredPassword = async (email: string, password: string): Promi
   const key = email.trim().toLowerCase();
   const current = getStoredPasswords();
   current[key] = password;
-  localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(current));
+  try {
+    localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(current));
+  } catch (e) {
+    console.warn('Error saving password to localStorage:', e);
+  }
 
   if (isSupabaseConfigured()) {
     try {
@@ -46,6 +51,41 @@ export const saveStoredPassword = async (email: string, password: string): Promi
       });
     } catch (err) {
       console.warn('Error syncing passwords to Supabase:', err);
+    }
+  }
+};
+
+export const getStoredMustChangeFlags = (): Record<string, boolean> => {
+  try {
+    const raw = localStorage.getItem(MUST_CHANGE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    parsed[SUPER_ADMIN_EMAIL.toLowerCase()] = false;
+    return parsed;
+  } catch {
+    return { [SUPER_ADMIN_EMAIL.toLowerCase()]: false };
+  }
+};
+
+export const saveStoredMustChangeFlag = async (email: string, mustChange: boolean): Promise<void> => {
+  if (!email) return;
+  const key = email.trim().toLowerCase();
+  const current = getStoredMustChangeFlags();
+  current[key] = key === SUPER_ADMIN_EMAIL.toLowerCase() ? false : mustChange;
+  try {
+    localStorage.setItem(MUST_CHANGE_STORAGE_KEY, JSON.stringify(current));
+  } catch (e) {
+    console.warn('Error saving must_change to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('system_settings').upsert({
+        key: 'user_must_change_password',
+        value: current,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Error syncing must_change to Supabase:', err);
     }
   }
 };
@@ -110,6 +150,7 @@ export const getLocalStorageUsers = (): UserProfile[] => {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     const passwords = getStoredPasswords();
+    const flags = getStoredMustChangeFlags();
     if (!raw) {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialLocalUsers));
       inMemoryUsers = initialLocalUsers;
@@ -121,9 +162,11 @@ export const getLocalStorageUsers = (): UserProfile[] => {
     parsed = parsed.map(u => {
       const emailKey = (u.email || '').trim().toLowerCase();
       const userPass = u.password || passwords[emailKey] || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
-      const mustChange = u.must_change_password !== undefined 
-        ? u.must_change_password 
-        : (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? false : (userPass === '123456'));
+      const mustChange = flags[emailKey] !== undefined
+        ? flags[emailKey]
+        : (u.must_change_password !== undefined 
+          ? u.must_change_password 
+          : (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? false : (userPass === '123456')));
       
       if (emailKey === SUPER_ADMIN_EMAIL.toLowerCase()) {
         return {
@@ -181,7 +224,7 @@ const saveLocalStorageUsers = (users: UserProfile[]): void => {
 };
 
 let lastUsersFetch = 0;
-const USERS_CACHE_TTL = 30_000; // 30 seconds
+const USERS_CACHE_TTL = 15_000; // 15 seconds
 
 export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> => {
   const now = Date.now();
@@ -196,9 +239,10 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
   if (isSupabaseConfigured()) {
     inFlightUsersPromise = (async () => {
       try {
-        const [profilesRes, passwordsRes] = await Promise.all([
+        const [profilesRes, passwordsRes, flagsRes] = await Promise.all([
           supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(100),
-          supabase.from('system_settings').select('value').eq('key', 'user_passwords').maybeSingle()
+          supabase.from('system_settings').select('value').eq('key', 'user_passwords').maybeSingle(),
+          supabase.from('system_settings').select('value').eq('key', 'user_must_change_password').maybeSingle()
         ]);
 
         let remotePasswords: Record<string, string> = {};
@@ -206,20 +250,40 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
           remotePasswords = passwordsRes.data.value as Record<string, string>;
         }
 
+        let remoteFlags: Record<string, boolean> = {};
+        if (flagsRes.data?.value && typeof flagsRes.data.value === 'object') {
+          remoteFlags = flagsRes.data.value as Record<string, boolean>;
+        }
+
         const localPasswords = getStoredPasswords();
         const mergedPasswords = { ...localPasswords, ...remotePasswords };
         localStorage.setItem(PASSWORDS_STORAGE_KEY, JSON.stringify(mergedPasswords));
+
+        const localFlags = getStoredMustChangeFlags();
+        const mergedFlags = { ...localFlags, ...remoteFlags };
+        localStorage.setItem(MUST_CHANGE_STORAGE_KEY, JSON.stringify(mergedFlags));
 
         if (!profilesRes.error && profilesRes.data && profilesRes.data.length > 0) {
           const localList = getLocalStorageUsers();
           const profiles = profilesRes.data.map((p: any) => {
             const emailKey = (p.email || '').trim().toLowerCase();
             const localMatch = localList.find(l => (l.email || '').toLowerCase() === emailKey || l.id === p.id);
-            const userPass = p.password || mergedPasswords[emailKey] || localMatch?.password || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
+            const userPass = mergedPasswords[emailKey] || p.password || localMatch?.password || (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
+            const mustChange = mergedFlags[emailKey] !== undefined
+              ? Boolean(mergedFlags[emailKey])
+              : (localMatch?.must_change_password !== undefined 
+                ? Boolean(localMatch.must_change_password) 
+                : (emailKey === SUPER_ADMIN_EMAIL.toLowerCase() ? false : (userPass === '123456')));
+
             return {
-              ...p,
+              id: p.id,
               full_name: p.full_name || localMatch?.full_name || 'Usuario',
-              password: userPass
+              email: p.email,
+              role: (p.role || 'Oficina') as UserRole,
+              status: p.status || 'Activo',
+              password: userPass,
+              must_change_password: mustChange,
+              created_at: p.created_at
             } as UserProfile;
           });
 
@@ -255,7 +319,10 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
     : (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? false : true);
   
   if (user.email) {
-    await saveStoredPassword(user.email, userPassword);
+    await Promise.all([
+      saveStoredPassword(user.email, userPassword),
+      saveStoredMustChangeFlag(user.email, mustChange)
+    ]);
   }
 
   let createdId = Date.now().toString();
@@ -266,12 +333,14 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
         full_name: user.full_name,
         email: user.email,
         role: user.role,
-        status: user.status,
-        must_change_password: mustChange
+        status: user.status || 'Activo',
+        password: userPassword
       };
       const { data, error } = await supabase.from('profiles').insert([cleanUser]).select().single();
       if (!error && data) {
         createdId = data.id || createdId;
+      } else if (error) {
+        console.warn('Profile insert error (saved locally):', error);
       }
     } catch (err) {
       console.warn('Profile insert notice (saved locally):', err);
@@ -280,15 +349,22 @@ export const createUser = async (user: Omit<UserProfile, 'id'> & { password?: st
 
   const current = getLocalStorageUsers();
   const newUser: UserProfile = { ...user, id: createdId, password: userPassword, must_change_password: mustChange };
-  const updated = [...current, newUser];
+  const updated = [...current.filter(u => u.email?.toLowerCase() !== (newUser.email || '').toLowerCase()), newUser];
   saveLocalStorageUsers(updated);
   lastUsersFetch = 0;
   return newUser;
 };
 
 export const updateUser = async (id: string, updates: Partial<UserProfile>): Promise<UserProfile | null> => {
-  if (updates.email && updates.password) {
-    await saveStoredPassword(updates.email, updates.password);
+  const emailToUse = updates.email?.trim().toLowerCase();
+  
+  if (emailToUse) {
+    if (updates.password) {
+      await saveStoredPassword(emailToUse, updates.password);
+    }
+    if (updates.must_change_password !== undefined) {
+      await saveStoredMustChangeFlag(emailToUse, updates.must_change_password);
+    }
   }
 
   if (isSupabaseConfigured()) {
@@ -298,10 +374,30 @@ export const updateUser = async (id: string, updates: Partial<UserProfile>): Pro
       if (updates.email !== undefined) cleanUpdates.email = updates.email;
       if (updates.role !== undefined) cleanUpdates.role = updates.role;
       if (updates.status !== undefined) cleanUpdates.status = updates.status;
-      if (updates.must_change_password !== undefined) cleanUpdates.must_change_password = updates.must_change_password;
+      if (updates.password !== undefined) cleanUpdates.password = updates.password;
 
       if (Object.keys(cleanUpdates).length > 0) {
-        await supabase.from('profiles').update(cleanUpdates).eq('id', id);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        let updated = false;
+
+        if (isUuid) {
+          const res = await supabase.from('profiles').update(cleanUpdates).eq('id', id).select();
+          if (!res.error && res.data && res.data.length > 0) {
+            updated = true;
+          }
+        }
+
+        if (!updated && updates.email) {
+          const res = await supabase.from('profiles').update(cleanUpdates).eq('email', updates.email).select();
+          if (!res.error && res.data && res.data.length > 0) {
+            updated = true;
+          }
+        }
+
+        if (!updated && !isUuid && cleanUpdates.full_name && cleanUpdates.email) {
+          // If profile does not exist in Supabase yet, insert it
+          await supabase.from('profiles').insert([cleanUpdates]);
+        }
       }
     } catch (err) {
       console.warn('Profile update notice (saved locally):', err);
@@ -338,12 +434,14 @@ export const changeUserPassword = async (email: string, newPassword: string): Pr
   if (!email || !newPassword) return null;
   const cleanEmail = email.trim().toLowerCase();
   
-  await saveStoredPassword(cleanEmail, newPassword);
+  await Promise.all([
+    saveStoredPassword(cleanEmail, newPassword),
+    saveStoredMustChangeFlag(cleanEmail, false)
+  ]);
 
   const current = getLocalStorageUsers();
   const targetUser = current.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
   if (!targetUser) {
-    // If not in users list, just save password
     return null;
   }
 
@@ -378,13 +476,18 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 
   if (isSupabaseConfigured()) {
     try {
-      await supabase.from('profiles').delete().eq('id', id);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        await supabase.from('profiles').delete().eq('id', id);
+      } else if (userToDelete.email) {
+        await supabase.from('profiles').delete().eq('email', userToDelete.email);
+      }
     } catch (err) {
       console.warn('Error deleting profile in Supabase:', err);
     }
   }
 
-  const updatedList = current.filter(u => u.id !== id);
+  const updatedList = current.filter(u => u.id !== id && (userToDelete.email ? u.email?.toLowerCase() !== userToDelete.email.toLowerCase() : true));
   saveLocalStorageUsers(updatedList);
   lastUsersFetch = 0;
   return true;

@@ -485,11 +485,15 @@ export default function Settings() {
     try {
       if (editingUser) {
         const isSuperAdmin = editingUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+        const targetEmail = isSuperAdmin ? SUPER_ADMIN_EMAIL : (emailVal || editingUser.email || '');
+        const targetRole = isSuperAdmin ? 'Administrador' : (roleVal || editingUser.role || 'Oficina');
+        const targetStatus = isSuperAdmin ? 'Activo' : (statusVal || editingUser.status || 'Activo');
+
         await apiUpdateUser(editingUser.id, {
-          full_name: fullName,
-          email: isSuperAdmin ? SUPER_ADMIN_EMAIL : emailVal,
-          role: isSuperAdmin ? 'Administrador' : roleVal,
-          status: isSuperAdmin ? 'Activo' : statusVal,
+          full_name: fullName || editingUser.full_name,
+          email: targetEmail,
+          role: targetRole,
+          status: targetStatus,
           password: passwordVal,
           must_change_password: isSuperAdmin ? false : userMustChangePassword,
         });
@@ -504,7 +508,7 @@ export default function Settings() {
         await apiCreateUser({
           full_name: fullName,
           email: emailVal,
-          role: roleVal,
+          role: roleVal || 'Oficina',
           status: statusVal,
           password: passwordVal,
           must_change_password: userMustChangePassword,
@@ -2499,7 +2503,7 @@ export default function Settings() {
                 </div>
               )}
 
-              <form onSubmit={handleSaveUser} className="p-8 pt-4 space-y-4">
+              <form key={editingUser?.id || 'new-user'} onSubmit={handleSaveUser} className="p-8 pt-4 space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1.5">Nombre Completo</label>
                   <input 
