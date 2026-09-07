@@ -2573,7 +2573,15 @@ export default function POS() {
   }, [dbProducts, showAlert]);
 
   const handlePrintQuotationFromModal = useCallback((q: Quotation) => {
+    const saleItems = (q.items || []).map(it => ({
+      description: it.product?.name || 'Repuesto cotizado',
+      quantity: it.quantity || 1,
+      unit_price: it.unitPrice || (it.product?.price || 0),
+      total_price: it.totalPrice || ((it.unitPrice || (it.product?.price || 0)) * (it.quantity || 1)),
+    }));
+
     const saleDetails: any = {
+      invoiceNumber: q.quotation_number,
       ncf: q.quotation_number,
       ncfType: 'Cotización',
       isElectronic: false,
@@ -2584,21 +2592,18 @@ export default function POS() {
       total: q.total_amount,
       paymentMethod: 'Cotización',
       client: q.customer,
-      items: q.items.map(it => ({
-        product: it.product,
-        quantity: it.quantity,
-        price: it.unitPrice
-      })),
+      items: saleItems,
       lastPaymentInfo: {},
       lastEcfData: {
-        securityCode: 'COT-30D',
+        securityCode: '',
         qrCodeUrl: '',
-        dgiiStatus: 'Cotización Comercial (30 días)',
+        dgiiStatus: 'Cotización Comercial',
         issuedAt: q.created_at
       },
       date: new Date(q.created_at)
     };
     setLastCompletedSale(saleDetails);
+    setIsQuotationsModalOpen(false);
     setIsSuccessModalOpen(true);
   }, []);
 
