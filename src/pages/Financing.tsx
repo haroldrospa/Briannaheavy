@@ -297,36 +297,7 @@ export default function Financing() {
         fetchInventory()
       ]);
       if (isMounted) {
-        if (dbF && dbF.length > 0) {
-          setFinancingsList(mapFinancingsToState(dbF));
-        } else {
-          const sample1 = {
-            customer_name: 'Constructora del Caribe S.R.L.',
-            item_name: 'Camión Volquete Mack Granite 2024',
-            total_amount: 1500000,
-            down_payment: 300000,
-            financed_amount: 1200000,
-            interest_rate: 2.0,
-            installments_count: 24,
-            frequency: 'Mensual' as const,
-            start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            status: 'Activo' as const,
-          };
-          const schedule1 = generateAmortizationSchedule(1200000, 2.0, 24, sample1.start_date).map(inst => ({
-            installment_number: inst.id,
-            due_date: inst.dueDate,
-            amount: inst.amount,
-            principal_amount: inst.capital,
-            interest_amount: inst.interest,
-            paid_amount: 0,
-            status: 'Pendiente' as const,
-          }));
-          createFinancing(sample1, schedule1).then(created => {
-            if (isMounted && created) {
-              setFinancingsList(mapFinancingsToState([created]));
-            }
-          });
-        }
+        setFinancingsList(mapFinancingsToState(dbF || []));
         if (custs && custs.length > 0) {
           setCustomersList(custs);
         }

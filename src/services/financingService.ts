@@ -48,35 +48,64 @@ export interface Financing {
 }
 
 const LOCAL_STORAGE_KEY = 'brianna_local_financings';
+const DELETED_FINANCINGS_KEY = 'brianna_deleted_financings';
+
+const getDeletedFinancingIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_FINANCINGS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(String));
+    }
+  } catch {}
+  return new Set();
+};
+
+const addDeletedFinancingId = (id: string): void => {
+  try {
+    const set = getDeletedFinancingIds();
+    set.add(String(id));
+    localStorage.setItem(DELETED_FINANCINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+};
 
 let inMemoryFinancings: Financing[] | null = null;
 let inFlightFinancingsPromise: Promise<Financing[]> | null = null;
 
 export const getLocalStorageFinancings = (): Financing[] => {
+  const deletedIds = getDeletedFinancingIds();
   if (inMemoryFinancings !== null) {
-    return inMemoryFinancings;
+    return inMemoryFinancings.filter(f => !deletedIds.has(String(f.id)));
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    inMemoryFinancings = parsed;
-    return parsed;
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter(f => !deletedIds.has(String(f.id)));
+      inMemoryFinancings = filtered;
+      return filtered;
+    }
+    return [];
   } catch {
     return [];
   }
 };
 
 const saveLocalStorageFinancings = (items: Financing[]): void => {
-  inMemoryFinancings = items;
+  const deletedIds = getDeletedFinancingIds();
+  const cleanItems = items.filter(f => !deletedIds.has(String(f.id)));
+  inMemoryFinancings = cleanItems;
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanItems));
   } catch (e) {
     console.warn('Error saving financings to localStorage:', e);
   }
 };
 
 export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]> => {
+  const deletedIds = getDeletedFinancingIds();
+
   if (isSupabaseConfigured()) {
     if (!forceRefresh && inFlightFinancingsPromise) {
       return inFlightFinancingsPromise;
@@ -91,7 +120,7 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
           .limit(200);
 
         if (!error && data) {
-          const financings = data as Financing[];
+          const financings = (data as Financing[]).filter(f => !deletedIds.has(String(f.id)));
           saveLocalStorageFinancings(financings);
           return financings;
         }
@@ -241,6 +270,8 @@ export const updateFinancing = async (
 };
 
 export const deleteFinancing = async (id: string): Promise<boolean> => {
+  addDeletedFinancingId(id);
+
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isDbUuid = uuidRegex.test(id);
 
