@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, type Invoice } from '../services/invoicesService';
 import CashClosureModal from '../components/finance/CashClosureModal';
+import { getNextReceiptNumber } from '../utils/sequenceStorage';
 
 export interface ReceivableItem {
   id: string;
@@ -222,9 +223,9 @@ export default function Cobros() {
     }
 
     // Prepare Receipt Voucher
-    const receiptSeq = String(Date.now()).slice(-6);
+    const receiptNumber = getNextReceiptNumber();
     setLastPaymentReceipt({
-      receiptNumber: `REC-${receiptSeq}`,
+      receiptNumber,
       customer: selectedReceivable.customer,
       rnc: selectedReceivable.rnc,
       invoice: selectedReceivable.invoice,

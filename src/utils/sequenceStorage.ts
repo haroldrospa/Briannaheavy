@@ -203,3 +203,25 @@ export function incrementSequence(key: string, defaultVal: string): string {
   window.dispatchEvent(new Event('brianna_seq_updated'));
   return nextSeq;
 }
+
+export const RECEIPT_SEQ_KEY = 'brianna_seq_receipt';
+
+export function getNextReceiptNumber(): string {
+  const year = new Date().getFullYear();
+  const raw = localStorage.getItem(RECEIPT_SEQ_KEY) || '1';
+  const num = parseInt(raw.replace(/\D/g, ''), 10);
+  const currentNum = isNaN(num) || num < 1 ? 1 : num;
+  const nextNum = currentNum + 1;
+  localStorage.setItem(RECEIPT_SEQ_KEY, String(nextNum));
+  window.dispatchEvent(new Event('brianna_seq_updated'));
+  return `REC-${year}-${String(currentNum).padStart(4, '0')}`;
+}
+
+export function peekCurrentReceiptNumber(): string {
+  const year = new Date().getFullYear();
+  const raw = localStorage.getItem(RECEIPT_SEQ_KEY) || '1';
+  const num = parseInt(raw.replace(/\D/g, ''), 10);
+  const currentNum = isNaN(num) || num < 1 ? 1 : num;
+  return `REC-${year}-${String(currentNum).padStart(4, '0')}`;
+}
+

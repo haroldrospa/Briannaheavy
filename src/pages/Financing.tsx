@@ -24,6 +24,7 @@ import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../serv
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 import { fetchCashMovements, type CashMovement } from '../services/cashMovementsService';
 import { verifyAdminMasterKey } from '../utils/scheduleStorage';
+import { getNextReceiptNumber, peekCurrentReceiptNumber } from '../utils/sequenceStorage';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
 
@@ -953,7 +954,7 @@ export default function Financing() {
       const totalPaid = totalSelectedAmount;
       const totalCap = totalSelectedCapital;
       const newBal = Math.max(0, selectedFinancing.amount - totalCap);
-      const recNumber = `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+      const recNumber = getNextReceiptNumber();
 
       setLastReceipt({
         receiptNumber: recNumber,
@@ -1005,7 +1006,7 @@ export default function Financing() {
       let remainingAbono = numAbono;
       const paidAbono = numAbono;
       const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
-      const recNumber = `REC-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+      const recNumber = getNextReceiptNumber();
 
       setLastReceipt({
         receiptNumber: recNumber,
@@ -1066,7 +1067,7 @@ export default function Financing() {
       ? numAbono
       : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0));
     const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)))) : 0;
-    const recNumber = `REC-${new Date().getFullYear()}-${String(selectedFinancing?.id || '0001').slice(-4).padStart(4, '0')}`;
+    const recNumber = peekCurrentReceiptNumber();
     return {
       receiptNumber: recNumber,
       date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
@@ -2404,7 +2405,7 @@ export default function Financing() {
                         <span className="inline-block px-3 py-1 bg-red-50 text-[#ED1C24] font-black text-xs uppercase tracking-widest rounded-full border border-red-100 print:bg-gray-100 print:text-black print:border-gray-300">
                           Recibo Oficial de Pago
                         </span>
-                        <p className="text-sm font-black text-gray-900 dark:text-white mt-2 print:text-black">N° #{activeReceiptData.receiptNumber}</p>
+                        <p className="text-sm font-black font-mono tracking-wide text-gray-900 dark:text-white mt-2 print:text-black">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
                         <p className="text-xs font-medium text-gray-500 mt-0.5 print:text-gray-700">Fecha: {activeReceiptData.date}</p>
                       </div>
                     </div>
@@ -2452,7 +2453,7 @@ export default function Financing() {
                           ) : (
                             activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                               <tr key={inst.id}>
-                                <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota N° #{inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
+                                <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -3433,7 +3434,7 @@ export default function Financing() {
               <span className="inline-block px-3 py-1 bg-gray-100 text-black font-black text-xs uppercase tracking-widest rounded-full border border-gray-300">
                 Recibo Oficial de Pago
               </span>
-              <p className="text-sm font-black text-black mt-2">N° #{activeReceiptData.receiptNumber}</p>
+              <p className="text-sm font-black font-mono tracking-wide text-black mt-2">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
               <p className="text-xs font-medium text-gray-700 mt-0.5">Fecha: {activeReceiptData.date}</p>
             </div>
           </div>
@@ -3487,7 +3488,7 @@ export default function Financing() {
                 ) : (
                   activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                     <tr key={inst.id}>
-                      <td className="py-3 px-4 font-bold text-black">Cuota N° #{inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
+                      <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
