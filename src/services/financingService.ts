@@ -75,14 +75,28 @@ let inFlightFinancingsPromise: Promise<Financing[]> | null = null;
 export const getLocalStorageFinancings = (): Financing[] => {
   const deletedIds = getDeletedFinancingIds();
   if (inMemoryFinancings !== null) {
-    return inMemoryFinancings.filter(f => !deletedIds.has(String(f.id)));
+    return inMemoryFinancings
+      .filter(f => !deletedIds.has(String(f.id)))
+      .map(f => ({
+        ...f,
+        installments: f.installments && Array.isArray(f.installments)
+          ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+          : f.installments
+      }));
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      const filtered = parsed.filter(f => !deletedIds.has(String(f.id)));
+      const filtered = parsed
+        .filter(f => !deletedIds.has(String(f.id)))
+        .map(f => ({
+          ...f,
+          installments: f.installments && Array.isArray(f.installments)
+            ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+            : f.installments
+        }));
       inMemoryFinancings = filtered;
       return filtered;
     }
@@ -94,7 +108,14 @@ export const getLocalStorageFinancings = (): Financing[] => {
 
 const saveLocalStorageFinancings = (items: Financing[]): void => {
   const deletedIds = getDeletedFinancingIds();
-  const cleanItems = items.filter(f => !deletedIds.has(String(f.id)));
+  const cleanItems = items
+    .filter(f => !deletedIds.has(String(f.id)))
+    .map(f => ({
+      ...f,
+      installments: f.installments && Array.isArray(f.installments)
+        ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+        : f.installments
+    }));
   inMemoryFinancings = cleanItems;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanItems));
@@ -291,7 +312,14 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
           .limit(200);
 
         if (!error && data) {
-          const financings = (data as Financing[]).filter(f => !deletedIds.has(String(f.id)));
+          const financings = (data as Financing[])
+            .filter(f => !deletedIds.has(String(f.id)))
+            .map(f => ({
+              ...f,
+              installments: f.installments && Array.isArray(f.installments)
+                ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+                : f.installments
+            }));
           saveLocalStorageFinancings(financings);
           return financings;
         }
@@ -512,3 +540,21 @@ export const markInstallmentPaid = async (
   saveLocalStorageFinancings(updatedList);
   return true;
 };
+
+export const persistFinancingInstallments = (
+  financingId: string,
+  updatedFinancing: any
+): void => {
+  const current = getLocalStorageFinancings();
+  const updatedList = current.map(fin => {
+    if (fin.id === financingId || String(fin.id) === String(financingId) || (updatedFinancing.rawId && fin.id === updatedFinancing.rawId)) {
+      return {
+        ...fin,
+        ...updatedFinancing,
+      };
+    }
+    return fin;
+  });
+  saveLocalStorageFinancings(updatedList);
+};
+

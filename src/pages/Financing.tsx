@@ -17,9 +17,16 @@ import {
   createFinancing, 
   updateFinancing,
   deleteFinancing,
-  markInstallmentPaid, 
+  markInstallmentPaid,
+  persistFinancingInstallments,
   type Installment 
 } from '../services/financingService';
+import {
+  getOrReconstructReceiptsForFinancing,
+  getReceiptsForFinancing,
+  saveReceipt,
+  type FinancingPaymentReceipt
+} from '../services/financingReceiptsService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory, type InventoryItem } from '../services/inventoryService';
 import { fetchCashMovements, type CashMovement } from '../services/cashMovementsService';
@@ -155,8 +162,13 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
   return dbF.map((f, idx) => {
     let installments: any[] = [];
     if (f.installments && Array.isArray(f.installments) && f.installments.length > 0) {
-      installments = f.installments.map((inst: any, iIdx: number) => {
-        const isPaid = inst.status === 'Pagado' || (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) >= Number(inst.amount));
+      const sortedInsts = [...f.installments].sort((a: any, b: any) => {
+        const numA = Number(a.installment_number) || Number(a.id) || 0;
+        const numB = Number(b.installment_number) || Number(b.id) || 0;
+        return numA - numB;
+      });
+      installments = sortedInsts.map((inst: any, iIdx: number) => {
+        const isPaid = inst.status === 'Pagado' || inst.isPaid || (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) >= Number(inst.amount));
         const dueDate = inst.due_date ? String(inst.due_date).split('T')[0] : `2026-08-${String(iIdx + 1).padStart(2, '0')}`;
         const evalResult = getInstallmentMoraAndStatus(dueDate, isPaid, 15);
         const cap = Number(inst.principal_amount) || 0;
@@ -174,7 +186,7 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
           status: isPaid ? 'Pagado' : evalResult.status,
           isPaid,
           paidAmount: Number(inst.paid_amount) || 0,
-          paidDate: inst.paid_date,
+          paidDate: inst.paid_date || inst.paidDate,
           daysOverdue: evalResult.daysOverdue,
           inGracePeriod: evalResult.inGracePeriod,
         };
@@ -790,13 +802,65 @@ export default function Financing() {
   const [selectedInstallmentIds, setSelectedInstallmentIds] = useState<number[]>([]);
 
   // Abonos State
-  const [paymentType, setPaymentType] = useState<'cuotas' | 'abono'>('cuotas');
+  const [paymentType, setPaymentType] = useState<'cuotas' | 'abono' | 'recibos'>('cuotas');
   const [abonoAmount, setAbonoAmount] = useState<string>('');
   
+  // Receipts State & History
+  const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
+  const [viewingReceipt, setViewingReceipt] = useState<FinancingPaymentReceipt | null>(null);
+
   // Print & Exit Confirmation State
   const [hasPrintedReceipt, setHasPrintedReceipt] = useState(false);
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<PaymentReceiptData | null>(null);
+
+  // Sync receipts when selectedFinancing changes
+  useEffect(() => {
+    if (selectedFinancing) {
+      const recs = getOrReconstructReceiptsForFinancing(selectedFinancing);
+      setFinancingReceipts(recs);
+    } else {
+      setFinancingReceipts([]);
+      setViewingReceipt(null);
+    }
+  }, [selectedFinancing]);
+
+  useEffect(() => {
+    const handleReceiptsUpdate = () => {
+      if (selectedFinancing) {
+        const recs = getReceiptsForFinancing(selectedFinancing.rawId || selectedFinancing.id);
+        setFinancingReceipts(recs);
+      }
+    };
+    window.addEventListener('brianna_receipts_updated', handleReceiptsUpdate);
+    return () => window.removeEventListener('brianna_receipts_updated', handleReceiptsUpdate);
+  }, [selectedFinancing]);
+
+  const handleOpenReceipt = (receipt: FinancingPaymentReceipt) => {
+    setViewingReceipt(receipt);
+    setLastReceipt(receipt as any);
+    setHasPrintedReceipt(false);
+    setShowReceipt(true);
+  };
+
+  const handleOpenReceiptForInstallment = (instId: number) => {
+    if (!selectedFinancing) return;
+    const found = financingReceipts.find(r =>
+      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(instId))
+    );
+    if (found) {
+      handleOpenReceipt(found);
+      return;
+    }
+    const recs = getOrReconstructReceiptsForFinancing(selectedFinancing);
+    setFinancingReceipts(recs);
+    const retry = recs.find(r =>
+      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(instId))
+    );
+    if (retry) {
+      handleOpenReceipt(retry);
+    }
+  };
 
   const handlePrintReceipt = () => {
     setHasPrintedReceipt(true);
@@ -833,6 +897,9 @@ export default function Financing() {
     // If currently viewing a receipt and hasn't printed yet, ask for confirmation
     if (showReceipt && !hasPrintedReceipt) {
       setShowExitConfirmModal(true);
+    } else if (showReceipt) {
+      setShowReceipt(false);
+      setViewingReceipt(null);
     } else {
       forceCloseAllModals();
     }
@@ -847,6 +914,7 @@ export default function Financing() {
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
     setLastReceipt(null);
+    setViewingReceipt(null);
     document.body.classList.remove('print-receipt-mode');
   };
 
@@ -879,7 +947,11 @@ export default function Financing() {
   const currentInstallments: MappedInstallment[] = useMemo(() => {
     if (!selectedFinancing) return [];
     const rawList: any[] = (selectedFinancing.installments && selectedFinancing.installments.length > 0)
-      ? selectedFinancing.installments
+      ? [...selectedFinancing.installments].sort((a: any, b: any) => {
+          const numA = Number(a.installment_number) || Number(a.id) || 0;
+          const numB = Number(b.installment_number) || Number(b.id) || 0;
+          return numA - numB;
+        })
       : [];
 
     return rawList.map((inst: any): MappedInstallment => {
@@ -970,22 +1042,39 @@ export default function Financing() {
       const totalCap = totalSelectedCapital;
       const newBal = Math.max(0, selectedFinancing.amount - totalCap);
       const recNumber = getNextReceiptNumber();
+      const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 
-      setLastReceipt({
+      const newReceipt: FinancingPaymentReceipt = {
+        id: `rec-${Date.now()}-${recNumber}`,
         receiptNumber: recNumber,
-        date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+        financingId: String(selectedFinancing.rawId || selectedFinancing.id),
+        date: formattedDate,
         paymentType: 'cuotas',
-        paidInstallments: paidList,
+        paidInstallments: paidList.map(inst => ({
+          id: inst.id,
+          dueDate: inst.dueDate,
+          capital: inst.capital,
+          interest: inst.interest,
+          penalty: inst.penalty,
+          total: inst.total,
+        })),
         abonoAmount: 0,
         totalPaid: totalPaid,
         newBalance: newBal,
         customerName: selectedFinancing.customer,
         customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
         itemName: selectedFinancing.item,
+        chassis: selectedFinancing.chassis,
+        itemPlate: selectedFinancing.itemPlate,
         cashierName: 'Carlos Mendoza',
-        financingId: String(selectedFinancing.id),
-        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`
-      });
+        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
+        createdAt: new Date().toISOString(),
+      };
+
+      saveReceipt(newReceipt);
+      setFinancingReceipts(prev => [newReceipt, ...prev.filter(r => r.id !== newReceipt.id)]);
+      setViewingReceipt(newReceipt);
+      setLastReceipt(newReceipt as any);
 
       const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
         if (selectedInstallmentIds.includes(inst.id)) {
@@ -1011,6 +1100,7 @@ export default function Financing() {
         installments: updatedInsts,
       };
 
+      persistFinancingInstallments(selectedFinancing.rawId || String(selectedFinancing.id), updatedFin);
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setSelectedInstallmentIds([]);
@@ -1022,10 +1112,13 @@ export default function Financing() {
       const paidAbono = numAbono;
       const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
       const recNumber = getNextReceiptNumber();
+      const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 
-      setLastReceipt({
+      const newReceipt: FinancingPaymentReceipt = {
+        id: `rec-${Date.now()}-${recNumber}`,
         receiptNumber: recNumber,
-        date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+        financingId: String(selectedFinancing.rawId || selectedFinancing.id),
+        date: formattedDate,
         paymentType: 'abono',
         paidInstallments: [],
         abonoAmount: paidAbono,
@@ -1034,10 +1127,17 @@ export default function Financing() {
         customerName: selectedFinancing.customer,
         customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
         itemName: selectedFinancing.item,
+        chassis: selectedFinancing.chassis,
+        itemPlate: selectedFinancing.itemPlate,
         cashierName: 'Carlos Mendoza',
-        financingId: String(selectedFinancing.id),
-        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`
-      });
+        qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
+        createdAt: new Date().toISOString(),
+      };
+
+      saveReceipt(newReceipt);
+      setFinancingReceipts(prev => [newReceipt, ...prev.filter(r => r.id !== newReceipt.id)]);
+      setViewingReceipt(newReceipt);
+      setLastReceipt(newReceipt as any);
 
       const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
         if (!inst.isPaid && remainingAbono > 0) {
@@ -1067,6 +1167,7 @@ export default function Financing() {
         installments: updatedInsts,
       };
 
+      persistFinancingInstallments(selectedFinancing.rawId || String(selectedFinancing.id), updatedFin);
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setAbonoAmount('');
@@ -1076,6 +1177,7 @@ export default function Financing() {
   };
 
   const activeReceiptData: PaymentReceiptData = useMemo(() => {
+    if (viewingReceipt) return viewingReceipt as any;
     if (lastReceipt) return lastReceipt;
     const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
     const totalPaid = paymentType === 'abono'
@@ -1098,7 +1200,7 @@ export default function Financing() {
       financingId: String(selectedFinancing?.id || ''),
       qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`
     };
-  }, [lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2246,17 +2348,32 @@ export default function Financing() {
                   </div>
 
                   <div className="pt-2 border-t border-gray-200/50 dark:border-zinc-800/60 flex items-center justify-between">
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedFinancing(item);
+                          setPaymentType('recibos');
+                          setShowPaymentForm(false);
+                          setShowReceipt(false);
+                          setShowAccountStatement(false);
+                        }} 
+                        className="px-2 py-1 text-gray-600 dark:text-zinc-300 hover:text-emerald-600 bg-gray-100 dark:bg-zinc-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                        title="Ver recibos de pago"
+                      >
+                        <DocumentTextIcon className="h-3.5 w-3.5 text-emerald-500" />
+                        <span>Recibos</span>
+                      </button>
                       <button 
                         onClick={(e) => handleOpenEditForm(item, e)} 
-                        className="px-2.5 py-1 text-gray-600 dark:text-zinc-300 hover:text-blue-600 bg-gray-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                        className="px-2 py-1 text-gray-600 dark:text-zinc-300 hover:text-blue-600 bg-gray-100 dark:bg-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                       >
                         <PencilSquareIcon className="h-3.5 w-3.5 text-blue-500" />
                         <span>Editar</span>
                       </button>
                       <button 
                         onClick={(e) => handleDeleteFinancing(item, e)} 
-                        className="px-2.5 py-1 text-gray-600 dark:text-zinc-300 hover:text-red-600 bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                        className="px-2 py-1 text-gray-600 dark:text-zinc-300 hover:text-red-600 bg-gray-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                       >
                         <TrashIcon className="h-3.5 w-3.5 text-red-500" />
                         <span>Borrar</span>
@@ -2343,6 +2460,20 @@ export default function Financing() {
                             className="text-gray-900 dark:text-white font-bold bg-red-50 dark:bg-red-900/30 px-3.5 py-1.5 rounded-full transition-colors hover:bg-red-100 dark:hover:bg-red-900/50 text-xs cursor-pointer"
                           >
                             Ver Detalles
+                          </button>
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setSelectedFinancing(item); 
+                              setPaymentType('recibos'); 
+                              setShowPaymentForm(false); 
+                              setShowReceipt(false); 
+                              setShowAccountStatement(false); 
+                            }} 
+                            title="Ver historial de recibos"
+                            className="p-1.5 text-gray-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <DocumentTextIcon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           </button>
                           <button 
                             onClick={(e) => handleOpenEditForm(item, e)} 
@@ -2759,28 +2890,46 @@ export default function Financing() {
                     </div>
 
                     <div className="mb-4">
-                      {/* Mode Switcher: Cuotas vs Abono a Capital */}
+                      {/* Mode Switcher: Cuotas vs Abono a Capital vs Recibos */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 bg-gray-100 dark:bg-zinc-900 p-1.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800">
-                        <div className="grid grid-cols-2 gap-1 w-full sm:w-auto">
+                        <div className="grid grid-cols-3 gap-1 w-full sm:w-auto">
                           <button
                             onClick={() => setPaymentType('cuotas')}
-                            className={`py-2 px-5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                            className={`py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer ${
                               paymentType === 'cuotas'
                                 ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
                                 : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
                             }`}
                           >
-                            Cobro por Cuotas
+                            Cobro Cuotas
                           </button>
                           <button
                             onClick={() => setPaymentType('abono')}
-                            className={`py-2 px-5 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                            className={`py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer ${
                               paymentType === 'abono'
                                 ? 'bg-[#ED1C24] text-white shadow-xs'
                                 : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
                             }`}
                           >
-                            Abono a Capital
+                            Abono Capital
+                          </button>
+                          <button
+                            onClick={() => setPaymentType('recibos')}
+                            className={`py-2 px-3 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              paymentType === 'recibos'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <DocumentTextIcon className="h-3.5 w-3.5" />
+                            <span>Recibos</span>
+                            {financingReceipts.length > 0 && (
+                              <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
+                                paymentType === 'recibos' ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300'
+                              }`}>
+                                {financingReceipts.length}
+                              </span>
+                            )}
                           </button>
                         </div>
 
@@ -2792,7 +2941,88 @@ export default function Financing() {
                         )}
                       </div>
 
-                      {paymentType === 'abono' ? (
+                      {paymentType === 'recibos' ? (
+                        <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 p-4 sm:p-5 rounded-2xl space-y-4 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                <DocumentTextIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                Historial de Recibos de Pago
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                                Consulta, descarga o imprime los comprobantes de pago emitidos para este financiamiento.
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 rounded-full border border-emerald-200 dark:border-emerald-800/60">
+                              {financingReceipts.length} {financingReceipts.length === 1 ? 'recibo' : 'recibos'}
+                            </span>
+                          </div>
+
+                          {financingReceipts.length === 0 ? (
+                            <div className="py-12 text-center text-gray-400 dark:text-zinc-500 space-y-2">
+                              <DocumentTextIcon className="h-10 w-10 mx-auto text-gray-300 dark:text-zinc-600" />
+                              <p className="text-sm font-bold">No hay recibos registrados aún</p>
+                              <p className="text-xs text-gray-400">Los recibos se generarán automáticamente cuando se registre un pago de cuotas o un abono a capital.</p>
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto max-h-80 custom-scrollbar">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-gray-50 dark:bg-zinc-900 text-gray-500 dark:text-zinc-400 font-bold uppercase text-[10px] border-y border-gray-100 dark:border-zinc-800 sticky top-0">
+                                  <tr>
+                                    <th className="px-3 py-2.5">No. Recibo</th>
+                                    <th className="px-3 py-2.5">Fecha</th>
+                                    <th className="px-3 py-2.5">Concepto</th>
+                                    <th className="px-3 py-2.5">Cajero</th>
+                                    <th className="px-3 py-2.5 text-right">Monto Pagado</th>
+                                    <th className="px-3 py-2.5 text-center">Acción</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 font-medium">
+                                  {financingReceipts.map((rc) => {
+                                    const cuotasDesc = rc.paymentType === 'abono'
+                                      ? 'Abono directo a capital'
+                                      : rc.paidInstallments && rc.paidInstallments.length > 0
+                                        ? `Cuota(s) #${rc.paidInstallments.map(i => i.id).join(', #')}`
+                                        : 'Pago de cuotas';
+                                    const formattedDate = rc.date || 'N/A';
+
+                                    return (
+                                      <tr key={rc.id || rc.receiptNumber} className="hover:bg-gray-50/60 dark:hover:bg-zinc-800/40 transition-colors">
+                                        <td className="px-3 py-2.5 font-mono font-black text-gray-900 dark:text-white">
+                                          {rc.receiptNumber}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-gray-600 dark:text-zinc-300">
+                                          {formattedDate}
+                                        </td>
+                                        <td className="px-3 py-2.5">
+                                          <span className="font-semibold text-gray-800 dark:text-zinc-200 block">{cuotasDesc}</span>
+                                          <span className="text-[10px] text-gray-400 font-mono">Saldo post-pago: ${(rc.newBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-gray-500 dark:text-zinc-400">
+                                          {rc.cashierName || 'Caja Principal'}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right font-black font-mono text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm">
+                                          ${(rc.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenReceipt(rc)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                                          >
+                                            <PrinterIcon className="h-3.5 w-3.5" />
+                                            <span>Ver Recibo</span>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ) : paymentType === 'abono' ? (
                         <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 p-6 rounded-2xl space-y-4 shadow-xs">
                           <div>
                             <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-1.5">
@@ -2923,9 +3153,25 @@ export default function Financing() {
                                       </td>
                                       <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">${inst.total.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
                                       <td className="px-3 py-2.5 text-center">
-                                        <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${inst.status === 'Pagado' ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400' : inst.status === 'Atrasado' ? 'text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400' : 'text-gray-600 bg-gray-100 dark:bg-zinc-800 dark:text-zinc-300'}`}>
-                                          {inst.status}
-                                        </span>
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${inst.status === 'Pagado' ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400' : inst.status === 'Atrasado' ? 'text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400' : 'text-gray-600 bg-gray-100 dark:bg-zinc-800 dark:text-zinc-300'}`}>
+                                            {inst.status}
+                                          </span>
+                                          {inst.status === 'Pagado' && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenReceiptForInstallment(inst.id);
+                                              }}
+                                              className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline flex items-center gap-0.5 cursor-pointer bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded"
+                                              title="Ver e imprimir recibo oficial de esta cuota"
+                                            >
+                                              <DocumentTextIcon className="h-3 w-3" />
+                                              <span>Recibo</span>
+                                            </button>
+                                          )}
+                                        </div>
                                       </td>
                                     </tr>
                                   );
@@ -2947,22 +3193,32 @@ export default function Financing() {
                           Estado de Cuenta
                         </button>
                         <span className="text-xs text-gray-400 font-medium">
-                          {paymentType === 'cuotas' ? `${selectedInstallmentIds.length} cuotas seleccionadas` : 'Abono directo'}
+                          {paymentType === 'recibos' ? `${financingReceipts.length} recibos en historial` : paymentType === 'cuotas' ? `${selectedInstallmentIds.length} cuotas seleccionadas` : 'Abono directo'}
                         </span>
                       </div>
 
-                      <button 
-                        onClick={() => setShowPaymentForm(true)} 
-                        disabled={paymentType === 'cuotas' ? selectedInstallmentIds.length === 0 : numAbono <= 0}
-                        className={`w-full sm:w-auto px-8 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
-                          (paymentType === 'cuotas' ? selectedInstallmentIds.length > 0 : numAbono > 0)
-                            ? 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]' 
-                            : 'bg-gray-200 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <BanknotesIcon className="h-5 w-5" />
-                        Cobrar Ahora (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
-                      </button>
+                      {paymentType === 'recibos' ? (
+                        <button 
+                          onClick={() => setPaymentType('cuotas')}
+                          className="w-full sm:w-auto px-6 py-2.5 rounded-full font-bold text-xs bg-gray-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <BanknotesIcon className="h-4 w-4" />
+                          Ir a Cobrar Cuotas
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => setShowPaymentForm(true)} 
+                          disabled={paymentType === 'cuotas' ? selectedInstallmentIds.length === 0 : numAbono <= 0}
+                          className={`w-full sm:w-auto px-8 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                            (paymentType === 'cuotas' ? selectedInstallmentIds.length > 0 : numAbono > 0)
+                              ? 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]' 
+                              : 'bg-gray-200 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
+                          }`}
+                        >
+                          <BanknotesIcon className="h-5 w-5" />
+                          Cobrar Ahora (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
+                        </button>
+                      )}
                     </div>
                   </>
                 ) : (
