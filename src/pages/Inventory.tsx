@@ -72,6 +72,8 @@ export default function Inventory() {
       image_url: Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : (item.image || item.image_url || ''),
       images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image || item.image_url ? [item.image || item.image_url] : []),
       department: item.department || 'Lote 1',
+      includes_itbis: item.includes_itbis !== undefined ? Boolean(item.includes_itbis) : true,
+      itbis_type: item.itbis_type || 'incluido',
       show_price: item.show_price !== undefined ? Boolean(item.show_price) : true,
     };
 

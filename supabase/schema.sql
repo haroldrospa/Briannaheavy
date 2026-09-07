@@ -74,6 +74,10 @@ CREATE TABLE IF NOT EXISTS public.inventory_items (
     location TEXT,
     description TEXT,
     image_url TEXT,
+    images TEXT[],
+    includes_itbis BOOLEAN DEFAULT TRUE,
+    itbis_type TEXT DEFAULT 'incluido',
+    show_price BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

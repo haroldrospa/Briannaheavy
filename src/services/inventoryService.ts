@@ -142,6 +142,10 @@ const sanitizeForSupabase = (item: Partial<InventoryItem>): Record<string, any> 
   if (item.description !== undefined) payload.description = item.description || null;
   if (item.image_url !== undefined) payload.image_url = item.image_url || null;
   if (item.department !== undefined) payload.location = item.department || null;
+  if (item.show_price !== undefined) payload.show_price = Boolean(item.show_price);
+  if (item.includes_itbis !== undefined) payload.includes_itbis = Boolean(item.includes_itbis);
+  if (item.itbis_type !== undefined) payload.itbis_type = item.itbis_type;
+  if (item.images !== undefined && Array.isArray(item.images)) payload.images = item.images;
 
   return payload;
 };
@@ -153,12 +157,25 @@ export const createInventoryItem = async (item: Omit<InventoryItem, 'id'>): Prom
   if (isSupabaseConfigured()) {
     try {
       const payload = sanitizeForSupabase(item);
-      const { data, error } = await supabase.from('inventory_items').insert([payload]).select().single();
-      if (!error && data) {
+      let res = await supabase.from('inventory_items').insert([payload]).select().single();
+      
+      // Fallback if Supabase schema lacks custom extended columns
+      if (res.error) {
+        console.warn('Initial Supabase insert failed, retrying with core columns:', res.error);
+        const corePayload = { ...payload };
+        delete corePayload.show_price;
+        delete corePayload.includes_itbis;
+        delete corePayload.itbis_type;
+        delete corePayload.images;
+        res = await supabase.from('inventory_items').insert([corePayload]).select().single();
+      }
+
+      if (!res.error && res.data) {
+        const mergedItem: InventoryItem = { ...newItem, ...(res.data as InventoryItem), ...item };
         const current = getLocalStorageInventory();
-        const updated = [data as InventoryItem, ...current.filter(i => i.id !== localId && i.id !== data.id)];
+        const updated = [mergedItem, ...current.filter(i => i.id !== localId && i.id !== mergedItem.id)];
         saveLocalStorageInventory(updated);
-        return data as InventoryItem;
+        return mergedItem;
       }
     } catch (err) {
       console.warn('Error inserting inventory item to Supabase:', err);
@@ -175,12 +192,25 @@ export const updateInventoryItem = async (id: string, updates: Partial<Inventory
   if (isSupabaseConfigured() && isValidUUID(id)) {
     try {
       const payload = sanitizeForSupabase(updates);
-      const { data, error } = await supabase.from('inventory_items').update(payload).eq('id', id).select().single();
-      if (!error && data) {
+      let res = await supabase.from('inventory_items').update(payload).eq('id', id).select().single();
+
+      // Fallback if Supabase schema lacks custom extended columns
+      if (res.error) {
+        console.warn('Initial Supabase update failed, retrying with core columns:', res.error);
+        const corePayload = { ...payload };
+        delete corePayload.show_price;
+        delete corePayload.includes_itbis;
+        delete corePayload.itbis_type;
+        delete corePayload.images;
+        res = await supabase.from('inventory_items').update(corePayload).eq('id', id).select().single();
+      }
+
+      if (!res.error && res.data) {
+        const mergedItem: InventoryItem = { ...(res.data as InventoryItem), ...updates };
         const current = getLocalStorageInventory();
-        const updatedList = current.map(item => item.id === id ? (data as InventoryItem) : item);
+        const updatedList = current.map(item => item.id === id ? mergedItem : item);
         saveLocalStorageInventory(updatedList);
-        return data as InventoryItem;
+        return mergedItem;
       }
     } catch (err) {
       console.warn('Error updating inventory item in Supabase:', err);

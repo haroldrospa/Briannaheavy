@@ -709,120 +709,113 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                 </div>
 
                 {/* 4. Selector de Inclusión de ITBIS (18%) */}
-                <div className="mt-3.5 pt-3 border-t border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="mt-4 pt-3.5 border-t border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-black text-gray-800 dark:text-zinc-200 uppercase tracking-tight">
-                      ¿El Precio de Venta incluye ITBIS (18%)?
+                    <label className="block text-[11px] font-bold text-gray-800 dark:text-zinc-200 uppercase tracking-wider">
+                      Tratamiento del ITBIS (18%)
                     </label>
-                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium">
-                      Configura si el precio fijado ya contiene el impuesto o se calculará adicional al facturar.
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-normal">
+                      Indica si el precio fijado ya contiene el impuesto o se sumará al facturar.
                     </p>
                   </div>
 
-                  {/* Toggle / Segmented Buttons */}
-                  <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#16171d] rounded-xl border border-gray-200 dark:border-zinc-700/80 shrink-0">
+                  {/* Segmented Control Minimalista */}
+                  <div className="inline-flex items-center p-1 bg-gray-100 dark:bg-zinc-800/80 rounded-xl border border-gray-200/60 dark:border-zinc-700/50 shrink-0">
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, includes_itbis: true, itbis_type: 'incluido' }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         formData.includes_itbis !== false && formData.itbis_type !== 'exento' && formData.itbis_type !== 'adicional'
-                          ? 'bg-[#ED1C24] text-white shadow-xs font-black'
-                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-950 dark:text-white shadow-xs font-bold'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                       }`}
                     >
-                      <span>✓</span>
-                      <span>Sí, Incluye ITBIS</span>
+                      Incluye ITBIS
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, includes_itbis: false, itbis_type: 'adicional' }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         formData.includes_itbis === false || formData.itbis_type === 'adicional'
-                          ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs font-black'
-                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-950 dark:text-white shadow-xs font-bold'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                       }`}
                     >
-                      <span>+</span>
-                      <span>No incluye (+18%)</span>
+                      + 18% Adicional
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, includes_itbis: true, itbis_type: 'exento' }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         formData.itbis_type === 'exento'
-                          ? 'bg-amber-600 text-white shadow-xs font-black'
-                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-950 dark:text-white shadow-xs font-bold'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                       }`}
                     >
-                      <span>0%</span>
-                      <span>Exento</span>
+                      Exento (0%)
                     </button>
                   </div>
                 </div>
 
-                {/* Desglose visual en tiempo real */}
+                {/* Desglose visual minimalista en tiempo real */}
                 {currentPrice > 0 && (
-                  <div className="mt-2.5 px-3 py-2 bg-white/80 dark:bg-[#16171d]/80 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                  <div className="mt-2.5 px-3.5 py-2.5 bg-gray-50/80 dark:bg-zinc-900/50 rounded-xl border border-gray-200/70 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
                     {formData.itbis_type === 'exento' ? (
-                      <div className="flex items-center gap-3 text-amber-700 dark:text-amber-400 font-bold">
-                        <span>🏷️ Precio Exento: RD$ {currentPrice.toFixed(2)}</span>
-                        <span>•</span>
-                        <span>ITBIS: RD$ 0.00 (0%)</span>
-                        <span>•</span>
-                        <span>Total Factura: RD$ {currentPrice.toFixed(2)}</span>
+                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                        <span>Precio Exento: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>ITBIS: <strong className="text-zinc-950 dark:text-white">RD$ 0.00</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>Total Venta: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
                       </div>
                     ) : (formData.includes_itbis === false || formData.itbis_type === 'adicional') ? (
-                      <div className="flex items-center gap-3 text-gray-700 dark:text-zinc-300 font-bold">
-                        <span>💵 Precio Neto: RD$ {currentPrice.toFixed(2)}</span>
-                        <span className="text-gray-400">+</span>
-                        <span className="text-[#ED1C24]">ITBIS (+18%): RD$ {(currentPrice * 0.18).toFixed(2)}</span>
-                        <span className="text-gray-400">=</span>
-                        <span className="text-emerald-700 dark:text-emerald-400 font-black">Total Factura: RD$ {(currentPrice * 1.18).toFixed(2)}</span>
+                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                        <span>Precio Base: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>ITBIS (18%): <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice * 0.18).toFixed(2)}</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>Total con ITBIS: <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice * 1.18).toFixed(2)}</strong></span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 text-gray-700 dark:text-zinc-300 font-bold">
-                        <span>📦 Base Imponible: RD$ {(currentPrice / 1.18).toFixed(2)}</span>
-                        <span className="text-gray-400">+</span>
-                        <span className="text-[#ED1C24]">ITBIS Incluido (18%): RD$ {(currentPrice - (currentPrice / 1.18)).toFixed(2)}</span>
-                        <span className="text-gray-400">=</span>
-                        <span className="text-emerald-700 dark:text-emerald-400 font-black">PVP Total: RD$ {currentPrice.toFixed(2)}</span>
+                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                        <span>Base Imponible: <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice / 1.18).toFixed(2)}</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>ITBIS (18%): <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice - (currentPrice / 1.18)).toFixed(2)}</strong></span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                        <span>Total Venta: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {/* 5. Visibilidad del Precio en Catálogo y Tienda Digital */}
-                <div className="mt-3.5 pt-3 border-t border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/60 dark:bg-[#16171d]/60 p-3 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80">
+                <div className="mt-3.5 pt-3.5 border-t border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight">
-                        Visibilidad del Precio en Catálogo / Tienda
+                      <span className="text-[11px] font-bold text-gray-800 dark:text-zinc-200 uppercase tracking-wider">
+                        Visibilidad del Precio en Catálogo
                       </span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        formData.show_price !== false 
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' 
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60'
-                      }`}>
-                        {formData.show_price !== false ? 'Precio Visible' : 'Precio Oculto (A Consultar)'}
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-gray-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                        {formData.show_price !== false ? 'Visible' : 'Precio Oculto'}
                       </span>
                     </div>
-                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
+                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-normal mt-0.5">
                       {formData.show_price !== false 
-                        ? 'Los clientes podrán ver el precio numérico en el catálogo y tienda pública.' 
-                        : 'Se mostrará como "Precio a Consultar" para que el cliente contacte y cotice por WhatsApp.'}
+                        ? 'El precio numérico será visible para los clientes en el catálogo web.' 
+                        : 'Se mostrará como "Precio a Consultar" para solicitar cotización por WhatsApp.'}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1 p-1 bg-white dark:bg-[#12131a] rounded-xl border border-gray-200 dark:border-zinc-700/80 shrink-0">
+                  <div className="inline-flex items-center p-1 bg-gray-100 dark:bg-zinc-800/80 rounded-xl border border-gray-200/60 dark:border-zinc-700/50 shrink-0">
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, show_price: true }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                         formData.show_price !== false
-                          ? 'bg-emerald-600 text-white shadow-xs font-black'
-                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-950 dark:text-white shadow-xs font-bold'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                       }`}
                     >
                       <EyeIcon className="w-3.5 h-3.5" />
@@ -832,10 +825,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, show_price: false }))}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                         formData.show_price === false
-                          ? 'bg-amber-600 text-white shadow-xs font-black'
-                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                          ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-bold'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200'
                       }`}
                     >
                       <EyeSlashIcon className="w-3.5 h-3.5" />
