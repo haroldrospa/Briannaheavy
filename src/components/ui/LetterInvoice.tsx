@@ -145,7 +145,7 @@ export default function LetterInvoice({
         {/* Tarjeta de NCF y Tipo de Documento */}
         <div className="w-[300px] border-2 border-zinc-900 rounded-2xl p-4 bg-zinc-50/50 text-right space-y-2">
           <div>
-            <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-blue-600' : 'text-red-600'}`}>
+            <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-zinc-900' : 'text-red-600'}`}>
               {getDocumentTypeName()}
             </span>
             <div className="text-xl font-black font-mono tracking-wider text-zinc-950 mt-1">
@@ -188,8 +188,8 @@ export default function LetterInvoice({
             )}
             {isCotizacion && (
               <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-zinc-300">
-                <span className="text-blue-700 font-bold">Validez:</span>
-                <span className="text-blue-700 font-black">15 Días</span>
+                <span className="text-zinc-800 font-bold">Validez:</span>
+                <span className="text-zinc-950 font-black">15 Días</span>
               </div>
             )}
           </div>
@@ -253,7 +253,7 @@ export default function LetterInvoice({
             </p>
           )}
           {isCotizacion && (
-            <p className="text-blue-700 font-medium pt-1">
+            <p className="text-zinc-700 font-medium pt-1">
               <strong>Estado:</strong> Presupuesto Informativo
             </p>
           )}
@@ -313,14 +313,14 @@ export default function LetterInvoice({
       <div className="grid grid-cols-12 gap-6 items-start border-t-2 border-zinc-900 pt-6 mb-6">
         {/* Lado Izquierdo: Timbre o Nota de Cotización */}
         {isCotizacion ? (
-          <div className="col-span-7 flex flex-col justify-center p-4 bg-blue-50/60 rounded-2xl border border-blue-200 text-left space-y-1.5">
-            <span className="font-black text-blue-950 uppercase tracking-wide text-xs">
+          <div className="col-span-7 flex flex-col justify-center p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-left space-y-1.5">
+            <span className="font-black text-zinc-950 uppercase tracking-wide text-xs">
               Presupuesto Comercial Estimado
             </span>
-            <p className="text-[11px] text-blue-900 leading-snug">
+            <p className="text-[11px] text-zinc-700 leading-snug">
               Este documento es una cotización informativa y no constituye una factura fiscal ni un comprobante de pago. Los precios y la disponibilidad están sujetos a confirmación al momento de generar la orden de compra.
             </p>
-            <p className="text-[10px] text-blue-700 font-bold">
+            <p className="text-[10px] text-zinc-600 font-bold">
               Válido por 15 días calendario a partir de la fecha de emisión.
             </p>
           </div>

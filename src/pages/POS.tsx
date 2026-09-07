@@ -2583,15 +2583,15 @@ export default function POS() {
     const saleDetails: any = {
       invoiceNumber: q.quotation_number,
       ncf: q.quotation_number,
-      ncfType: 'Cotización',
+      ncfType: 'CT',
       isElectronic: false,
       billingMode: 'internal',
       internalDocType: 'CT',
       subtotal: q.subtotal,
       tax: q.tax_amount,
       total: q.total_amount,
-      paymentMethod: 'Cotización',
-      client: q.customer,
+      paymentMethod: 'Presupuesto',
+      client: q.customer || (q.customer_name ? { name: q.customer_name, rnc: q.customer_rnc } : null),
       items: saleItems,
       lastPaymentInfo: {},
       lastEcfData: {
@@ -2605,7 +2605,8 @@ export default function POS() {
     setLastCompletedSale(saleDetails);
     setIsQuotationsModalOpen(false);
     setIsSuccessModalOpen(true);
-  }, []);
+    printLetter();
+  }, [printLetter]);
 
   return (
     <div className="h-[100dvh] w-full max-w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] text-gray-900 dark:text-white flex flex-col transition-colors duration-300 overflow-hidden font-sans">
@@ -3564,29 +3565,44 @@ export default function POS() {
               {/* Question: Imprimir */}
               <div className="mb-3">
                 <span className="text-xs font-semibold text-gray-600 dark:text-zinc-300">
-                  ¿Desea imprimir el comprobante?
+                  {lastCompletedSale?.ncf.startsWith('CT')
+                    ? '¿Desea imprimir o descargar la cotización en PDF?'
+                    : '¿Desea imprimir la factura?'}
                 </span>
               </div>
 
               {/* Action Buttons: Ticket & Letter */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={printTicket}
-                  className="flex items-center justify-center gap-1.5 py-3 px-3 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
-                >
-                  <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-                  <span>Imprimir Ticket</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={printLetter}
-                  className="flex items-center justify-center gap-1.5 py-3 px-3 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-[0.98] text-gray-800 dark:text-zinc-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
-                >
-                  <DocumentArrowDownIcon className="h-4 w-4" />
-                  <span>PDF Carta</span>
-                </button>
-              </div>
+              {lastCompletedSale?.ncf.startsWith('CT') ? (
+                <div className="flex flex-col gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={printLetter}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                  >
+                    <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
+                    <span>Imprimir Cotización (PDF / Carta)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={printLetter}
+                    className="flex items-center justify-center gap-1.5 py-3 px-3 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                  >
+                    <DocumentArrowDownIcon className="h-4 w-4" />
+                    <span>Factura (PDF / Carta)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={printTicket}
+                    className="flex items-center justify-center gap-1.5 py-3 px-3 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-[0.98] text-gray-800 dark:text-zinc-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                  >
+                    <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
+                    <span>Ticket Térmico</span>
+                  </button>
+                </div>
+              )}
 
               {/* Nueva Venta Button */}
               <button
@@ -3594,7 +3610,7 @@ export default function POS() {
                 onClick={resetPOS}
                 className="w-full py-2.5 bg-gray-50 dark:bg-zinc-900/70 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs border border-gray-200/70 dark:border-zinc-800 transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
-                <span>➕ Nueva Venta</span>
+                <span>➕ {lastCompletedSale?.ncf.startsWith('CT') ? 'Nueva Cotización / Venta' : 'Nueva Venta'}</span>
               </button>
             </motion.div>
           </div>
@@ -3669,15 +3685,25 @@ export default function POS() {
           invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
           isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
           date={lastCompletedSale?.date || new Date()}
-          customerName={lastCompletedSale ? (lastCompletedSale.client ? lastCompletedSale.client.name : (lastCompletedSale.isElectronic ? 'Consumidor Final' : 'Venta de Contado')) : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado'))}
-          customerRnc={lastCompletedSale?.client?.rnc || selectedClient?.rnc || ''}
+          customerName={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.name
+              ? lastCompletedSale.client.name
+              : typeof lastCompletedSale?.client === 'string' && lastCompletedSale.client
+              ? lastCompletedSale.client
+              : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Consumidor Final (Venta de Contado)'))
+          }
+          customerRnc={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.rnc
+              ? lastCompletedSale.client.rnc
+              : (selectedClient?.rnc || '')
+          }
           paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
           creditDays={lastCompletedSale?.creditDays}
           dueDate={lastCompletedSale?.dueDate}
-          receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
-          changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
-          transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
-          bankAccountName={lastCompletedSale?.lastPaymentInfo.bankAccountName ?? lastPaymentInfo.bankAccountName}
+          receivedAmount={lastCompletedSale?.lastPaymentInfo?.receivedAmount ?? lastPaymentInfo?.receivedAmount}
+          changeAmount={lastCompletedSale?.lastPaymentInfo?.changeAmount ?? lastPaymentInfo?.changeAmount}
+          transferReference={lastCompletedSale?.lastPaymentInfo?.transferReference ?? lastPaymentInfo?.transferReference}
+          bankAccountName={lastCompletedSale?.lastPaymentInfo?.bankAccountName ?? lastPaymentInfo?.bankAccountName}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,
@@ -3696,24 +3722,42 @@ export default function POS() {
         document.body
       )}
 
-      {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII - Mounted only when printing/success) */}
+      {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII / PDF - Mounted only when printing/success) */}
       {isSuccessModalOpen && !isCashClosureOpen && createPortal(
         <LetterInvoice
           ncf={lastCompletedSale?.ncf || currentNCF}
           invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
           isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
           date={lastCompletedSale?.date || new Date()}
-          customerName={lastCompletedSale ? (lastCompletedSale.client ? lastCompletedSale.client.name : (lastCompletedSale.isElectronic ? 'Consumidor Final' : 'Venta de Contado')) : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Venta de Contado'))}
-          customerRnc={lastCompletedSale?.client?.rnc || selectedClient?.rnc || ''}
-          customerPhone={lastCompletedSale?.client?.phone || selectedClient?.phone || ''}
-          customerAddress={lastCompletedSale?.client?.address || selectedClient?.address || ''}
+          customerName={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.name
+              ? lastCompletedSale.client.name
+              : typeof lastCompletedSale?.client === 'string' && lastCompletedSale.client
+              ? lastCompletedSale.client
+              : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Consumidor Final (Venta de Contado)'))
+          }
+          customerRnc={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.rnc
+              ? lastCompletedSale.client.rnc
+              : (selectedClient?.rnc || '')
+          }
+          customerPhone={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.phone
+              ? lastCompletedSale.client.phone
+              : (selectedClient?.phone || '')
+          }
+          customerAddress={
+            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.address
+              ? lastCompletedSale.client.address
+              : (selectedClient?.address || '')
+          }
           paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
           creditDays={lastCompletedSale?.creditDays}
           dueDate={lastCompletedSale?.dueDate}
-          receivedAmount={lastCompletedSale?.lastPaymentInfo.receivedAmount ?? lastPaymentInfo.receivedAmount}
-          changeAmount={lastCompletedSale?.lastPaymentInfo.changeAmount ?? lastPaymentInfo.changeAmount}
-          transferReference={lastCompletedSale?.lastPaymentInfo.transferReference ?? lastPaymentInfo.transferReference}
-          bankAccountName={lastCompletedSale?.lastPaymentInfo.bankAccountName ?? lastPaymentInfo.bankAccountName}
+          receivedAmount={lastCompletedSale?.lastPaymentInfo?.receivedAmount ?? lastPaymentInfo?.receivedAmount}
+          changeAmount={lastCompletedSale?.lastPaymentInfo?.changeAmount ?? lastPaymentInfo?.changeAmount}
+          transferReference={lastCompletedSale?.lastPaymentInfo?.transferReference ?? lastPaymentInfo?.transferReference}
+          bankAccountName={lastCompletedSale?.lastPaymentInfo?.bankAccountName ?? lastPaymentInfo?.bankAccountName}
           cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
           items={lastCompletedSale?.items || cart.map(item => ({
             description: item.product.name,
