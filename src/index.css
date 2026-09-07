@@ -44,6 +44,8 @@
   html {
     scroll-behavior: smooth;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01", "ss02";
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
@@ -52,6 +54,10 @@
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     transition: background-color 0.25s ease, color 0.25s ease;
     letter-spacing: -0.01em;
+    min-height: 100dvh;
+    min-width: 320px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
   }
 
   /* Sharp Tabular numbers for currencies and quantities */

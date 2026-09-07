@@ -53,6 +53,10 @@ export default function DashboardLayout() {
     }
   }, [location.pathname, activeRole, navigate]);
 
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+  }, [location.pathname]);
+
   const handleToggleSidebar = useCallback(() => setIsMobileSidebarOpen(prev => !prev), []);
   const handleCloseSidebar = useCallback(() => setIsMobileSidebarOpen(false), []);
   const handleOpenNewRequest = useCallback(() => setIsNewRequestModalOpen(true), []);
