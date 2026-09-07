@@ -24,6 +24,7 @@ import {
 import { fetchInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, type CashMovement } from '../../services/cashMovementsService';
 import { createCashClosure, type CashClosure } from '../../services/cashClosuresService';
+import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
 import { getLocalStorageUsers } from '../../services/usersService';
 import { 
   getActiveShift, 
@@ -74,6 +75,7 @@ export default function CashClosureModal({
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
   const [allMovements, setAllMovements] = useState<CashMovement[]>([]);
+  const [allFinancingReceipts, setAllFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
 
   const [initialFund, setInitialFund] = useState(0);
   const [isEditingFund, setIsEditingFund] = useState(false);
@@ -98,13 +100,14 @@ export default function CashClosureModal({
     const users = getLocalStorageUsers();
     users.forEach(u => { if (u.full_name) list.add(u.full_name); });
     allInvoices.forEach(i => { if (i.cashier_name) list.add(i.cashier_name); });
+    allFinancingReceipts.forEach(r => { if (r.cashierName) list.add(r.cashierName); });
     if (list.size === 0) {
       list.add('Harold Rosado');
       list.add('Harold Cajero');
       list.add('Carlos Díaz');
     }
     return Array.from(list);
-  }, [allInvoices]);
+  }, [allInvoices, allFinancingReceipts]);
 
   // Cargar datos iniciales al abrir o al cambiar de caja seleccionada
   useEffect(() => {
@@ -148,9 +151,28 @@ export default function CashClosureModal({
       ]);
       setAllInvoices(invs || []);
       setAllMovements(movs || []);
+      try {
+        const finReceipts = fetchAllFinancingReceipts();
+        setAllFinancingReceipts(finReceipts || []);
+      } catch (e) {
+        console.warn('Error loading financing receipts in closure:', e);
+      }
     };
 
     loadData();
+
+    const handleReceiptsRefresh = () => {
+      try {
+        const finReceipts = fetchAllFinancingReceipts();
+        setAllFinancingReceipts(finReceipts || []);
+      } catch (e) {
+        console.warn('Error refreshing financing receipts:', e);
+      }
+    };
+    window.addEventListener('brianna_receipts_updated', handleReceiptsRefresh);
+    return () => {
+      window.removeEventListener('brianna_receipts_updated', handleReceiptsRefresh);
+    };
   }, [isOpen, selectedRegister, isAdmin, loggedInUserName]);
 
   // Filtrar facturas garantizando unicidad por Caja y Cajero
@@ -164,6 +186,135 @@ export default function CashClosureModal({
     );
   }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter]);
 
+  // Filtrar recibos de financiamientos por Caja, Turno/Fecha y Cajero
+  const scopedFinancingReceipts = useMemo(() => {
+    // Si la caja seleccionada es sólo Caja 1 o Caja 2 (repuestos), los recibos de financiamiento pertenecen a Caja Cobros
+    const isCobrosRegister = selectedRegister === 'todas' || 
+      selectedRegister.toLowerCase().includes('cobro') || 
+      selectedRegister.toLowerCase().includes('finanza');
+
+    if (!isCobrosRegister) {
+      return [];
+    }
+
+    let list = allFinancingReceipts;
+
+    // Filtrar por cajero si no es 'todos'
+    let effectiveCashier = selectedCashierFilter;
+    if (!isAdmin && loggedInUserName) {
+      effectiveCashier = loggedInUserName;
+    }
+
+    if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+      const cLower = effectiveCashier.toLowerCase().trim();
+      list = list.filter(r => {
+        const c = (r.cashierName || '').toLowerCase().trim();
+        return c.includes(cLower) || cLower.includes(c);
+      });
+    }
+
+    if (filterMode === 'all') return list;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    if (filterMode === 'today') {
+      return list.filter(r => {
+        const dateStr = r.createdAt || r.date;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) || t >= startOfToday;
+      });
+    }
+
+    // filterMode === 'shift'
+    if (activeShift && activeShift.opened_at) {
+      const shiftStartTime = new Date(activeShift.opened_at).getTime();
+      const buffer = 120000;
+      const shiftList = list.filter(r => {
+        const dateStr = r.createdAt || r.date;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) || t >= (shiftStartTime - buffer);
+      });
+
+      if (shiftList.length === 0 && list.length > 0) {
+        const todayList = list.filter(r => {
+          const dateStr = r.createdAt || r.date;
+          if (!dateStr) return true;
+          const t = new Date(dateStr).getTime();
+          return isNaN(t) || t >= startOfToday;
+        });
+        if (todayList.length > 0) return todayList;
+      }
+
+      return shiftList;
+    }
+
+    return list.filter(r => {
+      const dateStr = r.createdAt || r.date;
+      if (!dateStr) return true;
+      const t = new Date(dateStr).getTime();
+      return isNaN(t) || t >= startOfToday;
+    });
+  }, [allFinancingReceipts, filterMode, activeShift, selectedRegister, selectedCashierFilter, isAdmin, loggedInUserName]);
+
+  // Filtrar abonos/cobros a facturas a crédito (registrados desde el módulo Cobros)
+  const scopedCreditPayments = useMemo(() => {
+    const isCobrosRegister = selectedRegister === 'todas' || 
+      selectedRegister.toLowerCase().includes('cobro') || 
+      selectedRegister.toLowerCase().includes('finanza');
+
+    if (!isCobrosRegister) {
+      return [];
+    }
+
+    const payments: Array<{ id: string; amount: number; method: string; cashier: string; date: string; invoiceNumber: string; customer: string }> = [];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const shiftStartTime = activeShift?.opened_at ? new Date(activeShift.opened_at).getTime() - 120000 : startOfToday;
+
+    let effectiveCashier = selectedCashierFilter;
+    if (!isAdmin && loggedInUserName) {
+      effectiveCashier = loggedInUserName;
+    }
+
+    allInvoices.forEach(inv => {
+      const hist = (inv as any).payments_history;
+      if (Array.isArray(hist) && hist.length > 0) {
+        hist.forEach(p => {
+          const pTime = p.date ? new Date(p.date).getTime() : 0;
+          let matchesTime = false;
+          if (filterMode === 'all') matchesTime = true;
+          else if (filterMode === 'today') matchesTime = isNaN(pTime) || pTime >= startOfToday;
+          else matchesTime = isNaN(pTime) || pTime >= shiftStartTime;
+
+          if (!matchesTime) return;
+
+          if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+            const cLower = effectiveCashier.toLowerCase().trim();
+            const pCashier = (p.cashier || '').toLowerCase().trim();
+            if (!pCashier.includes(cLower) && !cLower.includes(pCashier)) return;
+          }
+
+          payments.push({
+            id: p.id || `pay-${Math.random()}`,
+            amount: Number(p.amount) || 0,
+            method: p.method || 'Efectivo',
+            cashier: p.cashier || '',
+            date: p.date || '',
+            invoiceNumber: inv.invoice_number,
+            customer: inv.customer_name || 'Cliente'
+          });
+        });
+      }
+    });
+    return payments;
+  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, isAdmin, loggedInUserName]);
+
+  // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
+  const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
+
   // Filtrar movimientos de caja por Caja y Cajero
   const scopedMovements = useMemo(() => {
     return filterMovementsByShift(
@@ -175,9 +326,11 @@ export default function CashClosureModal({
     );
   }, [allMovements, filterMode, activeShift, selectedRegister, selectedCashierFilter]);
 
-  // Calcular ventas por método de pago para ESA caja/cajero
+  // Calcular ventas y cobros por método de pago para ESA caja/cajero
   const systemSales = useMemo(() => {
     let cash = 0, card = 0, transfer = 0, credit = 0;
+
+    // 1. Facturas directas (POS)
     scopedInvoices.forEach(inv => {
       const amt = Number(inv.total_amount) || 0;
       const method = inv.payment_method;
@@ -187,8 +340,29 @@ export default function CashClosureModal({
       else if (method === 'Crédito') credit += amt;
       else cash += amt;
     });
+
+    // 2. Recibos de financiamientos (Cuotas y Abonos a capital)
+    scopedFinancingReceipts.forEach(rc => {
+      const amt = Number(rc.totalPaid) || 0;
+      const method = rc.paymentMethod || 'Efectivo';
+      if (method === 'Efectivo') cash += amt;
+      else if (method === 'Tarjeta') card += amt;
+      else if (method === 'Transferencia') transfer += amt;
+      else cash += amt;
+    });
+
+    // 3. Cobros de facturas a crédito
+    scopedCreditPayments.forEach(p => {
+      const amt = Number(p.amount) || 0;
+      const method = p.method || 'Efectivo';
+      if (method === 'Efectivo') cash += amt;
+      else if (method === 'Tarjeta') card += amt;
+      else if (method === 'Transferencia') transfer += amt;
+      else cash += amt;
+    });
+
     return { cash, card, transfer, credit };
-  }, [scopedInvoices]);
+  }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments]);
 
   // Calcular totales de movimientos para ESA caja
   const cashMovementsTotals = useMemo(() => {
@@ -314,7 +488,7 @@ Fecha: ${dateStr} • ${timeStr}
 Caja: ${selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister}
 Cajero(a): ${cashierName}
 Supervisor: ${supervisorName}
-Facturas / Cobros en Turno: ${scopedInvoices.length}
+    Facturas / Cobros en Turno: ${totalDocsCount}
 
 --- RESUMEN FINANCIERO ---
 • Fondo Inicial: RD$ ${initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -413,7 +587,7 @@ Observaciones: ${notes || 'Sin observaciones'}
                     <span>{currentDateStr} • {currentTimeStr}</span>
                     <span className="text-zinc-300 dark:text-zinc-700">|</span>
                     <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                      Turno: {shiftStartStr} ({scopedInvoices.length} {scopedInvoices.length === 1 ? 'venta/cobro' : 'ventas/cobros'})
+                      Turno: {shiftStartStr} ({totalDocsCount} {totalDocsCount === 1 ? 'venta/cobro' : 'ventas/cobros'})
                     </span>
                   </p>
                 </div>
@@ -619,7 +793,7 @@ Observaciones: ${notes || 'Sin observaciones'}
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Ventas / Cobros</span>
                     <span className="text-[10px] font-medium px-1.5 py-0.2 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
-                      {scopedInvoices.length} docs
+                      {totalDocsCount} docs
                     </span>
                   </div>
                   <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-1 block">
@@ -792,6 +966,86 @@ Observaciones: ${notes || 'Sin observaciones'}
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cobros y Ventas Detalladas del Turno */}
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                        <DocumentArrowDownIcon className="w-3.5 h-3.5 text-zinc-400" />
+                        Cobros & Ventas en Turno ({totalDocsCount})
+                      </h3>
+                      <span className="text-[10px] font-mono font-bold text-emerald-600">
+                        RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {totalDocsCount === 0 ? (
+                      <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
+                        Sin cobros ni facturas registradas en este turno
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                        {/* Recibos de financiamiento */}
+                        {scopedFinancingReceipts.map(rc => (
+                          <div key={rc.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0">
+                                {rc.paymentMethod || 'Efectivo'}
+                              </span>
+                              <div className="truncate">
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{rc.receiptNumber}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{rc.customerName}</span>
+                              </div>
+                            </div>
+                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                              +${Number(rc.totalPaid).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ))}
+
+                        {/* Pagos de crédito */}
+                        {scopedCreditPayments.map(p => (
+                          <div key={p.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0">
+                                {p.method || 'Efectivo'}
+                              </span>
+                              <div className="truncate">
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{p.invoiceNumber}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{p.customer}</span>
+                              </div>
+                            </div>
+                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                              +${Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ))}
+
+                        {/* Facturas POS */}
+                        {scopedInvoices.map(inv => (
+                          <div key={inv.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                                inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                                inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
+                                inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                              }`}>
+                                {inv.payment_method}
+                              </span>
+                              <div className="truncate">
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{inv.invoice_number}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{inv.customer_name}</span>
+                              </div>
+                            </div>
+                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-2">
+                              +${Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1056,7 +1310,7 @@ Observaciones: ${notes || 'Sin observaciones'}
               <p><strong>Hora:</strong> {currentTimeStr}</p>
               <p><strong>Caja:</strong> {savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}</p>
               <p><strong>Cajero(a):</strong> {cashierName}</p>
-              <p><strong>Docs en Turno:</strong> {scopedInvoices.length}</p>
+              <p><strong>Docs en Turno:</strong> {totalDocsCount}</p>
             </div>
           </div>
 

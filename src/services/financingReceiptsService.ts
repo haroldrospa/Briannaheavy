@@ -1,3 +1,5 @@
+import { getLocalStorageFinancings } from './financingService';
+
 export interface FinancingPaymentReceipt {
   id: string;
   receiptNumber: string;
@@ -21,6 +23,8 @@ export interface FinancingPaymentReceipt {
   chassis?: string;
   itemPlate?: string;
   cashierName: string;
+  paymentMethod?: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
+  registerName?: string;
   qrUrl: string;
   createdAt: string;
 }
@@ -143,6 +147,8 @@ export function getOrReconstructReceiptsForFinancing(financing: any): FinancingP
         chassis: financing.chassis,
         itemPlate: financing.itemPlate || financing.item_plate,
         cashierName: 'Carlos Mendoza',
+        paymentMethod: 'Efectivo',
+        registerName: 'Caja Cobros & Financiamientos',
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNum}&rnc=131488417&monto=${totalPaid}`,
         createdAt: paymentDate,
       };
@@ -153,4 +159,23 @@ export function getOrReconstructReceiptsForFinancing(financing: any): FinancingP
   }
 
   return existingReceipts.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+}
+
+/**
+ * Fetches all financing payment receipts across all financings,
+ * automatically reconstructing historical receipts for any installments paid in DB.
+ */
+export function fetchAllFinancingReceipts(): FinancingPaymentReceipt[] {
+  try {
+    const financings = getLocalStorageFinancings();
+    if (Array.isArray(financings)) {
+      financings.forEach(fin => {
+        getOrReconstructReceiptsForFinancing(fin);
+      });
+    }
+  } catch (err) {
+    console.warn('Error reconstructing all financing receipts:', err);
+  }
+
+  return getStoredReceipts().sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 }

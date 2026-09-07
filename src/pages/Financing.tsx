@@ -808,6 +808,7 @@ export default function Financing() {
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
   const [viewingReceipt, setViewingReceipt] = useState<FinancingPaymentReceipt | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque'>('Efectivo');
 
   // Print & Exit Confirmation State
   const [hasPrintedReceipt, setHasPrintedReceipt] = useState(false);
@@ -1044,6 +1045,7 @@ export default function Financing() {
       const recNumber = getNextReceiptNumber();
       const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 
+      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
         receiptNumber: recNumber,
@@ -1066,12 +1068,16 @@ export default function Financing() {
         itemName: selectedFinancing.item,
         chassis: selectedFinancing.chassis,
         itemPlate: selectedFinancing.itemPlate,
-        cashierName: 'Carlos Mendoza',
+        cashierName: activeCashier,
+        paymentMethod: paymentMethod,
+        registerName: 'Caja Cobros & Financiamientos',
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
         createdAt: new Date().toISOString(),
       };
 
       saveReceipt(newReceipt);
+      window.dispatchEvent(new Event('brianna_receipts_updated'));
+      window.dispatchEvent(new Event('brianna_shift_updated'));
       setFinancingReceipts(prev => [newReceipt, ...prev.filter(r => r.id !== newReceipt.id)]);
       setViewingReceipt(newReceipt);
       setLastReceipt(newReceipt as any);
@@ -1113,6 +1119,7 @@ export default function Financing() {
       const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
       const recNumber = getNextReceiptNumber();
       const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1129,12 +1136,16 @@ export default function Financing() {
         itemName: selectedFinancing.item,
         chassis: selectedFinancing.chassis,
         itemPlate: selectedFinancing.itemPlate,
-        cashierName: 'Carlos Mendoza',
+        cashierName: activeCashier,
+        paymentMethod: paymentMethod,
+        registerName: 'Caja Cobros & Financiamientos',
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
         createdAt: new Date().toISOString(),
       };
 
       saveReceipt(newReceipt);
+      window.dispatchEvent(new Event('brianna_receipts_updated'));
+      window.dispatchEvent(new Event('brianna_shift_updated'));
       setFinancingReceipts(prev => [newReceipt, ...prev.filter(r => r.id !== newReceipt.id)]);
       setViewingReceipt(newReceipt);
       setLastReceipt(newReceipt as any);
@@ -3253,6 +3264,29 @@ export default function Financing() {
                           <span className="font-black text-[#ED1C24] dark:text-white text-2xl">
                             ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
+                        </div>
+
+                        {/* Selector de Método de Pago */}
+                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
+                          <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-2">
+                            Método de Pago Recibido
+                          </label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {(['Efectivo', 'Transferencia', 'Tarjeta', 'Cheque'] as const).map((method) => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setPaymentMethod(method)}
+                                className={`py-2 px-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                                  paymentMethod === method
+                                    ? 'bg-[#ED1C24] text-white shadow-xs'
+                                    : 'bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:border-red-300'
+                                }`}
+                              >
+                                {method}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
