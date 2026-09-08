@@ -21,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
-import { createCashClosure, type CashClosure } from '../../services/cashClosuresService';
+import { createCashClosure, getLocalStorageCashClosures, type CashClosure } from '../../services/cashClosuresService';
 import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
 import { 
   getActiveShift, 
@@ -29,6 +29,9 @@ import {
   updateActiveShiftFund, 
   filterInvoicesByShift, 
   filterMovementsByShift,
+  markInvoicesAsClosed,
+  setLastClosureTime,
+  getLastClosureTime,
   type ActiveShift 
 } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
@@ -125,6 +128,34 @@ export default function CashClosureModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    // 0. Auto-recuperar facturas cerradas de cierres previos para garantizar consistencia
+    try {
+      const pastClosures = getLocalStorageCashClosures();
+      if (pastClosures.length > 0) {
+        const regToLoad = selectedRegister === 'todas' ? 'Caja 1 - Repuestos' : selectedRegister;
+        const regClosures = pastClosures.filter(c => {
+          if (selectedRegister === 'todas') return true;
+          const cReg = (c.register_name || '').toLowerCase();
+          const sReg = regToLoad.toLowerCase();
+          return cReg.includes(sReg) || sReg.includes(cReg);
+        });
+        if (regClosures.length > 0) {
+          const latestClosureTime = new Date(regClosures[0].created_at).getTime();
+          if (!isNaN(latestClosureTime) && latestClosureTime > 0) {
+            setLastClosureTime(selectedRegister, regClosures[0].created_at);
+            const closedFromPast = getLocalStorageInvoices()
+              .filter(inv => inv.created_at && new Date(inv.created_at).getTime() <= latestClosureTime)
+              .map(inv => inv.id || inv.invoice_number);
+            if (closedFromPast.length > 0) {
+              markInvoicesAsClosed(closedFromPast);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error auto-syncing closed invoices:', e);
+    }
+
     // 1. Carga instantánea de caché local con 0ms de latencia
     setAllInvoices(getLocalStorageInvoices());
     setAllMovements(getLocalStorageMovements());
@@ -210,27 +241,24 @@ export default function CashClosureModal({
     }
 
     // filterMode === 'shift'
+    const lastClosureTime = getLastClosureTime(selectedRegister);
+    list = list.filter(r => {
+      const dateStr = r.createdAt || r.date;
+      if (lastClosureTime > 0 && dateStr) {
+        const t = new Date(dateStr).getTime();
+        if (!isNaN(t) && t <= lastClosureTime) return false;
+      }
+      return true;
+    });
+
     if (activeShift && activeShift.opened_at) {
-      const shiftStartTime = new Date(activeShift.opened_at).getTime();
-      const buffer = 120000;
-      const shiftList = list.filter(r => {
+      const shiftStartTime = Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime);
+      return list.filter(r => {
         const dateStr = r.createdAt || r.date;
         if (!dateStr) return true;
         const t = new Date(dateStr).getTime();
-        return isNaN(t) || t >= (shiftStartTime - buffer);
+        return isNaN(t) || t >= shiftStartTime;
       });
-
-      if (shiftList.length === 0 && list.length > 0) {
-        const todayList = list.filter(r => {
-          const dateStr = r.createdAt || r.date;
-          if (!dateStr) return true;
-          const t = new Date(dateStr).getTime();
-          return isNaN(t) || t >= startOfToday;
-        });
-        if (todayList.length > 0) return todayList;
-      }
-
-      return shiftList;
     }
 
     return list.filter(r => {
@@ -254,7 +282,10 @@ export default function CashClosureModal({
     const payments: Array<{ id: string; amount: number; method: string; cashier: string; date: string; invoiceNumber: string; customer: string }> = [];
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const shiftStartTime = activeShift?.opened_at ? new Date(activeShift.opened_at).getTime() - 120000 : startOfToday;
+    const lastClosureTime = getLastClosureTime(selectedRegister);
+    const shiftStartTime = activeShift?.opened_at 
+      ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) 
+      : Math.max(startOfToday, lastClosureTime);
 
     let effectiveCashier = selectedCashierFilter;
     if (!isAdmin && loggedInUserName) {
@@ -266,6 +297,9 @@ export default function CashClosureModal({
       if (Array.isArray(hist) && hist.length > 0) {
         hist.forEach(p => {
           const pTime = p.date ? new Date(p.date).getTime() : 0;
+          if (filterMode === 'shift' && lastClosureTime > 0 && pTime > 0 && pTime <= lastClosureTime) {
+            return;
+          }
           let matchesTime = false;
           if (filterMode === 'all') matchesTime = true;
           else if (filterMode === 'today') matchesTime = isNaN(pTime) || pTime >= startOfToday;
@@ -447,8 +481,14 @@ export default function CashClosureModal({
       });
 
       setSavedClosure(closure);
-      // Cerrar únicamente el turno de esta caja
+      // Marcar facturas de este arqueo como cerradas de forma permanente
+      markInvoicesAsClosed(scopedInvoices.map(i => i.id || i.invoice_number));
+      setLastClosureTime(actualRegName, closure.created_at);
+      setLastClosureTime('todas', closure.created_at);
+      // Cerrar el turno de esta caja
       closeShift(actualRegName);
+      setCounts({});
+      setNotes('');
       setShowCompletionOptions(true);
     } catch (err) {
       console.error('Error al guardar cierre de caja:', err);

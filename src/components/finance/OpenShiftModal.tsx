@@ -8,9 +8,10 @@ interface OpenShiftModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (initialAmount: number) => void;
+  registerName?: string;
 }
 
-export default function OpenShiftModal({ isOpen, onClose, onSuccess }: OpenShiftModalProps) {
+export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerName = 'Caja 1 - Repuestos' }: OpenShiftModalProps) {
   const [initialAmount, setInitialAmount] = useState<string>('0');
   const [cashierName, setCashierName] = useState(() => localStorage.getItem('brianna_user_name') || 'Harold Rosado');
 
@@ -36,7 +37,7 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess }: OpenShift
     const amount = parseFloat(initialAmount.replace(/,/g, '') || '0');
     if (isNaN(amount) || amount < 0) return;
     
-    openShift(amount, cashierName);
+    openShift(amount, cashierName, registerName);
     setInitialShiftFund(amount);
     onSuccess(amount);
     setInitialAmount('');

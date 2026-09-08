@@ -1857,7 +1857,7 @@ export default function POS() {
 
     const localInvs = getLocalStorageInvoices();
     if (localInvs) {
-      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(), 'todas', currentUserName).map(mapInvoiceToSessionSale));
+      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
     }
 
     // 2. Async background sync with Supabase
@@ -1880,7 +1880,7 @@ export default function POS() {
         })));
       }
       if (invs) {
-        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(), 'todas', currentUserName).map(mapInvoiceToSessionSale));
+        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
         setActiveQuotationsCount(getActiveQuotationsCount());
       }
     };
@@ -3686,6 +3686,7 @@ export default function POS() {
         {isOpenShiftModalOpen && (
           <OpenShiftModal
             isOpen={isOpenShiftModalOpen}
+            registerName={activeRegister}
             onClose={() => setIsOpenShiftModalOpen(false)}
             onSuccess={(initialAmount) => {
               console.log('Turno abierto con:', initialAmount);
