@@ -567,16 +567,16 @@ export default function Catalog({ isPublic: isPublicProp }: CatalogProps) {
 
                   {/* Top Badges */}
                   <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                    {getStatusBadge(item.status)}
+                    {item.status && item.status !== 'Disponible' && getStatusBadge(item.status)}
                     {item.year && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-black/75 backdrop-blur-xs text-white">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/75 backdrop-blur-xs text-white">
                         {item.year}
                       </span>
                     )}
                   </div>
 
                   <div className="absolute top-3 right-3">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xs text-gray-900 dark:text-zinc-100 shadow-2xs">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xs text-gray-800 dark:text-zinc-200 shadow-2xs">
                       {getItemTypeLabel(item.type)}
                     </span>
                   </div>
@@ -584,66 +584,59 @@ export default function Catalog({ isPublic: isPublicProp }: CatalogProps) {
                   {/* Multiple Photos Badge */}
                   {item.images && item.images.length > 1 && (
                     <div className="absolute bottom-3 right-3 z-10 pointer-events-none">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/75 backdrop-blur-xs text-white flex items-center gap-1 shadow-sm">
-                        <PhotoIcon className="w-3 h-3 text-red-400" />
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/70 backdrop-blur-xs text-white flex items-center gap-1">
+                        <PhotoIcon className="w-3 h-3 text-white/80" />
                         <span>{item.images.length} fotos</span>
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Product Info */}
-                <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
+                {/* Product Info - Minimalist & Simple */}
+                <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                      <span>{item.brand || 'Brianna'}</span>
-                      {item.model && <span>• {item.model}</span>}
+                    {/* Brand / Category & Stock */}
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-zinc-400 mb-1">
+                      <span className="font-semibold truncate uppercase tracking-wider text-[10px]">
+                        {item.brand && item.brand.trim() ? item.brand : getItemTypeLabel(item.type)}
+                      </span>
+                      {item.stock !== undefined && (
+                        <span className={`shrink-0 font-medium flex items-center gap-1 text-[11px] ${
+                          Number(item.stock) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${Number(item.stock) > 0 ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                          <span>{Number(item.stock) > 0 ? `${item.stock} en stock` : 'Agotado'}</span>
+                        </span>
+                      )}
                     </div>
-                    <h3 className="text-sm sm:text-base font-black text-gray-900 dark:text-zinc-100 group-hover:text-[#ED1C24] transition-colors line-clamp-2 mt-0.5">
+
+                    {/* Title */}
+                    <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100 group-hover:text-[#ED1C24] transition-colors line-clamp-2 leading-snug">
                       {item.name}
                     </h3>
 
-                    {/* Specs snippets */}
-                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800/80 text-[11px]">
-                      {item.vin && (
-                        <div className="truncate">
-                          <span className="text-gray-400 dark:text-zinc-500 block text-[9.5px] uppercase font-bold">Chasis / VIN</span>
-                          <span className="font-mono font-bold text-gray-800 dark:text-zinc-200">{item.vin}</span>
-                        </div>
-                      )}
-                      {item.mileage_hours !== undefined && item.mileage_hours !== null && String(item.mileage_hours).trim() !== '' && (
-                        <div>
-                          <span className="text-gray-400 dark:text-zinc-500 block text-[9.5px] uppercase font-bold">Horas / Km</span>
-                          <span className="font-bold text-gray-800 dark:text-zinc-200">{item.mileage_hours}</span>
-                        </div>
-                      )}
-                      {item.part_number && (
-                        <div className="truncate">
-                          <span className="text-gray-400 dark:text-zinc-500 block text-[9.5px] uppercase font-bold">No. Parte</span>
-                          <span className="font-mono font-bold text-gray-800 dark:text-zinc-200">{item.part_number}</span>
-                        </div>
-                      )}
-                      {item.stock !== undefined && (
-                        <div>
-                          <span className="text-gray-400 dark:text-zinc-500 block text-[9.5px] uppercase font-bold">Disponibilidad</span>
-                          <span className="font-bold text-gray-800 dark:text-zinc-200">{item.stock} en stock</span>
-                        </div>
-                      )}
-                    </div>
+                    {/* Quick key detail if available */}
+                    {(item.part_number || item.vin) && (
+                      <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1 truncate">
+                        {item.part_number ? `No. Parte: ${item.part_number}` : `VIN: ${item.vin}`}
+                      </p>
+                    )}
                   </div>
 
                   {/* Price & Contact Button */}
-                  <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-zinc-800/70 flex items-center justify-between gap-2">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 block">
-                        Precio
-                      </span>
                       {item.show_price !== false && item.price && Number(item.price) > 0 ? (
-                        <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white font-mono">
-                          RD$ {Number(item.price).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 leading-none mb-0.5">
+                            Precio
+                          </span>
+                          <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white font-mono leading-none">
+                            RD$ {Number(item.price).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       ) : (
-                        <span className="inline-flex items-center text-xs font-black text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded-xl border border-amber-200 dark:border-amber-800/60">
+                        <span className="text-xs sm:text-sm font-bold text-gray-600 dark:text-zinc-400">
                           Precio a Consultar
                         </span>
                       )}
@@ -653,7 +646,7 @@ export default function Catalog({ isPublic: isPublicProp }: CatalogProps) {
                       <button
                         type="button"
                         onClick={(e) => handleShareItemWhatsApp(item, e)}
-                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
                         title="Consultar por WhatsApp"
                       >
                         <ChatBubbleLeftRightIcon className="w-4 h-4" />
