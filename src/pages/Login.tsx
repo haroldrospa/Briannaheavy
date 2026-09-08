@@ -1,20 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
   LockClosedIcon, 
   EnvelopeIcon, 
   EyeIcon, 
-  EyeSlashIcon,
-  SunIcon,
-  MoonIcon,
-  ShieldCheckIcon,
-  ArrowRightIcon,
-  KeyIcon,
-  CheckCircleIcon,
-  ArrowLeftIcon,
-  ExclamationTriangleIcon,
-  UserCircleIcon
+  EyeSlashIcon, 
+  SunIcon, 
+  MoonIcon, 
+  ShieldCheckIcon, 
+  ArrowRightIcon, 
+  KeyIcon, 
+  CheckCircleIcon, 
+  ArrowLeftIcon, 
+  ExclamationTriangleIcon, 
+  UserCircleIcon 
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../contexts/ThemeContext';
 import loginBg from '../assets/login-bg.png';
@@ -22,10 +22,13 @@ import logo from '../assets/logo.png';
 import { setActiveRole, type UserRole } from '../utils/rolePermissions';
 import { 
   getLocalStorageUsers, 
+  fetchUsers,
+  findUserProfileByEmail,
+  normalizeUserEmail,
   getStoredPasswords, 
   SUPER_ADMIN_EMAIL, 
   changeUserPassword, 
-  userRequiresPasswordChange,
+  userRequiresPasswordChange, 
   type UserProfile 
 } from '../services/usersService';
 
@@ -57,29 +60,52 @@ export default function Login() {
   const navigate = useNavigate();
   const { setTheme, isDark } = useTheme();
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchUsers(true);
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
     const cleanEmail = email.trim().toLowerCase();
-    const allUsers = getLocalStorageUsers();
-    const passwords = getStoredPasswords();
-    const expectedPassword = passwords[cleanEmail] || (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase() ? 'admin123' : '123456');
+    const normEmail = normalizeUserEmail(cleanEmail);
 
-    if (password && password !== '••••••••' && password.trim() !== expectedPassword.trim()) {
-      setIsLoading(false);
-      setErrorMessage('Contraseña incorrecta. Verifique sus credenciales.');
-      return;
+    let allUsers = await fetchUsers(false);
+    if (!allUsers || allUsers.length === 0) {
+      allUsers = getLocalStorageUsers();
     }
-    
-    const matchedUser = allUsers.find(
-      u => u.email?.trim().toLowerCase() === cleanEmail
-    );
+
+    const passwords = getStoredPasswords();
+    const matchedUser = findUserProfileByEmail(allUsers, cleanEmail);
+
+    const expectedPassword = 
+      passwords[cleanEmail] || 
+      passwords[normEmail] || 
+      matchedUser?.password ||
+      (normEmail === normalizeUserEmail(SUPER_ADMIN_EMAIL) ? 'admin123' : '123456');
+
+    const enteredPass = password ? password.trim() : '';
+    if (enteredPass && enteredPass !== '••••••••' && enteredPass !== expectedPassword.trim()) {
+      if (!matchedUser?.password || enteredPass !== matchedUser.password.trim()) {
+        setIsLoading(false);
+        setErrorMessage('Contraseña incorrecta. Verifique sus credenciales.');
+        return;
+      }
+    }
 
     let resolvedRole: UserRole = 'Administrador';
     let resolvedName = 'Harold Rosado';
     let resolvedEmail = cleanEmail || SUPER_ADMIN_EMAIL;
+
+    // Administradores oficiales reconocidos
+    const KNOWN_ADMINS = [
+      'haroldrospa@gmail.com',
+      'rpenalo@briannaheavy.com',
+      'fechavarria@briannaheavy.com',
+      'jennifer@briannaheavy.com'
+    ];
 
     if (matchedUser) {
       if (matchedUser.status === 'Inactivo') {
@@ -87,13 +113,19 @@ export default function Login() {
         setErrorMessage('Esta cuenta se encuentra inactiva. Contacte al administrador.');
         return;
       }
-      resolvedRole = matchedUser.role;
+      resolvedRole = matchedUser.role || 'Administrador';
       resolvedName = matchedUser.full_name || 'Usuario';
       resolvedEmail = matchedUser.email || cleanEmail;
-    } else if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
+    } else if (normEmail === normalizeUserEmail(SUPER_ADMIN_EMAIL)) {
       resolvedRole = 'Administrador';
       resolvedName = 'Harold Rosado';
       resolvedEmail = SUPER_ADMIN_EMAIL;
+    } else if (KNOWN_ADMINS.some(adm => normEmail === normalizeUserEmail(adm))) {
+      resolvedRole = 'Administrador';
+      if (normEmail.includes('rpenalo')) resolvedName = 'Rosa Iris Penalo';
+      else if (normEmail.includes('fechavarria')) resolvedName = 'Franquelina Echavarria';
+      else if (normEmail.includes('jennifer')) resolvedName = 'Jennifer';
+      resolvedEmail = cleanEmail;
     } else {
       // Fallback for typed email
       const namePart = email.split('@')[0]?.replace('.', ' ').trim();

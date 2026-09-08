@@ -13,7 +13,13 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { getActiveRole, setActiveRole, type UserRole } from '../utils/rolePermissions';
-import { getLocalStorageUsers, type UserProfile } from '../services/usersService';
+import { 
+  getLocalStorageUsers, 
+  fetchUsers, 
+  findUserProfileByEmail, 
+  normalizeUserEmail, 
+  type UserProfile 
+} from '../services/usersService';
 
 const routeNames: Record<string, string> = {
   '/dashboard': 'Panel Principal',
@@ -71,13 +77,13 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const { setTheme, isDark } = useTheme();
 
   const resolveUserName = () => {
-    const email = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
+    const email = localStorage.getItem('brianna_user_email') || '';
     const users = getLocalStorageUsers();
     
-    // Always check actual registered profile in system
+    // Always check actual registered profile in system with typo tolerance
     const matched = email 
-      ? users.find((u: UserProfile) => (u.email || '').toLowerCase() === email)
-      : users.find((u: UserProfile) => (u.email || '').toLowerCase() === 'haroldrospa@gmail.com');
+      ? findUserProfileByEmail(users, email)
+      : users.find((u: UserProfile) => normalizeUserEmail(u.email) === 'haroldrospa@gmail.com');
 
     if (matched?.full_name) {
       localStorage.setItem('brianna_user_name', matched.full_name);
@@ -85,8 +91,12 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
     }
 
     const stored = localStorage.getItem('brianna_user_name');
-    if (stored && stored.trim() && stored !== 'Harold Rodríguez') {
+    if (stored && stored.trim() && stored !== 'Harold Rodríguez' && stored !== 'Rpenalo') {
       return stored.trim();
+    }
+
+    if (email && normalizeUserEmail(email).includes('rpenalo')) {
+      return 'Rosa Iris Penalo';
     }
 
     localStorage.setItem('brianna_user_name', 'Harold Rosado');
@@ -95,7 +105,9 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
 
   const resolveUserEmail = () => {
     const email = localStorage.getItem('brianna_user_email');
-    if (email && email.trim()) return email.trim();
+    if (email && email.trim()) {
+      return normalizeUserEmail(email);
+    }
     return getActiveRole() === 'Repuestos' ? 'cajero1@gmail.com' : 'Haroldrospa@gmail.com';
   };
 
@@ -104,6 +116,12 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const [userEmail, setUserEmail] = useState<string>(resolveUserEmail);
 
   useEffect(() => {
+    fetchUsers(false).then(() => {
+      setRoleState(getActiveRole());
+      setUserName(resolveUserName());
+      setUserEmail(resolveUserEmail());
+    });
+
     const handleSync = () => {
       const current = getActiveRole();
       setRoleState(current);

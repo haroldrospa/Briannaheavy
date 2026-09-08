@@ -137,26 +137,83 @@ export const hasPermission = (
 export const getActiveRole = (): UserRole => {
   if (typeof window === 'undefined') return 'Administrador';
   
-  const role = localStorage.getItem(ROLE_STORAGE_KEY) as UserRole;
+  const savedRole = localStorage.getItem(ROLE_STORAGE_KEY) as UserRole;
   const email = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
   const userName = (localStorage.getItem('brianna_user_name') || '').trim().toLowerCase();
 
-  // El correo o usuario del Administrador principal siempre es Administrador por defecto
-  if (email === 'haroldrospa@gmail.com') {
-    if (!role || role === 'Administrador') {
+  const cleanEmail = email
+    .replace('briannyheavy.com', 'briannaheavy.com')
+    .replace('briannaheavy.con', 'briannaheavy.com');
+
+  // 1. Harold Rosado (Super Admin) siempre es Administrador
+  if (cleanEmail === 'haroldrospa@gmail.com') {
+    if (!savedRole || savedRole === 'Administrador') {
       return 'Administrador';
     }
   }
 
-  if (role === 'Administrador') {
+  // 2. Administradores oficiales de la empresa
+  const KNOWN_ADMINS = [
+    'haroldrospa@gmail.com',
+    'rpenalo@briannaheavy.com',
+    'rpenalo@briannyheavy.com',
+    'fechavarria@briannaheavy.com',
+    'jennifer@briannaheavy.com'
+  ];
+
+  const isAdminName = 
+    userName.includes('rosa iris') || 
+    userName.includes('penalo') || 
+    userName.includes('harold rosado') ||
+    userName.includes('jennifer') ||
+    userName.includes('franquelina') ||
+    userName.includes('echavarria');
+
+  // 3. Revisar perfiles registrados en el sistema
+  try {
+    const rawUsers = localStorage.getItem('brianna_local_users');
+    if (rawUsers) {
+      const users = JSON.parse(rawUsers);
+      if (Array.isArray(users)) {
+        const matched = users.find((u: any) => {
+          const uEmail = (u.email || '').trim().toLowerCase()
+            .replace('briannyheavy.com', 'briannaheavy.com');
+          return (
+            (uEmail && uEmail === cleanEmail) ||
+            (cleanEmail.includes('@') && uEmail.includes('@') && uEmail.split('@')[0] === cleanEmail.split('@')[0]) ||
+            (u.full_name && userName && u.full_name.trim().toLowerCase() === userName)
+          );
+        });
+
+        if (matched && matched.role) {
+          if (matched.role === 'Administrador') {
+            if (savedRole !== 'Administrador') {
+              localStorage.setItem(ROLE_STORAGE_KEY, 'Administrador');
+            }
+            return 'Administrador';
+          }
+          if (matched.role) {
+            return matched.role;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignorar error de parsing
+  }
+
+  if (KNOWN_ADMINS.includes(cleanEmail) || isAdminName) {
+    if (savedRole !== 'Administrador') {
+      localStorage.setItem(ROLE_STORAGE_KEY, 'Administrador');
+    }
     return 'Administrador';
   }
 
-  if (role === 'Oficina' || role === 'Repuestos') {
-    return role;
+  if (savedRole === 'Administrador' || savedRole === 'Oficina' || savedRole === 'Repuestos') {
+    return savedRole;
   }
 
-  if (email.includes('cajer') || email.includes('caja') || userName.includes('cajer')) {
+  if (cleanEmail.includes('cajer') || cleanEmail.includes('caja') || userName.includes('cajer')) {
     return 'Repuestos';
   }
   

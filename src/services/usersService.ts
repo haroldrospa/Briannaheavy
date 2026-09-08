@@ -90,6 +90,13 @@ export const saveStoredMustChangeFlag = async (email: string, mustChange: boolea
   }
 };
 
+export const normalizeUserEmail = (email?: string): string => {
+  if (!email) return '';
+  return email.trim().toLowerCase()
+    .replace('briannyheavy.com', 'briannaheavy.com')
+    .replace('briannaheavy.con', 'briannaheavy.com');
+};
+
 const initialLocalUsers: UserProfile[] = [
   { 
     id: '1', 
@@ -102,19 +109,37 @@ const initialLocalUsers: UserProfile[] = [
   },
   {
     id: '2',
+    full_name: 'Rosa Iris Penalo',
+    role: 'Administrador',
+    status: 'Activo',
+    email: 'rpenalo@briannaheavy.com',
+    password: 'admin',
+    must_change_password: false
+  },
+  {
+    id: '3',
+    full_name: 'Franquelina Echavarria',
+    role: 'Administrador',
+    status: 'Activo',
+    email: 'fechavarria@briannaheavy.com',
+    password: '123456',
+    must_change_password: false
+  },
+  {
+    id: '4',
+    full_name: 'Jennifer',
+    role: 'Administrador',
+    status: 'Activo',
+    email: 'jennifer@briannaheavy.com',
+    password: 'a#vX60CcMdi!FshRS@um',
+    must_change_password: false
+  },
+  {
+    id: '5',
     full_name: 'Harold Cajero',
     role: 'Repuestos',
     status: 'Activo',
     email: 'cajero1@gmail.com',
-    password: '123456',
-    must_change_password: true
-  },
-  {
-    id: '3',
-    full_name: 'Carlos Díaz',
-    role: 'Oficina',
-    status: 'Activo',
-    email: 'carlos@briannaheavy.com',
     password: '123456',
     must_change_password: true
   }
@@ -123,12 +148,30 @@ const initialLocalUsers: UserProfile[] = [
 let inMemoryUsers: UserProfile[] | null = null;
 let inFlightUsersPromise: Promise<UserProfile[]> | null = null;
 
+export const findUserProfileByEmail = (users: UserProfile[], email: string): UserProfile | undefined => {
+  const clean = normalizeUserEmail(email);
+  if (!clean) return undefined;
+
+  let found = users.find(u => normalizeUserEmail(u.email) === clean);
+  if (found) return found;
+
+  if (clean.includes('@')) {
+    const prefix = clean.split('@')[0];
+    found = users.find(u => {
+      const uPrefix = normalizeUserEmail(u.email).split('@')[0];
+      return uPrefix === prefix;
+    });
+  }
+  return found;
+};
+
 const syncActiveSessionIfCurrent = (user: UserProfile) => {
   if (typeof window === 'undefined') return;
-  const currentEmail = (localStorage.getItem('brianna_user_email') || '').trim().toLowerCase();
-  const isSuperAdmin = user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+  const currentEmail = normalizeUserEmail(localStorage.getItem('brianna_user_email') || '');
+  const userNormEmail = normalizeUserEmail(user.email);
+  const isSuperAdmin = userNormEmail === normalizeUserEmail(SUPER_ADMIN_EMAIL);
   
-  if (user.email?.toLowerCase() === currentEmail || (isSuperAdmin && (!currentEmail || currentEmail === SUPER_ADMIN_EMAIL.toLowerCase()))) {
+  if (userNormEmail === currentEmail || (isSuperAdmin && (!currentEmail || currentEmail === normalizeUserEmail(SUPER_ADMIN_EMAIL)))) {
     if (user.full_name) {
       localStorage.setItem('brianna_user_name', user.full_name);
     }
@@ -296,6 +339,18 @@ export const fetchUsers = async (forceRefresh = false): Promise<UserProfile[]> =
 
           saveLocalStorageUsers(profiles);
           lastUsersFetch = Date.now();
+
+          // Sync active session if the current user profile exists in fetched profiles
+          if (typeof window !== 'undefined') {
+            const currentEmail = localStorage.getItem('brianna_user_email');
+            if (currentEmail) {
+              const matchedCurrent = findUserProfileByEmail(profiles, currentEmail);
+              if (matchedCurrent) {
+                syncActiveSessionIfCurrent(matchedCurrent);
+              }
+            }
+          }
+
           return profiles;
         }
       } catch (err) {
