@@ -104,48 +104,50 @@ export const createCashClosure = async (
   const updated = [newClosure, ...current];
   saveLocalStorageCashClosures(updated);
 
-  // 2. Sincronizar en Supabase si está disponible
+  // 2. Sincronizar en Supabase en segundo plano sin bloquear la UI (0ms latencia)
   if (isSupabaseConfigured()) {
-    try {
-      const { data, error } = await supabase
-        .from('cash_closures')
-        .insert([{
-          closure_number: newClosure.closure_number,
-          register_name: newClosure.register_name || 'Caja 1 - Repuestos',
-          shift_id: newClosure.shift_id || null,
-          cashier_name: newClosure.cashier_name,
-          supervisor_name: newClosure.supervisor_name,
-          initial_fund: newClosure.initial_fund,
-          system_sales_cash: newClosure.system_sales_cash,
-          system_sales_card: newClosure.system_sales_card,
-          system_sales_transfer: newClosure.system_sales_transfer,
-          system_sales_credit: newClosure.system_sales_credit,
-          total_sales: newClosure.total_sales,
-          cash_movements_in: newClosure.cash_movements_in,
-          cash_movements_out: newClosure.cash_movements_out,
-          expected_cash: newClosure.expected_cash,
-          counted_cash: newClosure.counted_cash,
-          difference: newClosure.difference,
-          status: newClosure.status,
-          denominations: newClosure.denominations,
-          movements: newClosure.movements || [],
-          notes: newClosure.notes || '',
-          created_at: newClosure.created_at,
-        }])
-        .select()
-        .single();
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('cash_closures')
+          .insert([{
+            closure_number: newClosure.closure_number,
+            register_name: newClosure.register_name || 'Caja 1 - Repuestos',
+            shift_id: newClosure.shift_id || null,
+            cashier_name: newClosure.cashier_name,
+            supervisor_name: newClosure.supervisor_name,
+            initial_fund: newClosure.initial_fund,
+            system_sales_cash: newClosure.system_sales_cash,
+            system_sales_card: newClosure.system_sales_card,
+            system_sales_transfer: newClosure.system_sales_transfer,
+            system_sales_credit: newClosure.system_sales_credit,
+            total_sales: newClosure.total_sales,
+            cash_movements_in: newClosure.cash_movements_in,
+            cash_movements_out: newClosure.cash_movements_out,
+            expected_cash: newClosure.expected_cash,
+            counted_cash: newClosure.counted_cash,
+            difference: newClosure.difference,
+            status: newClosure.status,
+            denominations: newClosure.denominations,
+            movements: newClosure.movements || [],
+            notes: newClosure.notes || '',
+            created_at: newClosure.created_at,
+          }])
+          .select()
+          .single();
 
-      if (!error && data) {
-        const list = getLocalStorageCashClosures();
-        const index = list.findIndex(c => c.id === newClosure.id);
-        if (index !== -1) {
-          list[index] = { ...newClosure, id: data.id };
-          saveLocalStorageCashClosures(list);
+        if (!error && data) {
+          const list = getLocalStorageCashClosures();
+          const index = list.findIndex(c => c.id === newClosure.id);
+          if (index !== -1) {
+            list[index] = { ...newClosure, id: data.id };
+            saveLocalStorageCashClosures(list);
+          }
         }
+      } catch (err) {
+        console.warn('Error saving cash closure in Supabase, preserved locally:', err);
       }
-    } catch (err) {
-      console.warn('Error saving cash closure in Supabase, preserved locally:', err);
-    }
+    })();
   }
 
   return newClosure;

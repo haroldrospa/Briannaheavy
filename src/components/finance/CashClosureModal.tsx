@@ -19,8 +19,8 @@ import {
   CheckIcon, 
   ClockIcon
 } from '@heroicons/react/24/outline';
-import { fetchInvoices, type Invoice } from '../../services/invoicesService';
-import { fetchCashMovements, type CashMovement } from '../../services/cashMovementsService';
+import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
+import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { createCashClosure, type CashClosure } from '../../services/cashClosuresService';
 import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
 import { 
@@ -69,9 +69,15 @@ export default function CashClosureModal({
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
   const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => isAdmin ? 'todos' : loggedInUserName);
 
-  const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
-  const [allMovements, setAllMovements] = useState<CashMovement[]>([]);
-  const [allFinancingReceipts, setAllFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
+  const [allMovements, setAllMovements] = useState<CashMovement[]>(() => getLocalStorageMovements());
+  const [allFinancingReceipts, setAllFinancingReceipts] = useState<FinancingPaymentReceipt[]>(() => {
+    try {
+      return fetchAllFinancingReceipts();
+    } catch {
+      return [];
+    }
+  });
 
   const [initialFund, setInitialFund] = useState(0);
   const [isEditingFund, setIsEditingFund] = useState(false);
@@ -117,22 +123,25 @@ export default function CashClosureModal({
   }, [isOpen, selectedRegister, loggedInUserName]);
 
   useEffect(() => {
-    const loadData = async () => {
-      const [invs, movs] = await Promise.all([
-        fetchInvoices(true),
-        fetchCashMovements()
-      ]);
-      setAllInvoices(invs || []);
-      setAllMovements(movs || []);
-      try {
-        const finReceipts = fetchAllFinancingReceipts();
-        setAllFinancingReceipts(finReceipts || []);
-      } catch (e) {
-        console.warn('Error loading financing receipts in closure:', e);
-      }
-    };
+    if (!isOpen) return;
 
-    loadData();
+    // 1. Carga instantánea de caché local con 0ms de latencia
+    setAllInvoices(getLocalStorageInvoices());
+    setAllMovements(getLocalStorageMovements());
+    try {
+      setAllFinancingReceipts(fetchAllFinancingReceipts());
+    } catch (e) {
+      console.warn('Error loading financing receipts in closure:', e);
+    }
+
+    // 2. Sincronización en segundo plano sin congelar la interfaz ni bloquear el modal
+    fetchInvoices(false).then(invs => {
+      if (invs && invs.length > 0) setAllInvoices(invs);
+    }).catch(e => console.warn('Background invoice fetch:', e));
+
+    fetchCashMovements(false).then(movs => {
+      if (movs && movs.length > 0) setAllMovements(movs);
+    }).catch(e => console.warn('Background movements fetch:', e));
 
     const handleReceiptsRefresh = () => {
       try {
@@ -996,11 +1005,12 @@ Observaciones: ${notes || 'Sin observaciones'}
       {/* Modal de Finalización con Opciones */}
       <AnimatePresence>
         {showCompletionOptions && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 print:hidden backdrop-blur-xs">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 print:hidden">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
               className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-md p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 relative space-y-5"
             >
               <button
