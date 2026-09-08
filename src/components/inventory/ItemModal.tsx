@@ -58,6 +58,38 @@ interface ItemModalProps {
   onPrintBarcode?: (item: any) => void;
 }
 
+// Helpers para formateo de moneda con separador de miles (,) y decimales (.)
+const formatCurrencyInput = (value: string | number): string => {
+  if (value === '' || value === undefined || value === null) return '';
+  let str = String(value);
+  if (str.endsWith(',') && !str.includes('.')) {
+    const digitsBefore = str.slice(0, -1).replace(/\D/g, '');
+    str = digitsBefore + '.';
+  }
+  const clean = str.replace(/[^0-9.]/g, '');
+  const parts = clean.split('.');
+  if (parts.length > 2) {
+    parts.splice(2);
+  }
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (parts[1] !== undefined) {
+    parts[1] = parts[1].slice(0, 2);
+  }
+  return parts.join('.');
+};
+
+const parseCurrency = (value: string | number): number => {
+  if (typeof value === 'number') return isNaN(value) ? 0 : value;
+  if (!value) return 0;
+  const clean = String(value).replace(/,/g, '');
+  const parsed = parseFloat(clean);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+const formatMoney = (val: number): string => {
+  return (isNaN(val) ? 0 : val).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 export default function ItemModal({ item, initialData, onClose, onSave, onPrintBarcode }: ItemModalProps) {
   const targetItem = item || initialData;
   const isEditing = !!targetItem;
@@ -88,10 +120,10 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
       const typeVal = rawType.includes('Camion') || rawType.includes('Camión') ? 'Camiones' :
                       rawType.includes('Equipo') ? 'Equipos Pesados' : 'Piezas';
 
-      const rawCost = targetItem.cost !== undefined && targetItem.cost !== null ? targetItem.cost : '';
-      const rawPrice = targetItem.price !== undefined && targetItem.price !== null ? targetItem.price : '';
-      const numCost = parseFloat(String(rawCost)) || 0;
-      const numPrice = parseFloat(String(rawPrice)) || 0;
+      const rawCost = targetItem.cost !== undefined && targetItem.cost !== null && targetItem.cost !== '' ? targetItem.cost : '';
+      const rawPrice = targetItem.price !== undefined && targetItem.price !== null && targetItem.price !== '' ? targetItem.price : '';
+      const numCost = parseCurrency(rawCost);
+      const numPrice = parseCurrency(rawPrice);
 
       if (numCost > 0 && numPrice > 0) {
         const calculatedMargin = ((numPrice - numCost) / numCost) * 100;
@@ -112,8 +144,8 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         brand: targetItem.brand || '',
         model: targetItem.model || '',
         minStock: (targetItem as any).min_stock ?? (targetItem as any).minStock ?? 5,
-        cost: rawCost,
-        price: rawPrice,
+        cost: rawCost !== '' ? formatMoney(numCost) : '',
+        price: rawPrice !== '' ? formatMoney(numPrice) : '',
         stock: (targetItem.stock !== undefined && targetItem.stock !== null) ? targetItem.stock : '',
         barcode: (targetItem as any).barcode || '',
         partNumber: (targetItem as any).part_number ?? (targetItem as any).partNumber ?? '',
@@ -164,51 +196,73 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
   };
 
   const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    const numCost = parseFloat(val);
+    const rawVal = e.target.value;
+    const formatted = formatCurrencyInput(rawVal);
+    const numCost = parseCurrency(formatted);
     const numMargin = parseFloat(marginPercent);
 
-    if (!isNaN(numCost) && !isNaN(numMargin)) {
+    if (!isNaN(numCost) && numCost > 0 && !isNaN(numMargin)) {
       const calculatedPrice = numCost * (1 + numMargin / 100);
       setFormData(prev => ({
         ...prev,
-        cost: val,
-        price: Number(calculatedPrice.toFixed(2))
+        cost: formatted,
+        price: formatCurrencyInput(calculatedPrice.toFixed(2))
       }));
     } else {
-      setFormData(prev => ({ ...prev, cost: val }));
+      setFormData(prev => ({ ...prev, cost: formatted }));
     }
   };
 
   const handleMarginChange = (val: string) => {
     setMarginPercent(val);
     const numMargin = parseFloat(val);
-    const numCost = parseFloat(String(formData.cost));
+    const numCost = parseCurrency(formData.cost);
 
     if (!isNaN(numCost) && !isNaN(numMargin)) {
       const calculatedPrice = numCost * (1 + numMargin / 100);
       setFormData(prev => ({
         ...prev,
-        price: Number(calculatedPrice.toFixed(2))
+        price: formatCurrencyInput(calculatedPrice.toFixed(2))
       }));
     }
   };
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    const numPrice = parseFloat(val);
-    const numCost = parseFloat(String(formData.cost));
+    const rawVal = e.target.value;
+    const formatted = formatCurrencyInput(rawVal);
+    const numPrice = parseCurrency(formatted);
+    const numCost = parseCurrency(formData.cost);
 
-    setFormData(prev => ({ ...prev, price: val }));
+    setFormData(prev => ({ ...prev, price: formatted }));
 
-    if (!isNaN(numCost) && numCost > 0 && !isNaN(numPrice)) {
+    if (numCost > 0 && numPrice > 0) {
       const calculatedMargin = ((numPrice - numCost) / numCost) * 100;
       setMarginPercent(Number.isInteger(calculatedMargin) ? calculatedMargin.toString() : calculatedMargin.toFixed(2));
     }
   };
 
-  const currentCost = parseFloat(String(formData.cost)) || 0;
-  const currentPrice = parseFloat(String(formData.price)) || 0;
+  const handleBlurCost = () => {
+    const numCost = parseCurrency(formData.cost);
+    if (formData.cost !== '' && !isNaN(numCost) && numCost >= 0) {
+      setFormData(prev => ({
+        ...prev,
+        cost: formatMoney(numCost)
+      }));
+    }
+  };
+
+  const handleBlurPrice = () => {
+    const numPrice = parseCurrency(formData.price);
+    if (formData.price !== '' && !isNaN(numPrice) && numPrice >= 0) {
+      setFormData(prev => ({
+        ...prev,
+        price: formatMoney(numPrice)
+      }));
+    }
+  };
+
+  const currentCost = parseCurrency(formData.cost);
+  const currentPrice = parseCurrency(formData.price);
   const profitAmount = currentPrice - currentCost;
   const profitMargin = currentCost > 0 ? (profitAmount / currentCost) * 100 : 0;
   const isLoss = currentCost > 0 && currentPrice < currentCost;
@@ -304,8 +358,8 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         ...formData,
         id: isEditing ? formData.id : undefined,
         name: (formData.name && formData.name.trim()) ? formData.name.trim() : (formData.brand && formData.brand.trim()) ? formData.brand.trim() : 'Artículo',
-        cost: parseFloat(String(formData.cost)) || 0,
-        price: parseFloat(String(formData.price)) || 0,
+        cost: parseCurrency(formData.cost),
+        price: parseCurrency(formData.price),
         stock: parseInt(String(formData.stock), 10) || 0,
         minStock: parseInt(String(formData.minStock), 10) || 0,
         year: formData.year ? parseInt(String(formData.year), 10) : undefined,
@@ -593,125 +647,161 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
               {/* Sección de Precios y Margen de Ganancia */}
               <div className="rounded-2xl p-3.5 sm:p-4 bg-gray-50/80 dark:bg-zinc-900/60 border border-gray-200/70 dark:border-zinc-800/80 transition-all">
                 
-                {/* Header: Title + Gain/Loss Badge */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                  <div>
-                    <h4 className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight flex items-center gap-1.5">
-                      <span>Precios y Margen de Ganancia</span>
-                    </h4>
-                    <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">
-                      Calcula el precio de venta a partir del costo y el % de margen deseado.
-                    </p>
-                  </div>
+                {formData.type === 'Piezas' ? (
+                  <>
+                    {/* Header: Title + Gain/Loss Badge */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight flex items-center gap-1.5">
+                          <span>Precios y Margen de Ganancia</span>
+                        </h4>
+                        <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">
+                          Calcula el precio de venta a partir del costo y el % de margen deseado.
+                        </p>
+                      </div>
 
-                  {/* Badge de Ganancia / Pérdida en Tiempo Real */}
-                  {currentCost > 0 && currentPrice > 0 && (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border self-start sm:self-auto shrink-0 ${
-                      isLoss
-                        ? 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 border-red-200 dark:border-red-800/50'
-                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50'
-                    }`}>
-                      <span>{isLoss ? '⚠️' : '📈'}</span>
-                      <span>{isLoss ? 'Pérdida: ' : 'Ganancia: '}</span>
-                      <strong className="font-mono font-black">
-                        RD$ {Math.abs(profitAmount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </strong>
-                      <span className="opacity-80">({profitMargin >= 0 ? '+' : ''}{profitMargin.toFixed(1)}%)</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* 3 Columns Input Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-start">
-                  
-                  {/* 1. Costo Unitario ($) */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                      Costo Unitario ($) *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-gray-400 dark:text-zinc-500 text-xs">$</span>
-                      <input 
-                        required 
-                        name="cost" 
-                        value={formData.cost} 
-                        onChange={handleCostChange} 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
-                        className="block w-full pl-7 pr-3 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all font-mono font-bold text-sm" 
-                        placeholder="0.00" 
-                      />
-                    </div>
-                  </div>
-
-                  {/* 2. % de Ganancia */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300">
-                        % de Ganancia
-                      </label>
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">Margen</span>
-                    </div>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        step="any"
-                        value={marginPercent} 
-                        onChange={(e) => handleMarginChange(e.target.value)} 
-                        className="block w-full pl-3 pr-7 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all font-mono font-bold text-sm" 
-                        placeholder="30" 
-                      />
-                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-bold text-gray-400 dark:text-zinc-500 text-xs">%</span>
+                      {/* Badge de Ganancia / Pérdida en Tiempo Real */}
+                      {currentCost > 0 && currentPrice > 0 && (
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border self-start sm:self-auto shrink-0 ${
+                          isLoss
+                            ? 'bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 border-red-200 dark:border-red-800/50'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50'
+                        }`}>
+                          <span>{isLoss ? '⚠️' : '📈'}</span>
+                          <span>{isLoss ? 'Pérdida: ' : 'Ganancia: '}</span>
+                          <strong className="font-mono font-black">
+                            RD$ {Math.abs(profitAmount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </strong>
+                          <span className="opacity-80">({profitMargin >= 0 ? '+' : ''}{profitMargin.toFixed(1)}%)</span>
+                        </span>
+                      )}
                     </div>
 
-                    {/* Botones rápidos de porcentaje en 1 sola fila continua */}
-                    <div className="flex items-center gap-1 mt-1.5">
-                      {[15, 25, 30, 50, 100].map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => handleMarginChange(String(pct))}
-                          className={`flex-1 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer text-center ${
-                            parseFloat(marginPercent) === pct
-                              ? 'bg-[#ED1C24] text-white shadow-xs'
-                              : 'bg-gray-200/80 dark:bg-zinc-700/60 text-gray-700 dark:text-zinc-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
-                          }`}
-                        >
-                          +{pct}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    {/* 3 Columns Input Grid para Piezas */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-start">
+                      
+                      {/* 1. Costo Unitario ($) */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                          Costo Unitario ($) *
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-gray-400 dark:text-zinc-500 text-xs">$</span>
+                          <input 
+                            required 
+                            name="cost" 
+                            value={formData.cost} 
+                            onChange={handleCostChange} 
+                            onBlur={handleBlurCost}
+                            type="text" 
+                            inputMode="decimal"
+                            className="block w-full pl-7 pr-3 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all font-mono font-bold text-sm" 
+                            placeholder="0.00" 
+                          />
+                        </div>
+                      </div>
 
-                  {/* 3. Precio de Venta ($) */}
+                      {/* 2. % de Ganancia */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                            % de Ganancia
+                          </label>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">Margen</span>
+                        </div>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={marginPercent} 
+                            onChange={(e) => handleMarginChange(e.target.value)} 
+                            className="block w-full pl-3 pr-7 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all font-mono font-bold text-sm" 
+                            placeholder="30" 
+                          />
+                          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-bold text-gray-400 dark:text-zinc-500 text-xs">%</span>
+                        </div>
+
+                        {/* Botones rápidos de porcentaje en 1 sola fila continua */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          {[15, 25, 30, 50, 100].map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => handleMarginChange(String(pct))}
+                              className={`flex-1 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer text-center ${
+                                parseFloat(marginPercent) === pct
+                                  ? 'bg-[#ED1C24] text-white shadow-xs'
+                                  : 'bg-gray-200/80 dark:bg-zinc-700/60 text-gray-700 dark:text-zinc-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
+                              }`}
+                            >
+                              +{pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. Precio de Venta ($) */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                            Precio de Venta ($) *
+                          </label>
+                          <span className="text-[10px] font-bold text-[#ED1C24] dark:text-red-400">PVP Final</span>
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#ED1C24] dark:text-red-400 text-xs">$</span>
+                          <input 
+                            required 
+                            name="price" 
+                            value={formData.price} 
+                            onChange={handlePriceChange} 
+                            onBlur={handleBlurPrice}
+                            type="text" 
+                            inputMode="decimal"
+                            className="block w-full pl-7 pr-3 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-2 border-[#ED1C24]/40 dark:border-[#ED1C24]/50 rounded-xl focus:ring-2 focus:ring-[#ED1C24] transition-all font-mono font-black text-sm" 
+                            placeholder="0.00" 
+                          />
+                        </div>
+                        <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 mt-1 block">
+                          Calculado por % o ingresado manual
+                        </span>
+                      </div>
+
+                    </div>
+                  </>
+                ) : (
+                  /* Camiones y Equipos Pesados: Solo Precio de Venta directo */
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                    <div className="mb-2">
+                      <h4 className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight">
+                        Precio de Venta
+                      </h4>
+                      <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium">
+                        Fija el precio de venta final para este {formData.type === 'Camiones' ? 'camión' : 'equipo pesado'}.
+                      </p>
+                    </div>
+
+                    <div className="max-w-xs">
+                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
                         Precio de Venta ($) *
                       </label>
-                      <span className="text-[10px] font-bold text-[#ED1C24] dark:text-red-400">PVP Final</span>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#ED1C24] dark:text-red-400 text-xs">$</span>
+                        <input 
+                          required 
+                          name="price" 
+                          value={formData.price} 
+                          onChange={handlePriceChange} 
+                          onBlur={handleBlurPrice}
+                          type="text" 
+                          inputMode="decimal"
+                          className="block w-full pl-7 pr-3 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-2 border-[#ED1C24]/40 dark:border-[#ED1C24]/50 rounded-xl focus:ring-2 focus:ring-[#ED1C24] transition-all font-mono font-black text-sm" 
+                          placeholder="0.00" 
+                        />
+                      </div>
                     </div>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#ED1C24] dark:text-red-400 text-xs">$</span>
-                      <input 
-                        required 
-                        name="price" 
-                        value={formData.price} 
-                        onChange={handlePriceChange} 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
-                        className="block w-full pl-7 pr-3 py-2 bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border-2 border-[#ED1C24]/40 dark:border-[#ED1C24]/50 rounded-xl focus:ring-2 focus:ring-[#ED1C24] transition-all font-mono font-black text-sm" 
-                        placeholder="0.00" 
-                      />
-                    </div>
-                    <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 mt-1 block">
-                      Calculado por % o ingresado manual
-                    </span>
                   </div>
-
-                </div>
+                )}
 
                 {/* 4. Selector de Inclusión de ITBIS (18%) */}
                 <div className="mt-4 pt-3.5 border-t border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -764,36 +854,7 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                   </div>
                 </div>
 
-                {/* Desglose visual minimalista en tiempo real */}
-                {currentPrice > 0 && (
-                  <div className="mt-2.5 px-3.5 py-2.5 bg-gray-50/80 dark:bg-zinc-900/50 rounded-xl border border-gray-200/70 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
-                    {formData.itbis_type === 'exento' ? (
-                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                        <span>Precio Exento: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>ITBIS: <strong className="text-zinc-950 dark:text-white">RD$ 0.00</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>Total Venta: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
-                      </div>
-                    ) : (formData.includes_itbis === false || formData.itbis_type === 'adicional') ? (
-                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                        <span>Precio Base: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>ITBIS (18%): <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice * 0.18).toFixed(2)}</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>Total con ITBIS: <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice * 1.18).toFixed(2)}</strong></span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                        <span>Base Imponible: <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice / 1.18).toFixed(2)}</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>ITBIS (18%): <strong className="text-zinc-950 dark:text-white">RD$ {(currentPrice - (currentPrice / 1.18)).toFixed(2)}</strong></span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                        <span>Total Venta: <strong className="text-zinc-950 dark:text-white">RD$ {currentPrice.toFixed(2)}</strong></span>
-                      </div>
-                    )}
-                  </div>
-                )}
+
 
                 {/* 5. Visibilidad del Precio en Catálogo y Tienda Digital */}
                 <div className="mt-3.5 pt-3.5 border-t border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -843,22 +904,7 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
                 </div>
               </div>
 
-              {/* Campos Opcionales para Piezas */}
-              {formData.type === 'Piezas' && (
-                <div className="pt-1">
-                  <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                    Compatibilidad / Descripción (Opcional)
-                  </label>
-                  <input 
-                    name="compatibility" 
-                    value={formData.compatibility || ''} 
-                    onChange={handleChange} 
-                    type="text" 
-                    className="block w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/60 text-gray-900 dark:text-zinc-100 dark:placeholder-zinc-500 border border-gray-200/80 dark:border-zinc-700/80 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 focus:border-[#ED1C24] transition-all text-xs font-semibold" 
-                    placeholder="Ej. Motores CAT C15 / Mack MP8 o aplicación específica" 
-                  />
-                </div>
-              )}
+
 
               {/* Campos Específicos por Tipo (Camiones o Equipos Pesados) */}
               {(formData.type === 'Camiones' || formData.type === 'Equipos Pesados') && (

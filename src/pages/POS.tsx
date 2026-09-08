@@ -222,7 +222,7 @@ const CatalogProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: 
           <div className="flex flex-col">
             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">Precio</span>
             <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
-              ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
             </span>
           </div>
 
@@ -298,7 +298,7 @@ const CatalogProductListItem = memo(({ product, onAdd }: { product: any; onAdd: 
 
       <div className="flex items-center gap-3 shrink-0">
         <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono">
-          ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
         </span>
         <button
           type="button"
@@ -338,7 +338,7 @@ const CatalogProductCompactCard = memo(({ product, onAdd }: { product: any; onAd
         </p>
         <div className="mt-1 flex items-center justify-between">
           <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
-            ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
           </span>
           <PlusIcon className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#ED1C24]" />
         </div>
@@ -2649,53 +2649,53 @@ export default function POS() {
 
   return (
     <div className="h-[100dvh] w-full max-w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] text-gray-900 dark:text-white flex flex-col transition-colors duration-300 overflow-hidden font-sans">
-      <header className="min-h-16 md:h-20 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white flex flex-wrap items-center justify-between px-4 sm:px-8 py-3 shrink-0 print:hidden z-20 border-b border-gray-100 dark:border-zinc-800 shadow-xs transition-colors duration-300 gap-3">
-        <div className="flex items-center gap-3 sm:gap-5 min-w-0">
+      <header className="w-full bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-white flex items-center justify-between px-3 sm:px-6 py-2.5 shrink-0 print:hidden z-20 border-b border-gray-100 dark:border-zinc-800 shadow-xs transition-colors duration-300 gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 shrink-0">
           {/* Back button dynamically displayed if user has permission to other modules */}
           {hasPermission(getActiveRole(), 'Dashboard', 'ver') ? (
             <>
               <Link 
                 to="/dashboard" 
-                className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
+                className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
                 title="Volver al panel principal"
               >
-                <ArrowLeftIcon className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
+                <ArrowLeftIcon className="h-4 w-4 sm:h-5 sm:w-5 group-hover:-translate-x-0.5 transition-transform" />
               </Link>
-              <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800"></div>
+              <div className="h-6 w-px bg-gray-200 dark:bg-zinc-800 hidden sm:block"></div>
             </>
           ) : hasPermission(getActiveRole(), 'Inventario', 'ver') ? (
             <>
               <Link 
                 to="/inventario" 
-                className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
+                className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-900 dark:text-white transition-all duration-200 group cursor-pointer shrink-0"
                 title="Ir al módulo de Inventario"
               >
-                <ArrowLeftIcon className="h-5 w-5 group-hover:-translate-x-0.5 transition-transform" />
+                <ArrowLeftIcon className="h-4 w-4 sm:h-5 sm:w-5 group-hover:-translate-x-0.5 transition-transform" />
               </Link>
-              <div className="h-7 w-px bg-gray-200 dark:bg-zinc-800"></div>
+              <div className="h-6 w-px bg-gray-200 dark:bg-zinc-800 hidden sm:block"></div>
             </>
           ) : null}
 
-          <div>
-            <div className="text-[10px] sm:text-xs font-black tracking-tight text-gray-900 dark:text-white uppercase">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] font-bold tracking-tight text-gray-400 dark:text-zinc-500 uppercase truncate">
               Brianna Heavy Equipment • RNC: 132610362
             </div>
-            <h1 className="text-base sm:text-xl font-black text-gray-900 dark:text-white tracking-tight leading-none truncate">
+            <h1 className="text-sm sm:text-base lg:text-lg font-black text-gray-900 dark:text-white tracking-tight leading-tight truncate">
               Punto de Venta & Caja
             </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide py-0.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 overflow-x-auto scrollbar-hide py-0.5">
           {/* Direct Access to Cotizaciones */}
           <button
             type="button"
             onClick={() => setIsQuotationsModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
             title="Cotizaciones guardadas (vigentes 30 días)"
           >
             <ClipboardDocumentListIcon className="h-4 w-4 text-zinc-600 dark:text-zinc-400 stroke-[2.2]" />
-            <span className="hidden md:inline">Cotizaciones</span>
+            <span className="hidden xl:inline">Cotizaciones</span>
             {activeQuotationsCount > 0 && (
               <span className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[10px] font-black px-1.5 py-0.2 rounded-full">
                 {activeQuotationsCount}
@@ -2707,27 +2707,27 @@ export default function POS() {
           {hasPermission(getActiveRole(), 'Inventario', 'ver') && (
             <Link
               to="/inventario"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap"
               title="Módulo de Inventario de Repuestos"
             >
               <WrenchScrewdriverIcon className="h-4 w-4 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
-              <span className="hidden md:inline">Inventario</span>
+              <span className="hidden xl:inline">Inventario</span>
             </Link>
           )}
 
           {/* User Profile Badge */}
           <div 
-            className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1 rounded-xl border border-zinc-200/70 dark:border-zinc-800 shadow-2xs"
+            className="flex items-center gap-1.5 sm:gap-2 bg-zinc-100 dark:bg-zinc-900 px-2 sm:px-2.5 py-1 rounded-xl border border-zinc-200/70 dark:border-zinc-800 shadow-2xs"
             title={`${currentUserName} (${getActiveRole() === 'Repuestos' ? 'Cajero' : getActiveRole()})`}
           >
             <div className="w-5 h-5 rounded-lg bg-red-100 dark:bg-red-950/60 text-[#ED1C24] font-black text-[11px] flex items-center justify-center shrink-0">
               {(currentUserName || 'U').charAt(0).toUpperCase()}
             </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <span className="text-xs font-bold text-gray-900 dark:text-white leading-none max-w-[110px] truncate">
+            <div className="hidden lg:flex flex-col text-left">
+              <span className="text-xs font-bold text-gray-900 dark:text-white leading-none max-w-[90px] xl:max-w-[120px] truncate">
                 {currentUserName}
               </span>
-              <span className="text-[8.5px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider leading-none mt-0.5">
+              <span className="text-[8px] font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider leading-none mt-0.5">
                 {getActiveRole() === 'Repuestos' ? 'Cajero' : getActiveRole()}
               </span>
             </div>
@@ -2739,21 +2739,23 @@ export default function POS() {
             <button
               type="button"
               onClick={() => setIsSessionSalesOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
               title="Ventas de la Sesión"
             >
               <ReceiptPercentIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
               <span className="hidden sm:inline">Ventas</span>
-              <span className="bg-[#ED1C24] text-white text-[9.5px] font-mono font-black px-1.5 py-0.2 rounded-full leading-none">
-                {validSessionSales.length}
-              </span>
+              {validSessionSales.length > 0 && (
+                <span className="bg-[#ED1C24] text-white text-[9.5px] font-mono font-black px-1.5 py-0.2 rounded-full leading-none">
+                  {validSessionSales.length}
+                </span>
+              )}
             </button>
 
             {/* Movimientos de Caja */}
             <button
               type="button"
               onClick={() => setIsCashMovementOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
               title="Movimientos de Caja"
             >
               <BanknotesIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
@@ -2765,7 +2767,7 @@ export default function POS() {
               <button
                 type="button"
                 onClick={() => setIsCashClosureOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
                 title="Cierre y Arqueo de Caja"
               >
                 <CalculatorIcon className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -2775,7 +2777,7 @@ export default function POS() {
               <button
                 type="button"
                 onClick={() => setIsOpenShiftModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer whitespace-nowrap animate-pulse"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer whitespace-nowrap"
                 title="El turno está cerrado. Haz clic para abrir turno con el fondo inicial"
               >
                 <LockClosedIcon className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -2834,13 +2836,13 @@ export default function POS() {
                 : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 font-bold'
             }`}
           >
-            🛒 Carrito {cart.length > 0 ? `(${cart.length}) • $${total.toFixed(0)}` : '(0)'}
+            🛒 Carrito {cart.length > 0 ? `(${cart.length}) • RD$ ${total.toLocaleString('es-DO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '(0)'}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-2.5 sm:p-4 md:p-6 relative">
-        <div className="h-full flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-6 print:hidden">
+      <div className="flex-1 overflow-hidden p-2.5 sm:p-3.5 md:p-4 relative">
+        <div className="h-full flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-5 print:hidden">
       {/* Products Grid */}
       <div className={`flex-1 flex-col overflow-hidden ${mobileTab === 'cart' ? 'hidden md:flex' : 'flex'}`}>
         <div className="pb-2.5 sm:pb-4 space-y-2.5 sm:space-y-3">
@@ -3009,7 +3011,7 @@ export default function POS() {
       </div>
 
       {/* Cart Sidebar */}
-      <div className={`w-full md:w-[420px] flex-col bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-3xl md:rounded-[2rem] shadow-sm overflow-hidden relative z-10 ${mobileTab === 'catalog' ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full md:w-[350px] lg:w-[380px] xl:w-[420px] flex-col bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-2xl md:rounded-3xl shadow-sm overflow-hidden relative z-10 shrink-0 ${mobileTab === 'catalog' ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 sm:p-6 pb-3 sm:pb-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center relative z-10">
           <div className="flex items-center gap-3">
             <div className="p-2.5 sm:p-3 bg-gray-100 dark:bg-zinc-800 rounded-2xl">
@@ -3077,7 +3079,7 @@ export default function POS() {
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
-                          ${calculateItemTotal(item).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          RD$ {calculateItemTotal(item).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <button 
                           type="button"
@@ -3143,7 +3145,7 @@ export default function POS() {
                         title="Clic para modificar el precio de este producto"
                       >
                         <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-sans">c/u:</span>
-                        <span>${item.product.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>RD$ {item.product.price.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         <PencilSquareIcon className="w-3.5 h-3.5 opacity-70 ml-0.5" />
                       </button>
 
@@ -3168,7 +3170,7 @@ export default function POS() {
                         title="Aplicar descuento a este producto"
                       >
                         <TagIcon className="w-3 h-3" />
-                        <span>{item.discount && item.discount > 0 ? (item.discountType === '%' ? `-${item.discount}%` : `-$${item.discount}`) : '% Desc'}</span>
+                        <span>{item.discount && item.discount > 0 ? (item.discountType === '%' ? `-${item.discount}%` : `-RD$ ${item.discount.toLocaleString('es-DO')}`) : '% Desc'}</span>
                       </button>
                     </div>
 
@@ -3191,20 +3193,20 @@ export default function POS() {
                               onClick={() => resetItemPrice(item.product.id)}
                               className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 hover:text-[#ED1C24] underline cursor-pointer"
                             >
-                              Restablecer ($ {item.product.originalPrice.toFixed(2)})
+                              Restablecer (RD$ {item.product.originalPrice.toLocaleString('es-DO', { minimumFractionDigits: 2 })})
                             </button>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="relative flex-1">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 dark:text-zinc-500 font-mono">$</span>
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 dark:text-zinc-500 font-mono">RD$</span>
                             <input
                               type="number"
                               step="any"
                               min="0"
                               autoFocus
                               placeholder="Nuevo precio"
-                              className="w-full pl-6 pr-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                              className="w-full pl-9 pr-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
                               defaultValue={item.product.price}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
@@ -3269,7 +3271,7 @@ export default function POS() {
                               onClick={() => setItemDiscount(item.product.id, item.discount || 0, '$')}
                               className={`px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${item.discountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
                             >
-                              $
+                              RD$
                             </button>
                           </div>
                           <input
@@ -3308,100 +3310,103 @@ export default function POS() {
             <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
               <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">Subtotal</span>
-                <span className="font-black text-gray-900 dark:text-white font-mono">${subtotal.toFixed(2)}</span>
+                <span className="font-black text-gray-900 dark:text-white font-mono">RD$ {subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
 
               {/* Descuento Global Panel */}
-              <div className="flex flex-col gap-2">
-                {!isEditingGlobalDiscount && globalDiscount === 0 ? (
-                  <div className="flex justify-end">
-                    <button 
-                      onClick={() => setIsEditingGlobalDiscount(true)}
-                      className="text-xs font-black text-[#ED1C24] hover:underline transition-colors cursor-pointer"
-                    >
-                      + Añadir Descuento General
-                    </button>
-                  </div>
-                ) : !isEditingGlobalDiscount && globalDiscount > 0 ? (
-                  <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400 items-center">
-                    <div className="flex items-center gap-2">
+              {cart.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {!isEditingGlobalDiscount && globalDiscount === 0 ? (
+                    <div className="flex justify-between items-center text-xs sm:text-sm text-gray-600 dark:text-zinc-400">
                       <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">Descuento General</span>
                       <button 
                         onClick={() => setIsEditingGlobalDiscount(true)}
-                        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                        className="text-xs font-black text-[#ED1C24] hover:underline transition-colors cursor-pointer"
                       >
-                        <span className="text-[10px] bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded-full font-black text-gray-700 dark:text-zinc-300">Editar</span>
+                        + Añadir Descuento
                       </button>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-green-600 dark:text-green-400 font-mono">
-                        -{globalDiscountType === '%' ? `${globalDiscount}%` : `$${globalDiscount.toFixed(2)}`} 
-                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium ml-1">(-${globalDiscountAmount.toFixed(2)})</span>
-                      </span>
-                      <button 
-                        onClick={() => {
-                          setGlobalDiscount(0);
-                          setIsEditingGlobalDiscount(false);
-                        }}
-                        className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2 p-3 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">Descuento General</span>
-                      <button 
-                        onClick={() => setIsEditingGlobalDiscount(false)}
-                        className="text-xs font-bold text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-                        <button
-                          type="button"
-                          onClick={() => setGlobalDiscountType('%')}
-                          className={`shrink-0 px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '%' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                  ) : !isEditingGlobalDiscount && globalDiscount > 0 ? (
+                    <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400 items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">Descuento General</span>
+                        <button 
+                          onClick={() => setIsEditingGlobalDiscount(true)}
+                          className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                         >
-                          %
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGlobalDiscountType('$')}
-                          className={`shrink-0 px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
-                        >
-                          $
+                          <span className="text-[10px] bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded-full font-black text-gray-700 dark:text-zinc-300">Editar</span>
                         </button>
                       </div>
-                      <input
-                        type="number"
-                        placeholder="Monto / %"
-                        className="w-full min-w-0 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
-                        value={globalDiscount || ''}
-                        onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') setIsEditingGlobalDiscount(false);
-                        }}
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => setIsEditingGlobalDiscount(false)}
-                        className="shrink-0 px-3 py-1 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-black transition-colors cursor-pointer"
-                      >
-                        Aplicar
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-green-600 dark:text-green-400 font-mono">
+                          -{globalDiscountType === '%' ? `${globalDiscount}%` : `RD$ ${globalDiscount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                          <span className="text-[10px] sm:text-xs text-gray-400 font-medium ml-1">(-RD$ {globalDiscountAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                        </span>
+                        <button 
+                          onClick={() => {
+                            setGlobalDiscount(0);
+                            setIsEditingGlobalDiscount(false);
+                          }}
+                          className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 p-3 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">Descuento General</span>
+                        <button 
+                          onClick={() => setIsEditingGlobalDiscount(false)}
+                          className="text-xs font-bold text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => setGlobalDiscountType('%')}
+                            className={`shrink-0 px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '%' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGlobalDiscountType('$')}
+                            className={`shrink-0 px-2.5 sm:px-3 py-1 text-xs font-black transition-colors ${globalDiscountType === '$' ? 'bg-[#ED1C24] text-white' : 'text-gray-600 dark:text-gray-400'}`}
+                          >
+                            RD$
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="Monto / %"
+                          className="w-full min-w-0 px-2.5 py-1 text-xs font-bold bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ED1C24]"
+                          value={globalDiscount || ''}
+                          onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setIsEditingGlobalDiscount(false);
+                          }}
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setIsEditingGlobalDiscount(false)}
+                          className="shrink-0 px-3 py-1 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-black transition-colors cursor-pointer"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">ITBIS (18%)</span>
-                <span className="font-black text-gray-900 dark:text-white font-mono">${tax.toFixed(2)}</span>
+                <span className="font-black text-gray-900 dark:text-white font-mono">RD$ {tax.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
             <div className="flex justify-between items-baseline pt-3 sm:pt-4 border-t border-gray-200 dark:border-zinc-700">
@@ -3409,7 +3414,9 @@ export default function POS() {
                 <span className="text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-wider">Total Factura</span>
                 <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium">Impuestos incluidos</span>
               </div>
-              <span className="text-2xl sm:text-3xl font-black text-[#ED1C24] font-mono tracking-tight">${total.toFixed(2)}</span>
+              <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${total > 0 ? 'text-[#ED1C24]' : 'text-gray-900 dark:text-white'}`}>
+                RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
             </div>
           </div>
           
@@ -3443,7 +3450,7 @@ export default function POS() {
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider block">Total Factura</span>
-                <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">${total.toFixed(2)}</span>
+                <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
