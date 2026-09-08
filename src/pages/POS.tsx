@@ -36,7 +36,8 @@ import {
   PencilSquareIcon,
   Squares2X2Icon,
   ListBulletIcon,
-  SquaresPlusIcon
+  SquaresPlusIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
 import QuotationsModal from '../components/pos/QuotationsModal';
 import { 
@@ -62,7 +63,7 @@ import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../ser
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
 import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
-import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift } from '../services/shiftsService';
+import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift, isShiftOpen } from '../services/shiftsService';
 
 const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {
   const dateObj = inv.created_at ? new Date(inv.created_at) : new Date();
@@ -1718,6 +1719,7 @@ export default function POS() {
   const [isQuotationsModalOpen, setIsQuotationsModalOpen] = useState(false);
   const [activeQuotationsCount, setActiveQuotationsCount] = useState<number>(() => getActiveQuotationsCount());
   const [activeQuotationId, setActiveQuotationId] = useState<string | null>(null);
+  const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(activeRegister));
 
   useEffect(() => {
     const handleUserUpdate = () => {
@@ -1726,15 +1728,26 @@ export default function POS() {
     const handleQuotationsUpdate = () => {
       setActiveQuotationsCount(getActiveQuotationsCount());
     };
+    const handleShiftUpdate = () => {
+      setIsShiftActive(isShiftOpen(activeRegister));
+    };
+    const handleOpenShiftRequested = () => {
+      setIsOpenShiftModalOpen(true);
+    };
+
     window.addEventListener('brianna_role_updated', handleUserUpdate);
     window.addEventListener('brianna_user_updated', handleUserUpdate);
     window.addEventListener('brianna_quotations_updated', handleQuotationsUpdate);
+    window.addEventListener('brianna_shift_updated', handleShiftUpdate);
+    window.addEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
     return () => {
       window.removeEventListener('brianna_role_updated', handleUserUpdate);
       window.removeEventListener('brianna_user_updated', handleUserUpdate);
       window.removeEventListener('brianna_quotations_updated', handleQuotationsUpdate);
+      window.removeEventListener('brianna_shift_updated', handleShiftUpdate);
+      window.removeEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
     };
-  }, []);
+  }, [activeRegister]);
 
   const mapInventoryItemToProduct = useCallback((item: any) => ({
     id: String(item.id),
@@ -2189,8 +2202,17 @@ export default function POS() {
 
   const openCheckout = useCallback(() => {
     if (cart.length === 0) return;
+    if (!isShiftActive) {
+      showAlert({
+        title: 'Turno de Caja Cerrado',
+        description: 'Debes abrir el turno e ingresar el fondo inicial de caja para poder facturar.',
+        variant: 'warning'
+      });
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     setIsCheckoutModalOpen(true);
-  }, [cart.length]);
+  }, [cart.length, isShiftActive, showAlert]);
 
   const completeSale = async (saleParams: {
     billingMode: 'electronic' | 'internal';
@@ -2738,16 +2760,28 @@ export default function POS() {
               <span className="hidden sm:inline">Movimientos</span>
             </button>
 
-            {/* Cierre de Caja */}
-            <button
-              type="button"
-              onClick={() => setIsCashClosureOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
-              title="Cierre y Arqueo de Caja"
-            >
-              <CalculatorIcon className="h-3.5 w-3.5 stroke-[2.5]" />
-              <span>Cierre</span>
-            </button>
+            {/* Cierre de Caja / Abrir Turno */}
+            {isShiftActive ? (
+              <button
+                type="button"
+                onClick={() => setIsCashClosureOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                title="Cierre y Arqueo de Caja"
+              >
+                <CalculatorIcon className="h-3.5 w-3.5 stroke-[2.5]" />
+                <span>Cierre</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsOpenShiftModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer whitespace-nowrap animate-pulse"
+                title="El turno está cerrado. Haz clic para abrir turno con el fondo inicial"
+              >
+                <LockClosedIcon className="h-3.5 w-3.5 stroke-[2.5]" />
+                <span>Abrir Turno</span>
+              </button>
+            )}
           </div>
 
           {/* Theme & Logout Utility Controls */}
@@ -3689,8 +3723,13 @@ export default function POS() {
             registerName={activeRegister}
             onClose={() => setIsOpenShiftModalOpen(false)}
             onSuccess={(initialAmount) => {
-              console.log('Turno abierto con:', initialAmount);
               setIsOpenShiftModalOpen(false);
+              setIsShiftActive(true);
+              showAlert({
+                title: 'Turno Abierto con Éxito',
+                description: `La caja (${activeRegister}) ha sido abierta con un fondo de RD$ ${initialAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}. Ya puedes comenzar a facturar.`,
+                variant: 'success'
+              });
             }}
           />
         )}

@@ -156,7 +156,7 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     opened_at: openedAtStr,
     initial_fund: localFund,
     cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
-    is_open: true,
+    is_open: localFund > 0,
   };
 
   try {
@@ -164,6 +164,20 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
   } catch {}
 
   return defaultShift;
+};
+
+export const isShiftOpen = (registerName = 'Caja 1 - Repuestos'): boolean => {
+  const shiftKey = getShiftStorageKey(registerName);
+  try {
+    const raw = localStorage.getItem(shiftKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.is_open === 'boolean') {
+        return parsed.is_open;
+      }
+    }
+  } catch {}
+  return false;
 };
 
 export const openShift = (
@@ -201,19 +215,25 @@ export const closeShift = (registerName = 'Caja 1 - Repuestos', _closureId?: str
   setLastClosureTime('todas', nowIso);
 
   try {
-    const current = getActiveShift(registerName);
-    if (current) {
-      current.is_open = false;
-      current.closed_at = nowIso;
-      const lastClosedKey = `brianna_last_closed_${registerName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      localStorage.setItem(lastClosedKey, JSON.stringify(current));
-    }
     const shiftKey = getShiftStorageKey(registerName);
     const fundKey = getFundStorageKey(registerName);
-    localStorage.removeItem(shiftKey);
+
+    const closedShift: ActiveShift = {
+      id: `SHIFT-${registerName.substring(0, 3).toUpperCase()}-${Date.now()}`,
+      register_name: registerName,
+      opened_at: nowIso,
+      closed_at: nowIso,
+      initial_fund: 0,
+      cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
+      is_open: false,
+    };
+    localStorage.setItem(shiftKey, JSON.stringify(closedShift));
     localStorage.setItem(fundKey, '0');
-    localStorage.removeItem('brianna_active_shift');
+    localStorage.setItem('brianna_active_shift', JSON.stringify(closedShift));
     localStorage.setItem('brianna_initial_cash_fund', '0');
+
+    const lastClosedKey = `brianna_last_closed_${registerName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    localStorage.setItem(lastClosedKey, JSON.stringify(closedShift));
   } catch (e) {
     console.error('Error closing active shift:', e);
   }

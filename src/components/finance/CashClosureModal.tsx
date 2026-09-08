@@ -573,9 +573,10 @@ Observaciones: ${notes || 'Sin observaciones'}
   const currentDateStr = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' });
   const currentTimeStr = now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
-  const shiftStartStr = activeShift?.opened_at 
-    ? new Date(activeShift.opened_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })
-    : 'Inicio de jornada';
+  const isShiftOpenState = activeShift?.is_open;
+  const shiftStartStr = isShiftOpenState
+    ? (activeShift?.opened_at ? new Date(activeShift.opened_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'En curso')
+    : 'Cerrado';
 
   if (!isOpen) return null;
 
@@ -603,20 +604,45 @@ Observaciones: ${notes || 'Sin observaciones'}
                     <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
                       {selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister}
                     </span>
+                    {!isShiftOpenState && (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40">
+                        Turno Cerrado
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 mt-0.5 font-medium">
                     <ClockIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <span>{currentDateStr} • {currentTimeStr}</span>
                     <span className="text-zinc-300 dark:text-zinc-700">|</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                      Turno: {shiftStartStr} ({totalDocsCount} {totalDocsCount === 1 ? 'venta/cobro' : 'ventas/cobros'})
-                    </span>
+                    {isShiftOpenState ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        Turno: {shiftStartStr} ({totalDocsCount} {totalDocsCount === 1 ? 'venta/cobro' : 'ventas/cobros'})
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400 font-bold">
+                        Turno Cerrado (0 docs en curso)
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 self-end sm:self-auto">
+                {!isShiftOpenState && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose(false);
+                      window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
+                    }}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer animate-pulse"
+                    title="Abrir turno con fondo inicial"
+                  >
+                    <span>Abrir Turno</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => handlePrint()}
