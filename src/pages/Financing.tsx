@@ -590,7 +590,7 @@ export default function Financing() {
     setNewItemType(fin.itemType || 'Equipo_Pesado');
     setNewTotalValue(formatCurrencyInput(fin.totalValue || fin.amount));
     setNewDownPayment(formatCurrencyInput(fin.downPayment || 0));
-    setNewRate(String(fin.rate || 2.0));
+    setNewRate(String(fin.rate !== undefined && fin.rate !== null ? fin.rate : 2.0));
     setNewMonths(String(fin.months || fin.installments?.length || 24));
     setNewNextPayment(fin.nextPayment || fin.startDate || defaultNextMonthDate());
     setNewGuarantorName(fin.guarantor || '');
@@ -720,7 +720,7 @@ export default function Financing() {
     const finalInicial = modalInicial;
     const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : Math.max(0, finalTotal - finalInicial);
     const finalMonths = modalNumMonths || 24;
-    const finalRate = parseFloat(newRate) || 2.0;
+    const finalRate = isNaN(parseFloat(newRate)) ? 2.0 : Math.max(0, parseFloat(newRate));
     const baseDate = newNextPayment ? new Date(newNextPayment) : new Date();
 
     let balance = finalFinanced;
@@ -1998,20 +1998,20 @@ export default function Financing() {
                           <input
                             type="number"
                             step="0.1"
-                            min="0.1"
+                            min="0"
                             max="50"
                             value={newRate}
                             onChange={(e) => setNewRate(e.target.value)}
                             className="w-full pl-2.5 pr-6 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold font-mono text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-[#ED1C24]"
-                            placeholder="2.0"
+                            placeholder="0.0"
                           />
                           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
                             %
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-1 flex-1">
-                          {['1.5', '2.0', '2.5', '3.0'].map((r) => (
+                        <div className="grid grid-cols-5 gap-1 flex-1">
+                          {['0', '1.5', '2.0', '2.5', '3.0'].map((r) => (
                             <button
                               key={r}
                               type="button"
@@ -2154,7 +2154,7 @@ export default function Financing() {
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tasa Mensual (%)</label>
-              <input type="number" step="0.1" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium font-mono" />
+              <input type="number" step="0.1" min="0" value={rate} onChange={e => setRate(Number(e.target.value))} className="block w-full px-4 py-3 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white border-none rounded-full focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-medium font-mono" />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Plazo (Meses)</label>
