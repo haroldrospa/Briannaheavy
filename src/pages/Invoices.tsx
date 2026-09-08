@@ -20,6 +20,7 @@ import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
+import { matchesCashierUser } from '../services/shiftsService';
 
 
 const containerVariants = {
@@ -39,6 +40,7 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>(getLocalStorageInvoices);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'todos' | 'electronic' | 'internal'>('todos');
+  const [salesScope, setSalesScope] = useState<'mis_facturas' | 'todas'>('mis_facturas');
   const [currentRole, setCurrentRole] = useState<UserRole>(getActiveRole);
 
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -104,15 +106,12 @@ export default function Invoices() {
   const filteredInvoices = invoices.filter(inv => {
     if (isQuotationInvoice(inv)) return false;
 
-    // Si no es Administrador, solo mostrar facturas emitidas por este usuario
-    if (!isAdmin) {
+    // Cada usuario solo puede ver las ventas que él mismo facturó
+    if (salesScope === 'mis_facturas' || !isAdmin) {
       const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
-      if (currentUserName) {
-        const cLower = currentUserName.toLowerCase().trim();
-        const invCashier = (inv.cashier_name || '').toLowerCase().trim();
-        if (invCashier && !invCashier.includes(cLower) && !cLower.includes(invCashier)) {
-          return false;
-        }
+      const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
+      if (!matchesCashierUser(inv.cashier_name, currentUserName, currentUserEmail)) {
+        return false;
       }
     }
 
@@ -175,6 +174,34 @@ export default function Invoices() {
             className="block w-full pl-10 sm:pl-11 pr-4 py-2.5 sm:py-3 bg-white dark:bg-[#121318] text-gray-900 dark:text-zinc-100 border border-transparent dark:border-zinc-800 rounded-full shadow-xs text-xs sm:text-sm font-medium focus:ring-2 focus:ring-gray-900/20 transition-all dark:placeholder-zinc-500 outline-none" 
           />
         </div>
+
+        {/* Sales Scope Tabs (Mis Facturas vs Todas) */}
+        {isAdmin && (
+          <div className="flex items-center p-1 bg-white dark:bg-[#121318] rounded-full border border-gray-200/80 dark:border-zinc-800 shadow-xs shrink-0">
+            <button
+              type="button"
+              onClick={() => setSalesScope('mis_facturas')}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                salesScope === 'mis_facturas'
+                  ? 'bg-[#ED1C24] text-white shadow-xs'
+                  : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Mis Facturas
+            </button>
+            <button
+              type="button"
+              onClick={() => setSalesScope('todas')}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                salesScope === 'todas'
+                  ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-gray-900 shadow-xs'
+                  : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              Todas (General)
+            </button>
+          </div>
+        )}
 
         {/* Filter Mode Tabs */}
         <div className="flex items-center p-1 bg-white dark:bg-[#121318] rounded-full border border-gray-200/80 dark:border-zinc-800 shadow-xs overflow-x-auto scrollbar-hide shrink-0">

@@ -62,7 +62,7 @@ import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../ser
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
 import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
-import { filterInvoicesByShift, isQuotationInvoice } from '../services/shiftsService';
+import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift } from '../services/shiftsService';
 
 const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {
   const dateObj = inv.created_at ? new Date(inv.created_at) : new Date();
@@ -90,6 +90,8 @@ const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {
     paymentMethod: (inv.payment_method as any) || 'Efectivo',
     invoiceType: typeDesc,
     total: Number(inv.total_amount) || 0,
+    cashier: inv.cashier_name,
+    cashier_name: inv.cashier_name,
   };
 };
 
@@ -1855,7 +1857,7 @@ export default function POS() {
 
     const localInvs = getLocalStorageInvoices();
     if (localInvs) {
-      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i))).map(mapInvoiceToSessionSale));
+      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(), 'todas', currentUserName).map(mapInvoiceToSessionSale));
     }
 
     // 2. Async background sync with Supabase
@@ -1878,7 +1880,7 @@ export default function POS() {
         })));
       }
       if (invs) {
-        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i))).map(mapInvoiceToSessionSale));
+        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(), 'todas', currentUserName).map(mapInvoiceToSessionSale));
         setActiveQuotationsCount(getActiveQuotationsCount());
       }
     };
@@ -1965,15 +1967,30 @@ export default function POS() {
   const [sessionSales, setSessionSales] = useState<SessionSale[]>([]);
 
   // Garantizar que las cotizaciones nunca sumen en la cuenta de ventas de la sesión
+  // y que cada usuario SÓLO vea las ventas que él mismo facturó
   const validSessionSales = useMemo(() => {
+    const userEmail = typeof window !== 'undefined' ? (localStorage.getItem('brianna_user_email') || '') : '';
+    const myName = currentUserName || (typeof window !== 'undefined' ? (localStorage.getItem('brianna_user_name') || '') : '');
+
     return sessionSales.filter(s => {
       const id = String(s.id || '').toUpperCase();
       const ncf = String(s.ncf || '').toUpperCase();
       const invType = String(s.invoiceType || '').toUpperCase();
       const method = String(s.paymentMethod || '').toLowerCase();
-      return !id.startsWith('CT-') && !ncf.startsWith('CT') && invType !== 'CT' && !method.includes('cotiz');
+      const isCotiz = id.startsWith('CT-') || ncf.startsWith('CT') || invType === 'CT' || method.includes('cotiz');
+      if (isCotiz) return false;
+
+      // Cada usuario SOLO puede ver las ventas que él mismo facturó
+      if (myName) {
+        const cashier = String(s.cashier || (s as any).cashier_name || '');
+        if (cashier && !matchesCashierUser(cashier, myName, userEmail)) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [sessionSales]);
+  }, [sessionSales, currentUserName]);
 
   // Billing & e-CF Modes: 'internal' (Sistema / No DGII por defecto) vs 'electronic' (DGII e-CF)
   const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');

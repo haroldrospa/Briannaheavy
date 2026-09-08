@@ -161,37 +161,58 @@ export const isQuotationInvoice = (inv: Invoice | any): boolean => {
   );
 };
 
+// Función auxiliar para comparar cajero con el usuario en sesión
+export const matchesCashierUser = (
+  invoiceCashier?: string, 
+  userName?: string, 
+  userEmail?: string
+): boolean => {
+  if (!userName && !userEmail) return true;
+  const cashier = (invoiceCashier || '').toLowerCase().trim();
+  if (!cashier) return true;
+
+  const meName = (userName || '').toLowerCase().trim();
+  const meEmail = (userEmail || '').toLowerCase().trim();
+  const prefix = meEmail.includes('@') ? meEmail.split('@')[0] : '';
+
+  if (meName && (cashier.includes(meName) || meName.includes(cashier))) return true;
+  if (prefix && prefix.length >= 3 && cashier.includes(prefix)) return true;
+
+  if (meName) {
+    const parts = meName.split(/\s+/).filter(p => p.length >= 3);
+    if (parts.some(p => cashier.includes(p))) return true;
+  }
+
+  return false;
+};
+
 /**
- * Filtra facturas/ventas garantizando unicidad por Caja y Cajero.
+ * Filtra facturas/ventas garantizando que cada usuario sólo vea las ventas que él mismo facturó.
  * Las cotizaciones nunca deben incluirse en ventas ni turnos de caja.
- * Los usuarios que no son Administradores sólo pueden ver lo que ellos mismos han facturado.
+ * Las cotizaciones son las únicas visibles por todos los usuarios.
  */
 export const filterInvoicesByShift = (
   invoices: Invoice[],
   filterMode: 'shift' | 'today' | 'all' = 'shift',
   activeShift: ActiveShift = getActiveShift(),
   selectedRegister = 'todas',
-  selectedCashier = 'todos'
+  selectedCashier = 'current_user'
 ): Invoice[] => {
   // Excluir SIEMPRE las cotizaciones de cualquier cálculo de caja o ventas
   let list = (invoices || []).filter(inv => !isQuotationInvoice(inv));
 
-  const currentRole = getActiveRole();
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+  const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  // Si el usuario no es Administrador, SIEMPRE forzar el filtro a sus propias facturas
+  // Cada venta es independiente: por defecto filtrar a las ventas del usuario actual
   let effectiveCashier = selectedCashier;
-  if (currentRole !== 'Administrador' && currentUserName) {
+  if (effectiveCashier === 'current_user' || !effectiveCashier) {
     effectiveCashier = currentUserName;
   }
 
-  // 1. Filtrar por Cajera/Usuario si se seleccionó una en específico o si no es admin
-  if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
-    const cLower = effectiveCashier.toLowerCase().trim();
-    list = list.filter(inv => {
-      const cashier = (inv.cashier_name || '').toLowerCase().trim();
-      return cashier.includes(cLower) || cLower.includes(cashier);
-    });
+  // 1. Filtrar por Cajera/Usuario si no se solicitó explícitamente ver 'todas'
+  if (effectiveCashier !== 'todas' && effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+    list = list.filter(inv => matchesCashierUser(inv.cashier_name, effectiveCashier, currentUserEmail));
   }
 
   // 2. Filtrar por Caja específica si no es 'todas'

@@ -26,6 +26,8 @@ export interface SessionSale {
   total: number;
   subtotal?: number;
   tax_amount?: number;
+  cashier?: string;
+  cashier_name?: string;
   items?: { description: string; quantity: number; unit_price: number; total_price: number }[];
 }
 
