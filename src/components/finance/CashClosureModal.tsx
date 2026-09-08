@@ -17,22 +17,18 @@ import {
   BoltIcon, 
   PencilSquareIcon, 
   CheckIcon, 
-  ClockIcon,
-  BuildingStorefrontIcon,
-  UserCircleIcon
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, type CashMovement } from '../../services/cashMovementsService';
 import { createCashClosure, type CashClosure } from '../../services/cashClosuresService';
 import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
-import { getLocalStorageUsers } from '../../services/usersService';
 import { 
   getActiveShift, 
   closeShift, 
   updateActiveShiftFund, 
   filterInvoicesByShift, 
   filterMovementsByShift,
-  CASH_REGISTERS,
   type ActiveShift 
 } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
@@ -94,20 +90,6 @@ export default function CashClosureModal({
   const [isSavingClosure, setIsSavingClosure] = useState(false);
   const [savedClosure, setSavedClosure] = useState<CashClosure | null>(null);
 
-  // Lista dinámica de usuarios / cajeras disponibles
-  const availableCashiers = useMemo(() => {
-    const list = new Set<string>();
-    const users = getLocalStorageUsers();
-    users.forEach(u => { if (u.full_name) list.add(u.full_name); });
-    allInvoices.forEach(i => { if (i.cashier_name) list.add(i.cashier_name); });
-    allFinancingReceipts.forEach(r => { if (r.cashierName) list.add(r.cashierName); });
-    if (list.size === 0) {
-      list.add('Harold Rosado');
-      list.add('Harold Cajero');
-      list.add('Carlos Díaz');
-    }
-    return Array.from(list);
-  }, [allInvoices, allFinancingReceipts]);
 
   // Cargar datos iniciales al abrir o al cambiar de caja seleccionada
   useEffect(() => {
@@ -116,11 +98,10 @@ export default function CashClosureModal({
     if (defaultRegister && defaultRegister !== selectedRegister) {
       setSelectedRegister(defaultRegister);
     }
-    if (!isAdmin) {
-      setSelectedCashierFilter(loggedInUserName);
-      setCashierName(loggedInUserName);
-    }
-  }, [isOpen, defaultRegister, isAdmin, loggedInUserName]);
+    setSelectedCashierFilter(loggedInUserName);
+    setCashierName(loggedInUserName);
+    setFilterMode('shift');
+  }, [isOpen, defaultRegister, loggedInUserName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -132,18 +113,10 @@ export default function CashClosureModal({
     const fund = shift ? shift.initial_fund : 0;
     setInitialFund(fund);
     setTempFund(String(fund));
+    setCashierName(loggedInUserName);
+  }, [isOpen, selectedRegister, loggedInUserName]);
 
-    if (!isAdmin) {
-      setCashierName(loggedInUserName);
-    } else {
-      const localUser = defaultCashier || localStorage.getItem('brianna_user_name');
-      if (localUser) {
-        setCashierName(localUser);
-      } else if (shift?.cashier_name) {
-        setCashierName(shift.cashier_name);
-      }
-    }
-
+  useEffect(() => {
     const loadData = async () => {
       const [invs, movs] = await Promise.all([
         fetchInvoices(true),
@@ -628,110 +601,6 @@ Observaciones: ${notes || 'Sin observaciones'}
                 >
                   <XMarkIcon className="h-5 w-5" />
                 </button>
-              </div>
-            </div>
-
-            {/* Multi-Caja & Multi-Cajero Control Bar */}
-            <div className="px-5 sm:px-6 py-2.5 bg-zinc-50/70 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-              {/* Caja Selector Pills */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                <span className="text-[10px] font-semibold uppercase text-zinc-400 dark:text-zinc-500 mr-1 flex items-center gap-1 shrink-0">
-                  <BuildingStorefrontIcon className="w-3.5 h-3.5" /> Caja:
-                </span>
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl">
-                  {CASH_REGISTERS.map((reg) => {
-                    const isActive = selectedRegister === reg;
-                    return (
-                      <button
-                        key={reg}
-                        type="button"
-                        onClick={() => setSelectedRegister(reg)}
-                        className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer text-xs ${
-                          isActive
-                            ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                        }`}
-                      >
-                        {reg}
-                      </button>
-                    );
-                  })}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRegister('todas')}
-                      className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all cursor-pointer text-xs ${
-                        selectedRegister === 'todas'
-                          ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-bold'
-                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                      }`}
-                    >
-                      Todas (Consolidado)
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Cashier Filter & Time Range Selector */}
-              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {/* Cajera Filter / Badge */}
-                {isAdmin ? (
-                  <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800/90 border border-zinc-200/80 dark:border-zinc-700/60 px-2.5 py-1 rounded-xl shadow-2xs">
-                    <UserCircleIcon className="w-4 h-4 text-zinc-400" />
-                    <select
-                      value={selectedCashierFilter}
-                      onChange={(e) => setSelectedCashierFilter(e.target.value)}
-                      className="bg-transparent font-medium text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer text-xs"
-                    >
-                      <option value="todos">Todos los Cajeros</option>
-                      {availableCashiers.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 px-2.5 py-1 rounded-xl shadow-2xs text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                    <UserCircleIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Cajero(a): {loggedInUserName}</span>
-                  </div>
-                )}
-
-                {/* Scope Time Pills */}
-                <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl text-[11px] font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode('shift')}
-                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                      filterMode === 'shift'
-                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white font-bold shadow-xs'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    Turno
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode('today')}
-                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                      filterMode === 'today'
-                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white font-bold shadow-xs'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    Hoy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode('all')}
-                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                      filterMode === 'all'
-                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white font-bold shadow-xs'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    Histórico
-                  </button>
-                </div>
               </div>
             </div>
 
