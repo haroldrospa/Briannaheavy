@@ -59,7 +59,7 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/clientes" element={<Customers />} />
                   <Route path="/facturas" element={<Invoices />} />
-                  <Route path="/usuarios" element={<Navigate to="/configuracion" replace />} />
+                  <Route path="/usuarios" element={<Navigate to="/configuracion?tab=usuarios" replace />} />
                   <Route path="/pos" element={<POS />} />
                   <Route path="/cobros" element={<Cobros />} />
                   <Route path="/inventario" element={<Inventory />} />
@@ -78,7 +78,8 @@ function App() {
                   <Route path="/catalog" element={<Navigate to="/catalogo" replace />} />
                   <Route path="/customers" element={<Navigate to="/clientes" replace />} />
                   <Route path="/invoices" element={<Navigate to="/facturas" replace />} />
-                  <Route path="/users" element={<Navigate to="/configuracion" replace />} />
+                  <Route path="/users" element={<Navigate to="/configuracion?tab=usuarios" replace />} />
+                  <Route path="/permisos" element={<Navigate to="/configuracion?tab=permisos" replace />} />
                   <Route path="/financing" element={<Navigate to="/financiamientos" replace />} />
                   <Route path="/reports" element={<Navigate to="/reportes" replace />} />
                   <Route path="/settings" element={<Navigate to="/configuracion" replace />} />

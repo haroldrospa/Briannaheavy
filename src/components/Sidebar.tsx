@@ -17,7 +17,8 @@ import {
   XMarkIcon,
   CurrencyDollarIcon,
   BuildingLibraryIcon,
-  TruckIcon
+  TruckIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermissions';
@@ -33,6 +34,7 @@ const navigation = [
   { name: 'Finanzas', href: '/financiamientos', icon: BanknotesIcon },
   { name: 'Banco', href: '/bancos', icon: BuildingLibraryIcon },
   { name: 'Reportes', href: '/reportes', icon: DocumentChartBarIcon, badge: '2' },
+  { name: 'Usuarios', href: '/configuracion?tab=usuarios', icon: ShieldCheckIcon },
   { name: 'Ajustes', href: '/configuracion', icon: Cog6ToothIcon },
 ];
 
@@ -67,7 +69,13 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
 
   // Recomputes when role or permissions change
   const filteredNavigation = useMemo(
-    () => navigation.filter(item => isRouteAllowed(item.href, currentRole)),
+    () => {
+      // El Administrador SIEMPRE ve TODOS los módulos y páginas sin excepción
+      if (currentRole === 'Administrador') {
+        return navigation;
+      }
+      return navigation.filter(item => isRouteAllowed(item.href, currentRole));
+    },
     [currentRole, permsVersion]
   );
 
@@ -110,7 +118,12 @@ export default function Sidebar({ onNewRequest, isOpen = false, onClose }: Sideb
       {/* Navigation */}
       <nav className="flex-1 space-y-1 xl:space-y-1.5">
         {filteredNavigation.map((item) => {
-          const isActive = location.pathname.startsWith(item.href);
+          const isExactQuery = item.href.includes('?');
+          const isActive = isExactQuery
+            ? (location.pathname + location.search) === item.href
+            : item.href === '/configuracion'
+              ? location.pathname === '/configuracion' && !location.search.includes('tab=usuarios')
+              : location.pathname === item.href || (location.pathname.startsWith(item.href) && item.href !== '/');
           return (
             <Link
               key={item.name}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import logo from '../assets/logo.png';
 import { 
@@ -98,7 +99,22 @@ const TABS = [
 ];
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('empresa');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (requestedTab && TABS.some(t => t.id === requestedTab)) {
+      return requestedTab;
+    }
+    return 'empresa';
+  });
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && TABS.some(t => t.id === tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   const tabsNavRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -309,6 +325,7 @@ export default function Settings() {
       setPinError('');
       return;
     }
+    setSearchParams({ tab: tabId }, { replace: true });
     setActiveTab(tabId);
   };
 
@@ -317,6 +334,7 @@ export default function Settings() {
     if (verifyAdminMasterKey(pinInput)) {
       setIsEcfUnlocked(true);
       setIsPinModalOpen(false);
+      setSearchParams({ tab: 'comprobantes_electronicos' }, { replace: true });
       setActiveTab('comprobantes_electronicos');
       setPinInput('');
       setPinError('');

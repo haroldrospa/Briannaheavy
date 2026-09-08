@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   SunIcon, 
   MoonIcon, 
@@ -6,11 +6,13 @@ import {
   Bars3Icon, 
   ShieldCheckIcon,
   BuildingOffice2Icon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  ChevronUpDownIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { getActiveRole, type UserRole } from '../utils/rolePermissions';
+import { getActiveRole, setActiveRole, type UserRole } from '../utils/rolePermissions';
 import { getLocalStorageUsers, type UserProfile } from '../services/usersService';
 
 const routeNames: Record<string, string> = {
@@ -117,6 +119,19 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
     };
   }, []);
 
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsRoleDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleLogout = useCallback(() => {
     navigate('/login');
   }, [navigate]);
@@ -142,27 +157,87 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
         </div>
         
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Responsive Professional User & Role Badge */}
-          <div 
-            className="flex items-center gap-2 bg-white dark:bg-[#121318] border border-gray-200/90 dark:border-zinc-800 p-1 sm:px-3 sm:py-1.5 rounded-2xl shadow-xs"
-            title={`${userName} (${currentRoleConfig?.label || activeRole})`}
-          >
-            <div className={`p-1.5 rounded-xl ${currentRoleConfig?.colorClass || 'bg-gray-100 text-gray-700'}`}>
-              <CurrentRoleIcon className="w-4 h-4 stroke-[2]" />
-            </div>
-            <div className="hidden sm:flex flex-col text-left">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black text-gray-900 dark:text-zinc-100 leading-tight">
-                  {userName}
-                </span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${currentRoleConfig?.badgeBg || 'bg-gray-100 text-gray-600'}`}>
-                  {currentRoleConfig?.label || activeRole}
+          {/* Responsive Professional User & Role Switcher */}
+          <div className="relative" ref={dropdownRef}>
+            <button 
+              type="button"
+              onClick={() => setIsRoleDropdownOpen(prev => !prev)}
+              className="flex items-center gap-2 bg-white dark:bg-[#121318] border border-gray-200/90 dark:border-zinc-800 p-1 sm:px-3 sm:py-1.5 rounded-2xl shadow-xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all cursor-pointer text-left"
+              title="Cambiar rol activo o ver perfil"
+            >
+              <div className={`p-1.5 rounded-xl ${currentRoleConfig?.colorClass || 'bg-gray-100 text-gray-700'}`}>
+                <CurrentRoleIcon className="w-4 h-4 stroke-[2]" />
+              </div>
+              <div className="hidden sm:flex flex-col text-left">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-gray-900 dark:text-zinc-100 leading-tight">
+                    {userName}
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${currentRoleConfig?.badgeBg || 'bg-gray-100 text-gray-600'}`}>
+                    {currentRoleConfig?.label || activeRole}
+                  </span>
+                </div>
+                <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 leading-none truncate max-w-[140px]">
+                  {userEmail}
                 </span>
               </div>
-              <span className="text-[10px] font-medium text-gray-400 dark:text-zinc-500 leading-none truncate max-w-[140px]">
-                {userEmail}
-              </span>
-            </div>
+              <ChevronUpDownIcon className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 ml-0.5 hidden sm:block" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isRoleDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#14151b] border border-gray-200/90 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 p-2 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-2 border-b border-gray-100 dark:border-zinc-800/80 mb-1">
+                  <p className="text-[10px] uppercase font-bold text-gray-400 dark:text-zinc-500 tracking-wider">
+                    Cambiar Rol Activo
+                  </p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white truncate mt-0.5">
+                    {userName}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  {(['Administrador', 'Oficina', 'Repuestos'] as const).map((roleKey) => {
+                    const cfg = roleConfig[roleKey];
+                    const isCurrent = activeRole === roleKey;
+                    const Icon = cfg.icon;
+
+                    return (
+                      <button
+                        key={roleKey}
+                        type="button"
+                        onClick={() => {
+                          setActiveRole(roleKey);
+                          setIsRoleDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                          isCurrent 
+                            ? 'bg-red-50 dark:bg-red-950/40 text-gray-900 dark:text-white font-black' 
+                            : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50 text-gray-600 dark:text-zinc-400 font-semibold'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className={`p-1.5 rounded-lg ${cfg.colorClass}`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold block leading-tight">
+                              {cfg.label}
+                            </span>
+                            <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-normal block leading-tight">
+                              {cfg.description}
+                            </span>
+                          </div>
+                        </div>
+                        {isCurrent && (
+                          <CheckIcon className="w-4 h-4 text-[#ED1C24] shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           
           <button
