@@ -51,8 +51,7 @@ export default function Inventory() {
   }, []);
 
   const handleSaveItem = useCallback(async (item: any) => {
-    const isEditing = Boolean(itemToEdit && itemToEdit.id);
-    const targetId = isEditing ? String(itemToEdit!.id) : null;
+    const targetId = (itemToEdit && itemToEdit.id) ? String(itemToEdit.id) : (item && item.id ? String(item.id) : null);
 
     const formattedItem: Omit<InventoryItem, 'id'> = {
       name: (item.name && item.name.trim()) ? item.name.trim() : (item.brand && item.brand.trim()) ? item.brand.trim() : (item.partNumber || item.model || 'Artículo sin nombre'),
@@ -63,18 +62,22 @@ export default function Inventory() {
       cost: Number(item.cost) || 0,
       status: item.status || 'Disponible',
       stock: Number(item.stock) || 0,
-      min_stock: Number(item.minStock) || 0,
+      min_stock: Number(item.minStock !== undefined ? item.minStock : (item.min_stock !== undefined ? item.min_stock : 5)),
       part_number: item.partNumber || item.part_number || '',
       barcode: item.barcode || '',
       vin: item.vin || item.serialNumber || '',
       year: item.year ? Number(item.year) : undefined,
       description: item.compatibility || item.description || '',
+      compatibility: item.compatibility || item.description || '',
       image_url: Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : (item.image || item.image_url || ''),
       images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image || item.image_url ? [item.image || item.image_url] : []),
-      department: item.department || 'Lote 1',
+      department: item.department || item.location || 'Lote 1',
+      location: item.department || item.location || 'Lote 1',
       includes_itbis: item.includes_itbis !== undefined ? Boolean(item.includes_itbis) : true,
       itbis_type: item.itbis_type || 'incluido',
       show_price: item.show_price !== undefined ? Boolean(item.show_price) : true,
+      plate: item.plate || '',
+      color: item.color || '',
     };
 
     // 1. Switch to 'Todos' or matching category so new item is always visible
@@ -93,7 +96,7 @@ export default function Inventory() {
     // 3. Actualización Optimista Instantánea (En vivo en pantalla de una vez)
     let tempId: string | null = null;
     if (targetId) {
-      setInventory(prev => prev.map(i => i.id === String(targetId) ? { ...i, ...formattedItem, id: String(targetId) } : i));
+      setInventory(prev => prev.map(i => String(i.id) === String(targetId) ? { ...i, ...formattedItem, id: String(targetId) } : i));
     } else {
       tempId = 'temp-' + Date.now();
       const optimisticItem: InventoryItem = {
@@ -109,12 +112,12 @@ export default function Inventory() {
       if (targetId) {
         const updated = await updateInventoryItem(String(targetId), formattedItem);
         if (updated) {
-          setInventory(prev => prev.map(i => i.id === String(targetId) ? updated : i));
+          setInventory(prev => prev.map(i => String(i.id) === String(targetId) ? updated : i));
         }
       } else {
         const created = await createInventoryItem(formattedItem);
         setInventory(prev => {
-          const filtered = prev.filter(i => i.id !== tempId && i.id !== created.id);
+          const filtered = prev.filter(i => String(i.id) !== tempId && String(i.id) !== String(created.id));
           return [created, ...filtered];
         });
       }
@@ -671,7 +674,10 @@ export default function Inventory() {
             isOpen={isModalOpen}
             item={itemToEdit}
             initialData={itemToEdit}
-            onClose={() => setIsModalOpen(false)}
+            onClose={() => {
+              setIsModalOpen(false);
+              setItemToEdit(null);
+            }}
             onSave={handleSaveItem}
             onPrintBarcode={(item) => setItemToPrintBarcode(item)}
           />

@@ -19,12 +19,16 @@ export interface InventoryItem {
   stock?: number;
   min_stock?: number;
   description?: string;
+  compatibility?: string;
   image_url?: string;
   images?: string[];
   department?: string;
+  location?: string;
   includes_itbis?: boolean;
   itbis_type?: string;
   show_price?: boolean;
+  plate?: string;
+  color?: string;
   created_at?: string;
 }
 
@@ -34,6 +38,68 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [];
 
 let inMemoryInventory: InventoryItem[] | null = null;
 let inFlightInventoryPromise: Promise<InventoryItem[]> | null = null;
+
+export const encodeDescriptionMeta = (
+  userDescription: string = '',
+  meta: {
+    includes_itbis?: boolean;
+    itbis_type?: string;
+    show_price?: boolean;
+    images?: string[];
+    department?: string;
+    plate?: string;
+    color?: string;
+  }
+): string => {
+  const cleanDesc = (userDescription || '').replace(/<!--__META_START__[\s\S]*?__META_END__-->/g, '').trim();
+  const metaPayload: Record<string, any> = {};
+  if (meta.includes_itbis !== undefined) metaPayload.includes_itbis = meta.includes_itbis;
+  if (meta.itbis_type !== undefined) metaPayload.itbis_type = meta.itbis_type;
+  if (meta.show_price !== undefined) metaPayload.show_price = meta.show_price;
+  if (meta.department) metaPayload.department = meta.department;
+  if (meta.plate) metaPayload.plate = meta.plate;
+  if (meta.color) metaPayload.color = meta.color;
+  if (Array.isArray(meta.images) && meta.images.length > 0) {
+    // Keep up to 5 compressed images in the metadata tag
+    metaPayload.images = meta.images.slice(0, 5);
+  }
+
+  const metaString = `<!--__META_START__${JSON.stringify(metaPayload)}__META_END__-->`;
+  return cleanDesc ? `${cleanDesc}\n${metaString}` : metaString;
+};
+
+export const decodeDescriptionMeta = (rawDescription: string = ''): {
+  description: string;
+  includes_itbis?: boolean;
+  itbis_type?: string;
+  show_price?: boolean;
+  images?: string[];
+  department?: string;
+  plate?: string;
+  color?: string;
+} => {
+  if (!rawDescription) return { description: '' };
+  const match = rawDescription.match(/<!--__META_START__([\s\S]*?)__META_END__-->/);
+  const cleanDescription = rawDescription.replace(/<!--__META_START__[\s\S]*?__META_END__-->/g, '').trim();
+  if (!match || !match[1]) {
+    return { description: cleanDescription };
+  }
+  try {
+    const meta = JSON.parse(match[1]);
+    return {
+      description: cleanDescription,
+      includes_itbis: meta.includes_itbis,
+      itbis_type: meta.itbis_type,
+      show_price: meta.show_price,
+      images: Array.isArray(meta.images) ? meta.images : undefined,
+      department: meta.department,
+      plate: meta.plate,
+      color: meta.color
+    };
+  } catch {
+    return { description: cleanDescription };
+  }
+};
 
 export const getLocalStorageInventory = (): InventoryItem[] => {
   if (inMemoryInventory !== null) {
@@ -89,7 +155,55 @@ export const fetchInventory = async (forceRefresh = false): Promise<InventoryIte
           .limit(500);
 
         if (!error && data) {
-          const items = data as InventoryItem[];
+          const localItems = getLocalStorageInventory();
+          const localMap = new Map(localItems.map(it => [String(it.id), it]));
+
+          const items: InventoryItem[] = (data as any[]).map(row => {
+            const meta = decodeDescriptionMeta(row.description || '');
+            const local = localMap.get(String(row.id));
+
+            let itemImages: string[] = [];
+            if (Array.isArray(meta.images) && meta.images.length > 0) {
+              itemImages = meta.images;
+            } else if (local && Array.isArray(local.images) && local.images.length > 0) {
+              itemImages = local.images;
+            } else if (row.image_url) {
+              itemImages = [row.image_url];
+            } else if (local?.image_url) {
+              itemImages = [local.image_url];
+            }
+
+            const primaryImage = itemImages[0] || row.image_url || local?.image_url || '';
+
+            return {
+              ...row,
+              id: String(row.id),
+              name: row.name || local?.name || '',
+              type: row.type || local?.type || 'Pieza',
+              brand: row.brand || local?.brand || '',
+              model: row.model || local?.model || '',
+              price: Number(row.price) || 0,
+              cost: Number(row.cost) || 0,
+              stock: Number(row.stock) || 0,
+              min_stock: Number(row.min_stock ?? local?.min_stock ?? 5),
+              description: meta.description || local?.description || '',
+              compatibility: meta.description || local?.compatibility || '',
+              department: row.location || meta.department || local?.department || 'Lote 1',
+              location: row.location || meta.department || local?.location || 'Lote 1',
+              includes_itbis: meta.includes_itbis !== undefined 
+                ? meta.includes_itbis 
+                : (local?.includes_itbis !== undefined ? local.includes_itbis : true),
+              itbis_type: meta.itbis_type || local?.itbis_type || 'incluido',
+              show_price: meta.show_price !== undefined 
+                ? meta.show_price 
+                : (local?.show_price !== undefined ? local.show_price : true),
+              images: itemImages,
+              image_url: primaryImage,
+              plate: meta.plate || (row as any).plate || local?.plate || '',
+              color: meta.color || (row as any).color || local?.color || '',
+            };
+          });
+
           saveLocalStorageInventory(items);
           return items;
         }
@@ -139,13 +253,39 @@ const sanitizeForSupabase = (item: Partial<InventoryItem>): Record<string, any> 
   if (item.barcode !== undefined) payload.barcode = item.barcode || null;
   if (item.stock !== undefined) payload.stock = Number(item.stock) || 0;
   if (item.min_stock !== undefined) payload.min_stock = Number(item.min_stock) || 0;
-  if (item.description !== undefined) payload.description = item.description || null;
-  if (item.image_url !== undefined) payload.image_url = item.image_url || null;
-  if (item.department !== undefined) payload.location = item.department || null;
-  if (item.show_price !== undefined) payload.show_price = Boolean(item.show_price);
-  if (item.includes_itbis !== undefined) payload.includes_itbis = Boolean(item.includes_itbis);
-  if (item.itbis_type !== undefined) payload.itbis_type = item.itbis_type;
-  if (item.images !== undefined && Array.isArray(item.images)) payload.images = item.images;
+
+  // Supabase location maps to department
+  if (item.department !== undefined || item.location !== undefined) {
+    payload.location = item.department || item.location || null;
+  }
+
+  // Supabase primary image
+  if (item.image_url !== undefined || (Array.isArray(item.images) && item.images.length > 0)) {
+    const img = (Array.isArray(item.images) && item.images.length > 0) ? item.images[0] : (item.image_url || null);
+    payload.image_url = img;
+  }
+
+  // Encode extended attributes cleanly into description
+  const hasMetaFields = item.includes_itbis !== undefined || 
+                        item.itbis_type !== undefined || 
+                        item.show_price !== undefined || 
+                        (Array.isArray(item.images) && item.images.length > 0) ||
+                        item.department !== undefined ||
+                        item.plate !== undefined ||
+                        item.color !== undefined;
+
+  if (item.description !== undefined || item.compatibility !== undefined || hasMetaFields) {
+    const baseText = item.description || item.compatibility || '';
+    payload.description = encodeDescriptionMeta(baseText, {
+      includes_itbis: item.includes_itbis,
+      itbis_type: item.itbis_type,
+      show_price: item.show_price,
+      images: item.images,
+      department: item.department || item.location,
+      plate: item.plate,
+      color: item.color,
+    });
+  }
 
   return payload;
 };
@@ -157,23 +297,25 @@ export const createInventoryItem = async (item: Omit<InventoryItem, 'id'>): Prom
   if (isSupabaseConfigured()) {
     try {
       const payload = sanitizeForSupabase(item);
-      let res = await supabase.from('inventory_items').insert([payload]).select().single();
-      
-      // Fallback if Supabase schema lacks custom extended columns
-      if (res.error) {
-        console.warn('Initial Supabase insert failed, retrying with core columns:', res.error);
-        const corePayload = { ...payload };
-        delete corePayload.show_price;
-        delete corePayload.includes_itbis;
-        delete corePayload.itbis_type;
-        delete corePayload.images;
-        res = await supabase.from('inventory_items').insert([corePayload]).select().single();
-      }
+      const res = await supabase.from('inventory_items').insert([payload]).select().single();
 
       if (!res.error && res.data) {
-        const mergedItem: InventoryItem = { ...newItem, ...(res.data as InventoryItem), ...item };
+        const meta = decodeDescriptionMeta(res.data.description || '');
+        const mergedItem: InventoryItem = {
+          ...newItem,
+          ...(res.data as any),
+          id: String(res.data.id),
+          description: meta.description || item.description || '',
+          compatibility: meta.description || item.compatibility || '',
+          department: res.data.location || meta.department || item.department || 'Lote 1',
+          includes_itbis: meta.includes_itbis !== undefined ? meta.includes_itbis : (item.includes_itbis ?? true),
+          itbis_type: meta.itbis_type || item.itbis_type || 'incluido',
+          show_price: meta.show_price !== undefined ? meta.show_price : (item.show_price ?? true),
+          images: meta.images || item.images || (res.data.image_url ? [res.data.image_url] : []),
+          image_url: (meta.images && meta.images[0]) || item.image_url || res.data.image_url || '',
+        };
         const current = getLocalStorageInventory();
-        const updated = [mergedItem, ...current.filter(i => i.id !== localId && i.id !== mergedItem.id)];
+        const updated = [mergedItem, ...current.filter(i => String(i.id) !== localId && String(i.id) !== String(mergedItem.id))];
         saveLocalStorageInventory(updated);
         return mergedItem;
       }
@@ -183,50 +325,63 @@ export const createInventoryItem = async (item: Omit<InventoryItem, 'id'>): Prom
   }
 
   const current = getLocalStorageInventory();
-  const updated = [newItem, ...current.filter(i => i.id !== localId)];
+  const updated = [newItem, ...current.filter(i => String(i.id) !== localId)];
   saveLocalStorageInventory(updated);
   return newItem;
 };
 
 export const updateInventoryItem = async (id: string, updates: Partial<InventoryItem>): Promise<InventoryItem | null> => {
+  // 1. Inmediatamente actualizar caché local para respuesta instantánea
+  const current = getLocalStorageInventory();
+  let updatedItem: InventoryItem | null = null;
+  const updatedList = current.map(item => {
+    if (String(item.id) === String(id)) {
+      updatedItem = { ...item, ...updates, id: String(id) };
+      return updatedItem;
+    }
+    return item;
+  });
+  if (!updatedItem) {
+    updatedItem = { id: String(id), ...updates } as InventoryItem;
+    updatedList.push(updatedItem);
+  }
+  saveLocalStorageInventory(updatedList);
+
+  // 2. Persistir en Supabase
   if (isSupabaseConfigured() && isValidUUID(id)) {
     try {
       const payload = sanitizeForSupabase(updates);
-      let res = await supabase.from('inventory_items').update(payload).eq('id', id).select().single();
-
-      // Fallback if Supabase schema lacks custom extended columns
-      if (res.error) {
-        console.warn('Initial Supabase update failed, retrying with core columns:', res.error);
-        const corePayload = { ...payload };
-        delete corePayload.show_price;
-        delete corePayload.includes_itbis;
-        delete corePayload.itbis_type;
-        delete corePayload.images;
-        res = await supabase.from('inventory_items').update(corePayload).eq('id', id).select().single();
-      }
+      const res = await supabase.from('inventory_items').update(payload).eq('id', id).select().single();
 
       if (!res.error && res.data) {
-        const mergedItem: InventoryItem = { ...(res.data as InventoryItem), ...updates };
-        const current = getLocalStorageInventory();
-        const updatedList = current.map(item => item.id === id ? mergedItem : item);
-        saveLocalStorageInventory(updatedList);
+        const meta = decodeDescriptionMeta(res.data.description || '');
+        const finalImages = updates.images || meta.images || (res.data.image_url ? [res.data.image_url] : []);
+        const mergedItem: InventoryItem = {
+          ...updatedItem,
+          ...(res.data as any),
+          ...updates,
+          id: String(id),
+          description: meta.description || updates.description || '',
+          compatibility: meta.description || updates.compatibility || '',
+          department: res.data.location || updates.department || meta.department || 'Lote 1',
+          includes_itbis: updates.includes_itbis !== undefined ? updates.includes_itbis : (meta.includes_itbis ?? true),
+          itbis_type: updates.itbis_type || meta.itbis_type || 'incluido',
+          show_price: updates.show_price !== undefined ? updates.show_price : (meta.show_price ?? true),
+          images: finalImages,
+          image_url: finalImages[0] || updates.image_url || res.data.image_url || '',
+        };
+
+        const freshList = getLocalStorageInventory().map(item => String(item.id) === String(id) ? mergedItem : item);
+        saveLocalStorageInventory(freshList);
         return mergedItem;
+      } else if (res.error) {
+        console.warn('Supabase update error:', res.error);
       }
     } catch (err) {
       console.warn('Error updating inventory item in Supabase:', err);
     }
   }
 
-  const current = getLocalStorageInventory();
-  let updatedItem: InventoryItem | null = null;
-  const updatedList = current.map(item => {
-    if (item.id === id) {
-      updatedItem = { ...item, ...updates };
-      return updatedItem;
-    }
-    return item;
-  });
-  saveLocalStorageInventory(updatedList);
   return updatedItem;
 };
 
@@ -236,7 +391,7 @@ export const deleteInventoryItem = async (id: string): Promise<boolean> => {
       const { error } = await supabase.from('inventory_items').delete().eq('id', id);
       if (!error) {
         const current = getLocalStorageInventory();
-        const filtered = current.filter(item => item.id !== id);
+        const filtered = current.filter(item => String(item.id) !== String(id));
         saveLocalStorageInventory(filtered);
         return true;
       }
@@ -246,7 +401,7 @@ export const deleteInventoryItem = async (id: string): Promise<boolean> => {
   }
 
   const current = getLocalStorageInventory();
-  const filtered = current.filter(item => item.id !== id);
+  const filtered = current.filter(item => String(item.id) !== String(id));
   saveLocalStorageInventory(filtered);
   return true;
 };
@@ -272,7 +427,21 @@ export const createBulkInventoryItems = async (items: Omit<InventoryItem, 'id'>[
           .select();
 
         if (!error && data) {
-          insertedResults.push(...(data as InventoryItem[]));
+          const parsed = (data as any[]).map(row => {
+            const meta = decodeDescriptionMeta(row.description || '');
+            return {
+              ...row,
+              id: String(row.id),
+              description: meta.description,
+              compatibility: meta.description,
+              department: row.location || meta.department || 'Lote 1',
+              includes_itbis: meta.includes_itbis ?? true,
+              itbis_type: meta.itbis_type || 'incluido',
+              show_price: meta.show_price ?? true,
+              images: meta.images || (row.image_url ? [row.image_url] : []),
+            } as InventoryItem;
+          });
+          insertedResults.push(...parsed);
         } else if (error) {
           console.error('Error in batch insert chunk:', error);
         }

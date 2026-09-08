@@ -122,7 +122,7 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         serialNumber: (targetItem as any).vin ?? (targetItem as any).serialNumber ?? '',
         compatibility: (targetItem as any).description ?? (targetItem as any).compatibility ?? '',
         status: targetItem.status || 'Disponible',
-        department: (targetItem as any).department || 'Lote 1',
+        department: (targetItem as any).department || (targetItem as any).location || 'Lote 1',
         includes_itbis: (targetItem as any).includes_itbis !== undefined 
           ? Boolean((targetItem as any).includes_itbis) 
           : ((targetItem as any).itbis_type === 'adicional' ? false : true),
@@ -303,6 +303,7 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
       await onSave({
         ...formData,
         id: isEditing ? formData.id : undefined,
+        name: (formData.name && formData.name.trim()) ? formData.name.trim() : (formData.brand && formData.brand.trim()) ? formData.brand.trim() : 'Artículo',
         cost: parseFloat(String(formData.cost)) || 0,
         price: parseFloat(String(formData.price)) || 0,
         stock: parseInt(String(formData.stock), 10) || 0,
@@ -314,7 +315,11 @@ export default function ItemModal({ item, initialData, onClose, onSave, onPrintB
         itbis_type: formData.itbis_type || 'incluido',
         show_price: formData.show_price !== undefined ? formData.show_price : true,
         image: finalImages[0] || '',
-        images: finalImages
+        images: finalImages,
+        compatibility: formData.compatibility || '',
+        description: formData.compatibility || formData.description || '',
+        department: formData.department || 'Lote 1',
+        location: formData.department || 'Lote 1',
       });
       onClose();
     } catch (err) {
