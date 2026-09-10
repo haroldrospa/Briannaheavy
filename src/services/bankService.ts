@@ -1,6 +1,7 @@
-﻿import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
+import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { fetchCashMovements, getLocalStorageMovements, createCashMovement, type CashMovement } from './cashMovementsService';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from './invoicesService';
+import { getStoredReceipts } from './financingReceiptsService';
 
 export interface BankTransaction {
   id: string;
@@ -10,7 +11,8 @@ export interface BankTransaction {
   amount: number;
   concept: string;
   reference?: string;
-  category?: 'Venta / Facturación' | 'Depósito / Transferencia' | 'Retiro / Pago' | 'Cobro Financiamiento' | 'Aporte de Capital' | 'Gasto / Servicio' | 'Otro';
+  payment_method?: 'Efectivo' | 'Transferencia' | 'Cheque' | string;
+  category?: 'Venta / Facturación' | 'Depósito / Transferencia' | 'Retiro / Pago' | 'Cobro Financiamiento' | 'Aporte de Capital' | 'Gasto / Servicio' | 'Movimiento de Efectivo' | 'Otro';
   date: string;
   created_by?: string;
   source_id?: string;
@@ -23,6 +25,16 @@ export interface BankAccountWithBalance extends CompanyBankAccount {
   totalWithdrawals: number;
   transactionCount: number;
 }
+
+export const CASH_ACCOUNT: CompanyBankAccount = {
+  id: 'caja-general',
+  bankName: 'Caja General (Efectivo)',
+  accountNumber: 'CAJA-FISICA-01',
+  accountType: 'Efectivo en Caja',
+  currency: 'DOP',
+  holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+  rnc: '132-61036-2'
+};
 
 const MANUAL_BANK_STORAGE_KEY = 'brianna_manual_bank_transactions';
 
@@ -116,12 +128,19 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   manualTxs.forEach(tx => {
     if (!seenIds.has(tx.id)) {
       seenIds.add(tx.id);
-      aggregated.push(tx);
+      aggregated.push({
+        ...tx,
+        payment_method: tx.payment_method || (tx.bank_account_id === 'caja-general' ? 'Efectivo' : 'Transferencia')
+      });
     }
   });
 
-  // B. Añadir movimientos de caja que fueron por transferencia o vinculados a banco
+  // B. Añadir movimientos de caja (tanto transferencias bancarias como efectivo en caja)
   allMovements.forEach(m => {
+    const txId = `mov-${m.id}`;
+    if (seenIds.has(txId)) return;
+    seenIds.add(txId);
+
     const pm = (m.payment_method || '').toLowerCase();
     const isBankMove = pm.includes('transferencia') || 
                        pm.includes('transf') || 
@@ -129,49 +148,66 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
                        Boolean(m.bank_account_name);
 
     if (isBankMove) {
-      const txId = `mov-${m.id}`;
-      if (!seenIds.has(txId)) {
-        seenIds.add(txId);
-        
-        let bankId = m.bank_account_id || '';
-        let bankName = m.bank_account_name || '';
+      let bankId = m.bank_account_id || '';
+      let bankName = m.bank_account_name || '';
 
-        if (bankId && !bankName) {
-          const found = bankAccounts.find(b => b.id === bankId);
-          if (found) bankName = found.bankName;
-        }
-        if (bankName && !bankId) {
-          const found = bankAccounts.find(b => 
-            b.bankName.toLowerCase().includes(bankName.toLowerCase()) || 
-            bankName.toLowerCase().includes(b.bankName.toLowerCase())
-          );
-          if (found) bankId = found.id;
-        }
-        if (!bankId || !bankName) {
-          bankName = defaultBank.bankName;
-          bankId = defaultBank.id;
-        }
-
-        aggregated.push({
-          id: txId,
-          bank_account_id: bankId,
-          bank_account_name: bankName,
-          type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
-          amount: Number(m.amount) || 0,
-          concept: m.concept || (m.type === 'Ingreso' ? 'Depósito Bancario' : 'Retiro Bancario'),
-          reference: m.reference || undefined,
-          category: m.type === 'Ingreso' ? 'Depósito / Transferencia' : 'Retiro / Pago',
-          date: m.created_at || new Date().toISOString(),
-          created_by: m.created_by || 'Sistema',
-          source_id: m.id,
-          source_type: 'cash_movement'
-        });
+      if (bankId && !bankName) {
+        const found = bankAccounts.find(b => b.id === bankId);
+        if (found) bankName = found.bankName;
       }
+      if (bankName && !bankId) {
+        const found = bankAccounts.find(b => 
+          b.bankName.toLowerCase().includes(bankName.toLowerCase()) || 
+          bankName.toLowerCase().includes(b.bankName.toLowerCase())
+        );
+        if (found) bankId = found.id;
+      }
+      if (!bankId || !bankName) {
+        bankName = defaultBank.bankName;
+        bankId = defaultBank.id;
+      }
+
+      aggregated.push({
+        id: txId,
+        bank_account_id: bankId,
+        bank_account_name: bankName,
+        type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
+        amount: Number(m.amount) || 0,
+        concept: m.concept || (m.type === 'Ingreso' ? 'Depósito Bancario' : 'Retiro Bancario'),
+        reference: m.reference || undefined,
+        payment_method: 'Transferencia',
+        category: m.type === 'Ingreso' ? 'Depósito / Transferencia' : 'Retiro / Pago',
+        date: m.created_at || new Date().toISOString(),
+        created_by: m.created_by || 'Sistema',
+        source_id: m.id,
+        source_type: 'cash_movement'
+      });
+    } else {
+      // Movimiento en Efectivo (Caja)
+      aggregated.push({
+        id: txId,
+        bank_account_id: 'caja-general',
+        bank_account_name: 'Caja General (Efectivo)',
+        type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
+        amount: Number(m.amount) || 0,
+        concept: m.concept || (m.type === 'Ingreso' ? 'Ingreso a Caja en Efectivo' : 'Egreso de Caja en Efectivo'),
+        reference: m.reference || undefined,
+        payment_method: 'Efectivo',
+        category: 'Movimiento de Efectivo',
+        date: m.created_at || new Date().toISOString(),
+        created_by: m.created_by || 'Cajero',
+        source_id: m.id,
+        source_type: 'cash_movement'
+      });
     }
   });
 
-  // C. Añadir facturas de venta pagadas por Transferencia
+  // C. Añadir facturas de venta (Transferencias y Efectivo)
   allInvoices.forEach(inv => {
+    const txId = `inv-${inv.id}`;
+    if (seenIds.has(txId)) return;
+    seenIds.add(txId);
+
     const pm = (inv.payment_method || '').toLowerCase();
     const isTransfer = pm.includes('transferencia') || 
                        pm.includes('transf') || 
@@ -180,52 +216,128 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
                        Boolean(inv.transfer_reference) ||
                        Boolean((inv as any).transferReference);
 
+    const invNum = inv.ncf || inv.invoice_number || 'S/N';
+    const client = inv.customer_name || 'Venta de Contado';
+
     if (isTransfer) {
-      const txId = `inv-${inv.id}`;
-      if (!seenIds.has(txId)) {
-        seenIds.add(txId);
+      let assignedBankId = inv.bank_account_id || '';
+      let assignedBankName = inv.bank_account_name || '';
 
-        let assignedBankId = inv.bank_account_id || '';
-        let assignedBankName = inv.bank_account_name || '';
+      if (assignedBankId && !assignedBankName) {
+        const matchBank = bankAccounts.find(b => b.id === assignedBankId);
+        if (matchBank) assignedBankName = matchBank.bankName;
+      }
 
-        if (assignedBankId && !assignedBankName) {
-          const matchBank = bankAccounts.find(b => b.id === assignedBankId);
-          if (matchBank) assignedBankName = matchBank.bankName;
-        }
+      if (assignedBankName && !assignedBankId) {
+        const matchBank = bankAccounts.find(b => 
+          b.bankName.toLowerCase().includes(assignedBankName.toLowerCase()) || 
+          assignedBankName.toLowerCase().includes(b.bankName.toLowerCase())
+        );
+        if (matchBank) assignedBankId = matchBank.id;
+      }
 
-        if (assignedBankName && !assignedBankId) {
+      if (!assignedBankId || !assignedBankName) {
+        assignedBankId = defaultBank.id;
+        assignedBankName = defaultBank.bankName;
+      }
+
+      aggregated.push({
+        id: txId,
+        bank_account_id: assignedBankId,
+        bank_account_name: assignedBankName,
+        type: 'Ingreso',
+        amount: Number(inv.total_amount) || 0,
+        concept: `Cobro Venta Factura ${invNum} - ${client}`,
+        reference: inv.transfer_reference || (inv as any).transferReference || undefined,
+        payment_method: 'Transferencia',
+        category: 'Venta / Facturación',
+        date: inv.created_at || new Date().toISOString(),
+        created_by: inv.cashier_name || 'Cajero POS',
+        source_id: inv.id,
+        source_type: 'invoice'
+      });
+    } else {
+      // Venta cobrada en Efectivo
+      aggregated.push({
+        id: txId,
+        bank_account_id: 'caja-general',
+        bank_account_name: 'Caja General (Efectivo)',
+        type: 'Ingreso',
+        amount: Number(inv.total_amount) || 0,
+        concept: `Cobro Venta Factura ${invNum} - ${client}`,
+        reference: inv.ncf || inv.invoice_number || undefined,
+        payment_method: 'Efectivo',
+        category: 'Venta / Facturación',
+        date: inv.created_at || new Date().toISOString(),
+        created_by: inv.cashier_name || 'Cajero POS',
+        source_id: inv.id,
+        source_type: 'invoice'
+      });
+    }
+  });
+
+  // D. Añadir recibos de financiamiento (Transferencias y Efectivo)
+  try {
+    const receipts = getStoredReceipts();
+    receipts.forEach(r => {
+      const txId = `rcpt-${r.id || r.receiptNumber}`;
+      if (seenIds.has(txId)) return;
+      seenIds.add(txId);
+
+      const rPm = (r.paymentMethod || 'Efectivo').toLowerCase();
+      const isTransfer = rPm.includes('transferencia') || rPm.includes('transf') || Boolean(r.bankName);
+
+      if (isTransfer) {
+        let assignedBankId = defaultBank.id;
+        let assignedBankName = defaultBank.bankName;
+
+        if (r.bankName) {
           const matchBank = bankAccounts.find(b => 
-            b.bankName.toLowerCase().includes(assignedBankName.toLowerCase()) || 
-            assignedBankName.toLowerCase().includes(b.bankName.toLowerCase())
+            b.bankName.toLowerCase().includes(r.bankName!.toLowerCase()) || 
+            r.bankName!.toLowerCase().includes(b.bankName.toLowerCase())
           );
-          if (matchBank) assignedBankId = matchBank.id;
+          if (matchBank) {
+            assignedBankId = matchBank.id;
+            assignedBankName = matchBank.bankName;
+          }
         }
-
-        if (!assignedBankId || !assignedBankName) {
-          assignedBankId = defaultBank.id;
-          assignedBankName = defaultBank.bankName;
-        }
-
-        const invNum = inv.ncf || inv.invoice_number || 'S/N';
-        const client = inv.customer_name || 'Venta de Contado';
 
         aggregated.push({
           id: txId,
           bank_account_id: assignedBankId,
           bank_account_name: assignedBankName,
           type: 'Ingreso',
-          amount: Number(inv.total_amount) || 0,
-          concept: `Cobro Venta Factura ${invNum} - ${client}`,
-          reference: inv.transfer_reference || (inv as any).transferReference || undefined,
-          category: 'Venta / Facturación',
-          date: inv.created_at || new Date().toISOString(),
-          created_by: inv.cashier_name || 'Cajero POS',
-          source_id: inv.id,
-          source_type: 'invoice'
+          amount: Number(r.totalPaid) || 0,
+          concept: `Cobro Cuota Financiamiento ${r.receiptNumber} - ${r.customerName}`,
+          reference: r.referenceNumber || r.receiptNumber,
+          payment_method: 'Transferencia',
+          category: 'Cobro Financiamiento',
+          date: r.paymentExecutionDate || r.createdAt || r.date || new Date().toISOString(),
+          created_by: r.cashierName || 'Cobrador',
+          source_id: r.id,
+          source_type: 'financing_payment'
+        });
+      } else {
+        aggregated.push({
+          id: txId,
+          bank_account_id: 'caja-general',
+          bank_account_name: 'Caja General (Efectivo)',
+          type: 'Ingreso',
+          amount: Number(r.totalPaid) || 0,
+          concept: `Cobro Cuota Financiamiento ${r.receiptNumber} - ${r.customerName}`,
+          reference: r.referenceNumber || r.receiptNumber,
+          payment_method: r.paymentMethod || 'Efectivo',
+          category: 'Cobro Financiamiento',
+          date: r.paymentExecutionDate || r.createdAt || r.date || new Date().toISOString(),
+          created_by: r.cashierName || 'Cobrador',
+          source_id: r.id,
+          source_type: 'financing_payment'
         });
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.warn('Error reading financing receipts for bank transactions:', err);
+  }
 
   // Ordenar de más reciente a más antiguo
   return aggregated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -258,6 +370,7 @@ export const createDirectBankTransaction = async (data: {
     amount: data.amount,
     concept: data.concept,
     reference: data.reference,
+    payment_method: data.bank_account_id === 'caja-general' ? 'Efectivo' : 'Transferencia',
     category,
     date,
     created_by,
@@ -274,8 +387,8 @@ export const createDirectBankTransaction = async (data: {
       type: data.type,
       amount: data.amount,
       concept: `[Banco: ${data.bank_account_name}] ${data.concept}`,
-      payment_method: 'Transferencia',
-      bank_account_id: data.bank_account_id,
+      payment_method: data.bank_account_id === 'caja-general' ? 'Efectivo' : 'Transferencia',
+      bank_account_id: data.bank_account_id === 'caja-general' ? undefined : data.bank_account_id,
       bank_account_name: data.bank_account_name,
       reference: data.reference,
       register_name: 'Banco Empresarial',
@@ -290,27 +403,33 @@ export const createDirectBankTransaction = async (data: {
 };
 
 /**
- * Calcula balances y estadísticas de cada cuenta bancaria de la empresa
+ * Calcula balances y estadísticas de cada cuenta bancaria de la empresa y de la caja de efectivo
  */
 export const calculateBankAccountsSummary = (
   accounts: CompanyBankAccount[],
   transactions: BankTransaction[]
 ): {
   accountsWithBalances: BankAccountWithBalance[];
+  cashAccountWithBalance: BankAccountWithBalance;
+  allAccountsWithBalances: BankAccountWithBalance[];
   totalGlobalBalance: number;
+  totalBankBalance: number;
+  totalCashBalance: number;
   totalGlobalDeposits: number;
   totalGlobalWithdrawals: number;
   totalTransactionsCount: number;
 } => {
-  let totalGlobalDeposits = 0;
-  let totalGlobalWithdrawals = 0;
+  let totalBankDeposits = 0;
+  let totalBankWithdrawals = 0;
 
   const accountsWithBalances: BankAccountWithBalance[] = accounts.map(acc => {
-    // Filtrar transacciones para esta cuenta
+    // Filtrar transacciones para esta cuenta bancaria
     const accountTxs = transactions.filter(t => 
-      t.bank_account_id === acc.id || 
-      t.bank_account_name.toLowerCase().includes(acc.bankName.toLowerCase()) ||
-      acc.bankName.toLowerCase().includes(t.bank_account_name.toLowerCase())
+      t.bank_account_id !== 'caja-general' && (
+        t.bank_account_id === acc.id || 
+        t.bank_account_name.toLowerCase().includes(acc.bankName.toLowerCase()) ||
+        acc.bankName.toLowerCase().includes(t.bank_account_name.toLowerCase())
+      )
     );
 
     let totalDeposits = 0;
@@ -325,23 +444,56 @@ export const calculateBankAccountsSummary = (
       }
     });
 
-    const currentBalance = totalDeposits - totalWithdrawals;
-
-    totalGlobalDeposits += totalDeposits;
-    totalGlobalWithdrawals += totalWithdrawals;
+    totalBankDeposits += totalDeposits;
+    totalBankWithdrawals += totalWithdrawals;
 
     return {
       ...acc,
-      currentBalance,
+      currentBalance: totalDeposits - totalWithdrawals,
       totalDeposits,
       totalWithdrawals,
       transactionCount: accountTxs.length
     };
   });
 
+  // Calcular balance y transacciones de Caja General (Efectivo)
+  const cashTxs = transactions.filter(t => 
+    t.bank_account_id === 'caja-general' || 
+    (t.payment_method || '').toLowerCase() === 'efectivo'
+  );
+
+  let cashDeposits = 0;
+  let cashWithdrawals = 0;
+
+  cashTxs.forEach(t => {
+    const amt = Number(t.amount) || 0;
+    if (t.type === 'Ingreso') {
+      cashDeposits += amt;
+    } else {
+      cashWithdrawals += amt;
+    }
+  });
+
+  const cashAccountWithBalance: BankAccountWithBalance = {
+    ...CASH_ACCOUNT,
+    currentBalance: cashDeposits - cashWithdrawals,
+    totalDeposits: cashDeposits,
+    totalWithdrawals: cashWithdrawals,
+    transactionCount: cashTxs.length
+  };
+
+  const totalBankBalance = totalBankDeposits - totalBankWithdrawals;
+  const totalCashBalance = cashDeposits - cashWithdrawals;
+  const totalGlobalDeposits = totalBankDeposits + cashDeposits;
+  const totalGlobalWithdrawals = totalBankWithdrawals + cashWithdrawals;
+
   return {
     accountsWithBalances,
-    totalGlobalBalance: totalGlobalDeposits - totalGlobalWithdrawals,
+    cashAccountWithBalance,
+    allAccountsWithBalances: [...accountsWithBalances, cashAccountWithBalance],
+    totalGlobalBalance: totalBankBalance + totalCashBalance,
+    totalBankBalance,
+    totalCashBalance,
     totalGlobalDeposits,
     totalGlobalWithdrawals,
     totalTransactionsCount: transactions.length

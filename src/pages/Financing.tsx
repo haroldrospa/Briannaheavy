@@ -39,6 +39,9 @@ import QRCode from '../components/ui/QRCode';
 export interface PaymentReceiptData {
   receiptNumber: string;
   date: string;
+  paymentExecutionDate?: string;
+  scheduledDueDate?: string;
+  nextPaymentDate?: string;
   paymentType: 'cuotas' | 'abono';
   paidInstallments: MappedInstallment[];
   abonoAmount: number;
@@ -1113,7 +1116,16 @@ export default function Financing() {
       const totalCap = totalSelectedCapital;
       const newBal = Math.max(0, selectedFinancing.amount - totalCap);
       const recNumber = getNextReceiptNumber();
-      const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      const scheduledDue = paidList.length === 1 
+        ? paidList[0].dueDate 
+        : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
+      const remainingUnpaid = (selectedFinancing.installments || []).filter((i: any) => !selectedInstallmentIds.includes(i.id) && !i.isPaid);
+      const nextDue = newBal <= 0 
+        ? 'Totalmente Saldado' 
+        : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
 
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
@@ -1129,6 +1141,9 @@ export default function Financing() {
         receiptNumber: recNumber,
         financingId: String(selectedFinancing.rawId || selectedFinancing.id),
         date: formattedDate,
+        paymentExecutionDate: executionDateStr,
+        scheduledDueDate: scheduledDue,
+        nextPaymentDate: nextDue,
         paymentType: 'cuotas',
         paidInstallments: paidList.map(inst => ({
           id: inst.id,
@@ -1204,7 +1219,13 @@ export default function Financing() {
       const paidAbono = numAbono;
       const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
       const recNumber = getNextReceiptNumber();
-      const formattedDate = new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      const firstUnpaid = (selectedFinancing.installments || []).find((i: any) => !i.isPaid);
+      const scheduledDue = firstUnpaid ? firstUnpaid.dueDate : (selectedFinancing.nextPayment || 'N/A');
+      const nextDue = newBal <= 0 ? 'Totalmente Saldado' : scheduledDue;
+
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
       const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : paidAbono) : paidAbono;
@@ -1219,6 +1240,9 @@ export default function Financing() {
         receiptNumber: recNumber,
         financingId: String(selectedFinancing.rawId || selectedFinancing.id),
         date: formattedDate,
+        paymentExecutionDate: executionDateStr,
+        scheduledDueDate: scheduledDue,
+        nextPaymentDate: nextDue,
         paymentType: 'abono',
         paidInstallments: [],
         abonoAmount: paidAbono,
@@ -1289,7 +1313,19 @@ export default function Financing() {
   };
 
   const activeReceiptData: PaymentReceiptData = useMemo(() => {
-    if (viewingReceipt) return viewingReceipt as any;
+    if (viewingReceipt) {
+      const vr = viewingReceipt as any;
+      const vrPaidList = vr.paidInstallments || [];
+      const autoScheduled = vr.scheduledDueDate || (vrPaidList.length > 0 ? vrPaidList[0].dueDate : (selectedFinancing?.nextPayment || 'N/A'));
+      const autoNext = vr.nextPaymentDate || (vr.newBalance <= 0 ? 'Totalmente Saldado' : (selectedFinancing?.nextPayment || 'N/A'));
+      const autoExecDate = vr.paymentExecutionDate || vr.date;
+      return {
+        ...vr,
+        paymentExecutionDate: autoExecDate,
+        scheduledDueDate: autoScheduled,
+        nextPaymentDate: autoNext,
+      };
+    }
     if (lastReceipt) return lastReceipt;
     const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
     const totalPaid = paymentType === 'abono'
@@ -1305,9 +1341,30 @@ export default function Financing() {
       ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
       : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+    
+    let scheduledDue = 'N/A';
+    let nextDue = 'N/A';
+    if (paymentType === 'cuotas') {
+      scheduledDue = paidList.length === 1 
+        ? paidList[0].dueDate 
+        : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing?.nextPayment || 'N/A'));
+      const remainingUnpaid = currentInstallments.filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado');
+      nextDue = newBal <= 0 ? 'Totalmente Saldado' : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
+    } else {
+      const firstUnpaid = currentInstallments.find(i => i.status !== 'Pagado');
+      scheduledDue = firstUnpaid ? firstUnpaid.dueDate : (selectedFinancing?.nextPayment || 'N/A');
+      nextDue = newBal <= 0 ? 'Totalmente Saldado' : scheduledDue;
+    }
+
     return {
       receiptNumber: recNumber,
-      date: new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' }),
+      date: formattedDate,
+      paymentExecutionDate: executionDateStr,
+      scheduledDueDate: scheduledDue,
+      nextPaymentDate: nextDue,
       paymentType: paymentType,
       paidInstallments: paidList,
       abonoAmount: numAbono,
@@ -1326,7 +1383,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2789,7 +2846,46 @@ export default function Financing() {
                           Recibo Oficial de Pago
                         </span>
                         <p className="text-sm font-black font-mono tracking-wide text-gray-900 dark:text-white mt-2 print:text-black">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
-                        <p className="text-xs font-medium text-gray-500 mt-0.5 print:text-gray-700">Fecha: {activeReceiptData.date}</p>
+                        <p className="text-xs font-bold text-gray-700 dark:text-zinc-300 mt-1 print:text-black">
+                          Fecha de Pago: <span className="font-black text-gray-900 dark:text-white">{activeReceiptData.paymentExecutionDate || activeReceiptData.date}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Tarjetas Informativas de Fechas: Fecha de Pago Realizada vs Fecha Programada / Vencimiento */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3.5 bg-gradient-to-r from-red-50/60 via-amber-50/40 to-blue-50/60 dark:from-red-950/20 dark:via-zinc-900 dark:to-blue-950/20 rounded-2xl border border-gray-200/80 dark:border-zinc-800 print:bg-gray-50 print:border-gray-300">
+                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-red-100 dark:border-red-900/30 print:bg-white print:border-gray-300">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#ED1C24] dark:text-red-400 block mb-1">
+                          💵 Fecha en que se Realizó el Pago
+                        </span>
+                        <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
+                          {activeReceiptData.paymentExecutionDate || activeReceiptData.date}
+                        </p>
+                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Cobro procesado en caja</span>
+                      </div>
+
+                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-amber-100 dark:border-amber-900/30 print:bg-white print:border-gray-300">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
+                          🗓️ Fecha Programada de la Cuota
+                        </span>
+                        <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
+                          {activeReceiptData.scheduledDueDate || activeReceiptData.paidInstallments?.[0]?.dueDate || selectedFinancing?.nextPayment || 'N/A'}
+                        </p>
+                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Vencimiento predeterminado</span>
+                      </div>
+
+                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-blue-100 dark:border-blue-900/30 print:bg-white print:border-gray-300">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-1">
+                          ⏳ Próxima Fecha de Pago del Cliente
+                        </span>
+                        <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
+                          {activeReceiptData.newBalance <= 0 
+                            ? 'Totalmente Saldado ✓' 
+                            : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
+                        </p>
+                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">
+                          {activeReceiptData.newBalance <= 0 ? 'Sin cuotas pendientes' : 'Siguiente cuota a pagar'}
+                        </span>
                       </div>
                     </div>
 
@@ -2861,6 +2957,7 @@ export default function Financing() {
                         <thead className="bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 uppercase tracking-wider text-[10px] font-black print:bg-gray-200 print:text-black">
                           <tr>
                             <th className="py-3 px-4">Concepto / Cuota</th>
+                            <th className="py-3 px-4 text-center">Vencimiento Programado</th>
                             <th className="py-3 px-4 text-right">Capital</th>
                             <th className="py-3 px-4 text-right">Interés</th>
                             <th className="py-3 px-4 text-right">Mora</th>
@@ -2871,6 +2968,7 @@ export default function Financing() {
                           {activeReceiptData.paymentType === 'abono' ? (
                             <tr>
                               <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Abono Directo al Capital Principal</td>
+                              <td className="py-3.5 px-4 text-center font-mono font-bold text-gray-500 print:text-black">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
                               <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                               <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
                               <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
@@ -2879,7 +2977,8 @@ export default function Financing() {
                           ) : (
                             activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                               <tr key={inst.id}>
-                                <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
+                                <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                                <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 dark:text-amber-400 print:text-black">{inst.dueDate}</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                                 <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -2917,6 +3016,14 @@ export default function Financing() {
                           <span className="font-bold text-gray-500 print:text-gray-700">Nuevo Balance Pendiente:</span>
                           <span className="font-black text-[#ED1C24] dark:text-red-400 text-sm print:text-black">
                             ${activeReceiptData.newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                          </span>
+                        </div>
+                        <div className="pt-2 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
+                          <span className="font-bold text-gray-500 print:text-gray-700">Próxima Fecha de Pago:</span>
+                          <span className={`font-mono font-black text-xs ${activeReceiptData.newBalance <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400 print:text-black'}`}>
+                            {activeReceiptData.newBalance <= 0 
+                              ? 'Totalmente Saldado ✓' 
+                              : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
                           </span>
                         </div>
                       </div>
@@ -3356,8 +3463,68 @@ export default function Financing() {
                               />
                             </div>
                             <p className="text-[11px] text-gray-400 font-medium mt-2">
-                              💡 El abono ingresado reducirá directamente la deuda del capital pendiente del financiamiento.
+                              💡 El abono ingresado reducirá directamente la deuda del capital pendiente del financiamiento y amortizará las cuotas pendientes.
                             </p>
+
+                            {/* Botones de sugerencias rápidas de abono */}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-3">
+                              <span className="text-[10px] font-bold uppercase text-gray-400 mr-1">Sugerencias rápidas:</span>
+                              {(() => {
+                                const firstUnpaid = currentInstallments.find(i => i.status !== 'Pagado');
+                                const cuotaAmt = firstUnpaid ? firstUnpaid.total : 0;
+                                const halfCuota = cuotaAmt > 0 ? Math.round(cuotaAmt / 2) : 0;
+                                return (
+                                  <>
+                                    {cuotaAmt > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAbonoAmount(formatCurrencyInput(cuotaAmt))}
+                                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                                      >
+                                        1 Cuota (${cuotaAmt.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})
+                                      </button>
+                                    )}
+                                    {halfCuota > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAbonoAmount(formatCurrencyInput(halfCuota))}
+                                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                      >
+                                        1/2 Cuota (${halfCuota.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})
+                                      </button>
+                                    )}
+                                    {[5000, 10000, 25000, 50000, 100000].filter(amt => amt < selectedFinancing.amount).map((amt) => (
+                                      <button
+                                        key={amt}
+                                        type="button"
+                                        onClick={() => setAbonoAmount(formatCurrencyInput(amt))}
+                                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                      >
+                                        ${amt.toLocaleString()}
+                                      </button>
+                                    ))}
+                                    {selectedFinancing.amount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAbonoAmount(formatCurrencyInput(selectedFinancing.amount))}
+                                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                      >
+                                        Saldar Total (${selectedFinancing.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                                      </button>
+                                    )}
+                                    {abonoAmount && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAbonoAmount('')}
+                                        className="px-2 py-1 text-xs font-bold rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                      >
+                                        Limpiar
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
                           </div>
 
                           {numAbono > 0 && (
@@ -3473,7 +3640,7 @@ export default function Financing() {
                                           <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${inst.status === 'Pagado' ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400' : inst.status === 'Atrasado' ? 'text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400' : 'text-gray-600 bg-gray-100 dark:bg-zinc-800 dark:text-zinc-300'}`}>
                                             {inst.status}
                                           </span>
-                                          {inst.status === 'Pagado' && (
+                                          {inst.status === 'Pagado' ? (
                                             <button
                                               type="button"
                                               onClick={(e) => {
@@ -3485,6 +3652,20 @@ export default function Financing() {
                                             >
                                               <DocumentTextIcon className="h-3 w-3" />
                                               <span>Recibo</span>
+                                            </button>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPaymentType('abono');
+                                                setAbonoAmount(formatCurrencyInput(inst.total));
+                                              }}
+                                              className="text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 flex items-center gap-1 cursor-pointer bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/40 transition-colors"
+                                              title="Hacer un abono a esta cuota"
+                                            >
+                                              <BanknotesIcon className="h-3 w-3" />
+                                              <span>Abonar</span>
                                             </button>
                                           )}
                                         </div>
@@ -3513,28 +3694,70 @@ export default function Financing() {
                         </span>
                       </div>
 
-                      {paymentType === 'recibos' ? (
-                        <button 
-                          onClick={() => setPaymentType('cuotas')}
-                          className="w-full sm:w-auto px-6 py-2.5 rounded-full font-bold text-xs bg-gray-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <BanknotesIcon className="h-4 w-4" />
-                          Ir a Cobrar Cuotas
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={() => setShowPaymentForm(true)} 
-                          disabled={paymentType === 'cuotas' ? selectedInstallmentIds.length === 0 : numAbono <= 0}
-                          className={`w-full sm:w-auto px-8 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
-                            (paymentType === 'cuotas' ? selectedInstallmentIds.length > 0 : numAbono > 0)
-                              ? 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]' 
-                              : 'bg-gray-200 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
-                          }`}
-                        >
-                          <BanknotesIcon className="h-5 w-5" />
-                          Cobrar Ahora (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
-                        </button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                        {paymentType === 'recibos' ? (
+                          <button 
+                            onClick={() => setPaymentType('cuotas')}
+                            className="w-full sm:w-auto px-6 py-2.5 rounded-full font-bold text-xs bg-gray-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90 transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <BanknotesIcon className="h-4 w-4" />
+                            Ir a Cobrar Cuotas
+                          </button>
+                        ) : paymentType === 'cuotas' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaymentType('abono');
+                                if (selectedInsts.length > 0) {
+                                  setAbonoAmount(formatCurrencyInput(totalSelectedAmount));
+                                }
+                              }}
+                              className="w-full sm:w-auto px-5 py-3 rounded-full font-black text-xs bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-900/10 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99]"
+                              title="Abonar un monto libre o parcial"
+                            >
+                              <BanknotesIcon className="h-4 w-4" />
+                              <span>Hacer Abono Parcial</span>
+                            </button>
+
+                            <button 
+                              onClick={() => setShowPaymentForm(true)} 
+                              disabled={selectedInstallmentIds.length === 0}
+                              className={`w-full sm:w-auto px-7 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                                selectedInstallmentIds.length > 0
+                                  ? 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]' 
+                                  : 'bg-gray-200 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
+                              }`}
+                            >
+                              <BanknotesIcon className="h-5 w-5" />
+                              Cobrar Ahora (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setPaymentType('cuotas')}
+                              className="w-full sm:w-auto px-4 py-2.5 rounded-full font-bold text-xs bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-all cursor-pointer"
+                            >
+                              Volver a Cuotas
+                            </button>
+
+                            <button 
+                              onClick={() => setShowPaymentForm(true)} 
+                              disabled={numAbono <= 0}
+                              className={`w-full sm:w-auto px-8 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                                numAbono > 0
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20 active:scale-[0.99]' 
+                                  : 'bg-gray-200 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed'
+                              }`}
+                            >
+                              <BanknotesIcon className="h-5 w-5" />
+                              Abonar Ahora (${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -3553,6 +3776,62 @@ export default function Financing() {
                           {paymentType === 'abono' ? 'Desglose de Abono a Capital' : 'Desglose de Pago'}
                         </h4>
                       </div>
+
+                      {/* Modalidad Selector if in Cuotas */}
+                      {paymentType === 'cuotas' && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-900/40">
+                          <div>
+                            <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                              ¿Desea realizar un abono parcial en vez de la cuota completa?
+                            </span>
+                            <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                              Permite ingresar un monto menor para amortizar el capital directamente.
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentType('abono');
+                              setAbonoAmount(formatCurrencyInput(totalSelectedAmount));
+                            }}
+                            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
+                          >
+                            Hacer Abono Parcial
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Monto editable if in Abono */}
+                      {paymentType === 'abono' && (
+                        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-black uppercase text-emerald-900 dark:text-emerald-300">
+                              Monto a Abonar ($)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaymentType('cuotas');
+                                setAbonoAmount('');
+                              }}
+                              className="text-[11px] font-bold text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white underline cursor-pointer"
+                            >
+                              Volver a Cuota Completa
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-emerald-600 dark:text-emerald-400 text-lg">$</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={abonoAmount}
+                              onChange={(e) => setAbonoAmount(formatCurrencyInput(e.target.value))}
+                              placeholder="0.00"
+                              className="w-full pl-8 pr-4 py-2 bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xl font-black font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       <div className="space-y-3">
                         <div className="flex justify-between items-center text-sm">
@@ -3576,8 +3855,10 @@ export default function Financing() {
                           </span>
                         </div>
                         <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
-                          <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">Total a Pagar</span>
-                          <span className="font-black text-[#ED1C24] dark:text-white text-2xl">
+                          <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
+                            {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}
+                          </span>
+                          <span className={`font-black text-2xl ${paymentType === 'abono' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-white'}`}>
                             ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
@@ -3831,13 +4112,17 @@ export default function Financing() {
                             className={`w-full flex items-center justify-center gap-2 py-4 px-4 rounded-full font-bold transition-all shadow-md text-lg cursor-pointer ${
                               isInsufficient
                                 ? 'bg-gray-300 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 cursor-not-allowed'
-                                : 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]'
+                                : paymentType === 'abono'
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20 active:scale-[0.99]'
+                                  : 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]'
                             }`}
                           >
                             <CheckCircleIcon className="h-6 w-6" />
                             {isInsufficient
                               ? 'Efectivo Recibido Insuficiente'
-                              : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                              : paymentType === 'abono'
+                                ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
                           </button>
                         </div>
                       );
@@ -4284,7 +4569,46 @@ export default function Financing() {
                 Recibo Oficial de Pago
               </span>
               <p className="text-sm font-black font-mono tracking-wide text-black mt-2">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
-              <p className="text-xs font-medium text-gray-700 mt-0.5">Fecha: {activeReceiptData.date}</p>
+              <p className="text-xs font-bold text-gray-800 mt-1">
+                Fecha de Pago: <span className="font-black text-black">{activeReceiptData.paymentExecutionDate || activeReceiptData.date}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Tarjetas Informativas de Fechas: Fecha de Pago Realizada vs Fecha Programada / Vencimiento */}
+          <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-300">
+            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
+              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
+                💵 Fecha de Pago Realizado
+              </span>
+              <p className="font-black text-black text-xs">
+                {activeReceiptData.paymentExecutionDate || activeReceiptData.date}
+              </p>
+              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Cobro procesado en caja</span>
+            </div>
+
+            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
+              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
+                🗓️ Fecha Programada de la Cuota
+              </span>
+              <p className="font-black text-black text-xs">
+                {activeReceiptData.scheduledDueDate || activeReceiptData.paidInstallments?.[0]?.dueDate || selectedFinancing?.nextPayment || 'N/A'}
+              </p>
+              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Vencimiento predeterminado</span>
+            </div>
+
+            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
+              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
+                ⏳ Próxima Fecha de Pago
+              </span>
+              <p className="font-black text-black text-xs">
+                {activeReceiptData.newBalance <= 0 
+                  ? 'Totalmente Saldado ✓' 
+                  : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
+              </p>
+              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">
+                {activeReceiptData.newBalance <= 0 ? 'Sin cuotas pendientes' : 'Siguiente cuota a pagar'}
+              </span>
             </div>
           </div>
 
@@ -4362,6 +4686,7 @@ export default function Financing() {
               <thead className="bg-gray-100 text-black uppercase tracking-wider text-[10px] font-black">
                 <tr>
                   <th className="py-2.5 px-4">Concepto / Cuota</th>
+                  <th className="py-2.5 px-4 text-center">Vencimiento Programado</th>
                   <th className="py-2.5 px-4 text-right">Capital</th>
                   <th className="py-2.5 px-4 text-right">Interés</th>
                   <th className="py-2.5 px-4 text-right">Mora</th>
@@ -4372,6 +4697,7 @@ export default function Financing() {
                 {activeReceiptData.paymentType === 'abono' ? (
                   <tr>
                     <td className="py-3 px-4 font-bold text-black">Abono Directo al Capital Principal</td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
                     <td className="py-3 px-4 text-right font-medium text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                     <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
                     <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
@@ -4380,7 +4706,8 @@ export default function Financing() {
                 ) : (
                   activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                     <tr key={inst.id}>
-                      <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length} ({inst.dueDate})</td>
+                      <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                      <td className="py-3 px-4 text-center font-mono font-bold text-black">{inst.dueDate}</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                       <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -4418,6 +4745,14 @@ export default function Financing() {
                 <span className="font-bold text-gray-700">Nuevo Balance Pendiente:</span>
                 <span className="font-black text-black text-sm">
                   ${activeReceiptData.newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-gray-300 flex justify-between items-center text-xs">
+                <span className="font-bold text-gray-700">Próxima Fecha de Pago:</span>
+                <span className="font-black text-black text-xs font-mono">
+                  {activeReceiptData.newBalance <= 0 
+                    ? 'Totalmente Saldado ✓' 
+                    : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
                 </span>
               </div>
             </div>

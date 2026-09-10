@@ -5,6 +5,9 @@ export interface FinancingPaymentReceipt {
   receiptNumber: string;
   financingId: string;
   date: string;
+  paymentExecutionDate?: string;
+  scheduledDueDate?: string;
+  nextPaymentDate?: string;
   paymentType: 'cuotas' | 'abono';
   paidInstallments: {
     id: number;

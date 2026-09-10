@@ -8,14 +8,17 @@ import {
   DocumentDuplicateIcon,
   CheckIcon,
   BanknotesIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { 
   fetchAllBankTransactions, 
   calculateBankAccountsSummary, 
+  CASH_ACCOUNT,
   type BankTransaction 
 } from '../services/bankService';
+import CashMovementModal from '../components/finance/CashMovementModal';
 import logo from '../assets/logo.png';
 
 export default function Banks() {
@@ -23,12 +26,14 @@ export default function Banks() {
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
+  const [methodFilter, setMethodFilter] = useState<'all' | 'Efectivo' | 'Transferencia'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'Ingreso' | 'Egreso'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('Movimiento de Efectivo');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [copiedAccId, setCopiedAccId] = useState<string | null>(null);
   const [copiedRefId, setCopiedRefId] = useState<string | null>(null);
+  const [isMovementModalOpen, setIsMovementModalOpen] = useState<boolean>(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -52,6 +57,7 @@ export default function Banks() {
     window.addEventListener('brianna_invoices_updated', handleBankChanges);
     window.addEventListener('brianna_bank_accounts_changed', handleBankChanges);
     window.addEventListener('brianna_cash_movements_changed', handleBankChanges);
+    window.addEventListener('brianna_receipts_updated', handleBankChanges);
     window.addEventListener('storage', handleBankChanges);
     window.addEventListener('focus', handleBankChanges);
 
@@ -60,6 +66,7 @@ export default function Banks() {
       window.removeEventListener('brianna_invoices_updated', handleBankChanges);
       window.removeEventListener('brianna_bank_accounts_changed', handleBankChanges);
       window.removeEventListener('brianna_cash_movements_changed', handleBankChanges);
+      window.removeEventListener('brianna_receipts_updated', handleBankChanges);
       window.removeEventListener('storage', handleBankChanges);
       window.removeEventListener('focus', handleBankChanges);
     };
@@ -73,12 +80,29 @@ export default function Banks() {
   // Filtrado de transacciones
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      // 1. Filtro por Banco
+      // 1. Filtro por Banco o Caja
       if (selectedBankFilter !== 'all') {
-        const matchesId = tx.bank_account_id === selectedBankFilter;
-        const targetAcc = bankAccounts.find(a => a.id === selectedBankFilter);
-        const matchesName = targetAcc && tx.bank_account_name.toLowerCase().includes(targetAcc.bankName.toLowerCase());
-        if (!matchesId && !matchesName) return false;
+        if (selectedBankFilter === 'caja-general') {
+          const isCash = tx.bank_account_id === 'caja-general' || (tx.payment_method || '').toLowerCase() === 'efectivo';
+          if (!isCash) return false;
+        } else {
+          const matchesId = tx.bank_account_id === selectedBankFilter;
+          const targetAcc = bankAccounts.find(a => a.id === selectedBankFilter);
+          const matchesName = targetAcc && tx.bank_account_name.toLowerCase().includes(targetAcc.bankName.toLowerCase());
+          if (!matchesId && !matchesName) return false;
+        }
+      }
+
+      // 1b. Filtro por Método de Pago
+      if (methodFilter !== 'all') {
+        const pm = (tx.payment_method || '').toLowerCase();
+        if (methodFilter === 'Efectivo') {
+          const isCash = pm.includes('efectivo') || tx.bank_account_id === 'caja-general';
+          if (!isCash) return false;
+        } else if (methodFilter === 'Transferencia') {
+          const isTransf = pm.includes('transferencia') || pm.includes('transf');
+          if (!isTransf) return false;
+        }
       }
 
       // 2. Filtro por Tipo (Ingreso vs Egreso)
@@ -87,8 +111,14 @@ export default function Banks() {
       }
 
       // 3. Filtro por Categoría
-      if (categoryFilter !== 'all' && tx.category !== categoryFilter) {
-        return false;
+      if (categoryFilter !== 'all') {
+        if (categoryFilter === 'Movimiento de Efectivo') {
+          const isCashMove = tx.category === 'Movimiento de Efectivo' || 
+            (tx.source_type === 'cash_movement' && (tx.payment_method || '').toLowerCase() === 'efectivo');
+          if (!isCashMove) return false;
+        } else if (tx.category !== categoryFilter) {
+          return false;
+        }
       }
 
       // 4. Filtro por Fecha
@@ -107,7 +137,7 @@ export default function Banks() {
         }
       }
 
-      // 5. Búsqueda por texto (referencia, concepto, responsable)
+      // 5. Búsqueda por texto (referencia, concepto, responsable, método)
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const inConcept = tx.concept.toLowerCase().includes(q);
@@ -115,14 +145,15 @@ export default function Banks() {
         const inBank = tx.bank_account_name.toLowerCase().includes(q);
         const inCategory = (tx.category || '').toLowerCase().includes(q);
         const inCreatedBy = (tx.created_by || '').toLowerCase().includes(q);
-        if (!inConcept && !inRef && !inBank && !inCategory && !inCreatedBy) {
+        const inMethod = (tx.payment_method || '').toLowerCase().includes(q);
+        if (!inConcept && !inRef && !inBank && !inCategory && !inCreatedBy && !inMethod) {
           return false;
         }
       }
 
       return true;
     });
-  }, [transactions, bankAccounts, selectedBankFilter, typeFilter, categoryFilter, datePreset, searchTerm]);
+  }, [transactions, bankAccounts, selectedBankFilter, methodFilter, typeFilter, categoryFilter, datePreset, searchTerm]);
 
   const handleCopy = (text: string, id: string, type: 'acc' | 'ref') => {
     navigator.clipboard.writeText(text);
@@ -139,15 +170,17 @@ export default function Banks() {
     window.print();
   };
 
-  const currentSelectedAccount = bankAccounts.find(a => a.id === selectedBankFilter);
+  const currentSelectedAccount = selectedBankFilter === 'caja-general' 
+    ? CASH_ACCOUNT 
+    : bankAccounts.find(a => a.id === selectedBankFilter);
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* 1. Header Minimalista con el Diseño de la App (sin repetir título) */}
+      {/* 1. Header Minimalista con el Diseño de la App */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
         <div>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400 font-medium">
-            Historial consolidado de transferencias, depósitos y cuentas empresariales.
+            Historial consolidado de movimientos bancarios, depósitos, transferencias y movimientos en efectivo.
           </p>
         </div>
 
@@ -163,6 +196,15 @@ export default function Banks() {
 
           <button
             type="button"
+            onClick={() => setIsMovementModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full font-bold text-xs shadow-xs hover:shadow transition-all cursor-pointer"
+          >
+            <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+            <span>Registrar Movimiento</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handlePrint}
             className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-full font-bold text-xs shadow-2xs transition-all cursor-pointer"
           >
@@ -174,11 +216,11 @@ export default function Banks() {
 
       {/* 2. Tarjetas de Métricas - Diseño Minimalista y Limpio */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 print:hidden">
-        {/* Balance Global */}
+        {/* Balance Global Consolidado */}
         <div className="p-4 sm:p-4.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Balance Total en Bancos
+              Balance Consolidado
             </span>
             <span className="p-1.5 bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 rounded-xl">
               <BuildingLibraryIcon className="w-3.5 h-3.5" />
@@ -187,10 +229,38 @@ export default function Banks() {
           <p className="text-xl sm:text-2xl font-black font-mono text-gray-900 dark:text-white">
             RD$ {summary.totalGlobalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Consolidado en todas las cuentas</p>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium truncate">
+            Bancos: RD$ {summary.totalBankBalance.toLocaleString('es-DO', { maximumFractionDigits: 0 })} • Caja: RD$ {summary.totalCashBalance.toLocaleString('es-DO', { maximumFractionDigits: 0 })}
+          </p>
         </div>
 
-        {/* Total Depósitos */}
+        {/* Balance en Efectivo (Caja) */}
+        <div 
+          onClick={() => setSelectedBankFilter(selectedBankFilter === 'caja-general' ? 'all' : 'caja-general')}
+          className={`p-4 sm:p-4.5 bg-white dark:bg-zinc-900 rounded-2xl border transition-all cursor-pointer shadow-2xs space-y-1 ${
+            selectedBankFilter === 'caja-general'
+              ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+              : 'border-gray-200/70 dark:border-zinc-800 hover:border-emerald-300'
+          }`}
+          title="Clic para filtrar transacciones en efectivo"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Efectivo en Caja
+            </span>
+            <span className="p-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
+              <BanknotesIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+            </span>
+          </div>
+          <p className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+            RD$ {summary.totalCashBalance.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">
+            {summary.cashAccountWithBalance.transactionCount} movs. en efectivo
+          </p>
+        </div>
+
+        {/* Total Entradas */}
         <div className="p-4 sm:p-4.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -203,10 +273,10 @@ export default function Banks() {
           <p className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">
             +RD$ {summary.totalGlobalDeposits.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Ventas por transf. y depósitos</p>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Depósitos, transferencias y ventas</p>
         </div>
 
-        {/* Total Retiros */}
+        {/* Total Salidas */}
         <div className="p-4 sm:p-4.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#ED1C24] dark:text-red-400">
@@ -219,35 +289,19 @@ export default function Banks() {
           <p className="text-xl sm:text-2xl font-black font-mono text-[#ED1C24] dark:text-red-400">
             -RD$ {summary.totalGlobalWithdrawals.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Pagos y transferencias emitidas</p>
-        </div>
-
-        {/* Operaciones */}
-        <div className="p-4 sm:p-4.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Operaciones
-            </span>
-            <span className="p-1.5 bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 rounded-xl">
-              <BanknotesIcon className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <p className="text-xl sm:text-2xl font-black font-mono text-gray-900 dark:text-white">
-            {summary.totalTransactionsCount}
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Transacciones bancarias</p>
+          <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium">Pagos emitidos y salidas de caja</p>
         </div>
       </div>
 
-      {/* 3. Cuentas Bancarias de la Empresa - Tarjetas Compactas e Interactivas */}
+      {/* 3. Cuentas Bancarias y Fondos en Caja - Tarjetas Compactas e Interactivas */}
       <div className="print:hidden space-y-2">
         <div className="flex items-center justify-between px-0.5">
           <div className="flex items-center gap-2">
             <h2 className="text-[11px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Cuentas Bancarias ({bankAccounts.length})
+              Cuentas Bancarias y Caja de Efectivo ({summary.allAccountsWithBalances.length})
             </h2>
             <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium hidden sm:inline">
-              • Clic para filtrar movimientos por cuenta
+              • Clic para filtrar movimientos por cuenta o caja
             </span>
           </div>
           {selectedBankFilter !== 'all' && (
@@ -260,7 +314,8 @@ export default function Banks() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Cuentas Bancarias */}
           {summary.accountsWithBalances.map((acc) => {
             const isSelected = selectedBankFilter === acc.id;
             const isBPD = acc.bankName.toLowerCase().includes('popular');
@@ -346,15 +401,70 @@ export default function Banks() {
               </div>
             );
           })}
+
+          {/* Tarjeta de Caja General (Efectivo) */}
+          {(() => {
+            const isCashSelected = selectedBankFilter === 'caja-general';
+            const cashAcc = summary.cashAccountWithBalance;
+            return (
+              <div
+                onClick={() => setSelectedBankFilter(isCashSelected ? 'all' : 'caja-general')}
+                className={`group relative p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-2xs ${
+                  isCashSelected
+                    ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-500 ring-2 ring-emerald-500/20'
+                    : 'bg-white dark:bg-zinc-900 border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-400'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center font-black text-xs text-white shrink-0 shadow-xs">
+                      <BanknotesIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-xs font-black text-emerald-900 dark:text-emerald-300 truncate">
+                          Caja General
+                        </h3>
+                        {isCashSelected && (
+                          <span className="text-[9px] font-black px-1.5 py-0.2 bg-emerald-600 text-white rounded-md">
+                            Activo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400 font-medium truncate">
+                        Efectivo en Caja • DOP
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full shrink-0">
+                    {cashAcc.transactionCount} op.
+                  </span>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-emerald-100 dark:border-emerald-900/50 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                    Balance Disponible
+                  </span>
+
+                  <div className="text-right">
+                    <span className="font-mono text-xs sm:text-sm font-black text-emerald-700 dark:text-emerald-400">
+                      RD$ {cashAcc.currentBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
       {/* 4. Barra de Filtros y Tabla Unificada */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 p-4 sm:p-5 shadow-2xs space-y-4">
-        {/* Barra de Filtros Minimalista en una sola línea */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
-          {/* Cuentas Pills & Tipo */}
-          <div className="flex flex-wrap items-center gap-1.5">
+        {/* Barra de Filtros Minimalista */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 print:hidden">
+          {/* Cuentas Pills, Método y Tipo */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* Cuenta activa */}
             <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl text-xs font-bold">
               <button
@@ -391,6 +501,38 @@ export default function Banks() {
                   </button>
                 );
               })}
+
+              {/* Botón de filtro de Caja General */}
+              <button
+                type="button"
+                onClick={() => setSelectedBankFilter('caja-general')}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  selectedBankFilter === 'caja-general'
+                    ? 'bg-emerald-600 text-white shadow-2xs font-black'
+                    : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                }`}
+              >
+                <BanknotesIcon className="w-3.5 h-3.5" />
+                <span>Efectivo ({summary.cashAccountWithBalance.transactionCount})</span>
+              </button>
+            </div>
+
+            {/* Método: Todos / Efectivo / Transferencia */}
+            <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl text-xs font-bold">
+              {(['all', 'Efectivo', 'Transferencia'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMethodFilter(m)}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    methodFilter === m
+                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-2xs font-black'
+                      : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {m === 'all' ? 'Métodos' : m === 'Efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
+                </button>
+              ))}
             </div>
 
             {/* Tipo: Todos / Ingreso / Egreso */}
@@ -406,7 +548,7 @@ export default function Banks() {
                       : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
-                  {t === 'all' ? 'Todos' : t === 'Ingreso' ? 'Entradas (+)' : 'Salidas (-)'}
+                  {t === 'all' ? 'Flujo' : t === 'Ingreso' ? 'Entradas (+)' : 'Salidas (-)'}
                 </button>
               ))}
             </div>
@@ -421,10 +563,12 @@ export default function Banks() {
               className="px-3 py-1.5 bg-gray-100 dark:bg-zinc-800 border-none rounded-xl text-xs font-bold text-gray-700 dark:text-zinc-300 cursor-pointer focus:ring-1 focus:ring-red-500"
             >
               <option value="all">Categorías (Todas)</option>
+              <option value="Movimiento de Efectivo">Movimientos de Efectivo</option>
               <option value="Venta / Facturación">Ventas / Facturación</option>
               <option value="Depósito / Transferencia">Depósitos / Transferencias</option>
               <option value="Retiro / Pago">Retiros / Pagos</option>
               <option value="Cobro Financiamiento">Cobros Financiamientos</option>
+              <option value="Gasto / Servicio">Gastos / Servicios</option>
             </select>
 
             {/* Fecha Preset */}
@@ -444,7 +588,7 @@ export default function Banks() {
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por ref., concepto..."
+                placeholder="Buscar por ref., concepto, método..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-500"
@@ -460,13 +604,13 @@ export default function Banks() {
               <img src={logo} alt="Logo" className="h-12 object-contain" />
               <div>
                 <h2 className="text-xl font-black uppercase text-black">BRIANNA HEAVY EQUIPMENT S.R.L.</h2>
-                <p className="text-xs font-bold text-gray-700">RNC: 132-61036-2 • EXTRACTO DE MOVIMIENTOS BANCARIOS</p>
+                <p className="text-xs font-bold text-gray-700">RNC: 132-61036-2 • EXTRACTO DE MOVIMIENTOS FINANCIEROS</p>
                 <p className="text-xs text-gray-600">Fecha de emisión: {new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xs font-black uppercase">Cuenta:</p>
-              <p className="text-sm font-bold text-black">{currentSelectedAccount ? currentSelectedAccount.bankName : 'Todas las Cuentas Bancarias'}</p>
+              <p className="text-xs font-black uppercase">Cuenta / Caja:</p>
+              <p className="text-sm font-bold text-black">{currentSelectedAccount ? currentSelectedAccount.bankName : 'Todas las Cuentas y Caja de Efectivo'}</p>
               {currentSelectedAccount && (
                 <p className="text-xs font-mono">{currentSelectedAccount.accountNumber} ({currentSelectedAccount.accountType})</p>
               )}
@@ -480,7 +624,7 @@ export default function Banks() {
             <div className="py-14 text-center space-y-2">
               <BuildingLibraryIcon className="w-10 h-10 text-gray-300 dark:text-zinc-700 mx-auto" />
               <p className="text-xs font-bold text-gray-500 dark:text-zinc-400">
-                No se encontraron transacciones bancarias con los filtros seleccionados.
+                No se encontraron movimientos con los filtros seleccionados.
               </p>
             </div>
           ) : (
@@ -491,7 +635,10 @@ export default function Banks() {
                     Fecha / Hora
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:text-black">
-                    Cuenta Bancaria
+                    Cuenta / Caja
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:text-black">
+                    Método
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:text-black">
                     Tipo
@@ -513,6 +660,8 @@ export default function Banks() {
               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 bg-white dark:bg-zinc-900">
                 {filteredTransactions.map((tx) => {
                   const isIngreso = tx.type === 'Ingreso';
+                  const isCash = tx.bank_account_id === 'caja-general' || (tx.payment_method || '').toLowerCase().includes('efectivo');
+
                   return (
                     <tr 
                       key={tx.id}
@@ -528,14 +677,32 @@ export default function Banks() {
                         </div>
                       </td>
 
-                      {/* Cuenta Bancaria */}
+                      {/* Cuenta o Caja */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-xs font-black text-gray-900 dark:text-white print:text-black">
-                          {tx.bank_account_name}
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${isCash ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                          <span className="text-xs font-black text-gray-900 dark:text-white print:text-black">
+                            {tx.bank_account_name}
+                          </span>
                         </div>
                         <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono">
                           {tx.category}
                         </span>
+                      </td>
+
+                      {/* Método de Pago */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {isCash ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50">
+                            <BanknotesIcon className="w-3 h-3 stroke-[2.5]" />
+                            <span>Efectivo</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50">
+                            <BuildingLibraryIcon className="w-3 h-3 stroke-[2.5]" />
+                            <span>Transferencia</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* Tipo */}
@@ -550,7 +717,7 @@ export default function Banks() {
                           ) : (
                             <ArrowUpCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" />
                           )}
-                          <span>{isIngreso ? 'Depósito' : 'Retiro'}</span>
+                          <span>{isIngreso ? 'Ingreso' : 'Egreso'}</span>
                         </span>
                       </td>
 
@@ -605,6 +772,16 @@ export default function Banks() {
           )}
         </div>
       </div>
+
+      {/* Modal de Registro de Movimiento de Fondos (Efectivo y Transferencia) */}
+      <CashMovementModal
+        isOpen={isMovementModalOpen}
+        onClose={() => setIsMovementModalOpen(false)}
+        onSuccess={() => {
+          setIsMovementModalOpen(false);
+          loadData();
+        }}
+      />
     </div>
   );
 }
