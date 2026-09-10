@@ -68,8 +68,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         bank_account_id: paymentMethod === 'Transferencia' ? selectedAccount?.id : undefined,
         bank_account_name: bankAccountLabel,
         reference: paymentMethod === 'Transferencia' ? reference.trim() : undefined,
-        register_name: defaultRegister || 'Caja Cobros & Financiamientos',
-        created_by: localStorage.getItem('brianna_user_name') || 'Carlos Mendoza',
+        register_name: defaultRegister || localStorage.getItem('brianna_active_register') || 'Caja 1 - Repuestos',
+        created_by: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
       });
       
       onSuccess();

@@ -49,12 +49,20 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
 
   const loadMovements = async () => {
-    const movs = await fetchCashMovements();
-    if (movs) setCashMovements(filterMovementsByShift(movs));
+    const movs = await fetchCashMovements(true);
+    if (movs) {
+      const filtered = filterMovementsByShift(movs, 'today');
+      setCashMovements(filtered.length > 0 ? filtered : movs);
+    }
   };
 
   useEffect(() => {
-    if (isOpen) loadMovements();
+    if (isOpen) {
+      loadMovements();
+      const handler = () => loadMovements();
+      window.addEventListener('brianna_cash_movements_changed', handler);
+      return () => window.removeEventListener('brianna_cash_movements_changed', handler);
+    }
   }, [isOpen]);
 
   const validSales = useMemo(() => {
@@ -84,7 +92,8 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const filteredMovements = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return cashMovements.filter(m => {
-      const matchSearch = !q || m.concept.toLowerCase().includes(q) || String(m.amount).includes(q);
+      const conceptText = (m.concept || (m as any).reason || '').toLowerCase();
+      const matchSearch = !q || conceptText.includes(q) || String(m.amount).includes(q);
       const matchType = movementTypeFilter === 'Todos' || m.type === movementTypeFilter;
       return matchSearch && matchType;
     });
@@ -356,6 +365,7 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
       {/* Cash Movement Modal */}
       <CashMovementModal
         isOpen={isMovementModalOpen}
+        defaultRegister="Caja 1 - Repuestos"
         onClose={() => setIsMovementModalOpen(false)}
         onSuccess={() => { setIsMovementModalOpen(false); loadMovements(); }}
       />

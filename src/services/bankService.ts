@@ -190,12 +190,12 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
         bank_account_name: 'Caja General (Efectivo)',
         type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
         amount: Number(m.amount) || 0,
-        concept: m.concept || (m.type === 'Ingreso' ? 'Ingreso a Caja en Efectivo' : 'Egreso de Caja en Efectivo'),
+        concept: m.concept || (m as any).reason || (m.type === 'Ingreso' ? 'Ingreso a Caja en Efectivo' : 'Egreso de Caja en Efectivo'),
         reference: m.reference || undefined,
         payment_method: 'Efectivo',
         category: 'Movimiento de Efectivo',
         date: m.created_at || new Date().toISOString(),
-        created_by: m.created_by || 'Cajero',
+        created_by: m.created_by || (m as any).user_name || 'Harold Rosado',
         source_id: m.id,
         source_type: 'cash_movement'
       });
