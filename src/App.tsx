@@ -8,19 +8,39 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { initRealtimeSync } from './services/realtimeService';
 
-// Páginas Lazy Loaded
-const Login = React.lazy(() => import('./pages/Login'));
-const Dashboard = React.lazy(() => import('./pages/Dashboard'));
-const POS = React.lazy(() => import('./pages/POS'));
-const Cobros = React.lazy(() => import('./pages/Cobros'));
-const Inventory = React.lazy(() => import('./pages/Inventory'));
-const Financing = React.lazy(() => import('./pages/Financing'));
-const Settings = React.lazy(() => import('./pages/Settings'));
-const Reports = React.lazy(() => import('./pages/Reports'));
-const Customers = React.lazy(() => import('./pages/Customers'));
-const Invoices = React.lazy(() => import('./pages/Invoices'));
-const Banks = React.lazy(() => import('./pages/Banks'));
-const Catalog = React.lazy(() => import('./pages/Catalog'));
+// Función para reintentar la carga de chunks perezosos si hubo un nuevo despliegue
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<{ default: T }>
+) {
+  return React.lazy(async () => {
+    const pageHasBeenRefreshed = sessionStorage.getItem('chunk_retry_refreshed');
+    try {
+      return await componentImport();
+    } catch (error: any) {
+      console.warn('Error al cargar módulo dinámico (posible nueva versión desplegada en el servidor):', error);
+      if (!pageHasBeenRefreshed) {
+        sessionStorage.setItem('chunk_retry_refreshed', 'true');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+// Páginas Lazy Loaded con Auto-Recuperación
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const POS = lazyWithRetry(() => import('./pages/POS'));
+const Cobros = lazyWithRetry(() => import('./pages/Cobros'));
+const Inventory = lazyWithRetry(() => import('./pages/Inventory'));
+const Financing = lazyWithRetry(() => import('./pages/Financing'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const Reports = lazyWithRetry(() => import('./pages/Reports'));
+const Customers = lazyWithRetry(() => import('./pages/Customers'));
+const Invoices = lazyWithRetry(() => import('./pages/Invoices'));
+const Banks = lazyWithRetry(() => import('./pages/Banks'));
+const Catalog = lazyWithRetry(() => import('./pages/Catalog'));
 
 // Configuración de React Query
 const queryClient = new QueryClient({
@@ -34,6 +54,13 @@ const queryClient = new QueryClient({
 
 function App() {
   useEffect(() => {
+    // Si la app cargó con éxito, limpiar flags de reintentos
+    setTimeout(() => {
+      sessionStorage.removeItem('chunk_retry_refreshed');
+      sessionStorage.removeItem('global_chunk_reload');
+      sessionStorage.removeItem('eb_chunk_reload_attempted');
+    }, 1500);
+
     const cleanup = initRealtimeSync();
     return () => cleanup();
   }, []);

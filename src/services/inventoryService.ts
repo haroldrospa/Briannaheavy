@@ -121,21 +121,50 @@ export const getLocalStorageInventory = (): InventoryItem[] => {
 
 export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
   inMemoryInventory = items;
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-  } catch (err) {
-    console.warn('LocalStorage quota exceeded. Cleaning heavy base64 images for offline cache...', err);
-    try {
-      const sanitized = items.map(item => ({
+
+  const sanitizeForStorage = (list: InventoryItem[], removeAllImages = false): any[] => {
+    return list.map(item => {
+      if (removeAllImages) {
+        return {
+          id: item.id,
+          name: item.name,
+          type: item.type,
+          brand: item.brand,
+          model: item.model,
+          price: item.price,
+          cost: item.cost,
+          stock: item.stock,
+          min_stock: item.min_stock,
+          department: item.department,
+          location: item.location,
+          includes_itbis: item.includes_itbis,
+          itbis_type: item.itbis_type,
+          show_price: item.show_price,
+          description: (item.description || '').slice(0, 300)
+        };
+      }
+
+      const isBase64 = (str?: string) => Boolean(str && (str.startsWith('data:') || str.length > 2048));
+      return {
         ...item,
-        image_url: item.image_url && item.image_url.length > 200000 ? '' : item.image_url,
+        image_url: isBase64(item.image_url) ? '' : item.image_url,
         images: Array.isArray(item.images) 
-          ? item.images.map(img => img.length > 200000 ? '' : img).filter(Boolean)
+          ? item.images.filter(img => !isBase64(img))
           : undefined
-      }));
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
+      };
+    });
+  };
+
+  try {
+    const lightItems = sanitizeForStorage(items, false);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightItems));
+  } catch (err) {
+    console.warn('LocalStorage quota excedido al guardar inventario. Guardando solo datos esenciales...', err);
+    try {
+      const minimalItems = sanitizeForStorage(items, true);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(minimalItems));
     } catch (innerErr) {
-      console.error('Failed to save to localStorage after sanitizing:', innerErr);
+      console.warn('No fue posible persistir inventario en localStorage (se mantiene en memoria activa):', innerErr);
     }
   }
 };
