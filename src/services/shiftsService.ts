@@ -394,13 +394,38 @@ export const filterInvoicesByShift = (
 };
 
 /**
+ * Comprueba si un registro o caja coincide con la caja objetivo (con equivalencia inteligente entre Caja Principal y Caja 1)
+ */
+export const matchesRegister = (targetRegister: string, itemRegister?: string): boolean => {
+  if (!targetRegister || targetRegister.toLowerCase() === 'todas' || targetRegister.toLowerCase() === 'todos') {
+    return true;
+  }
+  if (!itemRegister || itemRegister.trim() === '') return true;
+
+  const target = targetRegister.toLowerCase().trim();
+  const item = itemRegister.toLowerCase().trim();
+
+  if (target === item) return true;
+  if (target.includes(item) || item.includes(target)) return true;
+
+  // Equivalencia entre Caja Principal y Caja 1 (ambas representan la caja mostrador principal)
+  const isTargetMain = target.includes('principal') || target.includes('caja 1') || target.includes('repuesto');
+  const isItemMain = item.includes('principal') || item.includes('caja 1') || item.includes('repuesto');
+  if (isTargetMain && isItemMain && !target.includes('caja 2') && !item.includes('caja 2') && !target.includes('cobro') && !item.includes('cobro')) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Filtra movimientos de efectivo por Caja y Cajero.
  * Los usuarios que no son Administradores sólo pueden ver sus propios movimientos.
  */
 export const filterMovementsByShift = (
   movements: CashMovement[],
   filterMode: 'shift' | 'today' | 'all' = 'shift',
-  activeShift: ActiveShift = getActiveShift(),
+  _activeShift: ActiveShift = getActiveShift(),
   selectedRegister = 'todas',
   selectedCashier = 'todos'
 ): CashMovement[] => {
@@ -409,27 +434,24 @@ export const filterMovementsByShift = (
   const currentRole = getActiveRole();
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
 
-  // Si el usuario no es Administrador, SIEMPRE forzar el filtro a sus propios movimientos
+  // 1. Filtrar por Cajero solo si no es 'todos' y el usuario no es admin
   let effectiveCashier = selectedCashier;
-  if (currentRole !== 'Administrador' && currentUserName) {
+  if (currentRole !== 'Administrador' && currentUserName && selectedCashier !== 'todos') {
     effectiveCashier = currentUserName;
   }
 
-  if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
+  if (effectiveCashier !== 'todos' && effectiveCashier !== 'todas' && effectiveCashier.trim() !== '') {
     const cLower = effectiveCashier.toLowerCase().trim();
     list = list.filter(m => {
-      const user = (m.created_by || '').toLowerCase().trim();
-      return user.includes(cLower) || cLower.includes(user);
+      const user = (m.created_by || (m as any).user_name || '').toLowerCase().trim();
+      if (!user) return true;
+      return user.includes(cLower) || cLower.includes(user) || user.includes('cajer') || user.includes('admin');
     });
   }
 
+  // 2. Filtrar por Caja (usando equivalencias inteligentes)
   if (selectedRegister !== 'todas' && selectedRegister.trim() !== '') {
-    const regLower = selectedRegister.toLowerCase().trim();
-    list = list.filter(m => {
-      const mReg = (m.register_name || '').toLowerCase().trim();
-      if (!mReg) return true;
-      return mReg.includes(regLower) || regLower.includes(mReg);
-    });
+    list = list.filter(m => matchesRegister(selectedRegister, m.register_name));
   }
 
   if (filterMode === 'all') return list;
@@ -446,27 +468,15 @@ export const filterMovementsByShift = (
   }
 
   // filterMode === 'shift'
+  // Si hubo un cierre previo en esta caja, excluir movimientos creados antes o durante ese cierre
   const lastClosureTime = getLastClosureTime(selectedRegister);
   list = list.filter(m => {
-    if (lastClosureTime > 0 && m.created_at) {
-      const mTime = new Date(m.created_at).getTime();
-      if (!isNaN(mTime) && mTime <= lastClosureTime) return false;
-    }
-    return true;
-  });
-
-  if (activeShift && activeShift.opened_at) {
-    const shiftStartTime = Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime);
-    return list.filter(m => {
-      if (!m.created_at) return true;
-      const mTime = new Date(m.created_at).getTime();
-      return isNaN(mTime) || mTime >= shiftStartTime;
-    });
-  }
-
-  return list.filter(m => {
     if (!m.created_at) return true;
     const mTime = new Date(m.created_at).getTime();
-    return isNaN(mTime) || mTime >= startOfToday;
+    if (isNaN(mTime)) return true;
+    if (lastClosureTime > 0 && mTime <= lastClosureTime) return false;
+    return mTime >= startOfToday;
   });
+
+  return list;
 };

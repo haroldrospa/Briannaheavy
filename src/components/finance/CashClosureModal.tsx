@@ -182,9 +182,21 @@ export default function CashClosureModal({
         console.warn('Error refreshing financing receipts:', e);
       }
     };
+
+    const handleMovementsRefresh = () => {
+      setAllMovements(getLocalStorageMovements());
+      fetchCashMovements(true).then(movs => {
+        if (movs && movs.length > 0) setAllMovements(movs);
+      }).catch(e => console.warn('Background movements refresh:', e));
+    };
+
     window.addEventListener('brianna_receipts_updated', handleReceiptsRefresh);
+    window.addEventListener('brianna_cash_movements_changed', handleMovementsRefresh);
+    window.addEventListener('brianna_bank_transactions_changed', handleMovementsRefresh);
     return () => {
       window.removeEventListener('brianna_receipts_updated', handleReceiptsRefresh);
+      window.removeEventListener('brianna_cash_movements_changed', handleMovementsRefresh);
+      window.removeEventListener('brianna_bank_transactions_changed', handleMovementsRefresh);
     };
   }, [isOpen, selectedRegister, isAdmin, loggedInUserName]);
 
@@ -331,16 +343,16 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // Filtrar movimientos de caja por Caja y Cajero
+  // Filtrar movimientos de caja por Caja
   const scopedMovements = useMemo(() => {
     return filterMovementsByShift(
       allMovements, 
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
-      selectedCashierFilter
+      'todos'
     );
-  }, [allMovements, filterMode, activeShift, selectedRegister, selectedCashierFilter]);
+  }, [allMovements, filterMode, activeShift, selectedRegister]);
 
   // Calcular ventas y cobros por método de pago para ESA caja/cajero
   const systemSales = useMemo(() => {
@@ -380,12 +392,17 @@ export default function CashClosureModal({
     return { cash, card, transfer, credit };
   }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments]);
 
-  // Calcular totales de movimientos para ESA caja
+  // Calcular totales de movimientos para ESA caja física (solo efectivo)
   const cashMovementsTotals = useMemo(() => {
     let ingresos = 0, egresos = 0;
     scopedMovements.forEach(m => {
-      if (m.type === 'Ingreso') ingresos += Number(m.amount) || 0;
-      else if (m.type === 'Egreso') egresos += Number(m.amount) || 0;
+      const pm = (m.payment_method || 'Efectivo').toLowerCase();
+      const isBank = pm.includes('transferencia') || pm.includes('transf');
+      if (isBank) return;
+
+      const amt = Number(m.amount) || 0;
+      if (m.type === 'Ingreso') ingresos += amt;
+      else if (m.type === 'Egreso') egresos += amt;
     });
     return { ingresos, egresos };
   }, [scopedMovements]);
@@ -896,15 +913,16 @@ Observaciones: ${notes || 'Sin observaciones'}
                       <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
                         {scopedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
+                          const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro de Efectivo');
                           return (
                             <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${isIngreso ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
-                                  {isIngreso ? '↓ Ingreso' : '↑ Egreso'}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${isIngreso ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
+                                  {isIngreso ? '↓ Ingreso' : '↑ Retiro'}
                                 </span>
-                                <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[140px]">{m.concept}</span>
+                                <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[140px]" title={conceptText}>{conceptText}</span>
                               </div>
-                              <span className={`font-bold font-mono ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              <span className={`font-bold font-mono shrink-0 ml-2 ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                 {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                               </span>
                             </div>

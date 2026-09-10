@@ -3716,6 +3716,7 @@ export default function POS() {
         {isCashMovementOpen && (
           <CashMovementModal
             isOpen={isCashMovementOpen}
+            defaultRegister={activeRegister}
             onClose={() => setIsCashMovementOpen(false)}
             onSuccess={() => setIsCashMovementOpen(false)}
           />
