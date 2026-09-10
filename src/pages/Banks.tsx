@@ -28,7 +28,7 @@ export default function Banks() {
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'Efectivo' | 'Transferencia'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'Ingreso' | 'Egreso'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('Movimiento de Efectivo');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [datePreset, setDatePreset] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [copiedAccId, setCopiedAccId] = useState<string | null>(null);

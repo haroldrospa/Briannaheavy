@@ -256,27 +256,10 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
         source_id: inv.id,
         source_type: 'invoice'
       });
-    } else {
-      // Venta cobrada en Efectivo
-      aggregated.push({
-        id: txId,
-        bank_account_id: 'caja-general',
-        bank_account_name: 'Caja General (Efectivo)',
-        type: 'Ingreso',
-        amount: Number(inv.total_amount) || 0,
-        concept: `Cobro Venta Factura ${invNum} - ${client}`,
-        reference: inv.ncf || inv.invoice_number || undefined,
-        payment_method: 'Efectivo',
-        category: 'Venta / Facturación',
-        date: inv.created_at || new Date().toISOString(),
-        created_by: inv.cashier_name || 'Cajero POS',
-        source_id: inv.id,
-        source_type: 'invoice'
-      });
     }
   });
 
-  // D. Añadir recibos de financiamiento (Transferencias y Efectivo)
+  // D. Añadir recibos de financiamiento pagados por Transferencia
   try {
     const receipts = getStoredReceipts();
     receipts.forEach(r => {
@@ -311,22 +294,6 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
           concept: `Cobro Cuota Financiamiento ${r.receiptNumber} - ${r.customerName}`,
           reference: r.referenceNumber || r.receiptNumber,
           payment_method: 'Transferencia',
-          category: 'Cobro Financiamiento',
-          date: r.paymentExecutionDate || r.createdAt || r.date || new Date().toISOString(),
-          created_by: r.cashierName || 'Cobrador',
-          source_id: r.id,
-          source_type: 'financing_payment'
-        });
-      } else {
-        aggregated.push({
-          id: txId,
-          bank_account_id: 'caja-general',
-          bank_account_name: 'Caja General (Efectivo)',
-          type: 'Ingreso',
-          amount: Number(r.totalPaid) || 0,
-          concept: `Cobro Cuota Financiamiento ${r.receiptNumber} - ${r.customerName}`,
-          reference: r.referenceNumber || r.receiptNumber,
-          payment_method: r.paymentMethod || 'Efectivo',
           category: 'Cobro Financiamiento',
           date: r.paymentExecutionDate || r.createdAt || r.date || new Date().toISOString(),
           created_by: r.cashierName || 'Cobrador',
