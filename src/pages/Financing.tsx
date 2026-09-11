@@ -3844,29 +3844,6 @@ export default function Financing() {
                         </h4>
                       </div>
 
-                      {/* Modalidad Selector if in Cuotas */}
-                      {paymentType === 'cuotas' && (
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-900/40">
-                          <div>
-                            <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
-                              ¿Desea realizar un abono parcial en vez de la cuota completa?
-                            </span>
-                            <span className="text-[11px] text-amber-700 dark:text-amber-400">
-                              Permite ingresar un monto menor para amortizar el capital directamente.
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPaymentType('abono');
-                              setAbonoAmount(formatCurrencyInput(totalSelectedAmount));
-                            }}
-                            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
-                          >
-                            Hacer Abono Parcial
-                          </button>
-                        </div>
-                      )}
 
                       {/* Monto editable if in Abono */}
                       {paymentType === 'abono' && (
