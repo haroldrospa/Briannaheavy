@@ -11,6 +11,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
+import OpenShiftModal from '../components/finance/OpenShiftModal';
+import { isShiftOpen } from '../services/shiftsService';
 import { 
   fetchFinancings, 
   getLocalStorageFinancings, 
@@ -303,14 +305,36 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
   return diffDays >= 0 && diffDays <= daysLimit;
 };
 
+const FINANCING_REGISTER = 'Caja Cobros & Financiamientos';
+
 export default function Financing() {
   const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
+  const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(FINANCING_REGISTER));
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState<boolean>(false);
   const [isNewFormOpen, setIsNewFormOpen] = useState(false);
   const [customersList, setCustomersList] = useState<Customer[]>(() => getLocalStorageCustomers());
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>(() => getLocalStorageInventory());
+
+  useEffect(() => {
+    const handleShiftUpdate = () => {
+      setIsShiftActive(isShiftOpen(FINANCING_REGISTER));
+    };
+    const handleOpenShiftRequested = (e: any) => {
+      if (!e.detail?.register || e.detail.register === FINANCING_REGISTER || e.detail.register === 'todas') {
+        setIsOpenShiftModalOpen(true);
+      }
+    };
+
+    window.addEventListener('brianna_shift_updated', handleShiftUpdate);
+    window.addEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+    return () => {
+      window.removeEventListener('brianna_shift_updated', handleShiftUpdate);
+      window.removeEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+    };
+  }, []);
   
   useEffect(() => {
     let isMounted = true;
@@ -1498,13 +1522,28 @@ export default function Financing() {
             <span>Movimientos (I/E)</span>
           </button>
 
-          <button 
-            onClick={() => setIsCashClosureOpen(true)}
-            className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
-          >
-            <BanknotesIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
-            <span>Cierre de Caja</span>
-          </button>
+          {/* Cierre de Caja / Abrir Turno */}
+          {isShiftActive ? (
+            <button 
+              type="button"
+              onClick={() => setIsCashClosureOpen(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
+              title="Cierre y Arqueo de Caja"
+            >
+              <BanknotesIcon className="h-4 w-4 text-gray-500 dark:text-zinc-400" />
+              <span>Cierre de Caja</span>
+            </button>
+          ) : (
+            <button 
+              type="button"
+              onClick={() => setIsOpenShiftModalOpen(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-md shadow-emerald-900/20 cursor-pointer text-xs animate-pulse"
+              title="El turno está cerrado. Haz clic para abrir turno con el fondo inicial"
+            >
+              <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+              <span>Abrir Turno</span>
+            </button>
+          )}
           <button 
             onClick={() => setShowCalculator(!showCalculator)}
             className="w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-white dark:bg-[#1a1a1a] text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/80 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-xs cursor-pointer text-xs"
@@ -4792,11 +4831,35 @@ export default function Financing() {
       </AnimatePresence>
 
       {/* Cierre de Caja Modal */}
-      <CashClosureModal 
-        isOpen={isCashClosureOpen} 
-        onClose={() => setIsCashClosureOpen(false)} 
-        defaultRegister="Caja Cobros & Financiamientos"
-      />
+      <AnimatePresence>
+        {isCashClosureOpen && (
+          <CashClosureModal 
+            isOpen={isCashClosureOpen} 
+            onClose={(didCloseShift) => {
+              setIsCashClosureOpen(false);
+              if (didCloseShift) {
+                setIsOpenShiftModalOpen(true);
+              }
+            }} 
+            defaultRegister={FINANCING_REGISTER}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Open Shift Modal */}
+      <AnimatePresence>
+        {isOpenShiftModalOpen && (
+          <OpenShiftModal
+            isOpen={isOpenShiftModalOpen}
+            registerName={FINANCING_REGISTER}
+            onClose={() => setIsOpenShiftModalOpen(false)}
+            onSuccess={() => {
+              setIsOpenShiftModalOpen(false);
+              setIsShiftActive(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Modal de Confirmación con Clave Maestra para Eliminar Financiamiento */}
       <AnimatePresence>

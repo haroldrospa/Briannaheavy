@@ -17,7 +17,8 @@ import {
   BoltIcon, 
   PencilSquareIcon, 
   CheckIcon, 
-  ClockIcon
+  ClockIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -1235,13 +1236,26 @@ Observaciones: ${notes || 'Sin observaciones'}
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={handleCloseAll}
-                className="w-full bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold py-3 rounded-2xl text-xs transition-colors cursor-pointer"
-              >
-                Cerrar Ventana
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseAll();
+                    window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
+                  }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/20"
+                >
+                  <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+                  <span>Abrir Nuevo Turno</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseAll}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold py-3 rounded-2xl text-xs transition-colors cursor-pointer"
+                >
+                  Cerrar Ventana
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

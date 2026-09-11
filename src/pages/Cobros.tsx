@@ -6,11 +6,17 @@ import {
   CheckCircleIcon,
   PrinterIcon,
   BanknotesIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
+import { AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, type Invoice } from '../services/invoicesService';
 import CashClosureModal from '../components/finance/CashClosureModal';
+import OpenShiftModal from '../components/finance/OpenShiftModal';
+import { isShiftOpen } from '../services/shiftsService';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
+
+const COBROS_REGISTER = 'Caja Cobros & Repuestos';
 
 export interface ReceivableItem {
   id: string;
@@ -119,8 +125,28 @@ export default function Cobros() {
   } | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // Cash Closure Modal
+  // Cash Closure & Shift State
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
+  const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(COBROS_REGISTER));
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleShiftUpdate = () => {
+      setIsShiftActive(isShiftOpen(COBROS_REGISTER));
+    };
+    const handleOpenShiftRequested = (e: any) => {
+      if (!e.detail?.register || e.detail.register === COBROS_REGISTER || e.detail.register === 'todas') {
+        setIsOpenShiftModalOpen(true);
+      }
+    };
+
+    window.addEventListener('brianna_shift_updated', handleShiftUpdate);
+    window.addEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+    return () => {
+      window.removeEventListener('brianna_shift_updated', handleShiftUpdate);
+      window.removeEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+    };
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -264,14 +290,27 @@ export default function Cobros() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsCashClosureOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-xs font-bold transition-all border border-gray-200/80 dark:border-zinc-700 shadow-2xs cursor-pointer"
-          >
-            <BanknotesIcon className="w-4 h-4 text-emerald-600" />
-            <span>Cierre de Caja</span>
-          </button>
+          {isShiftActive ? (
+            <button
+              type="button"
+              onClick={() => setIsCashClosureOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-xs font-bold transition-all border border-gray-200/80 dark:border-zinc-700 shadow-2xs cursor-pointer"
+              title="Cierre y Arqueo de Caja"
+            >
+              <BanknotesIcon className="w-4 h-4 text-emerald-600" />
+              <span>Cierre de Caja</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsOpenShiftModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold transition-all shadow-md shadow-emerald-900/20 cursor-pointer animate-pulse"
+              title="El turno está cerrado. Haz clic para abrir turno con el fondo inicial"
+            >
+              <LockClosedIcon className="w-4 h-4 stroke-[2.2]" />
+              <span>Abrir Turno</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -662,13 +701,35 @@ export default function Cobros() {
       )}
 
       {/* Cash Closure Modal */}
-      {isCashClosureOpen && (
-        <CashClosureModal
-          isOpen={isCashClosureOpen}
-          onClose={() => setIsCashClosureOpen(false)}
-          defaultRegister="Caja Cobros & Repuestos"
-        />
-      )}
+      <AnimatePresence>
+        {isCashClosureOpen && (
+          <CashClosureModal
+            isOpen={isCashClosureOpen}
+            onClose={(didCloseShift) => {
+              setIsCashClosureOpen(false);
+              if (didCloseShift) {
+                setIsOpenShiftModalOpen(true);
+              }
+            }}
+            defaultRegister={COBROS_REGISTER}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Open Shift Modal */}
+      <AnimatePresence>
+        {isOpenShiftModalOpen && (
+          <OpenShiftModal
+            isOpen={isOpenShiftModalOpen}
+            registerName={COBROS_REGISTER}
+            onClose={() => setIsOpenShiftModalOpen(false)}
+            onSuccess={() => {
+              setIsOpenShiftModalOpen(false);
+              setIsShiftActive(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
