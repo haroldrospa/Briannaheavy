@@ -10,7 +10,7 @@ import {
   LockClosedIcon,
   CalendarIcon
 } from '@heroicons/react/24/outline';
-import { AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, type Invoice } from '../services/invoicesService';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
@@ -131,6 +131,17 @@ export default function Cobros() {
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
   const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(COBROS_REGISTER));
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState<boolean>(false);
+  const [showShiftWarningModal, setShowShiftWarningModal] = useState<boolean>(false);
+  const [shiftWarningMessage, setShiftWarningMessage] = useState<string>('');
+
+  const requireOpenShift = (actionMessage: string): boolean => {
+    if (!isShiftActive) {
+      setShiftWarningMessage(actionMessage);
+      setShowShiftWarningModal(true);
+      return false;
+    }
+    return true;
+  };
 
   useEffect(() => {
     const handleShiftUpdate = () => {
@@ -193,6 +204,9 @@ export default function Cobros() {
 
   // Open Payment Modal
   const handleOpenPayment = (item: ReceivableItem) => {
+    if (!requireOpenShift('Debes abrir un turno de caja antes de registrar un cobro de facturas a crédito.')) {
+      return;
+    }
     setSelectedReceivable(item);
     setPaymentAmount(item.balance.toFixed(2));
     setPaymentMethod('Efectivo');
@@ -204,6 +218,9 @@ export default function Cobros() {
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedReceivable) return;
+    if (!requireOpenShift('Debes abrir un turno de caja antes de procesar este cobro.')) {
+      return;
+    }
 
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) return;
@@ -767,6 +784,53 @@ export default function Cobros() {
               setIsShiftActive(true);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Advertencia: Turno Requerido */}
+      <AnimatePresence>
+        {showShiftWarningModal && (
+          <div className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="bg-white dark:bg-[#15161c] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800 p-6 sm:p-7 text-center"
+            >
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-3xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40 mb-4 shadow-sm">
+                <LockClosedIcon className="h-8 w-8 stroke-[2.2]" />
+              </div>
+
+              <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
+                Turno de Caja Requerido
+              </h3>
+
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-2 px-2 leading-relaxed font-medium">
+                {shiftWarningMessage || 'Para registrar o procesar cobros de facturas, debes abrir un turno en caja e ingresar el fondo inicial.'}
+              </p>
+
+              <div className="mt-6 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowShiftWarningModal(false)}
+                  className="flex-1 py-3 rounded-full text-xs font-bold text-gray-700 dark:text-zinc-300 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShiftWarningModal(false);
+                    setIsOpenShiftModalOpen(true);
+                  }}
+                  className="flex-1 py-3 rounded-full text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md shadow-emerald-900/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+                  <span>Abrir Turno Ahora</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

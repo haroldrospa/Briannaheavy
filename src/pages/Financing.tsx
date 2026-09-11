@@ -328,6 +328,18 @@ export default function Financing() {
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
   const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(FINANCING_REGISTER));
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState<boolean>(false);
+  const [showShiftWarningModal, setShowShiftWarningModal] = useState<boolean>(false);
+  const [shiftWarningMessage, setShiftWarningMessage] = useState<string>('');
+
+  const requireOpenShift = (actionMessage: string): boolean => {
+    if (!isShiftActive) {
+      setShiftWarningMessage(actionMessage);
+      setShowShiftWarningModal(true);
+      return false;
+    }
+    return true;
+  };
+
   const [isNewFormOpen, setIsNewFormOpen] = useState(false);
   const [customersList, setCustomersList] = useState<Customer[]>(() => getLocalStorageCustomers());
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>(() => getLocalStorageInventory());
@@ -580,6 +592,9 @@ export default function Financing() {
   };
 
   const handleOpenNewForm = () => {
+    if (!requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
+      return;
+    }
     setEditingFinancing(null);
     setNewCustomer('');
     setNewCustomerPhoto('');
@@ -752,6 +767,9 @@ export default function Financing() {
 
   const handleSaveFinancing = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
+      return;
+    }
     if (!newCustomer.trim() || !newItem.trim() || modalValTotal <= 0) {
       setFormValidationNotice(true);
       return;
@@ -1147,6 +1165,9 @@ export default function Financing() {
 
   const handleConfirmAndProcessPayment = async () => {
     if (!selectedFinancing) return;
+    if (!requireOpenShift('Debes abrir un turno de caja antes de confirmar y procesar un pago.')) {
+      return;
+    }
 
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
@@ -1580,7 +1601,12 @@ export default function Financing() {
             <span>Simulador</span>
           </button>
           <button 
-            onClick={() => (isNewFormOpen ? setIsNewFormOpen(false) : handleOpenNewForm())}
+            onClick={() => {
+              if (!isNewFormOpen && !requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
+                return;
+              }
+              isNewFormOpen ? setIsNewFormOpen(false) : handleOpenNewForm();
+            }}
             className={`w-full sm:w-auto flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer text-xs ${
               isNewFormOpen 
                 ? 'bg-red-600 text-white hover:bg-red-700' 
@@ -3775,6 +3801,9 @@ export default function Financing() {
                             <button
                               type="button"
                               onClick={() => {
+                                if (!requireOpenShift('Debes abrir un turno de caja antes de realizar un abono parcial.')) {
+                                  return;
+                                }
                                 setPaymentType('abono');
                                 if (selectedInsts.length > 0) {
                                   setAbonoAmount(formatCurrencyInput(totalSelectedAmount));
@@ -3788,7 +3817,12 @@ export default function Financing() {
                             </button>
 
                             <button 
-                              onClick={() => setShowPaymentForm(true)} 
+                              onClick={() => {
+                                if (!requireOpenShift('Debes abrir un turno de caja antes de cobrar las cuotas.')) {
+                                  return;
+                                }
+                                setShowPaymentForm(true);
+                              }} 
                               disabled={selectedInstallmentIds.length === 0}
                               className={`w-full sm:w-auto px-7 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
                                 selectedInstallmentIds.length > 0
@@ -3811,7 +3845,12 @@ export default function Financing() {
                             </button>
 
                             <button 
-                              onClick={() => setShowPaymentForm(true)} 
+                              onClick={() => {
+                                if (!requireOpenShift('Debes abrir un turno de caja antes de abonar a capital.')) {
+                                  return;
+                                }
+                                setShowPaymentForm(true);
+                              }} 
                               disabled={numAbono <= 0}
                               className={`w-full sm:w-auto px-8 py-3 rounded-full font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
                                 numAbono > 0
@@ -4897,6 +4936,53 @@ export default function Financing() {
               setIsShiftActive(true);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Advertencia: Turno Requerido */}
+      <AnimatePresence>
+        {showShiftWarningModal && (
+          <div className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="bg-white dark:bg-[#15161c] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800 p-6 sm:p-7 text-center"
+            >
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-3xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40 mb-4 shadow-sm">
+                <LockClosedIcon className="h-8 w-8 stroke-[2.2]" />
+              </div>
+
+              <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
+                Turno de Caja Requerido
+              </h3>
+
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-2 px-2 leading-relaxed font-medium">
+                {shiftWarningMessage || 'Para registrar un nuevo financiamiento o procesar cobros y pagos, debes abrir un turno en caja e ingresar el fondo inicial.'}
+              </p>
+
+              <div className="mt-6 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowShiftWarningModal(false)}
+                  className="flex-1 py-3 rounded-full text-xs font-bold text-gray-700 dark:text-zinc-300 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShiftWarningModal(false);
+                    setIsOpenShiftModalOpen(true);
+                  }}
+                  className="flex-1 py-3 rounded-full text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md shadow-emerald-900/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+                  <span>Abrir Turno Ahora</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
