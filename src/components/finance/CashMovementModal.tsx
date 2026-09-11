@@ -10,9 +10,7 @@ import {
   CheckCircleIcon,
   PrinterIcon,
   DocumentTextIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  ArrowPathIcon
+  PlusIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, type CashMovement } from '../../services/cashMovementsService';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../../utils/receiptSettings';
@@ -40,10 +38,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
   // History and session states
   const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [isLoadingMovements, setIsLoadingMovements] = useState<boolean>(false);
-  const [historyFilterType, setHistoryFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso' | 'Efectivo' | 'Transferencia'>('Todos');
-  const [historyFilterMode, setHistoryFilterMode] = useState<'shift' | 'today'>('shift');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [historyFilterType, setHistoryFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
   const [selectedMovementForPrint, setSelectedMovementForPrint] = useState<CashMovement | null>(null);
   const [isPrintingSessionSummary, setIsPrintingSessionSummary] = useState<boolean>(false);
   const [lastCreatedMovement, setLastCreatedMovement] = useState<CashMovement | null>(null);
@@ -52,12 +47,11 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const activeShift = useMemo(() => getActiveShift(activeRegisterName), [activeRegisterName, isOpen]);
 
   const loadMovements = async () => {
-    setIsLoadingMovements(true);
     try {
       const data = await fetchCashMovements(true);
       setMovements(data);
-    } finally {
-      setIsLoadingMovements(false);
+    } catch {
+      // Ignorar error de carga
     }
   };
 
@@ -74,27 +68,14 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   }, [isOpen, selectedBankId, initialTab]);
 
   const sessionMovements = useMemo(() => {
-    return filterMovementsByShift(movements, historyFilterMode, activeShift, activeRegisterName, 'todos');
-  }, [movements, historyFilterMode, activeShift, activeRegisterName]);
+    return filterMovementsByShift(movements, 'shift', activeShift, activeRegisterName, 'todos');
+  }, [movements, activeShift, activeRegisterName]);
 
   const filteredSessionMovements = useMemo(() => {
-    let list = sessionMovements;
-    if (historyFilterType === 'Ingreso') list = list.filter(m => m.type === 'Ingreso');
-    else if (historyFilterType === 'Egreso') list = list.filter(m => m.type === 'Egreso');
-    else if (historyFilterType === 'Efectivo') list = list.filter(m => m.payment_method !== 'Transferencia');
-    else if (historyFilterType === 'Transferencia') list = list.filter(m => m.payment_method === 'Transferencia');
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter(m => 
-        (m.concept || '').toLowerCase().includes(q) ||
-        (m.reference || '').toLowerCase().includes(q) ||
-        (m.created_by || '').toLowerCase().includes(q) ||
-        (m.bank_account_name || '').toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [sessionMovements, historyFilterType, searchQuery]);
+    if (historyFilterType === 'Ingreso') return sessionMovements.filter(m => m.type === 'Ingreso');
+    if (historyFilterType === 'Egreso') return sessionMovements.filter(m => m.type === 'Egreso');
+    return sessionMovements;
+  }, [sessionMovements, historyFilterType]);
 
   const sessionTotals = useMemo(() => {
     const totalIngresos = sessionMovements
@@ -204,19 +185,17 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-1.5rem)] sm:w-full max-w-2xl bg-white dark:bg-[#1a1a1a] rounded-3xl sm:rounded-[2.5rem] shadow-2xl z-50 overflow-hidden border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[90vh] print:hidden"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-1.5rem)] sm:w-full max-w-lg sm:max-w-xl bg-white dark:bg-[#1a1a1a] rounded-3xl sm:rounded-[2.5rem] shadow-2xl z-50 overflow-hidden border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[88vh] print:hidden"
       >
         {/* Header con tabs */}
         <div className="px-6 pt-5 pb-3 border-b border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#1a1a1a] shrink-0">
-          <div className="flex justify-between items-start mb-3">
+          <div className="flex justify-between items-start mb-2.5">
             <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 flex items-center gap-1.5">
-                <span>Brianna Heavy Equipment • Finanzas</span>
-                <span className="inline-block w-1 h-1 rounded-full bg-gray-400" />
-                <span className="text-gray-600 dark:text-zinc-300 font-bold">{activeRegisterName}</span>
+              <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                Brianna Heavy Equipment • {activeRegisterName}
               </div>
-              <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
-                {activeTab === 'form' ? `Movimiento de Fondos (${type})` : 'Historial de Ingresos y Egresos'}
+              <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
+                {activeTab === 'form' ? `Movimiento de Fondos (${type})` : 'Historial de la Sesión'}
               </h3>
             </div>
             <button 
@@ -232,14 +211,14 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             <button
               type="button"
               onClick={() => setActiveTab('form')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'form'
                   ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
               }`}
             >
-              <PlusIcon className="w-4 h-4 stroke-[2.5]" />
-              <span>Registrar Movimiento</span>
+              <PlusIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Registrar</span>
             </button>
             <button
               type="button"
@@ -247,21 +226,14 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 setActiveTab('history');
                 loadMovements();
               }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'history'
                   ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
               }`}
             >
-              <DocumentTextIcon className="w-4 h-4" />
-              <span>Historial de la Sesión</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'history'
-                  ? 'bg-red-100 text-[#ED1C24] dark:bg-red-950/60 dark:text-red-300'
-                  : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-300'
-              }`}>
-                {sessionTotals.totalCount}
-              </span>
+              <DocumentTextIcon className="w-3.5 h-3.5" />
+              <span>Historial ({sessionTotals.totalCount})</span>
             </button>
           </div>
         </div>
@@ -512,245 +484,110 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
               </div>
             </form>
           ) : (
-            /* TAB HISTORIAL DE LA SESIÓN */
-            <div className="space-y-4">
-              {/* Tarjeta de estado de la sesión actual */}
-              <div className="p-3.5 bg-gray-50 dark:bg-zinc-900/70 border border-gray-200/80 dark:border-zinc-800 rounded-2xl flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-3 h-3 rounded-full ${activeShift ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            /* TAB HISTORIAL DE LA SESIÓN - DISEÑO LIMPIO Y SENCILLO */
+            <div className="space-y-3">
+              {/* Barra Resumen Compacta con Botón de Imprimir */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-3 sm:gap-4 text-xs">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-gray-900 dark:text-white">
-                        {activeShift ? `Turno #${activeShift.id.slice(0, 8)} (${activeShift.cashier_name})` : 'Sesión Activa'}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                        {activeRegisterName}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
-                      {activeShift 
-                        ? `Abierto: ${new Date(activeShift.opened_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}` 
-                        : 'Filtrando movimientos por el día de hoy'}
-                    </p>
+                    <span className="text-[10px] text-gray-400 font-bold block uppercase">Ingresos</span>
+                    <span className="font-black font-mono text-emerald-600 dark:text-emerald-400">
+                      RD$ {sessionTotals.ingresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold block uppercase">Egresos</span>
+                    <span className="font-black font-mono text-[#ED1C24] dark:text-red-400">
+                      RD$ {sessionTotals.egresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="h-6 w-px bg-gray-200 dark:bg-zinc-700" />
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold block uppercase">Neto</span>
+                    <span className="font-black font-mono text-gray-900 dark:text-white">
+                      RD$ {sessionTotals.neto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {/* Selector de modo: Turno actual vs Hoy completo */}
-                  <div className="flex bg-white dark:bg-zinc-800 p-0.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={handlePrintSessionSummary}
+                  disabled={sessionMovements.length === 0}
+                  className="px-3 py-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40"
+                >
+                  <PrinterIcon className="w-3.5 h-3.5" />
+                  <span>Reporte</span>
+                </button>
+              </div>
+
+              {/* Filtros simples de 3 opciones */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold">
+                  {(['Todos', 'Ingreso', 'Egreso'] as const).map(tab => (
                     <button
+                      key={tab}
                       type="button"
-                      onClick={() => setHistoryFilterMode('shift')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        historyFilterMode === 'shift'
-                          ? 'bg-red-600 text-white font-black shadow-xs'
-                          : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900'
+                      onClick={() => setHistoryFilterType(tab)}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        historyFilterType === tab
+                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
                       }`}
                     >
-                      Turno Activo
+                      {tab === 'Todos' ? 'Todos' : (tab === 'Ingreso' ? 'Ingresos' : 'Egresos')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryFilterMode('today')}
-                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                        historyFilterMode === 'today'
-                          ? 'bg-red-600 text-white font-black shadow-xs'
-                          : 'text-gray-600 dark:text-zinc-300 hover:text-gray-900'
-                      }`}
-                    >
-                      Hoy (Día Completo)
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={loadMovements}
-                    title="Actualizar datos"
-                    className="p-1.5 bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white rounded-xl border border-gray-200 dark:border-zinc-700 transition-all cursor-pointer"
-                  >
-                    <ArrowPathIcon className={`w-4 h-4 ${isLoadingMovements ? 'animate-spin' : ''}`} />
-                  </button>
+                  ))}
                 </div>
+
+                <span className="text-[11px] text-gray-400 font-bold">
+                  {filteredSessionMovements.length} {filteredSessionMovements.length === 1 ? 'registro' : 'registros'}
+                </span>
               </div>
 
-              {/* KPIs de la sesión */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/40 rounded-2xl">
-                  <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Ingresos</span>
-                    <ArrowDownCircleIcon className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <div className="text-sm sm:text-base font-black font-mono text-emerald-700 dark:text-emerald-300">
-                    RD$ {sessionTotals.ingresos.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400 font-bold mt-0.5">
-                    {sessionTotals.countIngresos} registros
-                  </div>
-                </div>
-
-                <div className="p-3 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/40 rounded-2xl">
-                  <div className="flex items-center justify-between text-red-800 dark:text-red-300 mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Egresos</span>
-                    <ArrowUpCircleIcon className="w-4 h-4 text-[#ED1C24]" />
-                  </div>
-                  <div className="text-sm sm:text-base font-black font-mono text-red-700 dark:text-red-300">
-                    RD$ {sessionTotals.egresos.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] text-red-600/80 dark:text-red-400 font-bold mt-0.5">
-                    {sessionTotals.countEgresos} registros
-                  </div>
-                </div>
-
-                <div className={`p-3 rounded-2xl border ${
-                  sessionTotals.neto >= 0
-                    ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-900/40 text-blue-900 dark:text-blue-300'
-                    : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200/80 dark:border-amber-900/40 text-amber-900 dark:text-amber-300'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider">Flujo Neto</span>
-                    <BanknotesIcon className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div className="text-sm sm:text-base font-black font-mono">
-                    {sessionTotals.neto >= 0 ? '+' : ''}RD$ {sessionTotals.neto.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] opacity-80 font-bold mt-0.5">
-                    Total: {sessionTotals.totalCount} movimientos
-                  </div>
-                </div>
-              </div>
-
-              {/* Barra de Filtros, Búsqueda y Botón de Impresión de Reporte */}
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  {/* Filtro por tipo */}
-                  <div className="flex flex-wrap bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold">
-                    {(['Todos', 'Ingreso', 'Egreso', 'Efectivo', 'Transferencia'] as const).map(tab => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setHistoryFilterType(tab)}
-                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          historyFilterType === tab
-                            ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
-                            : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
-                        }`}
-                      >
-                        {tab === 'Todos' ? 'Todos' : tab}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Botón para imprimir el reporte de la sesión completa */}
-                  <button
-                    type="button"
-                    onClick={handlePrintSessionSummary}
-                    disabled={sessionMovements.length === 0}
-                    className="px-3 py-1.5 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-40"
-                  >
-                    <PrinterIcon className="w-4 h-4" />
-                    <span>Imprimir Reporte de Sesión</span>
-                  </button>
-                </div>
-
-                {/* Buscador */}
-                <div className="relative">
-                  <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar por concepto, referencia bancaria o cajero..."
-                    className="w-full pl-9 pr-3 py-2 bg-[#f4f3f1] dark:bg-[#222222] text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 rounded-xl outline-none focus:ring-2 focus:ring-red-500/30"
-                  />
-                </div>
-              </div>
-
-              {/* Lista de Movimientos de la Sesión */}
-              <div className="space-y-2 max-h-[38vh] overflow-y-auto pr-1">
+              {/* Lista simple de Movimientos */}
+              <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
                 {filteredSessionMovements.length === 0 ? (
                   <div className="py-12 text-center text-gray-400 dark:text-zinc-500">
-                    <DocumentTextIcon className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    <p className="text-xs font-bold">No hay movimientos registrados en esta sesión con los filtros actuales.</p>
-                    <p className="text-[11px] mt-1">Usa la pestaña "Registrar Movimiento" para ingresar o retirar fondos.</p>
+                    <p className="text-xs font-bold">No hay movimientos registrados en esta sesión.</p>
                   </div>
                 ) : (
                   filteredSessionMovements.map((mov) => {
                     const isIngreso = mov.type === 'Ingreso';
-                    const isTransfer = mov.payment_method === 'Transferencia';
                     return (
                       <div
                         key={mov.id}
-                        className="p-3 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-gray-300 dark:hover:border-zinc-700 rounded-2xl flex items-center justify-between gap-3 transition-all shadow-2xs"
+                        className="p-3 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 hover:border-gray-200 dark:hover:border-zinc-700 rounded-2xl flex items-center justify-between gap-3 transition-colors shadow-2xs"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isIngreso
-                              ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400'
-                              : 'bg-red-100 text-[#ED1C24] dark:bg-red-950/60 dark:text-red-400'
-                          }`}>
-                            {isIngreso ? (
-                              <ArrowDownCircleIcon className="w-5 h-5 stroke-[2.5]" />
-                            ) : (
-                              <ArrowUpCircleIcon className="w-5 h-5 stroke-[2.5]" />
-                            )}
-                          </div>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isIngreso ? 'bg-emerald-500' : 'bg-[#ED1C24]'}`} />
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                isIngreso
-                                  ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                  : 'bg-red-50 text-[#ED1C24] dark:bg-red-950/80 dark:text-red-300 border border-red-200 dark:border-red-800'
-                              }`}>
-                                {mov.type}
-                              </span>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 ${
-                                isTransfer
-                                  ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300'
-                                  : 'bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-zinc-300'
-                              }`}>
-                                {isTransfer ? <BuildingLibraryIcon className="w-3 h-3 text-blue-600" /> : <BanknotesIcon className="w-3 h-3 text-gray-600" />}
-                                {mov.payment_method}
-                              </span>
-                              <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono">
-                                {new Date(mov.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                              </span>
-                            </div>
-                            <p className="text-xs font-black text-gray-900 dark:text-white truncate mt-1">
+                            <p className="text-xs font-black text-gray-900 dark:text-white truncate">
                               {mov.concept}
                             </p>
-                            <div className="flex items-center gap-2 text-[10px] text-gray-500 dark:text-zinc-400 mt-0.5">
-                              {isTransfer && mov.bank_account_name && (
-                                <span className="text-blue-600 dark:text-blue-400 font-bold truncate">
-                                  🏦 {mov.bank_account_name}
-                                </span>
-                              )}
-                              {mov.reference && (
-                                <span className="font-mono text-gray-600 dark:text-zinc-300 font-bold">
-                                  Ref: {mov.reference}
-                                </span>
-                              )}
-                              <span className="truncate">Por: {mov.created_by || 'Harold Rosado'}</span>
-                            </div>
+                            <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
+                              {mov.payment_method}
+                              {mov.bank_account_name ? ` • ${mov.bank_account_name}` : ''}
+                              {mov.reference ? ` • Ref: ${mov.reference}` : ''}
+                              {' • '}
+                              {new Date(mov.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="text-right">
-                            <span className={`text-sm sm:text-base font-mono font-black block ${
-                              isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-red-400'
-                            }`}>
-                              {isIngreso ? '+' : '-'}RD$ {Number(mov.amount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-[9px] text-gray-400 font-mono">
-                              ID: {mov.id.slice(0, 6)}
-                            </span>
-                          </div>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <span className={`text-xs sm:text-sm font-mono font-black ${
+                            isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-red-400'
+                          }`}>
+                            {isIngreso ? '+' : '-'}RD$ {Number(mov.amount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
 
                           <button
                             type="button"
                             onClick={() => handlePrintMovement(mov)}
-                            title="Imprimir Constancia de este movimiento"
-                            className="p-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer"
+                            title="Imprimir constancia"
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer"
                           >
                             <PrinterIcon className="w-4 h-4" />
                           </button>
@@ -765,9 +602,9 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-2.5 bg-gray-100 dark:bg-zinc-800 rounded-full text-xs font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                  className="px-5 py-2 bg-gray-100 dark:bg-zinc-800 rounded-full text-xs font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                 >
-                  Cerrar Historial
+                  Cerrar
                 </button>
               </div>
             </div>
@@ -938,7 +775,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 REPORTE DE INGRESOS Y EGRESOS DE LA SESIÓN
               </h2>
               <p className="text-xs text-gray-600">
-                Filtro: {historyFilterMode === 'shift' ? 'Movimientos del Turno Activo' : 'Movimientos del Día Completo'}
+                Movimientos de la Sesión Activa
               </p>
             </div>
 
