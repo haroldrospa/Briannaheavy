@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -48,6 +48,7 @@ export interface PaymentReceiptData {
   paymentType: 'cuotas' | 'abono';
   paidInstallments: MappedInstallment[];
   abonoAmount: number;
+  surplusAmount?: number;
   totalPaid: number;
   newBalance: number;
   customerName: string;
@@ -917,6 +918,7 @@ export default function Financing() {
   // Abonos State
   const [paymentType, setPaymentType] = useState<'cuotas' | 'abono' | 'recibos'>('cuotas');
   const [abonoAmount, setAbonoAmount] = useState<string>('');
+  const [customCuotasPayAmount, setCustomCuotasPayAmount] = useState<string>('');
   
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
@@ -1042,6 +1044,7 @@ export default function Financing() {
     setShowAccountStatement(false);
     setShowPaymentForm(false);
     setSelectedInstallmentIds([]);
+    setCustomCuotasPayAmount('');
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
     setLastReceipt(null);
@@ -1140,10 +1143,21 @@ export default function Financing() {
   const totalSelectedAmount = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.total, 0);
 
   const numAbono = parseCurrencyInput(abonoAmount);
-  const effectivePayAmount = paymentType === 'abono' ? numAbono : totalSelectedAmount;
+  const numCustomCuotas = parseCurrencyInput(customCuotasPayAmount);
+  const surplusAmount = paymentType === 'cuotas' && numCustomCuotas > totalSelectedAmount
+    ? Math.round((numCustomCuotas - totalSelectedAmount) * 100) / 100
+    : 0;
+  const effectivePayAmount = paymentType === 'abono'
+    ? numAbono
+    : (numCustomCuotas > 0 ? numCustomCuotas : totalSelectedAmount);
+
+  const nextUnpaidInstallment = currentInstallments.find(
+    (i: MappedInstallment) => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado'
+  );
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
   const handleToggleSequentialInstallment = (targetInstId: number) => {
+    setCustomCuotasPayAmount('');
     const unpaidList: MappedInstallment[] = currentInstallments
       .filter((i: MappedInstallment) => i.status !== 'Pagado')
       .sort((a: MappedInstallment, b: MappedInstallment) => a.id - b.id);
@@ -1172,9 +1186,18 @@ export default function Financing() {
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
 
+      const numCustom = parseCurrencyInput(customCuotasPayAmount);
+      if (customCuotasPayAmount.trim() !== '' && numCustom > 0 && numCustom < totalSelectedAmount) {
+        alert(`El monto ingresado ($${numCustom.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor al total de las cuotas seleccionadas ($${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}).`);
+        return;
+      }
+
+      const totalPaid = effectivePayAmount;
+      const surplus = Math.max(0, totalPaid - totalSelectedAmount);
+      let remainingSurplus = surplus;
+
       const paidList = [...selectedInsts];
-      const totalPaid = totalSelectedAmount;
-      const totalCap = totalSelectedCapital;
+      const totalCap = totalSelectedCapital + surplus;
       const newBal = Math.max(0, selectedFinancing.amount - totalCap);
       const recNumber = getNextReceiptNumber();
       const now = new Date();
@@ -1186,10 +1209,6 @@ export default function Financing() {
       const scheduledDue = paidList.length === 1 
         ? paidList[0].dueDate 
         : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
-      const remainingUnpaid = (selectedFinancing.installments || []).filter((i: any) => !selectedInstallmentIds.includes(i.id) && !i.isPaid);
-      const nextDue = newBal <= 0 
-        ? 'Totalmente Saldado' 
-        : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
 
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
@@ -1199,6 +1218,54 @@ export default function Financing() {
       const finalBank = paymentMethod === 'Transferencia' 
         ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
         : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
+
+      const surplusNote = surplus > 0 
+        ? `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicado a capital de cuota(s) siguiente(s)`
+        : '';
+      const finalNotes = paymentNotes.trim()
+        ? (surplusNote ? `${paymentNotes.trim()} | ${surplusNote}` : paymentNotes.trim())
+        : (surplusNote || undefined);
+
+      const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
+        if (selectedInstallmentIds.includes(inst.id)) {
+          const paidInstTotal = inst.total;
+          if (inst.dbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, paidInstTotal);
+          }
+          return {
+            ...inst,
+            status: 'Pagado',
+            isPaid: true,
+            paidAmount: paidInstTotal,
+            paidDate: paidIsoDate,
+          };
+        }
+
+        if (!inst.isPaid && remainingSurplus > 0) {
+          const applied = Math.min(inst.capital, remainingSurplus);
+          remainingSurplus -= applied;
+          const newCapital = Math.max(0, inst.capital - applied);
+          const isFullyPaid = newCapital <= 0;
+          if (inst.dbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, applied);
+          }
+          return {
+            ...inst,
+            capital: newCapital,
+            isPaid: isFullyPaid,
+            status: isFullyPaid ? 'Pagado' : inst.status,
+            total: newCapital + inst.interest + inst.penalty,
+            paidDate: isFullyPaid ? paidIsoDate : inst.paidDate,
+          };
+        }
+
+        return inst;
+      });
+
+      const remainingUnpaid = updatedInsts.filter((i: any) => !i.isPaid);
+      const nextDue = newBal <= 0 
+        ? 'Totalmente Saldado' 
+        : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1219,6 +1286,7 @@ export default function Financing() {
           total: inst.total,
         })),
         abonoAmount: 0,
+        surplusAmount: surplus > 0 ? surplus : undefined,
         totalPaid: totalPaid,
         newBalance: newBal,
         customerName: selectedFinancing.customer,
@@ -1233,7 +1301,7 @@ export default function Financing() {
         changeGiven: change,
         bankName: finalBank,
         referenceNumber: referenceNumber?.trim() || undefined,
-        paymentNotes: paymentNotes.trim() || undefined,
+        paymentNotes: finalNotes,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
         createdAt: paidIsoDate,
       };
@@ -1245,26 +1313,10 @@ export default function Financing() {
       setViewingReceipt(newReceipt);
       setLastReceipt(newReceipt as any);
 
-      const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
-        if (selectedInstallmentIds.includes(inst.id)) {
-          const paidInstTotal = inst.total;
-          if (inst.dbId) {
-            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, paidInstTotal);
-          }
-          return {
-            ...inst,
-            status: 'Pagado',
-            isPaid: true,
-            paidAmount: paidInstTotal,
-            paidDate: paidIsoDate,
-          };
-        }
-        return inst;
-      });
-
       const allPaid = updatedInsts.every((i: any) => i.isPaid);
       const updatedFin = {
         ...selectedFinancing,
+        amount: newBal,
         status: allPaid ? 'Pagado' : selectedFinancing.status,
         installments: updatedInsts,
       };
@@ -1273,6 +1325,7 @@ export default function Financing() {
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setSelectedInstallmentIds([]);
+      setCustomCuotasPayAmount('');
       setCashReceived('');
       setReferenceNumber('');
       setPaymentNotes('');
@@ -1402,8 +1455,9 @@ export default function Financing() {
     const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
     const totalPaid = paymentType === 'abono'
       ? numAbono
-      : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0));
-    const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)))) : 0;
+      : (effectivePayAmount > 0 ? effectivePayAmount : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0)));
+    const cuotasCapPaid = (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)) + Math.max(0, (effectivePayAmount || 0) - (totalSelectedAmount || 0));
+    const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : cuotasCapPaid)) : 0;
     const recNumber = peekCurrentReceiptNumber();
     const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
     const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
@@ -1441,6 +1495,7 @@ export default function Financing() {
       paymentType: paymentType,
       paidInstallments: paidList,
       abonoAmount: numAbono,
+      surplusAmount: paymentType === 'cuotas' ? (surplusAmount > 0 ? surplusAmount : undefined) : undefined,
       totalPaid: totalPaid,
       newBalance: newBal,
       customerName: selectedFinancing?.customer || 'Cliente General',
@@ -1456,7 +1511,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -3068,16 +3123,36 @@ export default function Financing() {
                               <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                             </tr>
                           ) : (
-                            activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
-                              <tr key={inst.id}>
-                                <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
-                                <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 dark:text-amber-400 print:text-black">{inst.dueDate}</td>
-                                <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                                <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                                <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                                <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                              </tr>
-                            ))
+                            <>
+                              {activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
+                                <tr key={inst.id}>
+                                  <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                                  <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 dark:text-amber-400 print:text-black">{inst.dueDate}</td>
+                                  <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                  <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                  <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                  <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                </tr>
+                              ))}
+                              {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
+                                <tr className="bg-emerald-50/70 dark:bg-emerald-950/30">
+                                  <td className="py-3.5 px-4 font-bold text-emerald-800 dark:text-emerald-300 print:text-black">
+                                    Sobrante Aplicado a Próxima Cuota (Abono a Capital)
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-700 dark:text-emerald-400 print:text-black">
+                                    {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Amortización Directa'}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right font-medium text-emerald-700 dark:text-emerald-300 print:text-black">
+                                    ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
+                                  <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
+                                  <td className="py-3.5 px-4 text-right font-black text-emerald-700 dark:text-emerald-300 print:text-black">
+                                    ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           )}
                         </tbody>
                       </table>
@@ -3937,13 +4012,94 @@ export default function Financing() {
                             ${(paymentType === 'abono' ? 0 : totalSelectedPenalty).toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
-                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
-                          <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
-                            {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}
-                          </span>
-                          <span className={`font-black text-2xl ${paymentType === 'abono' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-white'}`}>
-                            ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                          </span>
+                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm flex items-center gap-1.5">
+                                <span>{paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}</span>
+                                {paymentType === 'cuotas' && (
+                                  <PencilSquareIcon className="w-3.5 h-3.5 text-[#ED1C24]" title="Puedes editar el monto si el cliente paga de más" />
+                                )}
+                              </span>
+                              {paymentType === 'cuotas' && (
+                                <span className="text-[10px] text-gray-400 dark:text-zinc-400 block font-medium">
+                                  {surplusAmount > 0
+                                    ? `Cuota base: $${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                    : 'Editable si el cliente paga de más'}
+                                </span>
+                              )}
+                            </div>
+
+                            {paymentType === 'abono' ? (
+                              <span className="font-black text-2xl text-emerald-600 dark:text-emerald-400">
+                                ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative w-44 sm:w-48">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-red-600 dark:text-red-400 text-sm">
+                                    RD$
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={customCuotasPayAmount}
+                                    onChange={(e) => setCustomCuotasPayAmount(formatCurrencyInput(e.target.value))}
+                                    placeholder={totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                    className="w-full pl-11 pr-3 py-1.5 bg-red-50/70 dark:bg-zinc-800 border-2 border-red-300 dark:border-red-900/60 rounded-xl text-xl font-black font-mono text-[#ED1C24] dark:text-red-400 text-right focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-[#ED1C24] transition-all"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Botón para restablecer al total de la cuota si fue modificado */}
+                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && parseCurrencyInput(customCuotasPayAmount) !== totalSelectedAmount && (
+                            <div className="flex items-center justify-between text-[11px] pt-0.5">
+                              <span className="text-gray-500 dark:text-zinc-400">
+                                Total cuota: <strong className="text-gray-700 dark:text-zinc-300">${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCustomCuotasPayAmount('')}
+                                className="font-bold text-[#ED1C24] hover:underline cursor-pointer"
+                              >
+                                Restablecer monto exacto
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Alerta / Detalle de Sobrante a favor del cliente */}
+                          {paymentType === 'cuotas' && surplusAmount > 0 && (
+                            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-xl space-y-1">
+                              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span>Sobrante a favor del cliente:</span>
+                                </span>
+                                <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
+                                  +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
+                                Este excedente de <strong>${surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se aplicará automáticamente al capital de la siguiente cuota
+                                {nextUnpaidInstallment ? ` (Cuota No. ${nextUnpaidInstallment.id} del ${nextUnpaidInstallment.dueDate})` : ''}.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Advertencia si el monto es menor al total de cuotas seleccionadas */}
+                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount && (
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1 text-xs">
+                              <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold">
+                                <ExclamationTriangleIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Monto menor al total de cuotas</span>
+                              </div>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">
+                                El monto ingresado (${numCustomCuotas.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor a las cuotas seleccionadas (${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}). Si desea abonar menos, seleccione la opción <strong>Hacer Abono Parcial</strong>.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -4219,7 +4375,9 @@ export default function Financing() {
 
                     {(() => {
                       const numCash = parseCurrencyInput(cashReceived);
-                      const isInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
+                      const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
+                      const isCuotasUnderpaid = paymentType === 'cuotas' && customCuotasPayAmount.trim() !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount;
+                      const isInsufficient = isCashInsufficient || isCuotasUnderpaid;
 
                       return (
                         <div className="pt-4 mt-6">
@@ -4235,11 +4393,13 @@ export default function Financing() {
                             }`}
                           >
                             <CheckCircleIcon className="h-6 w-6" />
-                            {isInsufficient
-                              ? 'Efectivo Recibido Insuficiente'
-                              : paymentType === 'abono'
-                                ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                                : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                            {isCuotasUnderpaid
+                              ? `Monto Menor al Total de Cuota (${totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                              : isCashInsufficient
+                                ? 'Efectivo Recibido Insuficiente'
+                                : paymentType === 'abono'
+                                  ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
                           </button>
                         </div>
                       );
@@ -4821,16 +4981,36 @@ export default function Financing() {
                     <td className="py-3 px-4 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                   </tr>
                 ) : (
-                  activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
-                    <tr key={inst.id}>
-                      <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
-                      <td className="py-3 px-4 text-center font-mono font-bold text-black">{inst.dueDate}</td>
-                      <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                      <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                      <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                      <td className="py-3 px-4 text-right font-black text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                  ))
+                  <>
+                    {activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
+                      <tr key={inst.id}>
+                        <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-black">{inst.dueDate}</td>
+                        <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-3 px-4 text-right font-black text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                      </tr>
+                    ))}
+                    {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
+                      <tr className="bg-gray-100">
+                        <td className="py-3 px-4 font-bold text-black">
+                          Sobrante Aplicado a Próxima Cuota (Abono a Capital)
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-black">
+                          {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Amortización Directa'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-medium text-black">
+                          ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                        <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                        <td className="py-3 px-4 text-right font-black text-black">
+                          ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 )}
               </tbody>
             </table>

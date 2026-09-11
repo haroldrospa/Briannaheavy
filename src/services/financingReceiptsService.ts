@@ -19,6 +19,7 @@ export interface FinancingPaymentReceipt {
     total: number;
   }[];
   abonoAmount: number;
+  surplusAmount?: number;
   totalPaid: number;
   newBalance: number;
   customerName: string;
