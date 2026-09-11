@@ -41,6 +41,7 @@ import QRCode from '../components/ui/QRCode';
 export interface PaymentReceiptData {
   receiptNumber: string;
   date: string;
+  paymentDate?: string;
   paymentExecutionDate?: string;
   scheduledDueDate?: string;
   nextPaymentDate?: string;
@@ -303,6 +304,19 @@ const isDueWithinDays = (nextPaymentStr: string, daysLimit: number = 2) => {
   const diffMs = payDate.getTime() - refDate.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
   return diffDays >= 0 && diffDays <= daysLimit;
+};
+
+// Helper to format date string YYYY-MM-DD to friendly Spanish date
+const formatPaymentDateToSpanish = (dateStr: string) => {
+  if (!dateStr) {
+    return new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return dateStr;
+  }
+  const dateObj = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+  return dateObj.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 const FINANCING_REGISTER = 'Caja Cobros & Financiamientos';
@@ -896,6 +910,7 @@ export default function Financing() {
   const [bankName, setBankName] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
+  const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   // Sincronizar cuentas bancarias si cambian en Configuración o Bancos
   useEffect(() => {
@@ -1013,6 +1028,7 @@ export default function Financing() {
     setShowExitConfirmModal(false);
     setLastReceipt(null);
     setViewingReceipt(null);
+    setPaymentDate(new Date().toISOString().slice(0, 10));
     document.body.classList.remove('print-receipt-mode');
   };
 
@@ -1141,8 +1157,11 @@ export default function Financing() {
       const newBal = Math.max(0, selectedFinancing.amount - totalCap);
       const recNumber = getNextReceiptNumber();
       const now = new Date();
-      const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const formattedDate = formatPaymentDateToSpanish(paymentDate);
       const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      const paidIsoDate = paymentDate 
+        ? new Date(`${paymentDate}T${now.toTimeString().slice(0, 8)}`).toISOString() 
+        : now.toISOString();
       const scheduledDue = paidList.length === 1 
         ? paidList[0].dueDate 
         : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
@@ -1165,6 +1184,7 @@ export default function Financing() {
         receiptNumber: recNumber,
         financingId: String(selectedFinancing.rawId || selectedFinancing.id),
         date: formattedDate,
+        paymentDate: paymentDate || new Date().toISOString().slice(0, 10),
         paymentExecutionDate: executionDateStr,
         scheduledDueDate: scheduledDue,
         nextPaymentDate: nextDue,
@@ -1194,7 +1214,7 @@ export default function Financing() {
         referenceNumber: referenceNumber?.trim() || undefined,
         paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
-        createdAt: new Date().toISOString(),
+        createdAt: paidIsoDate,
       };
 
       saveReceipt(newReceipt);
@@ -1215,7 +1235,7 @@ export default function Financing() {
             status: 'Pagado',
             isPaid: true,
             paidAmount: paidInstTotal,
-            paidDate: new Date().toISOString(),
+            paidDate: paidIsoDate,
           };
         }
         return inst;
@@ -1235,6 +1255,7 @@ export default function Financing() {
       setCashReceived('');
       setReferenceNumber('');
       setPaymentNotes('');
+      setPaymentDate(new Date().toISOString().slice(0, 10));
       setHasPrintedReceipt(false);
       setShowReceipt(true);
     } else {
@@ -1244,8 +1265,11 @@ export default function Financing() {
       const newBal = Math.max(0, selectedFinancing.amount - paidAbono);
       const recNumber = getNextReceiptNumber();
       const now = new Date();
-      const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+      const formattedDate = formatPaymentDateToSpanish(paymentDate);
       const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      const paidIsoDate = paymentDate 
+        ? new Date(`${paymentDate}T${now.toTimeString().slice(0, 8)}`).toISOString() 
+        : now.toISOString();
       const firstUnpaid = (selectedFinancing.installments || []).find((i: any) => !i.isPaid);
       const scheduledDue = firstUnpaid ? firstUnpaid.dueDate : (selectedFinancing.nextPayment || 'N/A');
       const nextDue = newBal <= 0 ? 'Totalmente Saldado' : scheduledDue;
@@ -1264,6 +1288,7 @@ export default function Financing() {
         receiptNumber: recNumber,
         financingId: String(selectedFinancing.rawId || selectedFinancing.id),
         date: formattedDate,
+        paymentDate: paymentDate || new Date().toISOString().slice(0, 10),
         paymentExecutionDate: executionDateStr,
         scheduledDueDate: scheduledDue,
         nextPaymentDate: nextDue,
@@ -1286,7 +1311,7 @@ export default function Financing() {
         referenceNumber: referenceNumber?.trim() || undefined,
         paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
-        createdAt: new Date().toISOString(),
+        createdAt: paidIsoDate,
       };
 
       saveReceipt(newReceipt);
@@ -1311,6 +1336,7 @@ export default function Financing() {
             isPaid: isFullyPaid,
             status: isFullyPaid ? 'Pagado' : inst.status,
             total: newCapital + inst.interest + inst.penalty,
+            paidDate: isFullyPaid ? paidIsoDate : inst.paidDate,
           };
         }
         return inst;
@@ -1331,6 +1357,7 @@ export default function Financing() {
       setCashReceived('');
       setReferenceNumber('');
       setPaymentNotes('');
+      setPaymentDate(new Date().toISOString().slice(0, 10));
       setHasPrintedReceipt(false);
       setShowReceipt(true);
     }
@@ -1366,7 +1393,7 @@ export default function Financing() {
       : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedDate = formatPaymentDateToSpanish(paymentDate);
     const executionDateStr = `${formattedDate} a las ${now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
     
     let scheduledDue = 'N/A';
@@ -1386,6 +1413,7 @@ export default function Financing() {
     return {
       receiptNumber: recNumber,
       date: formattedDate,
+      paymentDate: paymentDate || new Date().toISOString().slice(0, 10),
       paymentExecutionDate: executionDateStr,
       scheduledDueDate: scheduledDue,
       nextPaymentDate: nextDue,
@@ -1407,7 +1435,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -3901,6 +3929,40 @@ export default function Financing() {
                             ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
+                      </div>
+
+                      {/* Fecha en que se Realizó el Pago */}
+                      <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                            <CalendarIcon className="w-4 h-4 text-[#ED1C24]" />
+                            <span>Fecha en que se Realizó el Pago</span>
+                          </label>
+                          {paymentDate !== new Date().toISOString().slice(0, 10) ? (
+                            <button
+                              type="button"
+                              onClick={() => setPaymentDate(new Date().toISOString().slice(0, 10))}
+                              className="text-[11px] font-bold text-[#ED1C24] hover:underline cursor-pointer flex items-center gap-1"
+                            >
+                              <span>Restablecer a Hoy</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
+                              Hoy
+                            </span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={paymentDate}
+                            onChange={(e) => setPaymentDate(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#ED1C24] focus:bg-white dark:focus:bg-zinc-900 transition-all cursor-pointer"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">
+                          Esta fecha se reflejará en el comprobante, el estado de cuenta y el historial del cliente.
+                        </p>
                       </div>
 
                       {/* Selector Profesional de Método de Pago */}

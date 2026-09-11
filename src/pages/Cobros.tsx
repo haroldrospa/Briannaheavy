@@ -7,7 +7,8 @@ import {
   PrinterIcon,
   BanknotesIcon,
   BuildingStorefrontIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 import { AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, type Invoice } from '../services/invoicesService';
@@ -107,6 +108,7 @@ export default function Cobros() {
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Cheque' | 'Tarjeta'>('Efectivo');
   const [paymentReference, setPaymentReference] = useState('');
+  const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   
   // Success / Receipt Voucher Modal
   const [lastPaymentReceipt, setLastPaymentReceipt] = useState<{
@@ -210,9 +212,20 @@ export default function Cobros() {
     const newBalance = Math.max(0, previousBalance - amount);
     const cashierName = localStorage.getItem('brianna_user_name') || 'Cajero POS';
 
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const paidIsoDate = paymentDate 
+      ? new Date(`${paymentDate}T${now.toTimeString().slice(0, 8)}`).toISOString() 
+      : now.toISOString();
+
+    const dateParts = (paymentDate || '').split('-').map(Number);
+    const formattedPaymentDate = (dateParts.length === 3 && !isNaN(dateParts[0]))
+      ? `${new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0).toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })} a las ${timeStr}`
+      : now.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
     const newPaymentRecord = {
       id: `pay_${Date.now()}`,
-      date: new Date().toISOString(),
+      date: paidIsoDate,
       amount,
       method: paymentMethod,
       reference: paymentReference || undefined,
@@ -256,7 +269,7 @@ export default function Cobros() {
       rnc: selectedReceivable.rnc,
       invoice: selectedReceivable.invoice,
       ncf: selectedReceivable.ncf,
-      date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      date: formattedPaymentDate,
       amountPaid: amount,
       previousBalance,
       newBalance,
@@ -265,6 +278,7 @@ export default function Cobros() {
       cashier: cashierName
     });
 
+    setPaymentDate(new Date().toISOString().slice(0, 10));
     setIsPaymentModalOpen(false);
     setIsReceiptModalOpen(true);
   };
@@ -575,6 +589,31 @@ export default function Cobros() {
                   required
                   placeholder="0.00"
                   className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                />
+              </div>
+
+              {/* Fecha en que se Realizó el Pago */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight flex items-center gap-1.5">
+                    <CalendarIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                    <span>Fecha en que se Realizó el Pago</span>
+                  </label>
+                  {paymentDate !== new Date().toISOString().slice(0, 10) && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentDate(new Date().toISOString().slice(0, 10))}
+                      className="text-[10px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
+                    >
+                      Hoy
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all cursor-pointer"
                 />
               </div>
 

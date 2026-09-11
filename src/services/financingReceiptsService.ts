@@ -5,6 +5,7 @@ export interface FinancingPaymentReceipt {
   receiptNumber: string;
   financingId: string;
   date: string;
+  paymentDate?: string;
   paymentExecutionDate?: string;
   scheduledDueDate?: string;
   nextPaymentDate?: string;
