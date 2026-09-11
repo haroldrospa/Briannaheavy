@@ -390,6 +390,7 @@ export default function Financing() {
   // Main Financiamientos Status Filter State
   const [mainStatusFilter, setMainStatusFilter] = useState<'Todos' | 'En mora' | 'Vence 1 dia' | 'Al dia' | 'Movimientos'>('Todos');
   const [isCashMovementOpen, setIsCashMovementOpen] = useState<boolean>(false);
+  const [cashMovementInitialTab, setCashMovementInitialTab] = useState<'form' | 'history'>('form');
   const [movementsList, setMovementsList] = useState<CashMovement[]>([]);
   const [movementFilterType, setMovementFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
   const [movementFilterMethod, setMovementFilterMethod] = useState<'Todos' | 'Transferencia' | 'Efectivo'>('Todos');
@@ -2563,14 +2564,31 @@ export default function Financing() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsCashMovementOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-            >
-              <PlusIcon className="w-4 h-4 stroke-[2.5]" />
-              <span>+ Registrar Movimiento</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCashMovementInitialTab('history');
+                  setIsCashMovementOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <PrinterIcon className="w-4 h-4" />
+                <span>Historial & Reporte de Sesión</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCashMovementInitialTab('form');
+                  setIsCashMovementOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              >
+                <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+                <span>+ Registrar Movimiento</span>
+              </button>
+            </div>
           </div>
 
           {/* Tabla de Movimientos */}
@@ -2583,7 +2601,10 @@ export default function Financing() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsCashMovementOpen(true)}
+                  onClick={() => {
+                    setCashMovementInitialTab('form');
+                    setIsCashMovementOpen(true);
+                  }}
                   className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer hover:bg-emerald-700 transition-all"
                 >
                   Registrar Primer Movimiento
@@ -2600,6 +2621,7 @@ export default function Financing() {
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Concepto / Referencia</th>
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fecha / Hora</th>
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Caja / Responsable</th>
+                      <th className="px-5 py-3.5 text-center text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 bg-white dark:bg-[#1a1a1a]">
@@ -2657,6 +2679,20 @@ export default function Financing() {
                           <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-600 dark:text-zinc-400">
                             <div className="font-semibold text-gray-800 dark:text-zinc-200">{m.register_name || 'Finanzas & Cobros'}</div>
                             <div className="text-[10px] text-gray-400">{m.created_by || 'Sistema'}</div>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCashMovementInitialTab('history');
+                                setIsCashMovementOpen(true);
+                              }}
+                              title="Ver en Historial e Imprimir Constancia"
+                              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                            >
+                              <PrinterIcon className="w-3.5 h-3.5" />
+                              <span>Constancia</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -5077,6 +5113,7 @@ export default function Financing() {
         {isCashMovementOpen && (
           <CashMovementModal 
             isOpen={isCashMovementOpen} 
+            initialTab={cashMovementInitialTab}
             onClose={() => setIsCashMovementOpen(false)} 
             onSuccess={async () => {
               setIsCashMovementOpen(false);
