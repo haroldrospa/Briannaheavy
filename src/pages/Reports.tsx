@@ -26,7 +26,19 @@ import { fetchInventory, getLocalStorageInventory } from '../services/inventoryS
 import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cashClosuresService';
 
 const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], closures: any[] = []) => {
-  const mappedData: Record<string, any[]> = {};
+  const mappedData: Record<string, any[]> = {
+    ecf: [],
+    internas: [],
+    ventas: [],
+    financiamientos: [],
+    moras: [],
+    movimientos_caja: [],
+    inventario: [],
+    clientes: [],
+    caja: [],
+    inspecciones: [],
+    ordenes_trabajo: [],
+  };
   const validInvs = (invs || []).filter(inv => !isQuotationInvoice(inv));
 
   if (validInvs && validInvs.length > 0) {
@@ -185,34 +197,6 @@ const REPORT_TYPES = [
   { id: 'ordenes_trabajo', category: 'mantenimiento', name: 'Órdenes de Trabajo', icon: WrenchScrewdriverIcon, description: 'Servicios técnicos de taller, repuestos y mantenimientos.' },
 ];
 
-const DUMMY_REPORT_DATA: Record<string, any[]> = {
-  ecf: [
-    { code: 'E3100000041', ncf_prefix: 'E31', ncf_type: 'E31 - Crédito Fiscal', date: '2026-07-20', client: 'Constructora del Caribe S.R.L.', rnc: '131-48841-7', method: 'Transferencia', subtotal: 84745.76, tax_amount: 15254.24, total: 100000.00, securityCode: '8F2A19', dgiiStatus: 'Aceptado' },
-    { code: 'E3200000042', ncf_prefix: 'E32', ncf_type: 'E32 - Factura de Consumo', date: '2026-07-19', client: 'Juan Manuel Peralta', rnc: '402-2384910-1', method: 'Efectivo', subtotal: 12500.00, tax_amount: 2250.00, total: 14750.00, securityCode: '3C7B90', dgiiStatus: 'Aceptado' },
-    { code: 'E3100000043', ncf_prefix: 'E31', ncf_type: 'E31 - Crédito Fiscal', date: '2026-07-18', client: 'Transportes Cibao S.A.', rnc: '101-99882-3', method: 'Transferencia', subtotal: 45000.00, tax_amount: 8100.00, total: 53100.00, securityCode: '1A9F44', dgiiStatus: 'Aceptado' },
-    { code: 'E4500000005', ncf_prefix: 'E45', ncf_type: 'E45 - Gubernamental', date: '2026-07-17', client: 'Ministerio de Obras Públicas', rnc: '401-00234-9', method: 'Transferencia', subtotal: 120000.00, tax_amount: 0.00, total: 120000.00, securityCode: '9E3D82', dgiiStatus: 'Aceptado' },
-  ],
-  internas: [
-    { code: 'INT-000101', date: '2026-07-21', client: 'Taller San Cristóbal', rnc: 'Consumidor Final', method: 'Efectivo', cashier: 'Cajero Principal', status: 'Completada', total: 6450.00 },
-    { code: 'INT-000102', date: '2026-07-20', client: 'Carlos Rodríguez', rnc: 'Consumidor Final', method: 'Tarjeta', cashier: 'Cajero Principal', status: 'Completada', total: 3200.00 },
-    { code: 'INT-000103', date: '2026-07-19', client: 'Agregados del Sur', rnc: 'Consumidor Final', method: 'Transferencia', cashier: 'Cajero Principal', status: 'Completada', total: 18500.00 },
-    { code: 'INT-000104', date: '2026-07-18', client: 'Venta Rápida Mostrador', rnc: 'Consumidor Final', method: 'Efectivo', cashier: 'Cajero 2', status: 'Completada', total: 1150.00 },
-  ],
-  ventas: [
-    { code: 'FAC-000101', ncf: 'E3100000041', date: '2026-07-20', client: 'Constructora del Caribe S.R.L.', rnc: '131-48841-7', method: 'Transferencia', status: 'Pagada', total: 100000.00 },
-    { code: 'FAC-000102', ncf: 'INT-000101', date: '2026-07-21', client: 'Taller San Cristóbal', rnc: 'Consumidor Final', method: 'Efectivo', status: 'Pagada', total: 6450.00 },
-    { code: 'FAC-000103', ncf: 'E3200000042', date: '2026-07-19', client: 'Juan Manuel Peralta', rnc: '402-2384910-1', method: 'Efectivo', status: 'Pagada', total: 14750.00 },
-  ],
-  financiamientos: [],
-  moras: [],
-  movimientos_caja: [],
-  inventario: [],
-  clientes: [],
-  caja: [],
-  inspecciones: [],
-  ordenes_trabajo: [],
-};
-
 const REPORT_CATEGORIES = [
   { id: 'todos', label: 'Todos', icon: Squares2X2Icon },
   { id: 'ventas', label: 'Ventas & e-CF', icon: DocumentChartBarIcon },
@@ -225,8 +209,14 @@ export default function Reports() {
   const [selectedCategory, setSelectedCategory] = useState<string>('todos');
   const [selectedNcfType, setSelectedNcfType] = useState<string>('todos');
   const [isGenerated, setIsGenerated] = useState(true);
-  const [startDate, setStartDate] = useState('2026-07-01');
-  const [endDate, setEndDate] = useState('2026-07-21');
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
   const [dbData, setDbData] = useState<Record<string, any[]>>(() => 
@@ -304,12 +294,7 @@ export default function Reports() {
   const selectedReportInfo = REPORT_TYPES.find(r => r.id === activeReport) || REPORT_TYPES[0];
 
   const reportData = useMemo(() => {
-    let list: any[] = [];
-    if (dbData[activeReport] && dbData[activeReport].length > 0) {
-      list = dbData[activeReport];
-    } else {
-      list = DUMMY_REPORT_DATA[activeReport as keyof typeof DUMMY_REPORT_DATA] || [];
-    }
+    const list: any[] = dbData[activeReport] || [];
 
     if (activeReport === 'ecf' && selectedNcfType !== 'todos') {
       return list.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
@@ -320,7 +305,7 @@ export default function Reports() {
 
   // Group e-CF data dynamically by Voucher Type (E31, E32, E33, E34, E44, E45, etc.)
   const ecfGroupedByType = useMemo(() => {
-    const rawData = (dbData.ecf && dbData.ecf.length > 0) ? dbData.ecf : DUMMY_REPORT_DATA.ecf;
+    const rawData = dbData.ecf || [];
     const groups: Record<string, { prefix: string; typeName: string; count: number; subtotal: number; tax: number; total: number; items: any[] }> = {};
 
     const TYPE_LABELS: Record<string, string> = {
@@ -374,7 +359,7 @@ export default function Reports() {
   }, [activeReport, reportData]);
 
   const ecfTotals = useMemo(() => {
-    const data = (dbData.ecf && dbData.ecf.length > 0) ? dbData.ecf : DUMMY_REPORT_DATA.ecf;
+    const data = dbData.ecf || [];
     const filtered = selectedNcfType === 'todos' ? data : data.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
     const subtotal = filtered.reduce((sum: number, r: any) => sum + (r.subtotal || 0), 0);
     const tax = filtered.reduce((sum: number, r: any) => sum + (r.tax_amount || 0), 0);
@@ -383,10 +368,11 @@ export default function Reports() {
   }, [dbData.ecf, selectedNcfType]);
 
   const cajaTotals = useMemo(() => {
-    const incomes = DUMMY_REPORT_DATA.movimientos_caja.filter(m => m.type === 'Ingreso').reduce((sum, m) => sum + m.amount, 0);
-    const expenses = DUMMY_REPORT_DATA.movimientos_caja.filter(m => m.type === 'Egreso').reduce((sum, m) => sum + m.amount, 0);
+    const movs = dbData.movimientos_caja || [];
+    const incomes = movs.filter(m => m.type === 'Ingreso').reduce((sum, m) => sum + (m.amount || 0), 0);
+    const expenses = movs.filter(m => m.type === 'Egreso').reduce((sum, m) => sum + (m.amount || 0), 0);
     return { incomes, expenses, net: incomes - expenses };
-  }, []);
+  }, [dbData.movimientos_caja]);
 
   const handleGenerateReport = () => {
     setIsGenerated(true);
@@ -847,6 +833,17 @@ export default function Reports() {
 
               {/* Dynamic Report Table / Grouped Sections */}
               {activeReport === 'ecf' ? (
+                Object.keys(ecfGroupedByType).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800 p-12 text-center bg-gray-50/50 dark:bg-zinc-900/30">
+                    <DocumentChartBarIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-zinc-600 mb-3" />
+                    <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1">
+                      No hay Comprobantes Fiscales Electrónicos (e-CF)
+                    </h4>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-md mx-auto">
+                      No se han emitido facturas con comprobante fiscal electrónico (e-CF) en la base de datos para este período.
+                    </p>
+                  </div>
+                ) : (
                 <div className="space-y-5">
                   {Object.entries(ecfGroupedByType)
                     .filter(([prefix]) => selectedNcfType === 'todos' || selectedNcfType === prefix)
@@ -969,6 +966,17 @@ export default function Reports() {
                       </div>
                     </div>
                   </div>
+                </div>
+                )
+              ) : reportData.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 dark:border-zinc-800 p-12 text-center bg-gray-50/50 dark:bg-zinc-900/30">
+                  <DocumentChartBarIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-zinc-600 mb-3" />
+                  <h4 className="text-base font-bold text-gray-900 dark:text-white mb-1">
+                    No hay registros en este reporte
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-md mx-auto">
+                    No se encontraron datos registrados para {selectedReportInfo.name.toLowerCase()} en la base de datos para las fechas seleccionadas.
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-2xl border border-gray-200/80 dark:border-zinc-800 print:border-gray-400 print:rounded-none">
