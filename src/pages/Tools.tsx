@@ -51,6 +51,7 @@ export default function Tools() {
   // Estados de los formularios
   const [selectedToolForCheckin, setSelectedToolForCheckin] = useState<WorkshopTool | null>(null);
   const [editingTool, setEditingTool] = useState<WorkshopTool | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Formulario de Check-out (Salida)
   const [checkoutForm, setCheckoutForm] = useState({
@@ -153,6 +154,16 @@ export default function Tools() {
   // Manejo de Salida (Check-out)
   const handleOpenCheckout = (preselectedTool?: WorkshopTool) => {
     if (preselectedTool) {
+      if (preselectedTool.status !== 'Disponible') {
+        if (preselectedTool.status === 'En Uso') {
+          showToast(`"${preselectedTool.name}" ya está en uso por ${preselectedTool.current_loan?.mechanic_name || 'un mecánico'}.`, 'error');
+          handleOpenCheckin(preselectedTool);
+          return;
+        } else {
+          showToast(`"${preselectedTool.name}" se encuentra en ${preselectedTool.status.toLowerCase()} y no puede ser prestada.`, 'error');
+          return;
+        }
+      }
       setCheckoutForm({
         tool_id: preselectedTool.id,
         mechanic_name: '',
@@ -161,8 +172,12 @@ export default function Tools() {
       });
     } else {
       const firstAvailable = tools.find(t => t.status === 'Disponible');
+      if (!firstAvailable) {
+        showToast('No hay herramientas disponibles para prestar en este momento.', 'error');
+        return;
+      }
       setCheckoutForm({
-        tool_id: firstAvailable ? firstAvailable.id : '',
+        tool_id: firstAvailable.id,
         mechanic_name: '',
         work_order: '',
         notes: '',
@@ -173,15 +188,25 @@ export default function Tools() {
 
   const handleSubmitCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!checkoutForm.tool_id) {
       showToast('Seleccione una herramienta para prestar', 'error');
       return;
     }
+
+    const selectedTool = tools.find(t => t.id === checkoutForm.tool_id);
+    if (selectedTool && selectedTool.status !== 'Disponible') {
+      showToast(`Esta herramienta ya está ${selectedTool.status.toLowerCase()} por ${selectedTool.current_loan?.mechanic_name || 'otro mecánico'}`, 'error');
+      return;
+    }
+
     if (!checkoutForm.mechanic_name.trim()) {
       showToast('Especifique el nombre del mecánico', 'error');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await checkoutTool({
         tool_id: checkoutForm.tool_id,
@@ -191,9 +216,12 @@ export default function Tools() {
       });
       showToast('¡Herramienta prestada con éxito y registrada en la base de datos!');
       setIsCheckoutModalOpen(false);
-      loadData(false);
+      setCheckoutForm({ tool_id: '', mechanic_name: '', work_order: '', notes: '' });
+      await loadData(false);
     } catch (err: any) {
       showToast(err?.message || 'Error al procesar la salida', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -209,8 +237,9 @@ export default function Tools() {
 
   const handleSubmitCheckin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedToolForCheckin) return;
+    if (isSubmitting || !selectedToolForCheckin) return;
 
+    setIsSubmitting(true);
     try {
       await checkinTool({
         tool_id: selectedToolForCheckin.id,
@@ -220,9 +249,11 @@ export default function Tools() {
       showToast('¡Herramienta devuelta e ingresada al taller correctamente!');
       setIsCheckinModalOpen(false);
       setSelectedToolForCheckin(null);
-      loadData(false);
+      await loadData(false);
     } catch (err: any) {
       showToast(err?.message || 'Error al registrar la devolución', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -260,11 +291,14 @@ export default function Tools() {
 
   const handleSubmitTool = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!toolForm.code.trim() || !toolForm.name.trim()) {
       showToast('Código y nombre de la herramienta son obligatorios', 'error');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (editingTool) {
         await updateTool(editingTool.id, {
@@ -292,9 +326,11 @@ export default function Tools() {
         showToast('Nueva herramienta agregada al taller');
       }
       setIsToolModalOpen(false);
-      loadData(false);
+      await loadData(false);
     } catch (err: any) {
       showToast(err?.message || 'Error al guardar la herramienta', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -941,16 +977,23 @@ export default function Tools() {
                       setCheckoutForm(prev => ({ ...prev, tool_id: e.target.value }));
                     }}
                     required
+                    disabled={isSubmitting}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                   >
-                    <option value="" disabled>Seleccione una herramienta...</option>
-                    {tools
-                      .filter(t => t.status === 'Disponible' || t.id === checkoutForm.tool_id)
-                      .map(t => (
-                        <option key={t.id} value={t.id}>
-                          {t.code} — {t.name} ({t.location})
-                        </option>
-                      ))}
+                    {tools.filter(t => t.status === 'Disponible').length === 0 ? (
+                      <option value="" disabled>No hay herramientas disponibles en el taller</option>
+                    ) : (
+                      <>
+                        <option value="" disabled>Seleccione una herramienta disponible...</option>
+                        {tools
+                          .filter(t => t.status === 'Disponible')
+                          .map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.code} — {t.name} ({t.location})
+                            </option>
+                          ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -967,6 +1010,7 @@ export default function Tools() {
                       onChange={e => setCheckoutForm(prev => ({ ...prev, mechanic_name: e.target.value }))}
                       placeholder="Escriba o seleccione el nombre del mecánico..."
                       required
+                      disabled={isSubmitting}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                     />
                     <datalist id="mechanics-list">
@@ -981,8 +1025,9 @@ export default function Tools() {
                         <button
                           key={m}
                           type="button"
+                          disabled={isSubmitting}
                           onClick={() => setCheckoutForm(prev => ({ ...prev, mechanic_name: m }))}
-                          className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[10px] font-medium text-gray-700 dark:text-zinc-300 transition-colors"
+                          className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[10px] font-medium text-gray-700 dark:text-zinc-300 transition-colors disabled:opacity-50"
                         >
                           + {m.split(' ')[0]} {m.split(' ')[1]}
                         </button>
@@ -1001,6 +1046,7 @@ export default function Tools() {
                     value={checkoutForm.work_order}
                     onChange={e => setCheckoutForm(prev => ({ ...prev, work_order: e.target.value }))}
                     placeholder="Ej: Mack Granite #12 / OT-0045"
+                    disabled={isSubmitting}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                   />
                 </div>
@@ -1015,6 +1061,7 @@ export default function Tools() {
                     value={checkoutForm.notes}
                     onChange={e => setCheckoutForm(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Detalles sobre el uso o condición inicial..."
+                    disabled={isSubmitting}
                     className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                   />
                 </div>
@@ -1022,17 +1069,28 @@ export default function Tools() {
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-zinc-800">
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => setIsCheckoutModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 transition-all flex items-center gap-2"
+                    disabled={isSubmitting || tools.filter(t => t.status === 'Disponible').length === 0}
+                    className="px-5 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <ArrowRightCircleIcon className="w-4 h-4" />
-                    <span>Confirmar Salida</span>
+                    {isSubmitting ? (
+                      <>
+                        <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                        <span>Registrando Salida...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRightCircleIcon className="w-4 h-4" />
+                        <span>Confirmar Salida</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1138,17 +1196,28 @@ export default function Tools() {
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-zinc-800">
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => setIsCheckinModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2"
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <CheckCircleIcon className="w-4 h-4" />
-                    <span>Confirmar Entrada</span>
+                    {isSubmitting ? (
+                      <>
+                        <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                        <span>Registrando Entrada...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircleIcon className="w-4 h-4" />
+                        <span>Confirmar Entrada</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1292,16 +1361,25 @@ export default function Tools() {
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-zinc-800">
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => setIsToolModalOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 text-xs sm:text-sm font-bold hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 transition-all flex items-center gap-2"
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span>{editingTool ? 'Guardar Cambios' : 'Registrar Herramienta'}</span>
+                    {isSubmitting ? (
+                      <>
+                        <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                        <span>Guardando...</span>
+                      </>
+                    ) : (
+                      <span>{editingTool ? 'Guardar Cambios' : 'Registrar Herramienta'}</span>
+                    )}
                   </button>
                 </div>
               </form>

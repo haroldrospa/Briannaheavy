@@ -356,10 +356,35 @@ export const checkoutTool = async (payload: CheckoutPayload): Promise<{ tool: Wo
   const tool = tools.find(t => t.id === payload.tool_id);
 
   if (!tool) {
-    throw new Error('Herramienta no encontrada.');
+    throw new Error('Herramienta no encontrada en el inventario.');
   }
   if (tool.status === 'En Uso') {
-    throw new Error(`La herramienta ya está prestada a ${tool.current_loan?.mechanic_name || 'otro mecánico'}.`);
+    // Protección de idempotencia ante dobles clics o peticiones duplicadas para el mismo mecánico
+    const mechanicTrimmed = payload.mechanic_name.trim().toLowerCase();
+    if (
+      tool.current_loan &&
+      tool.current_loan.mechanic_name.trim().toLowerCase() === mechanicTrimmed
+    ) {
+      const currentLoans = await fetchToolLoans();
+      const existingLoan = currentLoans.find(l => l.id === tool.current_loan?.loan_id) || {
+        id: tool.current_loan.loan_id,
+        tool_id: tool.id,
+        tool_code: tool.code,
+        tool_name: tool.name,
+        mechanic_name: tool.current_loan.mechanic_name,
+        work_order: tool.current_loan.work_order || '',
+        dispatched_at: tool.current_loan.dispatched_at,
+        dispatched_by: tool.current_loan.dispatched_by,
+        returned_at: null,
+        returned_to: null,
+        status: 'Activo',
+        condition_on_checkout: 'Buen Estado',
+        notes: payload.notes || '',
+        created_at: tool.current_loan.dispatched_at,
+      };
+      return { tool, loan: existingLoan };
+    }
+    throw new Error(`La herramienta ya está prestada a ${tool.current_loan?.mechanic_name || 'otro mecánico'}. Debe ser devuelta antes de volver a prestarla.`);
   }
   if (tool.status === 'Dañada') {
     throw new Error('La herramienta está marcada como dañada y no puede ser prestada.');
