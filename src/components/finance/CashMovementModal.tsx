@@ -10,9 +10,10 @@ import {
   CheckCircleIcon,
   PrinterIcon,
   DocumentTextIcon,
-  PlusIcon
+  PlusIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
-import { createCashMovement, fetchCashMovements, type CashMovement } from '../../services/cashMovementsService';
+import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift } from '../../services/shiftsService';
 import logo from '../../assets/logo.png';
@@ -42,6 +43,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const [selectedMovementForPrint, setSelectedMovementForPrint] = useState<CashMovement | null>(null);
   const [isPrintingSessionSummary, setIsPrintingSessionSummary] = useState<boolean>(false);
   const [lastCreatedMovement, setLastCreatedMovement] = useState<CashMovement | null>(null);
+  const [movementToDelete, setMovementToDelete] = useState<CashMovement | null>(null);
+  const [isDeletingMovement, setIsDeletingMovement] = useState<boolean>(false);
 
   const activeRegisterName = defaultRegister || (typeof window !== 'undefined' ? localStorage.getItem('brianna_active_register') : '') || 'Caja 1 - Repuestos';
   const activeShift = useMemo(() => getActiveShift(activeRegisterName), [activeRegisterName, isOpen]);
@@ -121,6 +124,21 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         document.title = originalTitle;
       }, 500);
     }, 120);
+  };
+
+  const handleConfirmDeleteMovement = async () => {
+    if (!movementToDelete || isDeletingMovement) return;
+    setIsDeletingMovement(true);
+    try {
+      await deleteCashMovement(movementToDelete.id);
+      setMovementToDelete(null);
+      await loadMovements();
+      onSuccess();
+    } catch (err) {
+      console.error('Error al eliminar movimiento de caja:', err);
+    } finally {
+      setIsDeletingMovement(false);
+    }
   };
 
   const formatCurrency = (val: string) => {
@@ -591,6 +609,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                           >
                             <PrinterIcon className="w-4 h-4" />
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setMovementToDelete(mov)}
+                            title="Eliminar movimiento"
+                            className="p-1.5 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-all cursor-pointer"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -610,6 +637,41 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             </div>
           )}
         </div>
+
+        {/* Modal de confirmación de eliminación de movimiento */}
+        {movementToDelete && (
+          <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl p-5 max-w-sm w-full space-y-3 animate-in fade-in">
+              <div className="flex items-center gap-2.5 text-red-600 dark:text-red-400">
+                <TrashIcon className="w-5 h-5 stroke-[2.5]" />
+                <h4 className="text-sm font-black text-gray-900 dark:text-white">
+                  ¿Eliminar este {movementToDelete.type}?
+                </h4>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-zinc-400">
+                Se eliminará el movimiento de <strong className="text-gray-900 dark:text-white">RD$ {Number(movementToDelete.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong> ({movementToDelete.concept}).
+              </p>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingMovement}
+                  onClick={() => setMovementToDelete(null)}
+                  className="flex-1 py-2 bg-gray-100 dark:bg-zinc-800 rounded-xl text-xs font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingMovement}
+                  onClick={handleConfirmDeleteMovement}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingMovement ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* PORTALES DE IMPRESIÓN (SOLO VISIBLES AL MANDAR A IMPRIMIR) */}

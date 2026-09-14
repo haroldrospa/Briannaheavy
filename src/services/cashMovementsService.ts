@@ -16,27 +16,70 @@ export interface CashMovement {
 
 const MOVEMENTS_STORAGE_KEY = 'brianna_cash_movements';
 const SHIFT_FUND_STORAGE_KEY = 'brianna_initial_cash_fund';
+const DELETED_MOVEMENTS_STORAGE_KEY = 'brianna_deleted_cash_movement_ids';
 
 let inMemoryMovements: CashMovement[] | null = null;
 let inFlightMovementsPromise: Promise<CashMovement[]> | null = null;
 
-export const getLocalStorageMovements = (): CashMovement[] => {
-  if (inMemoryMovements !== null) return inMemoryMovements;
+export const getDeletedMovementIds = (): Set<string> => {
   try {
-    const raw = localStorage.getItem(MOVEMENTS_STORAGE_KEY);
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(DELETED_MOVEMENTS_STORAGE_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+};
+
+export const addDeletedMovementId = (id: string): void => {
+  if (!id) return;
+  try {
+    const set = getDeletedMovementIds();
+    set.add(id);
+    set.add(id.replace(/^mov-/, '').trim());
+    set.add(`mov-${id.replace(/^mov-/, '').trim()}`);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DELETED_MOVEMENTS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+};
+
+const isMovementDeleted = (id: string | undefined, deletedIds: Set<string>): boolean => {
+  if (!id) return false;
+  const strId = String(id).trim();
+  const cleanId = strId.replace(/^mov-/, '').trim();
+  return deletedIds.has(strId) || deletedIds.has(cleanId) || deletedIds.has(`mov-${cleanId}`);
+};
+
+export const getLocalStorageMovements = (): CashMovement[] => {
+  const deletedIds = getDeletedMovementIds();
+  if (inMemoryMovements !== null) {
+    return inMemoryMovements.filter(m => !isMovementDeleted(m.id, deletedIds));
+  }
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(MOVEMENTS_STORAGE_KEY) : null;
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    inMemoryMovements = parsed;
-    return parsed;
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter((m: CashMovement) => !isMovementDeleted(m?.id, deletedIds));
+      inMemoryMovements = filtered;
+      return filtered;
+    }
+    return [];
   } catch {
     return [];
   }
 };
 
 export const saveLocalStorageMovements = (movements: CashMovement[]): void => {
-  inMemoryMovements = movements;
+  const deletedIds = getDeletedMovementIds();
+  const filtered = (movements || []).filter(m => !isMovementDeleted(m?.id, deletedIds));
+  inMemoryMovements = filtered;
   try {
-    localStorage.setItem(MOVEMENTS_STORAGE_KEY, JSON.stringify(movements));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(MOVEMENTS_STORAGE_KEY, JSON.stringify(filtered));
+    }
   } catch (err) {
     console.error('Error saving cash movements to localStorage:', err);
   }
@@ -84,17 +127,20 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
           });
 
           // FUSIONAR con los movimientos locales para NUNCA perder movimientos creados localmente
-          const localList = getLocalStorageMovements();
+          const deletedIds = getDeletedMovementIds();
+          const localList = getLocalStorageMovements().filter(m => !isMovementDeleted(m?.id, deletedIds));
           const map = new Map<string, CashMovement>();
 
-          // Primero los remotos
+          // Primero los remotos (excluyendo los eliminados)
           supabaseList.forEach(m => {
-            if (m?.id) map.set(String(m.id), m);
+            if (m?.id && !isMovementDeleted(String(m.id), deletedIds)) {
+              map.set(String(m.id), m);
+            }
           });
 
           // Luego los locales (los locales no sincronizados o recientes tienen prioridad)
           localList.forEach(m => {
-            if (m?.id) {
+            if (m?.id && !isMovementDeleted(String(m.id), deletedIds)) {
               const ex = map.get(String(m.id));
               map.set(String(m.id), { ...ex, ...m });
             }
@@ -193,4 +239,46 @@ export const setInitialShiftFund = (amount: number): void => {
 
 export const clearSessionCashData = (): void => {
   localStorage.setItem(MOVEMENTS_STORAGE_KEY, JSON.stringify([]));
+};
+
+/**
+ * Elimina un movimiento de efectivo o transferencia de la base de datos y del almacenamiento local
+ */
+export const deleteCashMovement = async (id: string): Promise<boolean> => {
+  if (!id) return false;
+  const cleanId = String(id).replace(/^mov-/, '').trim();
+
+  // 1. Registrar en lista de eliminados para que no vuelva a aparecer
+  addDeletedMovementId(id);
+  addDeletedMovementId(cleanId);
+  addDeletedMovementId(`mov-${cleanId}`);
+
+  // 2. Remover inmediatamente de memoria y localStorage
+  const current = getLocalStorageMovements();
+  const updated = current.filter(m => {
+    const mId = String(m?.id || '');
+    const mClean = mId.replace(/^mov-/, '').trim();
+    return mId !== id && mId !== cleanId && mClean !== cleanId;
+  });
+  saveLocalStorageMovements(updated);
+
+  // 3. Notificar a las pantallas (Bancos, Finanzas, etc.)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_cash_movements_changed', { detail: { id: cleanId } }));
+    window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: { id: cleanId } }));
+  }
+
+  // 4. Eliminar de Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase
+        .from('cash_movements')
+        .delete()
+        .eq('id', cleanId);
+    } catch (err) {
+      console.warn('Error al eliminar movimiento de caja en Supabase:', err);
+    }
+  }
+
+  return true;
 };

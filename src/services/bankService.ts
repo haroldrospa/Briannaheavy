@@ -1,6 +1,6 @@
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
-import { fetchCashMovements, getLocalStorageMovements, createCashMovement, type CashMovement } from './cashMovementsService';
-import { fetchInvoices, getLocalStorageInvoices, type Invoice } from './invoicesService';
+import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, type CashMovement } from './cashMovementsService';
+import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, type Invoice } from './invoicesService';
 import { getStoredReceipts } from './financingReceiptsService';
 
 export interface BankTransaction {
@@ -466,3 +466,44 @@ export const calculateBankAccountsSummary = (
     totalTransactionsCount: transactions.length
   };
 };
+
+/**
+ * Elimina una transacción bancaria o movimiento de fondos
+ */
+export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolean> => {
+  if (!tx || !tx.id) return false;
+
+  // 1. Si es un movimiento de efectivo o transferencia de caja
+  if (tx.source_type === 'cash_movement' || tx.id.startsWith('mov-')) {
+    const movId = tx.source_id || tx.id.replace(/^mov-/, '');
+    const success = await deleteCashMovement(movId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return success;
+  }
+
+  // 2. Si es una transacción bancaria manual directa
+  if (tx.source_type === 'manual_bank' || tx.id.startsWith('btx-')) {
+    const current = getManualBankTransactions();
+    const updated = current.filter(t => t.id !== tx.id && t.id !== tx.source_id);
+    saveManualBankTransactions(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return true;
+  }
+
+  // 3. Si es una factura de venta
+  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
+    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
+    const success = await deleteInvoice(invId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return success;
+  }
+
+  return false;
+};
+

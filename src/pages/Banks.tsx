@@ -9,12 +9,15 @@ import {
   CheckIcon,
   BanknotesIcon,
   ArrowPathIcon,
-  PlusIcon
+  PlusIcon,
+  TrashIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { 
   fetchAllBankTransactions, 
   calculateBankAccountsSummary, 
+  deleteBankTransaction,
   CASH_ACCOUNT,
   type BankTransaction 
 } from '../services/bankService';
@@ -34,6 +37,9 @@ export default function Banks() {
   const [copiedAccId, setCopiedAccId] = useState<string | null>(null);
   const [copiedRefId, setCopiedRefId] = useState<string | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState<boolean>(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<BankTransaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -71,6 +77,24 @@ export default function Banks() {
       window.removeEventListener('focus', handleBankChanges);
     };
   }, [loadData]);
+
+  const handleConfirmDelete = async () => {
+    if (!transactionToDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const typeLabel = transactionToDelete.type;
+      const amountLabel = Number(transactionToDelete.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 });
+      await deleteBankTransaction(transactionToDelete);
+      setDeleteFeedback(`Se eliminó correctamente el movimiento de ${typeLabel} de RD$ ${amountLabel}.`);
+      setTransactionToDelete(null);
+      await loadData();
+      setTimeout(() => setDeleteFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error al eliminar transacción:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Resumen y métricas
   const summary = useMemo(() => {
@@ -461,6 +485,22 @@ export default function Banks() {
 
       {/* 4. Barra de Filtros y Tabla Unificada */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/70 dark:border-zinc-800 p-4 sm:p-5 shadow-2xs space-y-4">
+        {deleteFeedback && (
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in print:hidden">
+            <span className="flex items-center gap-2">
+              <CheckIcon className="w-4 h-4 text-emerald-600 stroke-[3]" />
+              {deleteFeedback}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDeleteFeedback(null)}
+              className="text-emerald-600 hover:text-emerald-900 dark:hover:text-white font-black cursor-pointer ml-2 text-sm leading-none"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Barra de Filtros Minimalista */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 print:hidden">
           {/* Cuentas Pills, Método y Tipo */}
@@ -655,6 +695,9 @@ export default function Banks() {
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:hidden">
                     Responsable
                   </th>
+                  <th className="px-3 py-3 text-center text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 print:hidden">
+                    Acción
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 bg-white dark:bg-zinc-900">
@@ -764,6 +807,18 @@ export default function Banks() {
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500 dark:text-zinc-400 print:hidden">
                         <span className="font-medium text-[11px]">{tx.created_by || 'Cajero'}</span>
                       </td>
+
+                      {/* Acción: Eliminar */}
+                      <td className="px-3 py-3 whitespace-nowrap text-center print:hidden">
+                        <button
+                          type="button"
+                          onClick={() => setTransactionToDelete(tx)}
+                          title="Eliminar movimiento"
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-all cursor-pointer"
+                        >
+                          <TrashIcon className="w-4 h-4 stroke-[2]" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -772,6 +827,82 @@ export default function Banks() {
           )}
         </div>
       </div>
+
+      {/* Modal de Confirmación de Eliminación */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="p-3 rounded-2xl bg-red-100 dark:bg-red-950/60 shrink-0">
+                <ExclamationTriangleIcon className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-gray-900 dark:text-white">
+                  ¿Eliminar este {transactionToDelete.type === 'Ingreso' ? 'Ingreso' : 'Egreso'}?
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">
+                  Esta acción eliminará el movimiento y actualizará el balance contable.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/60 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-zinc-400 font-medium">Concepto:</span>
+                <span className="font-black text-gray-900 dark:text-white text-right truncate max-w-[220px]">
+                  {transactionToDelete.concept}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-zinc-400 font-medium">Cuenta / Caja:</span>
+                <span className="font-bold text-gray-800 dark:text-zinc-200">
+                  {transactionToDelete.bank_account_name}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-zinc-400 font-medium">Monto:</span>
+                <span className={`font-mono font-black text-sm ${transactionToDelete.type === 'Ingreso' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-red-400'}`}>
+                  {transactionToDelete.type === 'Ingreso' ? '+' : '-'}RD$ {transactionToDelete.amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-zinc-400 font-medium">Fecha:</span>
+                <span className="text-gray-700 dark:text-zinc-300">
+                  {new Date(transactionToDelete.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              {transactionToDelete.created_by && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 dark:text-zinc-400 font-medium">Registrado por:</span>
+                  <span className="text-gray-700 dark:text-zinc-300 font-medium">
+                    {transactionToDelete.created_by}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setTransactionToDelete(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black shadow-md shadow-red-900/20 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <TrashIcon className="w-4 h-4" />
+                <span>{isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Registro de Movimiento de Fondos (Efectivo y Transferencia) */}
       <CashMovementModal
@@ -785,3 +916,4 @@ export default function Banks() {
     </div>
   );
 }
+
