@@ -1,6 +1,8 @@
 import type { Invoice } from './invoicesService';
 import type { CashMovement } from './cashMovementsService';
 import { getActiveRole } from '../utils/rolePermissions';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { saveRemoteSetting } from './settingsService';
 
 export const CASH_REGISTERS = [
   'Caja 1 - Repuestos',
@@ -205,6 +207,26 @@ export const openShift = (
     console.error('Error saving new active shift:', e);
   }
 
+  if (isSupabaseConfigured()) {
+    (async () => {
+      try {
+        await supabase.from('cash_shifts').insert([{
+          user_name: cashierName,
+          opening_amount: Number(initialFund) || 0,
+          status: 'Abierto',
+          opened_at: newShift.opened_at,
+        }]);
+        const activeShiftsRaw = localStorage.getItem('brianna_active_shifts_map');
+        const activeShifts = activeShiftsRaw ? JSON.parse(activeShiftsRaw) : {};
+        activeShifts[registerName] = newShift;
+        localStorage.setItem('brianna_active_shifts_map', JSON.stringify(activeShifts));
+        await saveRemoteSetting('active_shifts', activeShifts);
+      } catch (err) {
+        console.warn('Error saving shift to Supabase:', err);
+      }
+    })();
+  }
+
   window.dispatchEvent(new Event('brianna_shift_updated'));
   return newShift;
 };
@@ -236,6 +258,24 @@ export const closeShift = (registerName = 'Caja 1 - Repuestos', _closureId?: str
     localStorage.setItem(lastClosedKey, JSON.stringify(closedShift));
   } catch (e) {
     console.error('Error closing active shift:', e);
+  }
+
+  if (isSupabaseConfigured()) {
+    (async () => {
+      try {
+        await supabase
+          .from('cash_shifts')
+          .update({ status: 'Cerrado', closed_at: nowIso })
+          .eq('status', 'Abierto');
+        const activeShiftsRaw = localStorage.getItem('brianna_active_shifts_map');
+        const activeShifts = activeShiftsRaw ? JSON.parse(activeShiftsRaw) : {};
+        delete activeShifts[registerName];
+        localStorage.setItem('brianna_active_shifts_map', JSON.stringify(activeShifts));
+        await saveRemoteSetting('active_shifts', activeShifts);
+      } catch (err) {
+        console.warn('Error closing shift in Supabase:', err);
+      }
+    })();
   }
 
   window.dispatchEvent(new Event('brianna_shift_updated'));

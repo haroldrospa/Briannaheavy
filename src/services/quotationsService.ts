@@ -1,4 +1,5 @@
 import { getLocalStorageInvoices, saveLocalStorageInvoices, deleteInvoice } from './invoicesService';
+import { saveRemoteSetting } from './settingsService';
 
 export interface QuotationProduct {
   id: string | number;
@@ -180,6 +181,7 @@ export const fetchQuotations = (): Quotation[] => {
 const saveQuotationsToStorage = (quotations: Quotation[]): void => {
   try {
     localStorage.setItem(QUOTATIONS_STORAGE_KEY, JSON.stringify(quotations));
+    saveRemoteSetting('quotations', quotations).catch(e => console.warn('Supabase quotations sync warning:', e));
   } catch (err) {
     console.error('Error al guardar cotizaciones:', err);
   }

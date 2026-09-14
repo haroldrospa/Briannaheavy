@@ -88,6 +88,8 @@ export const DEFAULT_INVOICE_CONFIG: InvoiceCustomConfig = {
 
 const STORAGE_KEY = 'brianna_invoice_custom_settings';
 
+import { saveRemoteSetting } from '../services/settingsService';
+
 export const getInvoiceCustomConfig = (): InvoiceCustomConfig => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -105,8 +107,11 @@ export const saveInvoiceCustomConfig = (config: InvoiceCustomConfig): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     localStorage.setItem('brianna_receipt_font_size', config.fontSize);
-    window.dispatchEvent(new CustomEvent('brianna_invoice_config_changed', { detail: config }));
-    window.dispatchEvent(new CustomEvent('brianna_receipt_font_size_changed', { detail: config.fontSize }));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_invoice_config_changed', { detail: config }));
+      window.dispatchEvent(new CustomEvent('brianna_receipt_font_size_changed', { detail: config.fontSize }));
+    }
+    saveRemoteSetting('invoice_custom_settings', config).catch(e => console.warn('Supabase invoice settings sync warning:', e));
   } catch (err) {
     console.error('Error saving invoice custom settings:', err);
   }
@@ -132,7 +137,10 @@ export const saveReceiptFontSize = (size: ReceiptFontSize): void => {
     const current = getInvoiceCustomConfig();
     current.fontSize = size;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent('brianna_receipt_font_size_changed', { detail: size }));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_receipt_font_size_changed', { detail: size }));
+    }
+    saveRemoteSetting('invoice_custom_settings', current).catch(e => console.warn('Supabase font size sync warning:', e));
   } catch {
     // fallback
   }
@@ -212,9 +220,13 @@ export const saveCompanyBankAccounts = (accounts: CompanyBankAccount[]): void =>
   try {
     localStorage.setItem(BANK_STORAGE_KEY, JSON.stringify(accounts));
     localStorage.setItem(BANK_STORAGE_VERSION_KEY, CURRENT_BANK_VERSION);
-    window.dispatchEvent(new CustomEvent('brianna_bank_accounts_changed', { detail: accounts }));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_accounts_changed', { detail: accounts }));
+    }
+    saveRemoteSetting('company_bank_accounts', accounts).catch(e => console.warn('Supabase bank accounts sync warning:', e));
   } catch (err) {
     console.error('Error saving company bank accounts:', err);
   }
 };
+
 

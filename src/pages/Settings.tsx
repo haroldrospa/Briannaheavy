@@ -64,7 +64,8 @@ import {
   syncScheduleWithSupabase, 
   syncAdminKeyWithSupabase,
   syncPermissionsWithSupabase,
-  saveRemoteSetting 
+  saveRemoteSetting,
+  fetchAllSystemSettings
 } from '../services/settingsService';
 import { 
   getAlanubeConfig, 
@@ -308,12 +309,14 @@ export default function Settings() {
     localStorage.setItem('brianna_company_email', companyProfile.email);
     await saveRemoteSetting('company_profile', companyProfile);
     await saveRemoteSetting('invoice_custom_settings', updatedInvoiceConfig);
+    await saveRemoteSetting('company_bank_accounts', bankAccounts);
     setShowCompanyToast(true);
     setTimeout(() => setShowCompanyToast(false), 3500);
   };
 
-  const handleSaveInvoiceConfig = () => {
+  const handleSaveInvoiceConfig = async () => {
     saveInvoiceCustomConfig(invoiceConfig);
+    await saveRemoteSetting('invoice_custom_settings', invoiceConfig);
     setShowInvoiceToast(true);
     setTimeout(() => setShowInvoiceToast(false), 3500);
   };
@@ -351,12 +354,19 @@ export default function Settings() {
     setTimeout(() => setShowAdminKeyToast(false), 3500);
   };
 
-  const handleSaveAlanubeSettings = () => {
+  const handleSaveAlanubeSettings = async () => {
     saveAlanubeConfig(alanubeConfig);
     localStorage.setItem('brianna_seq_e31', eSequences.e31.padStart(10, '0'));
     localStorage.setItem('brianna_seq_e32', eSequences.e32.padStart(10, '0'));
     localStorage.setItem('brianna_seq_e45', eSequences.e45.padStart(10, '0'));
     localStorage.setItem('brianna_seq_e46', eSequences.e46.padStart(10, '0'));
+    await saveRemoteSetting('alanube_config', alanubeConfig);
+    await saveRemoteSetting('sequences', {
+      ...sequences,
+      seqE31: eSequences.e31,
+      seqE32: eSequences.e32,
+      seqE45: eSequences.e45,
+    });
     setShowAlanubeToast(true);
     setTimeout(() => setShowAlanubeToast(false), 3500);
   };
@@ -462,14 +472,89 @@ export default function Settings() {
     setUsersList(data);
   };
 
+  const loadAllSettingsFromDatabase = async () => {
+    try {
+      const allSettings = await fetchAllSystemSettings();
+      if (allSettings.company_profile) {
+        setCompanyProfile({
+          name: allSettings.company_profile.name || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+          rnc: allSettings.company_profile.rnc || '132-61036-2',
+          phone: allSettings.company_profile.phone || '(809) 555-5555',
+          email: allSettings.company_profile.email || 'contacto@briannaheavy.com',
+          address: allSettings.company_profile.address || 'Av. Principal #123, Santo Domingo, R.D.',
+        });
+      }
+      if (Array.isArray(allSettings.company_bank_accounts) && allSettings.company_bank_accounts.length > 0) {
+        setBankAccounts(allSettings.company_bank_accounts);
+      }
+      if (allSettings.invoice_custom_settings) {
+        setInvoiceConfig(prev => ({ ...prev, ...allSettings.invoice_custom_settings }));
+        if (allSettings.invoice_custom_settings.fontSize) {
+          setDefaultFontSize(allSettings.invoice_custom_settings.fontSize);
+        }
+      }
+      if (allSettings.sequences) {
+        setSequences(prev => ({ ...prev, ...allSettings.sequences }));
+        setESequences(prev => ({
+          ...prev,
+          e31: allSettings.sequences.seqE31 || prev.e31,
+          e32: allSettings.sequences.seqE32 || prev.e32,
+          e45: allSettings.sequences.seqE45 || prev.e45,
+        }));
+      }
+      if (allSettings.schedule) {
+        setSchedule(prev => ({ ...prev, ...allSettings.schedule }));
+      }
+      if (allSettings.admin_master_key) {
+        const key = typeof allSettings.admin_master_key === 'object' && allSettings.admin_master_key.key
+          ? allSettings.admin_master_key.key
+          : String(allSettings.admin_master_key);
+        setAdminMasterKey(key);
+      }
+      if (allSettings.role_permissions) {
+        setRoles(allSettings.role_permissions);
+      }
+      if (allSettings.alanube_config) {
+        setAlanubeConfig(prev => ({ ...prev, ...allSettings.alanube_config }));
+      }
+    } catch (err) {
+      console.warn('Error loading all settings from database:', err);
+    }
+  };
+
   useEffect(() => {
     loadSettingsUsers(true);
+    loadAllSettingsFromDatabase();
 
     const handleUserUpdate = () => {
       loadSettingsUsers(false);
     };
+    const handleBankUpdate = (e: any) => {
+      if (Array.isArray(e.detail)) setBankAccounts(e.detail);
+    };
+    const handleProfileUpdate = (e: any) => {
+      if (e.detail) {
+        setCompanyProfile(prev => ({ ...prev, ...e.detail }));
+      }
+    };
+    const handleInvoiceUpdate = (e: any) => {
+      if (e.detail) {
+        setInvoiceConfig(prev => ({ ...prev, ...e.detail }));
+        if (e.detail.fontSize) setDefaultFontSize(e.detail.fontSize);
+      }
+    };
+
     window.addEventListener('brianna_user_updated', handleUserUpdate);
-    return () => window.removeEventListener('brianna_user_updated', handleUserUpdate);
+    window.addEventListener('brianna_bank_accounts_changed', handleBankUpdate);
+    window.addEventListener('brianna_company_profile_updated', handleProfileUpdate);
+    window.addEventListener('brianna_invoice_config_changed', handleInvoiceUpdate);
+
+    return () => {
+      window.removeEventListener('brianna_user_updated', handleUserUpdate);
+      window.removeEventListener('brianna_bank_accounts_changed', handleBankUpdate);
+      window.removeEventListener('brianna_company_profile_updated', handleProfileUpdate);
+      window.removeEventListener('brianna_invoice_config_changed', handleInvoiceUpdate);
+    };
   }, []);
 
   const openUserModal = (user: UserProfile | null = null) => {

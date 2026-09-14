@@ -50,6 +50,8 @@ const DEFAULT_CONFIG: AlanubeConfig = {
   companyId: '01M0TYXY3TC2KMKWHTNAEW643R',
 };
 
+import { saveRemoteSetting } from './settingsService';
+
 export const getAlanubeConfig = (): AlanubeConfig => {
   try {
     const saved = localStorage.getItem('brianna_alanube_config');
@@ -65,8 +67,15 @@ export const getAlanubeConfig = (): AlanubeConfig => {
 export const saveAlanubeConfig = (config: Partial<AlanubeConfig>): void => {
   const current = getAlanubeConfig();
   const updated = { ...current, ...config };
-  localStorage.setItem('brianna_alanube_config', JSON.stringify(updated));
-  window.dispatchEvent(new Event('brianna_alanube_config_updated'));
+  try {
+    localStorage.setItem('brianna_alanube_config', JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('brianna_alanube_config_updated'));
+    }
+    saveRemoteSetting('alanube_config', updated).catch(e => console.warn('Supabase alanube_config sync warning:', e));
+  } catch (err) {
+    console.error('Error saving Alanube config:', err);
+  }
 };
 
 /**

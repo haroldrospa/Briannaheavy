@@ -57,19 +57,31 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
           .limit(200);
 
         if (!error && data) {
-          const supabaseList: CashMovement[] = (data as any[]).map(row => ({
-            id: String(row.id),
-            type: (row.type === 'Ingreso' ? 'Ingreso' : 'Egreso') as 'Ingreso' | 'Egreso',
-            amount: Number(row.amount) || 0,
-            concept: row.concept || row.reason || (row.type === 'Ingreso' ? 'Ingreso de Fondos' : 'Egreso / Gasto'),
-            payment_method: row.payment_method || (row.bank_account_name ? 'Transferencia' : 'Efectivo'),
-            bank_account_id: row.bank_account_id,
-            bank_account_name: row.bank_account_name,
-            reference: row.reference,
-            register_name: row.register_name || 'Caja 1 - Repuestos',
-            created_by: row.created_by || row.user_name || 'Harold Rosado',
-            created_at: row.created_at || new Date().toISOString()
-          }));
+          const supabaseList: CashMovement[] = (data as any[]).map(row => {
+            const rawReason = String(row.reason || row.concept || (row.type === 'Ingreso' ? 'Ingreso de Fondos' : 'Egreso / Gasto'));
+            const bankMatch = rawReason.match(/\(Banco:\s*([^)]+)\)/i);
+            const refMatch = rawReason.match(/\[Ref:\s*([^\]]+)\]/i);
+            const regMatch = rawReason.match(/\[(Caja[^\]]+)\]/i);
+            const cleanConcept = rawReason
+              .replace(/\(Banco:\s*([^)]+)\)/i, '')
+              .replace(/\[Ref:\s*([^\]]+)\]/i, '')
+              .replace(/\[(Caja[^\]]+)\]/i, '')
+              .trim();
+
+            return {
+              id: String(row.id),
+              type: (row.type === 'Ingreso' ? 'Ingreso' : 'Egreso') as 'Ingreso' | 'Egreso',
+              amount: Number(row.amount) || 0,
+              concept: cleanConcept || rawReason,
+              payment_method: row.payment_method || (bankMatch ? 'Transferencia' : 'Efectivo'),
+              bank_account_id: row.bank_account_id,
+              bank_account_name: bankMatch ? bankMatch[1].trim() : row.bank_account_name,
+              reference: refMatch ? refMatch[1].trim() : row.reference,
+              register_name: regMatch ? regMatch[1].trim() : (row.register_name || 'Caja 1 - Repuestos'),
+              created_by: row.created_by || row.user_name || 'Harold Rosado',
+              created_at: row.created_at || new Date().toISOString()
+            };
+          });
 
           // FUSIONAR con los movimientos locales para NUNCA perder movimientos creados localmente
           const localList = getLocalStorageMovements();
@@ -135,34 +147,22 @@ export const createCashMovement = async (
   if (isSupabaseConfigured()) {
     (async () => {
       try {
-        const fullPayload: any = {
+        const formattedReason = [
+          newMov.concept,
+          newMov.bank_account_name ? `(Banco: ${newMov.bank_account_name})` : '',
+          newMov.reference ? `[Ref: ${newMov.reference}]` : '',
+          newMov.register_name ? `[${newMov.register_name}]` : ''
+        ].filter(Boolean).join(' ');
+
+        const dbPayload = {
           type: newMov.type,
-          amount: newMov.amount,
-          reason: newMov.concept,
-          concept: newMov.concept,
+          amount: Number(newMov.amount) || 0,
+          reason: formattedReason,
           user_name: authorName,
-          created_by: authorName,
-          register_name: newMov.register_name || 'Caja 1 - Repuestos',
           created_at: newMov.created_at,
         };
-        if (newMov.payment_method) fullPayload.payment_method = newMov.payment_method;
-        if (newMov.bank_account_name) fullPayload.bank_account_name = newMov.bank_account_name;
-        if (newMov.reference) fullPayload.reference = newMov.reference;
 
-        let insertRes = await supabase.from('cash_movements').insert([fullPayload]).select().maybeSingle();
-
-        // Si falla por columnas extendidas no existentes en la tabla, insertar columnas básicas del schema
-        if (insertRes.error) {
-          const minimalPayload = {
-            type: newMov.type,
-            amount: newMov.amount,
-            reason: newMov.concept,
-            user_name: authorName,
-            register_name: newMov.register_name || 'Caja 1 - Repuestos',
-            created_at: newMov.created_at,
-          };
-          insertRes = await supabase.from('cash_movements').insert([minimalPayload]).select().maybeSingle();
-        }
+        const insertRes = await supabase.from('cash_movements').insert([dbPayload]).select().maybeSingle();
 
         if (!insertRes.error && insertRes.data) {
           const list = getLocalStorageMovements();
