@@ -135,6 +135,24 @@ export const fetchAllSystemSettings = async (): Promise<Record<string, any>> => 
           }
         } catch {}
       }
+
+      if (row.key === 'workshop_tools' && Array.isArray(row.value)) {
+        try {
+          localStorage.setItem('brianna_workshop_tools', JSON.stringify(row.value));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_tools_updated', { detail: row.value }));
+          }
+        } catch {}
+      }
+
+      if (row.key === 'tool_loans' && Array.isArray(row.value)) {
+        try {
+          localStorage.setItem('brianna_tool_loans', JSON.stringify(row.value));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_tool_loans_updated', { detail: row.value }));
+          }
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn('Exception during fetchAllSystemSettings:', err);
