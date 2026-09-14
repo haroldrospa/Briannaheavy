@@ -15,7 +15,8 @@ import {
   ArrowDownLeftIcon,
   PencilSquareIcon,
   TrashIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowUpTrayIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -27,10 +28,13 @@ import {
   checkoutTool, 
   checkinTool, 
   formatToolLoanDuration,
+  clearAllTools,
+  bulkImportTools,
   KNOWN_MECHANICS,
   type WorkshopTool, 
   type ToolLoanRecord 
 } from '../services/toolsService';
+import { fetchUsers } from '../services/usersService';
 
 export default function Tools() {
   const [tools, setTools] = useState<WorkshopTool[]>([]);
@@ -52,6 +56,7 @@ export default function Tools() {
   const [selectedToolForCheckin, setSelectedToolForCheckin] = useState<WorkshopTool | null>(null);
   const [editingTool, setEditingTool] = useState<WorkshopTool | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mechanicsList, setMechanicsList] = useState<string[]>(KNOWN_MECHANICS);
 
   // Formulario de Check-out (Salida)
   const [checkoutForm, setCheckoutForm] = useState({
@@ -112,6 +117,15 @@ export default function Tools() {
 
   useEffect(() => {
     loadData(true);
+
+    fetchUsers().then(users => {
+      if (Array.isArray(users) && users.length > 0) {
+        const names = users.map(u => u.full_name?.trim()).filter(Boolean) as string[];
+        if (names.length > 0) {
+          setMechanicsList(Array.from(new Set([...names, ...KNOWN_MECHANICS])));
+        }
+      }
+    }).catch(() => {});
 
     const handleToolsUpdate = () => loadData(false);
     const handleLoansUpdate = () => loadData(false);
@@ -341,10 +355,79 @@ export default function Tools() {
     try {
       await deleteTool(id);
       showToast('Herramienta eliminada del inventario');
-      loadData(false);
+      await loadData(true);
     } catch (err: any) {
       showToast(err?.message || 'Error al eliminar la herramienta', 'error');
     }
+  };
+
+  const handleClearAllTools = async () => {
+    if (!window.confirm('¿Estás seguro de vaciar todas las herramientas del taller? Esto eliminará los datos de prueba y dejará el inventario limpio para cargar tus herramientas reales.')) {
+      return;
+    }
+    try {
+      setIsLoading(true);
+      await clearAllTools();
+      showToast('Inventario vaciado. Listo para cargar tus herramientas reales.');
+      await loadData(true);
+    } catch (err: any) {
+      showToast(err?.message || 'Error al vaciar herramientas', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) return;
+
+        const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+        if (lines.length === 0) {
+          showToast('El archivo CSV está vacío', 'error');
+          return;
+        }
+
+        const startIndex = lines[0].toLowerCase().includes('código') || lines[0].toLowerCase().includes('codigo') || lines[0].toLowerCase().includes('nombre') ? 1 : 0;
+        
+        const imported: Array<Omit<WorkshopTool, 'id' | 'created_at'>> = [];
+        for (let i = startIndex; i < lines.length; i++) {
+          const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          if (cols.length >= 2 && cols[1]) {
+            imported.push({
+              code: cols[0] || `HERR-${String(tools.length + imported.length + 1).padStart(3, '0')}`,
+              name: cols[1],
+              category: cols[2] || 'Manual',
+              brand: cols[3] || undefined,
+              model: cols[4] || undefined,
+              location: cols[5] || 'Taller General',
+              status: 'Disponible',
+              notes: cols[6] || undefined,
+              current_loan: null,
+            });
+          }
+        }
+
+        if (imported.length === 0) {
+          showToast('No se encontraron herramientas con formato válido en el archivo CSV', 'error');
+          return;
+        }
+
+        await bulkImportTools(imported);
+        showToast(`¡${imported.length} herramientas reales importadas y guardadas en la base de datos!`);
+        await loadData(true);
+      } catch (err: any) {
+        showToast(err?.message || 'Error al importar CSV', 'error');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Categorías disponibles
@@ -402,6 +485,25 @@ export default function Tools() {
             <ArrowPathIcon className={`w-5 h-5 ${isLoading ? 'animate-spin text-[#C1121F]' : ''}`} />
           </button>
 
+          {tools.length > 0 && (
+            <button
+              onClick={handleClearAllTools}
+              className="p-2.5 rounded-xl border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 transition-colors"
+              title="Vaciar inventario de herramientas"
+            >
+              <TrashIcon className="w-5 h-5" />
+            </button>
+          )}
+
+          <label
+            className="px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 text-xs sm:text-sm font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Importar herramientas desde archivo CSV"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4" />
+            <span>Importar CSV</span>
+            <input type="file" accept=".csv,.txt" onChange={handleImportCSV} className="hidden" />
+          </label>
+
           <button
             onClick={handleOpenCreateTool}
             className="px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 text-xs sm:text-sm font-semibold transition-colors flex items-center gap-1.5"
@@ -412,7 +514,8 @@ export default function Tools() {
 
           <button
             onClick={() => handleOpenCheckout()}
-            className="px-4 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 hover:shadow-lg transition-all flex items-center gap-2"
+            disabled={tools.filter(t => t.status === 'Disponible').length === 0}
+            className="px-4 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 hover:shadow-lg transition-all flex items-center gap-2"
           >
             <ArrowRightCircleIcon className="w-5 h-5" />
             <span>Prestar Herramienta (Salida)</span>
@@ -681,7 +784,37 @@ export default function Tools() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60">
-                  {filteredTools.length === 0 ? (
+                  {tools.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-14 px-4">
+                        <div className="max-w-md mx-auto space-y-3">
+                          <div className="h-14 w-14 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 flex items-center justify-center mx-auto text-[#C1121F] dark:text-red-400">
+                            <WrenchIcon className="w-7 h-7" />
+                          </div>
+                          <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                            No hay herramientas registradas todavía
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-zinc-400 leading-relaxed">
+                            El inventario está listo y limpio para registrar las herramientas reales de tu taller. Puedes agregar una a una o importar un listado masivo en archivo CSV.
+                          </p>
+                          <div className="flex items-center justify-center gap-2.5 pt-2">
+                            <button
+                              onClick={handleOpenCreateTool}
+                              className="px-4 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                            >
+                              <PlusIcon className="w-4 h-4" />
+                              <span>Registrar Herramienta</span>
+                            </button>
+                            <label className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-800 dark:text-zinc-200 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5">
+                              <ArrowUpTrayIcon className="w-4 h-4" />
+                              <span>Importar CSV</span>
+                              <input type="file" accept=".csv,.txt" onChange={handleImportCSV} className="hidden" />
+                            </label>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredTools.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-zinc-400">
                         No se encontraron herramientas con los filtros seleccionados.
@@ -1014,14 +1147,14 @@ export default function Tools() {
                       className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                     />
                     <datalist id="mechanics-list">
-                      {KNOWN_MECHANICS.map(m => (
+                      {mechanicsList.map(m => (
                         <option key={m} value={m} />
                       ))}
                     </datalist>
 
                     {/* Chips de selección rápida */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      {KNOWN_MECHANICS.slice(0, 4).map(m => (
+                      {mechanicsList.slice(0, 6).map(m => (
                         <button
                           key={m}
                           type="button"
@@ -1029,7 +1162,7 @@ export default function Tools() {
                           onClick={() => setCheckoutForm(prev => ({ ...prev, mechanic_name: m }))}
                           className="px-2 py-0.5 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[10px] font-medium text-gray-700 dark:text-zinc-300 transition-colors disabled:opacity-50"
                         >
-                          + {m.split(' ')[0]} {m.split(' ')[1]}
+                          + {m}
                         </button>
                       ))}
                     </div>

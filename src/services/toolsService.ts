@@ -176,7 +176,7 @@ export const getLocalStorageTools = (): WorkshopTool[] => {
       const raw = localStorage.getItem(TOOLS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           inMemoryTools = parsed;
           return parsed;
         }
@@ -185,7 +185,7 @@ export const getLocalStorageTools = (): WorkshopTool[] => {
   } catch (err) {
     console.error('Error loading tools from local storage:', err);
   }
-  return DEFAULT_TOOLS;
+  return [];
 };
 
 export const saveLocalStorageTools = (tools: WorkshopTool[]): void => {
@@ -238,15 +238,11 @@ export const fetchTools = async (forceRefresh = false): Promise<WorkshopTool[]> 
 
   if (isSupabaseConfigured()) {
     try {
-      const remote = await fetchRemoteSettings<WorkshopTool[]>('workshop_tools', []);
-      if (Array.isArray(remote) && remote.length > 0) {
+      const remote = await fetchRemoteSettings<WorkshopTool[] | null>('workshop_tools', null);
+      if (Array.isArray(remote)) {
+        inMemoryTools = remote;
         saveLocalStorageTools(remote);
         return remote;
-      } else {
-        // Inicializar por primera vez en Supabase si está vacío
-        await saveRemoteSetting('workshop_tools', DEFAULT_TOOLS);
-        saveLocalStorageTools(DEFAULT_TOOLS);
-        return DEFAULT_TOOLS;
       }
     } catch (err) {
       console.warn('Error fetching workshop tools from Supabase:', err);
@@ -254,6 +250,32 @@ export const fetchTools = async (forceRefresh = false): Promise<WorkshopTool[]> 
   }
 
   return getLocalStorageTools();
+};
+
+export const clearAllTools = async (): Promise<void> => {
+  inMemoryTools = [];
+  inMemoryLoans = [];
+  saveLocalStorageTools([]);
+  saveLocalStorageToolLoans([]);
+  await saveRemoteSetting('workshop_tools', []);
+  await saveRemoteSetting('tool_loans', []);
+};
+
+export const bulkImportTools = async (newTools: Omit<WorkshopTool, 'id' | 'created_at'>[]): Promise<WorkshopTool[]> => {
+  const current = await fetchTools();
+  const created: WorkshopTool[] = newTools.map((item, idx) => ({
+    ...item,
+    id: `tool_${Date.now()}_${idx}`,
+    status: item.status || 'Disponible',
+    current_loan: null,
+    created_at: new Date().toISOString(),
+  }));
+
+  const merged = [...current, ...created];
+  inMemoryTools = merged;
+  saveLocalStorageTools(merged);
+  await saveRemoteSetting('workshop_tools', merged);
+  return merged;
 };
 
 export const fetchToolLoans = async (forceRefresh = false): Promise<ToolLoanRecord[]> => {
@@ -331,6 +353,7 @@ export const deleteTool = async (id: string): Promise<boolean> => {
   }
 
   const updatedList = currentTools.filter(t => t.id !== id);
+  inMemoryTools = updatedList;
   saveLocalStorageTools(updatedList);
   await saveRemoteSetting('workshop_tools', updatedList);
   return true;
