@@ -16,7 +16,9 @@ import {
   PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
-  ArrowUpTrayIcon
+  ArrowUpTrayIcon,
+  CameraIcon,
+  PhotoIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -31,10 +33,12 @@ import {
   clearAllTools,
   bulkImportTools,
   KNOWN_MECHANICS,
+  GENERAL_TOOL_ID,
   type WorkshopTool, 
   type ToolLoanRecord 
 } from '../services/toolsService';
 import { fetchUsers } from '../services/usersService';
+import { compressImage } from '../utils/imageCompressor';
 
 export default function Tools() {
   const [tools, setTools] = useState<WorkshopTool[]>([]);
@@ -60,10 +64,12 @@ export default function Tools() {
 
   // Formulario de Check-out (Salida)
   const [checkoutForm, setCheckoutForm] = useState({
-    tool_id: '',
+    tool_id: GENERAL_TOOL_ID,
+    generic_name: '',
     mechanic_name: '',
     work_order: '',
     notes: '',
+    photo_url: '',
   });
 
   // Formulario de Check-in (Entrada)
@@ -98,55 +104,53 @@ export default function Tools() {
   };
 
   // Carga de datos
-  const loadData = useCallback(async (force = false) => {
-    setIsLoading(true);
+  const loadData = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
-      const [toolsData, loansData] = await Promise.all([
-        fetchTools(force),
-        fetchToolLoans(force),
+      const [fetchedTools, fetchedLoans, fetchedUsersList] = await Promise.all([
+        fetchTools(true),
+        fetchToolLoans(true),
+        fetchUsers()
       ]);
-      setTools(toolsData);
-      setLoans(loansData);
+
+      setTools(fetchedTools);
+      setLoans(fetchedLoans);
+
+      if (fetchedUsersList && fetchedUsersList.length > 0) {
+        const dbNames = fetchedUsersList
+          .map(u => u.full_name?.trim())
+          .filter((name): name is string => Boolean(name && name.length > 1));
+        
+        const combined = Array.from(new Set([...dbNames, ...KNOWN_MECHANICS]));
+        setMechanicsList(combined);
+      }
     } catch (err) {
       console.error('Error al cargar datos de herramientas:', err);
-      showToast('Error al conectar con la base de datos', 'error');
+      showToast('Error al conectar con la base de datos de herramientas', 'error');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData(true);
+    loadData();
 
-    fetchUsers().then(users => {
-      if (Array.isArray(users) && users.length > 0) {
-        const names = users.map(u => u.full_name?.trim()).filter(Boolean) as string[];
-        if (names.length > 0) {
-          setMechanicsList(Array.from(new Set([...names, ...KNOWN_MECHANICS])));
-        }
-      }
-    }).catch(() => {});
+    const handleToolsUpdated = () => loadData(false);
+    const handleLoansUpdated = () => loadData(false);
 
-    const handleToolsUpdate = () => loadData(false);
-    const handleLoansUpdate = () => loadData(false);
-
-    window.addEventListener('brianna_tools_updated', handleToolsUpdate);
-    window.addEventListener('brianna_tool_loans_updated', handleLoansUpdate);
-
-    // Refrescar cada 60 segundos para mantener sincronización y tiempos relativos
-    const timer = setInterval(() => loadData(false), 60000);
+    window.addEventListener('brianna_tools_updated', handleToolsUpdated);
+    window.addEventListener('brianna_tool_loans_updated', handleLoansUpdated);
 
     return () => {
-      window.removeEventListener('brianna_tools_updated', handleToolsUpdate);
-      window.removeEventListener('brianna_tool_loans_updated', handleLoansUpdate);
-      clearInterval(timer);
+      window.removeEventListener('brianna_tools_updated', handleToolsUpdated);
+      window.removeEventListener('brianna_tool_loans_updated', handleLoansUpdated);
     };
   }, [loadData]);
 
-  // KPIs
+  // Contadores y métricas rápidas
   const totalTools = tools.length;
-  const availableTools = tools.filter(t => t.status === 'Disponible').length;
-  const inUseTools = tools.filter(t => t.status === 'En Uso');
+  const inUseTools = useMemo(() => tools.filter(t => t.status === 'En Uso'), [tools]);
+  const availableTools = useMemo(() => tools.filter(t => t.status === 'Disponible').length, [tools]);
   const inMaintenanceTools = tools.filter(t => t.status === 'Mantenimiento' || t.status === 'Dañada').length;
 
   // Filtrado de herramientas en catálogo
@@ -180,24 +184,43 @@ export default function Tools() {
       }
       setCheckoutForm({
         tool_id: preselectedTool.id,
+        generic_name: '',
         mechanic_name: '',
         work_order: '',
         notes: '',
+        photo_url: '',
       });
     } else {
-      const firstAvailable = tools.find(t => t.status === 'Disponible');
-      if (!firstAvailable) {
-        showToast('No hay herramientas disponibles para prestar en este momento.', 'error');
-        return;
-      }
+      // Por defecto la primera opción siempre es Herramienta General (Por Foto)
       setCheckoutForm({
-        tool_id: firstAvailable.id,
+        tool_id: GENERAL_TOOL_ID,
+        generic_name: '',
         mechanic_name: '',
         work_order: '',
         notes: '',
+        photo_url: '',
       });
     }
     setIsCheckoutModalOpen(true);
+  };
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressed = await compressImage(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.75,
+        mimeType: 'image/jpeg'
+      });
+      setCheckoutForm(prev => ({ ...prev, photo_url: compressed }));
+      showToast('¡Foto de la herramienta capturada con éxito!');
+    } catch (err) {
+      console.error('Error al procesar la foto:', err);
+      showToast('No se pudo procesar la foto de la herramienta', 'error');
+    }
   };
 
   const handleSubmitCheckout = async (e: React.FormEvent) => {
@@ -209,10 +232,19 @@ export default function Tools() {
       return;
     }
 
-    const selectedTool = tools.find(t => t.id === checkoutForm.tool_id);
-    if (selectedTool && selectedTool.status !== 'Disponible') {
-      showToast(`Esta herramienta ya está ${selectedTool.status.toLowerCase()} por ${selectedTool.current_loan?.mechanic_name || 'otro mecánico'}`, 'error');
+    const isGeneric = checkoutForm.tool_id === GENERAL_TOOL_ID;
+
+    if (isGeneric && !checkoutForm.photo_url) {
+      showToast('Para la herramienta general, debe tomar o subir una foto como constancia.', 'error');
       return;
+    }
+
+    if (!isGeneric) {
+      const selectedTool = tools.find(t => t.id === checkoutForm.tool_id);
+      if (selectedTool && selectedTool.status !== 'Disponible') {
+        showToast(`Esta herramienta ya está ${selectedTool.status.toLowerCase()} por ${selectedTool.current_loan?.mechanic_name || 'otro mecánico'}`, 'error');
+        return;
+      }
     }
 
     if (!checkoutForm.mechanic_name.trim()) {
@@ -224,13 +256,22 @@ export default function Tools() {
     try {
       await checkoutTool({
         tool_id: checkoutForm.tool_id,
+        generic_name: checkoutForm.generic_name.trim(),
         mechanic_name: checkoutForm.mechanic_name.trim(),
         work_order: checkoutForm.work_order.trim(),
         notes: checkoutForm.notes.trim(),
+        photo_url: checkoutForm.photo_url,
       });
-      showToast('¡Herramienta prestada con éxito y registrada en la base de datos!');
+      showToast('¡Salida de herramienta registrada con éxito!');
       setIsCheckoutModalOpen(false);
-      setCheckoutForm({ tool_id: '', mechanic_name: '', work_order: '', notes: '' });
+      setCheckoutForm({ 
+        tool_id: GENERAL_TOOL_ID, 
+        generic_name: '', 
+        mechanic_name: '', 
+        work_order: '', 
+        notes: '', 
+        photo_url: '' 
+      });
       await loadData(false);
     } catch (err: any) {
       showToast(err?.message || 'Error al procesar la salida', 'error');
@@ -673,9 +714,22 @@ export default function Tools() {
 
                     <div>
                       <div className="flex items-start gap-3 mb-3">
-                        <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#C1121F] flex items-center justify-center shrink-0">
-                          <WrenchIcon className="w-5 h-5" />
-                        </div>
+                        {tool.photo_url || loan?.photo_url ? (
+                          <div className="relative group shrink-0">
+                            <img 
+                              src={tool.photo_url || loan?.photo_url} 
+                              alt={tool.name} 
+                              className="h-12 w-12 rounded-xl object-cover border-2 border-amber-400 shadow-2xs"
+                            />
+                            <div className="absolute -bottom-1 -right-1 bg-black/70 text-white p-0.5 rounded-full">
+                              <CameraIcon className="w-3 h-3" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#C1121F] flex items-center justify-center shrink-0">
+                            <WrenchIcon className="w-5 h-5" />
+                          </div>
+                        )}
                         <div>
                           <span className="text-[11px] font-black text-[#C1121F] dark:text-red-400 tracking-wider">
                             {tool.code}
@@ -992,12 +1046,31 @@ export default function Tools() {
                       return (
                         <tr key={loan.id} className="hover:bg-gray-50/60 dark:hover:bg-zinc-800/30 transition-colors">
                           <td className="py-3 px-4">
-                            <span className="font-mono text-[11px] font-bold text-[#C1121F] dark:text-red-400 mr-1.5">
-                              {loan.tool_code}
-                            </span>
-                            <span className="font-bold text-gray-900 dark:text-white">
-                              {loan.tool_name}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {loan.photo_url ? (
+                                <a 
+                                  href={loan.photo_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  title="Ver foto de la herramienta"
+                                  className="shrink-0"
+                                >
+                                  <img 
+                                    src={loan.photo_url} 
+                                    alt={loan.tool_name} 
+                                    className="h-9 w-9 rounded-lg object-cover border border-amber-400 shadow-2xs hover:scale-110 transition-transform cursor-pointer"
+                                  />
+                                </a>
+                              ) : null}
+                              <div>
+                                <span className="font-mono text-[11px] font-bold text-[#C1121F] dark:text-red-400 mr-1.5">
+                                  {loan.tool_code}
+                                </span>
+                                <span className="font-bold text-gray-900 dark:text-white">
+                                  {loan.tool_name}
+                                </span>
+                              </div>
+                            </div>
                           </td>
 
                           <td className="py-3 px-4">
@@ -1101,9 +1174,14 @@ export default function Tools() {
               <form onSubmit={handleSubmitCheckout} className="space-y-4 mt-4">
                 {/* Herramienta */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 uppercase mb-1">
-                    Herramienta a Retirar *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 uppercase">
+                      Herramienta a Retirar *
+                    </label>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      📸 Opción Foto disponible
+                    </span>
+                  </div>
                   <select
                     value={checkoutForm.tool_id}
                     onChange={e => {
@@ -1113,22 +1191,109 @@ export default function Tools() {
                     disabled={isSubmitting}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/60 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C1121F]"
                   >
-                    {tools.filter(t => t.status === 'Disponible').length === 0 ? (
-                      <option value="" disabled>No hay herramientas disponibles en el taller</option>
-                    ) : (
-                      <>
-                        <option value="" disabled>Seleccione una herramienta disponible...</option>
-                        {tools
-                          .filter(t => t.status === 'Disponible')
-                          .map(t => (
-                            <option key={t.id} value={t.id}>
-                              {t.code} — {t.name} ({t.location})
-                            </option>
-                          ))}
-                      </>
-                    )}
+                    {/* 1. Primera Opción: Herramienta General con Foto */}
+                    <option value={GENERAL_TOOL_ID} className="font-bold text-[#C1121F]">
+                      ⭐ HERRAMIENTA GENERAL (FOTO DE CONSTANCIA)
+                    </option>
+
+                    {/* 2. Resto de herramientas catalogadas disponibles */}
+                    {tools
+                      .filter(t => t.status === 'Disponible' && t.id !== GENERAL_TOOL_ID)
+                      .map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.code} — {t.name} ({t.location})
+                        </option>
+                      ))}
                   </select>
                 </div>
+
+                {/* Si selecciona Herramienta General o no catalogada: Nombre descriptivo opcional y Toma de Foto Obligatoria */}
+                {checkoutForm.tool_id === GENERAL_TOOL_ID && (
+                  <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border-2 border-dashed border-amber-300 dark:border-amber-800/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CameraIcon className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                          Foto de Constancia de la Herramienta *
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-md">
+                        Requerida
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-zinc-400 mb-1">
+                        Descripción o referencia de la herramienta (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={checkoutForm.generic_name}
+                        onChange={e => setCheckoutForm(prev => ({ ...prev, generic_name: e.target.value }))}
+                        placeholder="Ej: Llave combinada grande / Extractor especial..."
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+
+                    {/* Previsualización o Botón de captura */}
+                    {checkoutForm.photo_url ? (
+                      <div className="relative rounded-xl overflow-hidden border border-amber-300 dark:border-amber-800 bg-black/10">
+                        <img 
+                          src={checkoutForm.photo_url} 
+                          alt="Foto herramienta retirada" 
+                          className="w-full h-44 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-between p-3">
+                          <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                            <CheckCircleIcon className="w-4 h-4 text-emerald-400" />
+                            Foto registrada
+                          </span>
+                          <label className="px-3 py-1.5 rounded-lg bg-white/90 hover:bg-white text-gray-900 text-xs font-bold cursor-pointer shadow-sm transition-all">
+                            Cambiar Foto
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment" 
+                              className="hidden" 
+                              onChange={handlePhotoCapture} 
+                              disabled={isSubmitting}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        {/* Botón Tomar Foto con Cámara */}
+                        <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white text-xs font-black cursor-pointer shadow-sm transition-all">
+                          <CameraIcon className="w-5 h-5" />
+                          <span>Tomar Foto con Cámara</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            className="hidden" 
+                            onChange={handlePhotoCapture} 
+                            disabled={isSubmitting}
+                          />
+                        </label>
+
+                        {/* Botón Subir Imagen / Galería */}
+                        <label className="flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-gray-50 text-gray-700 dark:text-zinc-200 text-xs font-bold cursor-pointer transition-all">
+                          <PhotoIcon className="w-4 h-4" />
+                          <span>Galería</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={handlePhotoCapture} 
+                            disabled={isSubmitting}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Mecánico */}
                 <div>
@@ -1210,7 +1375,7 @@ export default function Tools() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || tools.filter(t => t.status === 'Disponible').length === 0}
+                    disabled={isSubmitting || (checkoutForm.tool_id !== GENERAL_TOOL_ID && tools.filter(t => t.status === 'Disponible').length === 0)}
                     className="px-5 py-2.5 rounded-xl bg-[#C1121F] hover:bg-[#a50f1a] text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (

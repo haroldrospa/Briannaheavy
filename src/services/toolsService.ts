@@ -17,8 +17,11 @@ export interface WorkshopTool {
     work_order?: string;
     dispatched_at: string;
     dispatched_by: string;
+    photo_url?: string;
   } | null;
   notes?: string;
+  photo_url?: string;
+  is_generic?: boolean;
   created_at: string;
 }
 
@@ -38,9 +41,24 @@ export interface ToolLoanRecord {
   condition_on_checkout?: string;
   condition_on_return?: string; // 'Excelente', 'Bueno', 'Con Desgaste', 'Dañada', 'Incompleta'
   notes?: string;
+  photo_url?: string;
   duration_minutes?: number;
   created_at: string;
 }
+
+export const GENERAL_TOOL_ID = 'tool_general';
+export const GENERAL_TOOL: WorkshopTool = {
+  id: GENERAL_TOOL_ID,
+  code: 'HERR-GEN',
+  name: 'Herramienta General (Foto)',
+  category: 'Manual',
+  location: 'Taller General',
+  status: 'Disponible',
+  current_loan: null,
+  is_generic: true,
+  notes: 'Opción rápida para herramientas sin registrar en el catálogo o de nombre no especificado.',
+  created_at: '2026-01-01T00:00:00.000Z'
+};
 
 export const KNOWN_MECHANICS = [
   'Juan Pérez (Mecánico Diesel)',
@@ -369,6 +387,8 @@ export interface CheckoutPayload {
   work_order?: string;
   notes?: string;
   dispatched_by?: string;
+  photo_url?: string;
+  generic_name?: string;
 }
 
 /**
@@ -376,7 +396,30 @@ export interface CheckoutPayload {
  */
 export const checkoutTool = async (payload: CheckoutPayload): Promise<{ tool: WorkshopTool; loan: ToolLoanRecord }> => {
   const tools = await fetchTools();
-  const tool = tools.find(t => t.id === payload.tool_id);
+  const isGeneric = payload.tool_id === GENERAL_TOOL_ID;
+
+  let tool = tools.find(t => t.id === payload.tool_id);
+
+  if (isGeneric) {
+    // Si se selecciona la Herramienta General rápida, creamos una instancia dinámica
+    const genCode = `HERR-GEN-${Date.now().toString().slice(-4)}`;
+    const genName = payload.generic_name?.trim() || 'Herramienta General (Por Foto)';
+    const genericInstance: WorkshopTool = {
+      id: `tool_gen_${Date.now()}`,
+      code: genCode,
+      name: genName,
+      category: 'General',
+      location: 'Taller',
+      status: 'Disponible',
+      current_loan: null,
+      photo_url: payload.photo_url || '',
+      is_generic: true,
+      created_at: new Date().toISOString()
+    };
+    tool = genericInstance;
+    // Agregar al listado para seguimiento
+    tools.unshift(tool);
+  }
 
   if (!tool) {
     throw new Error('Herramienta no encontrada en el inventario.');
@@ -398,6 +441,7 @@ export const checkoutTool = async (payload: CheckoutPayload): Promise<{ tool: Wo
         work_order: tool.current_loan.work_order || '',
         dispatched_at: tool.current_loan.dispatched_at,
         dispatched_by: tool.current_loan.dispatched_by,
+        photo_url: tool.current_loan.photo_url || payload.photo_url || '',
         returned_at: null,
         returned_to: null,
         status: 'Activo',
@@ -426,6 +470,7 @@ export const checkoutTool = async (payload: CheckoutPayload): Promise<{ tool: Wo
     work_order: payload.work_order?.trim() || '',
     dispatched_at: nowIso,
     dispatched_by: author,
+    photo_url: payload.photo_url || tool.photo_url || '',
     returned_at: null,
     returned_to: null,
     status: 'Activo',
@@ -437,12 +482,14 @@ export const checkoutTool = async (payload: CheckoutPayload): Promise<{ tool: Wo
   const updatedTool: WorkshopTool = {
     ...tool,
     status: 'En Uso',
+    photo_url: payload.photo_url || tool.photo_url || '',
     current_loan: {
       loan_id: loanId,
       mechanic_name: payload.mechanic_name.trim(),
       work_order: payload.work_order?.trim() || '',
       dispatched_at: nowIso,
       dispatched_by: author,
+      photo_url: payload.photo_url || tool.photo_url || '',
     }
   };
 
