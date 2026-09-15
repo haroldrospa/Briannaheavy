@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
-import { isShiftOpen } from '../services/shiftsService';
+import { isShiftOpen, getActiveShift } from '../services/shiftsService';
 import { 
   fetchFinancings, 
   getLocalStorageFinancings, 
@@ -37,6 +37,7 @@ import { getNextReceiptNumber, peekCurrentReceiptNumber } from '../utils/sequenc
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
+import { useAlert } from '../contexts/ConfirmContext';
 
 export interface PaymentReceiptData {
   receiptNumber: string;
@@ -323,6 +324,7 @@ const formatPaymentDateToSpanish = (dateStr: string) => {
 const FINANCING_REGISTER = 'Caja Cobros & Financiamientos';
 
 export default function Financing() {
+  const showAlert = useAlert();
   const [financingsList, setFinancingsList] = useState(() => mapFinancingsToState(getLocalStorageFinancings()));
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
@@ -769,7 +771,7 @@ export default function Financing() {
 
   const handleSaveFinancing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
+    if (!editingFinancing && !requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
       return;
     }
     if (!newCustomer.trim() || !newItem.trim() || modalValTotal <= 0) {
@@ -782,7 +784,15 @@ export default function Financing() {
     const finalFinanced = modalFinancedAmount > 0 ? modalFinancedAmount : Math.max(0, finalTotal - finalInicial);
     const finalMonths = modalNumMonths || 24;
     const finalRate = isNaN(parseFloat(newRate)) ? 2.0 : Math.max(0, parseFloat(newRate));
-    const baseDate = newNextPayment ? new Date(newNextPayment) : new Date();
+
+    let baseDate: Date;
+    if (newNextPayment && newNextPayment.includes('-')) {
+      const parts = newNextPayment.split('-').map(Number);
+      baseDate = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    } else {
+      baseDate = new Date();
+      baseDate.setDate(baseDate.getDate() + 30);
+    }
 
     let balance = finalFinanced;
     const mRate = finalRate / 100;
@@ -795,12 +805,15 @@ export default function Financing() {
       const interest = fixedInterest;
       balance = Math.max(0, balance - capital);
 
-      const pDate = new Date(baseDate);
-      pDate.setMonth(pDate.getMonth() + (i - 1));
+      const pDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + (i - 1), baseDate.getDate(), 12, 0, 0);
+      const y = pDate.getFullYear();
+      const m = String(pDate.getMonth() + 1).padStart(2, '0');
+      const d = String(pDate.getDate()).padStart(2, '0');
+      const dueDateStr = `${y}-${m}-${d}`;
 
       installmentsToCreate.push({
         installment_number: i,
-        due_date: pDate.toISOString().split('T')[0],
+        due_date: dueDateStr,
         amount: Math.round((capital + interest) * 100) / 100,
         principal_amount: Math.round(capital * 100) / 100,
         interest_amount: Math.round(interest * 100) / 100,
@@ -844,11 +857,13 @@ export default function Financing() {
     try {
       if (editingFinancing) {
         // Mode: UPDATE
-        const finId = editingFinancing.rawId || String(editingFinancing.id);
+        const finId = String(editingFinancing.rawId || editingFinancing.id);
         const shouldRegenerateSchedule = 
           Number(editingFinancing.amount) !== finalFinanced || 
           Number(editingFinancing.months) !== finalMonths ||
-          Number(editingFinancing.rate) !== finalRate;
+          Number(editingFinancing.rate) !== finalRate ||
+          (editingFinancing.startDate && editingFinancing.startDate !== (newNextPayment || '')) ||
+          (editingFinancing.nextPayment && editingFinancing.nextPayment !== (newNextPayment || ''));
 
         const updated = await updateFinancing(
           finId, 
@@ -856,15 +871,33 @@ export default function Financing() {
           shouldRegenerateSchedule ? installmentsToCreate : undefined
         );
 
+        const matchFin = (f: any) => 
+          f.rawId === finId || 
+          String(f.id) === String(finId) || 
+          (editingFinancing.rawId && f.rawId === editingFinancing.rawId) ||
+          (editingFinancing.id && String(f.id) === String(editingFinancing.id));
+
         if (updated) {
           const mapped = mapFinancingsToState([updated]);
           if (mapped.length > 0) {
-            setFinancingsList(prev => prev.map(f => (f.rawId === finId || f.id === finId || f.id === editingFinancing.id) ? mapped[0] : f));
-            if (selectedFinancing && (selectedFinancing.rawId === finId || selectedFinancing.id === editingFinancing.id)) {
+            setFinancingsList(prev => {
+              const exists = prev.some(matchFin);
+              if (exists) {
+                return prev.map(f => matchFin(f) ? mapped[0] : f);
+              }
+              return [mapped[0], ...prev];
+            });
+            if (selectedFinancing && matchFin(selectedFinancing)) {
               setSelectedFinancing(mapped[0]);
             }
           }
         }
+
+        showAlert({
+          title: 'Contrato Actualizado',
+          description: `Los cambios del financiamiento para ${newCustomer.trim()} se han guardado correctamente.`,
+          variant: 'success'
+        });
       } else {
         // Mode: CREATE
         const created = await createFinancing(financingPayload, installmentsToCreate);
@@ -872,6 +905,12 @@ export default function Financing() {
         if (mapped.length > 0) {
           setFinancingsList(prev => [mapped[0], ...prev]);
         }
+
+        showAlert({
+          title: 'Financiamiento Creado',
+          description: `El contrato para ${newCustomer.trim()} ha sido registrado exitosamente.`,
+          variant: 'success'
+        });
       }
 
       setIsNewFormOpen(false);
@@ -1211,7 +1250,7 @@ export default function Financing() {
         ? paidList[0].dueDate 
         : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
 
-      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
+      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || getActiveShift(FINANCING_REGISTER)?.cashier_name || 'Harold Rosado';
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
       const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
       const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
@@ -1349,7 +1388,7 @@ export default function Financing() {
       const scheduledDue = firstUnpaid ? firstUnpaid.dueDate : (selectedFinancing.nextPayment || 'N/A');
       const nextDue = newBal <= 0 ? 'Totalmente Saldado' : scheduledDue;
 
-      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Carlos Mendoza';
+      const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || getActiveShift(FINANCING_REGISTER)?.cashier_name || 'Harold Rosado';
       const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
       const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : paidAbono) : paidAbono;
       const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - paidAbono) : 0;
@@ -1439,6 +1478,8 @@ export default function Financing() {
   };
 
   const activeReceiptData: PaymentReceiptData = useMemo(() => {
+    const currentCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || getActiveShift(FINANCING_REGISTER)?.cashier_name || 'Harold Rosado';
+
     if (viewingReceipt) {
       const vr = viewingReceipt as any;
       const vrPaidList = vr.paidInstallments || [];
@@ -1447,12 +1488,19 @@ export default function Financing() {
       const autoExecDate = vr.paymentExecutionDate || vr.date;
       return {
         ...vr,
+        cashierName: (vr.cashierName && vr.cashierName !== 'Carlos Mendoza') ? vr.cashierName : currentCashier,
         paymentExecutionDate: autoExecDate,
         scheduledDueDate: autoScheduled,
         nextPaymentDate: autoNext,
       };
     }
-    if (lastReceipt) return lastReceipt;
+    if (lastReceipt) {
+      const lr = lastReceipt as any;
+      return {
+        ...lr,
+        cashierName: (lr.cashierName && lr.cashierName !== 'Carlos Mendoza') ? lr.cashierName : currentCashier,
+      };
+    }
     const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
     const totalPaid = paymentType === 'abono'
       ? numAbono
@@ -1502,7 +1550,7 @@ export default function Financing() {
       customerName: selectedFinancing?.customer || 'Cliente General',
       customerCode: `CLI-${(selectedFinancing?.id || '1').toString().padStart(4, '0')}`,
       itemName: selectedFinancing?.item || 'Equipo Pesado',
-      cashierName: 'Carlos Mendoza',
+      cashierName: currentCashier,
       financingId: String(selectedFinancing?.id || ''),
       qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
       paymentMethod: paymentMethod,
@@ -3238,7 +3286,7 @@ export default function Financing() {
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
                         <p className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider print:text-black">Caja / Firma Autorizada</p>
-                        <p className="text-[9px] font-bold text-gray-700 dark:text-gray-300 mt-0.5 print:text-black">Carlos Mendoza (Cajero)</p>
+                        <p className="text-[9px] font-bold text-gray-700 dark:text-gray-300 mt-0.5 print:text-black">{activeReceiptData.cashierName || 'Cajero(a) Autorizado(a)'} (Cajero/a)</p>
                       </div>
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
@@ -5096,7 +5144,7 @@ export default function Financing() {
             <div className="text-center">
               <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
               <p className="text-[10px] font-black text-black uppercase tracking-wider">Caja / Firma Autorizada</p>
-              <p className="text-[9px] font-bold text-black mt-0.5">Carlos Mendoza (Cajero)</p>
+              <p className="text-[9px] font-bold text-black mt-0.5">{activeReceiptData.cashierName || 'Cajero(a) Autorizado(a)'} (Cajero/a)</p>
             </div>
             <div className="text-center">
               <div className="border-b border-black w-3/4 mx-auto mb-2"></div>

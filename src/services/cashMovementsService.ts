@@ -229,8 +229,9 @@ export const createCashMovement = async (
 
 export const getInitialShiftFund = (): number => {
   const val = localStorage.getItem(SHIFT_FUND_STORAGE_KEY);
-  if (!val) return 0;
-  return parseFloat(val) || 0;
+  if (!val) return 13000;
+  const parsed = parseFloat(val);
+  return isNaN(parsed) || parsed <= 0 ? 13000 : parsed;
 };
 
 export const setInitialShiftFund = (amount: number): void => {

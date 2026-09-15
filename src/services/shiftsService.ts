@@ -114,13 +114,23 @@ export const setLastClosureTime = (registerName: string, timeIso = new Date().to
   } catch {}
 };
 
+export const DEFAULT_SHIFT_FUND = 13000;
+
 export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift => {
   const shiftKey = getShiftStorageKey(registerName);
   try {
     const raw = localStorage.getItem(shiftKey);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.is_open) return parsed;
+      if (parsed && parsed.is_open) {
+        if (!parsed.initial_fund || parsed.initial_fund <= 0) {
+          parsed.initial_fund = DEFAULT_SHIFT_FUND;
+          try {
+            localStorage.setItem(shiftKey, JSON.stringify(parsed));
+          } catch {}
+        }
+        return parsed;
+      }
     }
   } catch (e) {
     console.warn('Error reading active shift for', registerName, e);
@@ -132,6 +142,9 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     if (legacyRaw) {
       const parsed = JSON.parse(legacyRaw);
       if (parsed && parsed.is_open) {
+        if (!parsed.initial_fund || parsed.initial_fund <= 0) {
+          parsed.initial_fund = DEFAULT_SHIFT_FUND;
+        }
         parsed.register_name = registerName;
         return parsed;
       }
@@ -156,7 +169,7 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     id: `SHIFT-${registerName.substring(0, 3).toUpperCase()}-${Date.now()}`,
     register_name: registerName,
     opened_at: openedAtStr,
-    initial_fund: localFund,
+    initial_fund: localFund > 0 ? localFund : DEFAULT_SHIFT_FUND,
     cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
     is_open: localFund > 0,
   };
@@ -183,15 +196,19 @@ export const isShiftOpen = (registerName = 'Caja 1 - Repuestos'): boolean => {
 };
 
 export const openShift = (
-  initialFund: number, 
+  initialFund: number = DEFAULT_SHIFT_FUND, 
   cashierName = localStorage.getItem('brianna_user_name') || 'Harold Rosado', 
   registerName = 'Caja 1 - Repuestos'
 ): ActiveShift => {
+  const fund = typeof initialFund === 'number' && !isNaN(initialFund) && initialFund > 0 
+    ? initialFund 
+    : DEFAULT_SHIFT_FUND;
+
   const newShift: ActiveShift = {
     id: `SHIFT-${registerName.substring(0, 3).toUpperCase()}-${Date.now()}`,
     register_name: registerName,
     opened_at: new Date().toISOString(),
-    initial_fund: initialFund,
+    initial_fund: fund,
     cashier_name: cashierName,
     is_open: true,
   };
@@ -200,9 +217,9 @@ export const openShift = (
     const shiftKey = getShiftStorageKey(registerName);
     const fundKey = getFundStorageKey(registerName);
     localStorage.setItem(shiftKey, JSON.stringify(newShift));
-    localStorage.setItem(fundKey, String(initialFund));
+    localStorage.setItem(fundKey, String(fund));
     localStorage.setItem('brianna_active_shift', JSON.stringify(newShift));
-    localStorage.setItem('brianna_initial_cash_fund', String(initialFund));
+    localStorage.setItem('brianna_initial_cash_fund', String(fund));
   } catch (e) {
     console.error('Error saving new active shift:', e);
   }

@@ -15,6 +15,7 @@ export interface Installment {
 
 export interface Financing {
   id: string;
+  rawId?: string;
   customer_id?: string;
   item_id?: string;
   customer_name: string;
@@ -436,12 +437,70 @@ export const updateFinancing = async (
     }
   }
 
+  // Normalizar campos en snake_case y camelCase para consistencia absoluta en todo el sistema
+  const normalizedFields: any = {
+    customer: financingData.customer_name || (financingData as any).customer,
+    customer_name: financingData.customer_name || (financingData as any).customer,
+    customerPhoto: (financingData as any).customer_photo || (financingData as any).customerPhoto,
+    customer_photo: (financingData as any).customer_photo || (financingData as any).customerPhoto,
+    rnc: financingData.customer_rnc || (financingData as any).rnc,
+    customer_rnc: financingData.customer_rnc || (financingData as any).rnc,
+    phone: financingData.customer_phone || (financingData as any).phone,
+    customer_phone: financingData.customer_phone || (financingData as any).phone,
+    item: financingData.item_name || (financingData as any).item,
+    item_name: financingData.item_name || (financingData as any).item,
+    chassis: financingData.chassis,
+    itemBrand: (financingData as any).item_brand || (financingData as any).itemBrand,
+    item_brand: (financingData as any).item_brand || (financingData as any).itemBrand,
+    itemModel: (financingData as any).item_model || (financingData as any).itemModel,
+    item_model: (financingData as any).item_model || (financingData as any).itemModel,
+    itemYear: (financingData as any).item_year || (financingData as any).itemYear,
+    item_year: (financingData as any).item_year || (financingData as any).itemYear,
+    itemColor: (financingData as any).item_color || (financingData as any).itemColor,
+    item_color: (financingData as any).item_color || (financingData as any).itemColor,
+    itemPlate: (financingData as any).item_plate || (financingData as any).itemPlate,
+    item_plate: (financingData as any).item_plate || (financingData as any).itemPlate,
+    itemEngineNumber: (financingData as any).item_engine_number || (financingData as any).itemEngineNumber,
+    item_engine_number: (financingData as any).item_engine_number || (financingData as any).itemEngineNumber,
+    itemMileageHours: (financingData as any).item_mileage_hours || (financingData as any).itemMileageHours,
+    item_mileage_hours: (financingData as any).item_mileage_hours || (financingData as any).itemMileageHours,
+    itemType: (financingData as any).item_type || (financingData as any).itemType,
+    item_type: (financingData as any).item_type || (financingData as any).itemType,
+    amount: financingData.financed_amount ?? (financingData as any).amount,
+    financed_amount: financingData.financed_amount ?? (financingData as any).amount,
+    totalValue: financingData.total_amount ?? (financingData as any).totalValue,
+    total_amount: financingData.total_amount ?? (financingData as any).totalValue,
+    downPayment: financingData.down_payment ?? (financingData as any).downPayment,
+    down_payment: financingData.down_payment ?? (financingData as any).downPayment,
+    rate: financingData.interest_rate ?? (financingData as any).rate,
+    interest_rate: financingData.interest_rate ?? (financingData as any).rate,
+    months: financingData.installments_count ?? (financingData as any).months,
+    installments_count: financingData.installments_count ?? (financingData as any).months,
+    startDate: financingData.start_date ?? (financingData as any).startDate,
+    start_date: financingData.start_date ?? (financingData as any).startDate,
+    nextPayment: financingData.start_date ?? (financingData as any).nextPayment,
+    guarantor: financingData.guarantor,
+    guarantorRnc: (financingData as any).guarantor_rnc || (financingData as any).guarantorRnc,
+    guarantor_rnc: (financingData as any).guarantor_rnc || (financingData as any).guarantorRnc,
+    guarantorPhone: (financingData as any).guarantor_phone || (financingData as any).guarantorPhone,
+    guarantor_phone: (financingData as any).guarantor_phone || (financingData as any).guarantorPhone,
+    guarantorRelation: (financingData as any).guarantor_relation || (financingData as any).guarantorRelation,
+    guarantor_relation: (financingData as any).guarantor_relation || (financingData as any).guarantorRelation,
+    guarantorAddress: (financingData as any).guarantor_address || (financingData as any).guarantorAddress,
+    guarantor_address: (financingData as any).guarantor_address || (financingData as any).guarantorAddress,
+  };
+
   // Actualización en local storage
   const current = getLocalStorageFinancings();
   let updatedRecord: Financing | null = null;
+  const matchId = (fin: any) =>
+    fin.id === id ||
+    String(fin.id) === String(id) ||
+    fin.rawId === id ||
+    String(fin.rawId) === String(id);
 
-  const updatedList = current.map(fin => {
-    if (fin.id === id || String(fin.id) === String(id)) {
+  const updatedList: Financing[] = current.map(fin => {
+    if (matchId(fin)) {
       const mergedInstallments = newInstallments
         ? newInstallments.map((inst, idx) => ({
             ...inst,
@@ -453,16 +512,37 @@ export const updateFinancing = async (
       updatedRecord = {
         ...fin,
         ...financingData,
+        ...normalizedFields,
+        id: fin.id || id,
+        rawId: fin.rawId || id,
         installments: mergedInstallments,
       };
-      return updatedRecord;
+      return updatedRecord as Financing;
     }
     return fin;
   });
 
-  if (updatedRecord) {
-    saveLocalStorageFinancings(updatedList);
+  if (!updatedRecord) {
+    const mergedInstallments = newInstallments
+      ? newInstallments.map((inst, idx) => ({
+          ...inst,
+          id: `inst-${Date.now()}-${idx + 1}`,
+          financing_id: id,
+        }))
+      : (financingData.installments || []);
+
+    updatedRecord = {
+      id,
+      rawId: id,
+      created_at: new Date().toISOString(),
+      ...financingData,
+      ...normalizedFields,
+      installments: mergedInstallments,
+    } as any;
+    updatedList.unshift(updatedRecord as Financing);
   }
+
+  saveLocalStorageFinancings(updatedList);
   return updatedRecord;
 };
 

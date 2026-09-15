@@ -46,7 +46,21 @@ export function getStoredReceipts(): FinancingPaymentReceipt[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) {
+      const activeUser = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
+      let hasUpdate = false;
+      parsed.forEach(r => {
+        if (!r.cashierName || r.cashierName === 'Carlos Mendoza') {
+          r.cashierName = activeUser;
+          hasUpdate = true;
+        }
+      });
+      if (hasUpdate && typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+      return parsed;
+    }
+    return [];
   } catch (err) {
     console.warn('Error reading financing receipts from localStorage:', err);
     return [];
@@ -156,7 +170,7 @@ export function getOrReconstructReceiptsForFinancing(financing: any): FinancingP
         itemName: financing.item || financing.item_name || 'Equipo',
         chassis: financing.chassis,
         itemPlate: financing.itemPlate || financing.item_plate,
-        cashierName: 'Carlos Mendoza',
+        cashierName: (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado',
         paymentMethod: 'Efectivo',
         registerName: 'Caja Cobros & Financiamientos',
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNum}&rnc=131488417&monto=${totalPaid}`,

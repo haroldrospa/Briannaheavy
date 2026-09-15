@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import { setInitialShiftFund } from '../../services/cashMovementsService';
-import { openShift } from '../../services/shiftsService';
+import { openShift, DEFAULT_SHIFT_FUND } from '../../services/shiftsService';
 
 interface OpenShiftModalProps {
   isOpen: boolean;
@@ -12,14 +12,14 @@ interface OpenShiftModalProps {
 }
 
 export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerName = 'Caja 1 - Repuestos' }: OpenShiftModalProps) {
-  const [initialAmount, setInitialAmount] = useState<string>('0');
+  const [initialAmount, setInitialAmount] = useState<string>('13,000');
   const [cashierName, setCashierName] = useState(() => localStorage.getItem('brianna_user_name') || 'Harold Rosado');
 
   useEffect(() => {
     if (isOpen) {
       const localUser = localStorage.getItem('brianna_user_name');
       if (localUser) setCashierName(localUser);
-      setInitialAmount('0');
+      setInitialAmount('13,000');
     }
   }, [isOpen]);
 
@@ -34,13 +34,14 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerNam
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(initialAmount.replace(/,/g, '') || '0');
-    if (isNaN(amount) || amount < 0) return;
+    const rawVal = initialAmount ? initialAmount.replace(/,/g, '') : '';
+    const parsed = parseFloat(rawVal);
+    const amount = !isNaN(parsed) && parsed > 0 ? parsed : DEFAULT_SHIFT_FUND;
     
     openShift(amount, cashierName, registerName);
     setInitialShiftFund(amount);
     onSuccess(amount);
-    setInitialAmount('');
+    setInitialAmount('13,000');
   };
 
   if (!isOpen) return null;
@@ -74,7 +75,7 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerNam
               Apertura de Turno & Caja
             </h3>
             <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5 font-medium">
-              Ingresa el fondo inicial disponible en caja
+              Fondo inicial reglamentario fijo de RD$ 13,000.00
             </p>
           </div>
 
@@ -90,9 +91,15 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerNam
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400">
-              Fondo de Caja Inicial (RD$)
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400">
+                Fondo de Caja Fijo (RD$)
+              </label>
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40">
+                <LockClosedIcon className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                Fijo en 13,000
+              </span>
+            </div>
 
             {/* Clean Input Box */}
             <div className="relative flex items-center bg-[#f4f3f1] dark:bg-[#222222] border-none focus-within:ring-2 focus-within:ring-[#ED1C24]/30 rounded-2xl px-5 py-4 transition-all">
@@ -106,10 +113,13 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerNam
                 value={initialAmount}
                 onChange={(e) => setInitialAmount(formatCurrency(e.target.value))}
                 className="w-full bg-transparent text-2xl font-black font-mono text-gray-900 dark:text-white outline-none placeholder-gray-400 dark:placeholder-zinc-600"
-                placeholder="0.00"
+                placeholder="13,000"
                 autoFocus
               />
             </div>
+            <p className="text-[11px] text-gray-500 dark:text-zinc-400">
+              Monto reglamentario establecido para apertura de turno: <strong className="text-gray-800 dark:text-gray-200">RD$ 13,000.00</strong>
+            </p>
           </div>
 
           {/* Action Buttons */}
@@ -125,7 +135,7 @@ export default function OpenShiftModal({ isOpen, onClose, onSuccess, registerNam
               type="submit"
               className="flex-1 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-full py-3.5 text-xs font-black transition-all shadow-md shadow-red-900/20 cursor-pointer"
             >
-              Iniciar Turno
+              Iniciar Turno ({initialAmount ? `RD$ ${initialAmount}` : 'RD$ 13,000'})
             </button>
           </div>
         </form>

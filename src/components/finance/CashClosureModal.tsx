@@ -14,7 +14,6 @@ import {
   EnvelopeIcon, 
   PaperAirplaneIcon, 
   ArrowTopRightOnSquareIcon, 
-  BoltIcon, 
   PencilSquareIcon, 
   CheckIcon, 
   ClockIcon,
@@ -33,6 +32,7 @@ import {
   markInvoicesAsClosed,
   setLastClosureTime,
   getLastClosureTime,
+  DEFAULT_SHIFT_FUND,
   type ActiveShift 
 } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
@@ -120,7 +120,7 @@ export default function CashClosureModal({
     const shift = getActiveShift(regToLoad);
     setActiveShift(shift);
 
-    const fund = shift ? shift.initial_fund : 0;
+    const fund = shift && shift.initial_fund > 0 ? shift.initial_fund : DEFAULT_SHIFT_FUND;
     setInitialFund(fund);
     setTempFund(String(fund));
     setCashierName(loggedInUserName);
@@ -431,24 +431,6 @@ export default function CashClosureModal({
 
   const handleResetCounts = () => {
     setCounts({});
-  };
-
-  // Autollenar conteo físico con el monto esperado para cuadre perfecto
-  const handleAutoFillCounts = () => {
-    let remaining = Math.max(0, Math.round(expectedCashTotal));
-    const newCounts: Record<number, number> = {};
-
-    for (const den of DENOMINATIONS) {
-      if (remaining <= 0) {
-        newCounts[den.value] = 0;
-        continue;
-      }
-      const count = Math.floor(remaining / den.value);
-      newCounts[den.value] = count;
-      remaining = remaining - (count * den.value);
-    }
-
-    setCounts(newCounts);
   };
 
   // Guardar fondo inicial editado para esta caja
@@ -791,14 +773,6 @@ Observaciones: ${notes || 'Sin observaciones'}
                       Conteo Físico ({selectedRegister === 'todas' ? 'Todas' : selectedRegister.split(' - ')[0]})
                     </h3>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAutoFillCounts}
-                        className="text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 flex items-center gap-1 transition-colors cursor-pointer px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-800/60"
-                        title="Autollenar conteo con el efectivo esperado"
-                      >
-                        <BoltIcon className="h-3.5 w-3.5" /> <span>Autollenar</span>
-                      </button>
                       <button
                         type="button"
                         onClick={handleResetCounts}
