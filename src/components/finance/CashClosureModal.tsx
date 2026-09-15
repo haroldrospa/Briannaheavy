@@ -487,8 +487,6 @@ export default function CashClosureModal({
       setLastClosureTime('todas', closure.created_at);
       // Cerrar el turno de esta caja
       closeShift(actualRegName);
-      setCounts({});
-      setNotes('');
       setShowCompletionOptions(true);
     } catch (err) {
       console.error('Error al guardar cierre de caja:', err);
@@ -497,43 +495,66 @@ export default function CashClosureModal({
     }
   };
 
-  const generateReportText = () => {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const now = new Date();
+  const closureDate = savedClosure?.created_at ? new Date(savedClosure.created_at) : now;
+  const currentDateStr = closureDate.toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' });
+  const currentTimeStr = closureDate.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
+  // Valores consolidados para impresión y reportes (prioriza el cierre guardado o los datos en vivo)
+  const printInitialFund = savedClosure?.initial_fund !== undefined ? Number(savedClosure.initial_fund) : initialFund;
+  const printTotalSales = savedClosure?.total_sales !== undefined ? Number(savedClosure.total_sales) : grandTotalSales;
+  const printExpectedCash = savedClosure?.expected_cash !== undefined ? Number(savedClosure.expected_cash) : expectedCashTotal;
+  const printPhysicalCash = savedClosure?.counted_cash !== undefined ? Number(savedClosure.counted_cash) : physicalCashTotal;
+  const printVariance = savedClosure?.difference !== undefined ? Number(savedClosure.difference) : variance;
+  const printStatus = savedClosure?.status || (printVariance === 0 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
+  const printSalesCash = savedClosure?.system_sales_cash !== undefined ? Number(savedClosure.system_sales_cash) : systemSales.cash;
+  const printSalesCard = savedClosure?.system_sales_card !== undefined ? Number(savedClosure.system_sales_card) : systemSales.card;
+  const printSalesTransfer = savedClosure?.system_sales_transfer !== undefined ? Number(savedClosure.system_sales_transfer) : systemSales.transfer;
+  const printSalesCredit = savedClosure?.system_sales_credit !== undefined ? Number(savedClosure.system_sales_credit) : systemSales.credit;
+  const printNotes = savedClosure?.notes !== undefined ? savedClosure.notes : notes;
+  const printCashier = savedClosure?.cashier_name || cashierName;
+  const printSupervisor = savedClosure?.supervisor_name || supervisorName;
+
+  const getPrintDenominationQty = (val: number): number => {
+    if (savedClosure?.denominations) {
+      return Number(savedClosure.denominations[String(val)] ?? savedClosure.denominations[val] ?? 0);
+    }
+    return Number(counts[val] || 0);
+  };
+
+  const generateReportText = () => {
     return `==================================================
    BRIANNA HEAVY EQUIPMENT - CIERRE DE CAJA
 ==================================================
 N° Comprobante: ${savedClosure?.closure_number || 'CC-' + Date.now()}
-Fecha: ${dateStr} • ${timeStr}
-Caja: ${selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister}
-Cajero(a): ${cashierName}
-Supervisor: ${supervisorName}
+Fecha: ${currentDateStr} • ${currentTimeStr}
+Caja: ${savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}
+Cajero(a): ${printCashier}
+Supervisor: ${printSupervisor}
     Facturas / Cobros en Turno: ${totalDocsCount}
 
 --- RESUMEN FINANCIERO ---
-• Fondo Inicial: RD$ ${initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Total Facturado / Cobrado: RD$ ${grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Efectivo: RD$ ${systemSales.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Tarjeta: RD$ ${systemSales.card.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Transferencia: RD$ ${systemSales.transfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Crédito: RD$ ${systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Fondo Inicial: RD$ ${printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Total Facturado / Cobrado: RD$ ${printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Efectivo: RD$ ${printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Tarjeta: RD$ ${printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Transferencia: RD$ ${printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Crédito: RD$ ${printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Ingresos Extras: +RD$ ${cashMovementsTotals.ingresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Egresos / Gastos: -RD$ ${cashMovementsTotals.egresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 
 --------------------------------------------------
-• Efectivo Teórico Esperado: RD$ ${expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Efectivo Físico Contado:  RD$ ${physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Diferencia: RD$ ${variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${variance === 0 ? 'CUADRE PERFECTO' : variance > 0 ? 'SOBRANTE' : 'FALTANTE'})
+• Efectivo Teórico Esperado: RD$ ${printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Efectivo Físico Contado:  RD$ ${printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Diferencia: RD$ ${printVariance.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${printStatus === 'Cuadrado' ? 'CUADRE PERFECTO' : printStatus === 'Sobrante' ? 'SOBRANTE' : 'FALTANTE'})
 --------------------------------------------------
-Observaciones: ${notes || 'Sin observaciones'}
+Observaciones: ${printNotes || 'Sin observaciones'}
 ==================================================`;
   };
 
   const handleOpenMailClient = () => {
     const regLabel = selectedRegister === 'todas' ? 'Consolidado' : selectedRegister;
-    const subject = encodeURIComponent(`Cierre de ${regLabel} - ${currentDateStr} (${variance === 0 ? 'Cuadrado' : variance > 0 ? 'Sobrante' : 'Faltante'})`);
+    const subject = encodeURIComponent(`Cierre de ${regLabel} - ${currentDateStr} (${printStatus})`);
     const body = encodeURIComponent(generateReportText());
     window.open(`mailto:${recipientEmail}?subject=${subject}&body=${body}`, '_blank');
   };
@@ -566,12 +587,11 @@ Observaciones: ${notes || 'Sin observaciones'}
     setShowCompletionOptions(false);
     setShowEmailInput(false);
     setEmailStatus('idle');
+    setCounts({});
+    setNotes('');
+    setSavedClosure(null);
     onClose(isSuccess);
   };
-
-  const now = new Date();
-  const currentDateStr = now.toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' });
-  const currentTimeStr = now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
 
   const isShiftOpenState = activeShift?.is_open;
   const shiftStartStr = isShiftOpenState
@@ -1260,7 +1280,7 @@ Observaciones: ${notes || 'Sin observaciones'}
               <p><strong>Fecha:</strong> {currentDateStr}</p>
               <p><strong>Hora:</strong> {currentTimeStr}</p>
               <p><strong>Caja:</strong> {savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}</p>
-              <p><strong>Cajero(a):</strong> {cashierName}</p>
+              <p><strong>Cajero(a):</strong> {printCashier}</p>
               <p><strong>Docs en Turno:</strong> {totalDocsCount}</p>
             </div>
           </div>
@@ -1270,28 +1290,28 @@ Observaciones: ${notes || 'Sin observaciones'}
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
               <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Fondo Inicial</span>
               <span className="text-xs font-black font-mono text-black">
-                RD$ {initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                RD$ {printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
               <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Total Facturado</span>
               <span className="text-xs font-black font-mono text-black">
-                RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
               <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Efectivo Esperado</span>
               <span className="text-xs font-black font-mono text-black">
-                RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                RD$ {printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="p-2 border border-gray-400 rounded bg-gray-100">
               <span className="text-[8.5px] font-bold text-black block uppercase">Efectivo Contado</span>
               <span className="text-xs font-black font-mono text-black">
-                RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -1315,7 +1335,7 @@ Observaciones: ${notes || 'Sin observaciones'}
                 </thead>
                 <tbody>
                   {DENOMINATIONS.map((den) => {
-                    const qty = counts[den.value] || 0;
+                    const qty = getPrintDenominationQty(den.value);
                     const subtotal = qty * den.value;
                     return (
                       <tr key={den.value} className="odd:bg-gray-50/50">
@@ -1331,7 +1351,7 @@ Observaciones: ${notes || 'Sin observaciones'}
                   <tr className="bg-gray-100 font-black">
                     <td colSpan={3} className="p-1 border border-gray-300 uppercase">Total Arqueado</td>
                     <td className="p-1 border border-gray-300 text-right font-mono">
-                      RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 </tbody>
@@ -1351,31 +1371,31 @@ Observaciones: ${notes || 'Sin observaciones'}
                     <tr>
                       <td className="p-1 border border-gray-300 font-bold">Efectivo</td>
                       <td className="p-1 border border-gray-300 text-right font-mono font-bold">
-                        RD$ {systemSales.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
                       <td className="p-1 border border-gray-300 font-bold">Tarjeta</td>
                       <td className="p-1 border border-gray-300 text-right font-mono font-bold">
-                        RD$ {systemSales.card.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
                       <td className="p-1 border border-gray-300 font-bold">Transferencia</td>
                       <td className="p-1 border border-gray-300 text-right font-mono font-bold">
-                        RD$ {systemSales.transfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
                       <td className="p-1 border border-gray-300 font-bold">Crédito</td>
                       <td className="p-1 border border-gray-300 text-right font-mono font-bold">
-                        RD$ {systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr className="bg-gray-100 font-black">
                       <td className="p-1 border border-gray-300 uppercase">Total Facturado</td>
                       <td className="p-1 border border-gray-300 text-right font-mono">
-                        RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   </tbody>
@@ -1417,10 +1437,10 @@ Observaciones: ${notes || 'Sin observaciones'}
               <div className="p-2 border border-black rounded bg-gray-100">
                 <div className="flex justify-between items-center text-[10px]">
                   <span className="font-black uppercase">
-                    {variance === 0 ? '✓ Cuadre Perfecto' : variance > 0 ? '▲ Sobrante' : '▼ Faltante'}
+                    {printStatus === 'Cuadrado' ? '✓ Cuadre Perfecto' : printStatus === 'Sobrante' ? '▲ Sobrante' : '▼ Faltante'}
                   </span>
                   <span className="font-black font-mono text-xs">
-                    RD$ {variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    RD$ {printVariance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -1429,9 +1449,9 @@ Observaciones: ${notes || 'Sin observaciones'}
           </div>
 
           {/* Observations */}
-          {notes && (
+          {printNotes && (
             <div className="mb-3 p-1.5 border border-gray-300 rounded bg-gray-50 text-[9px]">
-              <strong>Observaciones:</strong> {notes}
+              <strong>Observaciones:</strong> {printNotes}
             </div>
           )}
 
@@ -1440,13 +1460,13 @@ Observaciones: ${notes || 'Sin observaciones'}
             <div className="text-center space-y-1">
               <div className="border-t border-black w-40 mx-auto" />
               <p className="text-[10px] font-bold text-black">Firma del Cajero(a)</p>
-              <p className="text-[9px] text-gray-600">{cashierName}</p>
+              <p className="text-[9px] text-gray-600">{printCashier}</p>
             </div>
 
             <div className="text-center space-y-1">
               <div className="border-t border-black w-40 mx-auto" />
               <p className="text-[10px] font-bold text-black">Firma del Supervisor</p>
-              <p className="text-[9px] text-gray-600">{supervisorName}</p>
+              <p className="text-[9px] text-gray-600">{printSupervisor}</p>
             </div>
           </div>
 
