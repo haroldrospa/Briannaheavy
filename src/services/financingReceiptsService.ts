@@ -480,3 +480,45 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
 export function fetchAllFinancingReceipts(): FinancingPaymentReceipt[] {
   return getStoredReceipts().sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 }
+
+/**
+ * Elimina un recibo de pago tanto de localStorage como de Supabase,
+ * y emite el evento para refrescar los estados y reportes contables.
+ */
+export async function deleteFinancingReceipt(receiptIdOrNumber: string): Promise<boolean> {
+  const target = String(receiptIdOrNumber || '').trim();
+  if (!target) return false;
+
+  // 1. Eliminar de LocalStorage
+  const all = getStoredReceipts();
+  const filtered = all.filter(r => r.id !== target && r.receiptNumber !== target);
+  const wasRemoved = filtered.length !== all.length;
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    window.dispatchEvent(new Event('brianna_receipts_updated'));
+  }
+
+  // 2. Eliminar de Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      // Intentar borrado en tabla dedicada
+      await supabase
+        .from('financing_receipts')
+        .delete()
+        .or(`id.eq.${target},receipt_number.eq.${target}`);
+
+      // Actualizar backup en system_settings
+      await supabase.from('system_settings').upsert({
+        key: 'financing_receipts',
+        value: filtered,
+        updated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Error eliminando recibo en Supabase:', err);
+    }
+  }
+
+  return wasRemoved;
+}
+

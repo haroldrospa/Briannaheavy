@@ -22,6 +22,7 @@ import {
   deleteFinancing,
   deleteInstallment,
   markInstallmentPaid,
+  revertInstallmentPayment,
   persistFinancingInstallments,
   type Installment 
 } from '../services/financingService';
@@ -30,6 +31,7 @@ import {
   getReceiptsForFinancing,
   getStoredReceipts,
   saveReceipt,
+  deleteFinancingReceipt,
   fetchAllFinancingReceipts,
   fetchReceiptsFromSupabase,
   type FinancingPaymentReceipt
@@ -978,6 +980,171 @@ export default function Financing() {
       setDeleteInstallmentMasterKeyError('Error al eliminar la cuota. Intente nuevamente.');
     } finally {
       setIsDeletingInstallment(false);
+    }
+  };
+
+  // Estado para anulación/eliminación de pago protegida con Clave Maestra
+  const [paymentToDelete, setPaymentToDelete] = useState<{
+    receipt?: FinancingPaymentReceipt;
+    installment?: MappedInstallment;
+    receiptNumber: string;
+    totalAmount: number;
+    description: string;
+    installmentNumbers: number[];
+  } | null>(null);
+  const [deletePaymentMasterKey, setDeletePaymentMasterKey] = useState('');
+  const [deletePaymentMasterKeyError, setDeletePaymentMasterKeyError] = useState('');
+  const [showDeletePaymentMasterKeyText, setShowDeletePaymentMasterKeyText] = useState(false);
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+
+  const handleRequestDeletePaymentForInstallment = (inst: MappedInstallment, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!selectedFinancing) return;
+
+    // Buscar el recibo asociado a esta cuota
+    let targetReceipt = financingReceipts.find(r =>
+      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(inst.id))
+    );
+
+    if (!targetReceipt) {
+      const finId = String(selectedFinancing.rawId || selectedFinancing.id);
+      targetReceipt = allFinancingReceipts.find(r =>
+        String(r.financingId) === finId &&
+        r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(inst.id))
+      );
+    }
+
+    const instNum = Number(inst.id);
+    const totalAmt = targetReceipt?.totalPaid ?? Number(inst.total || inst.amount || 0);
+    const recNum = targetReceipt?.receiptNumber || '';
+
+    setPaymentToDelete({
+      receipt: targetReceipt,
+      installment: inst,
+      receiptNumber: recNum,
+      totalAmount: totalAmt,
+      description: `Cuota #${instNum}`,
+      installmentNumbers: targetReceipt?.paidInstallments && targetReceipt.paidInstallments.length > 0
+        ? targetReceipt.paidInstallments.map(pi => Number(pi.id))
+        : [instNum],
+    });
+    setDeletePaymentMasterKey('');
+    setDeletePaymentMasterKeyError('');
+    setShowDeletePaymentMasterKeyText(false);
+  };
+
+  const handleRequestDeleteReceipt = (rc: FinancingPaymentReceipt, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const instNums = rc.paidInstallments && rc.paidInstallments.length > 0
+      ? rc.paidInstallments.map(pi => Number(pi.id))
+      : [];
+
+    const cuotasDesc = rc.paymentType === 'abono'
+      ? 'Abono directo a capital'
+      : instNums.length > 0
+      ? `Cuota(s) #${instNums.join(', #')}`
+      : 'Pago de financiamiento';
+
+    setPaymentToDelete({
+      receipt: rc,
+      receiptNumber: rc.receiptNumber,
+      totalAmount: Number(rc.totalPaid) || 0,
+      description: cuotasDesc,
+      installmentNumbers: instNums,
+    });
+    setDeletePaymentMasterKey('');
+    setDeletePaymentMasterKeyError('');
+    setShowDeletePaymentMasterKeyText(false);
+  };
+
+  const handleConfirmDeletePaymentWithKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!paymentToDelete || isDeletingPayment) return;
+
+    if (!verifyAdminMasterKey(deletePaymentMasterKey)) {
+      setDeletePaymentMasterKeyError('Clave maestra incorrecta. Verifique e intente nuevamente.');
+      return;
+    }
+
+    setIsDeletingPayment(true);
+    try {
+      const activeFin = selectedFinancing || financingsList.find(f => String(f.rawId || f.id) === String(paymentToDelete.receipt?.financingId));
+      const finId = activeFin ? (activeFin.rawId || String(activeFin.id)) : String(paymentToDelete.receipt?.financingId || '');
+      const targetInstNums = paymentToDelete.installmentNumbers;
+
+      // 1. Eliminar recibo si existe
+      if (paymentToDelete.receipt) {
+        await deleteFinancingReceipt(paymentToDelete.receipt.id || paymentToDelete.receipt.receiptNumber);
+      } else if (paymentToDelete.receiptNumber) {
+        await deleteFinancingReceipt(paymentToDelete.receiptNumber);
+      }
+
+      // 2. Revertir cuotas en Supabase y LocalStorage
+      if (activeFin && targetInstNums.length > 0) {
+        const rawInsts = activeFin.installments || [];
+        const dbIds = rawInsts
+          .filter((i: any) => targetInstNums.includes(Number(i.id || i.installment_number)))
+          .map((i: any) => i.dbId || i.id)
+          .filter((id: string) => typeof id === 'string' && id.includes('-'));
+
+        await revertInstallmentPayment(finId, targetInstNums, dbIds);
+
+        // 3. Actualizar cuotas y balance en memoria
+        const today = new Date().toISOString().slice(0, 10);
+        const updatedRawInsts = rawInsts.map((inst: any) => {
+          const num = Number(inst.id || inst.installment_number);
+          if (targetInstNums.includes(num)) {
+            const isPast = inst.dueDate && inst.dueDate < today;
+            return {
+              ...inst,
+              status: isPast ? 'Atrasado' : 'Pendiente',
+              isPaid: false,
+              paidAmount: 0,
+              paidDate: undefined,
+            };
+          }
+          return inst;
+        });
+
+        const hasMora = updatedRawInsts.some((i: any) => i.status === 'Atrasado' || (i.dueDate && i.dueDate < today && !i.isPaid));
+        const allPaid = updatedRawInsts.length > 0 && updatedRawInsts.every((i: any) => i.isPaid);
+        const newFinStatus = allPaid ? 'Pagado' : (hasMora ? 'En mora' : 'Al día');
+
+        const updatedFin = {
+          ...activeFin,
+          status: newFinStatus,
+          installments: updatedRawInsts,
+        };
+
+        persistFinancingInstallments(finId, updatedFin);
+        if (selectedFinancing) {
+          setSelectedFinancing(updatedFin);
+        }
+        setFinancingsList(prev => prev.map(f => (f.rawId === finId || f.id === activeFin.id) ? updatedFin : f));
+      } else if (finId && targetInstNums.length > 0) {
+        await revertInstallmentPayment(finId, targetInstNums);
+      }
+
+      // 4. Actualizar listas de recibos
+      const recIdToRemove = paymentToDelete.receipt?.id;
+      const recNumToRemove = paymentToDelete.receiptNumber;
+      setFinancingReceipts(prev => prev.filter(r => r.id !== recIdToRemove && r.receiptNumber !== recNumToRemove));
+      setAllFinancingReceipts(prev => prev.filter(r => r.id !== recIdToRemove && r.receiptNumber !== recNumToRemove));
+
+      showAlert({
+        title: 'Pago Eliminado Correctamente',
+        description: `El pago ${recNumToRemove ? `(${recNumToRemove})` : ''} por RD$ ${paymentToDelete.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} fue anulado exitosamente y la cuota regresó a estado pendiente.`,
+        variant: 'success',
+      });
+
+      setPaymentToDelete(null);
+      setDeletePaymentMasterKey('');
+      setDeletePaymentMasterKeyError('');
+    } catch (err) {
+      console.error('Error al revertir pago:', err);
+      setDeletePaymentMasterKeyError('Error al anular el pago. Intente nuevamente.');
+    } finally {
+      setIsDeletingPayment(false);
     }
   };
 
@@ -3110,15 +3277,25 @@ export default function Financing() {
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-center">
                             {isFinancingPayment && m.rawReceipt ? (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenGlobalReceipt(m.rawReceipt!)}
-                                title="Ver e Imprimir Recibo Oficial"
-                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                              >
-                                <PrinterIcon className="w-3.5 h-3.5" />
-                                <span>Ver Recibo</span>
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenGlobalReceipt(m.rawReceipt!)}
+                                  title="Ver e Imprimir Recibo Oficial"
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                                >
+                                  <PrinterIcon className="w-3.5 h-3.5" />
+                                  <span>Ver Recibo</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleRequestDeleteReceipt(m.rawReceipt!, e)}
+                                  title="Eliminar / Anular este pago de financiamiento (Requiere Clave Maestra)"
+                                  className="p-1.5 text-gray-400 hover:text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer inline-flex items-center"
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </button>
+                              </div>
                             ) : (
                               <button
                                 type="button"
@@ -4098,14 +4275,25 @@ export default function Financing() {
                                           ${(rc.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenReceipt(rc)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 rounded-xl font-bold text-xs transition-colors cursor-pointer"
-                                          >
-                                            <PrinterIcon className="h-3.5 w-3.5" />
-                                            <span>Ver Recibo</span>
-                                          </button>
+                                          <div className="flex items-center justify-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenReceipt(rc)}
+                                              className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 dark:text-emerald-300 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                                            >
+                                              <PrinterIcon className="h-3.5 w-3.5" />
+                                              <span>Ver Recibo</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => handleRequestDeleteReceipt(rc, e)}
+                                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/50 dark:hover:bg-red-900/60 dark:text-red-400 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                                              title="Eliminar / Anular este pago y recibo (Requiere Clave Maestra)"
+                                            >
+                                              <TrashIcon className="h-3.5 w-3.5" />
+                                              <span>Eliminar Pago</span>
+                                            </button>
+                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -4312,18 +4500,29 @@ export default function Financing() {
                                             {inst.status}
                                           </span>
                                           {inst.status === 'Pagado' ? (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleOpenReceiptForInstallment(inst.id);
-                                              }}
-                                              className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline flex items-center gap-0.5 cursor-pointer bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded"
-                                              title="Ver e imprimir recibo oficial de esta cuota"
-                                            >
-                                              <DocumentTextIcon className="h-3 w-3" />
-                                              <span>Recibo</span>
-                                            </button>
+                                            <div className="flex items-center gap-1">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleOpenReceiptForInstallment(inst.id);
+                                                }}
+                                                className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:underline flex items-center gap-0.5 cursor-pointer bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded"
+                                                title="Ver e imprimir recibo oficial de esta cuota"
+                                              >
+                                                <DocumentTextIcon className="h-3 w-3" />
+                                                <span>Recibo</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => handleRequestDeletePaymentForInstallment(inst, e)}
+                                                className="text-[10px] font-bold text-red-600 dark:text-red-400 hover:text-red-700 hover:underline flex items-center gap-0.5 cursor-pointer bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200/50 dark:border-red-900/40"
+                                                title="Eliminar / Anular el pago de esta cuota (Requiere Clave Maestra)"
+                                              >
+                                                <TrashIcon className="h-3 w-3" />
+                                                <span>Eliminar Pago</span>
+                                              </button>
+                                            </div>
                                           ) : (
                                             <button
                                               type="button"
@@ -4344,9 +4543,15 @@ export default function Financing() {
                                       <td className="px-2 py-2.5 text-center">
                                         <button
                                           type="button"
-                                          onClick={(e) => handleRequestDeleteInstallment(inst, e)}
+                                          onClick={(e) => {
+                                            if (inst.status === 'Pagado') {
+                                              handleRequestDeletePaymentForInstallment(inst, e);
+                                            } else {
+                                              handleRequestDeleteInstallment(inst, e);
+                                            }
+                                          }}
                                           className="p-1.5 text-gray-400 hover:text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                                          title="Eliminar esta cuota (Requiere Clave Maestra)"
+                                          title={inst.status === 'Pagado' ? "Eliminar / Anular pago de esta cuota (Requiere Clave Maestra)" : "Eliminar esta cuota (Requiere Clave Maestra)"}
                                         >
                                           <TrashIcon className="h-3.5 w-3.5 mx-auto" />
                                         </button>
@@ -5802,6 +6007,114 @@ export default function Financing() {
                         <>
                           <TrashIcon className="w-4 h-4" />
                           <span>Eliminar Cuota</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal de Confirmación con Clave Maestra para Eliminar / Anular Pago */}
+        {paymentToDelete && (
+          <div className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="bg-white dark:bg-[#15161c] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800"
+            >
+              <div className="p-6 text-center">
+                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200/60 dark:border-red-900/40 mb-3 shadow-xs">
+                  <LockClosedIcon className="h-7 w-7 stroke-[2]" />
+                </div>
+
+                <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                  Autorización Requerida para Anular Pago
+                </h3>
+
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1.5 px-2 leading-relaxed">
+                  Está a punto de anular y eliminar el pago de <strong className="text-gray-900 dark:text-white font-bold">{paymentToDelete.description}</strong> {paymentToDelete.receiptNumber ? `(Recibo: ${paymentToDelete.receiptNumber})` : ''} por valor de <strong className="text-emerald-600 dark:text-emerald-400 font-black">RD$ {Number(paymentToDelete.totalAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>.
+                </p>
+
+                <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2 text-left">
+                  <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Efectos de esta operación:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-[10.5px]">
+                      <li>El recibo oficial emitido será anulado y eliminado.</li>
+                      <li>La(s) cuota(s) afectada(s) regresarán inmediatamente a estado <strong>Pendiente</strong>.</li>
+                      <li>El balance general del financiamiento se restaurará.</li>
+                      <li>El ingreso se descontará de los reportes de caja.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-3 px-2">
+                  Ingrese la <span className="text-[#ED1C24] font-bold">Clave Maestra</span> de administrador para confirmar:
+                </p>
+
+                <form onSubmit={handleConfirmDeletePaymentWithKey} className="mt-4 space-y-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 uppercase tracking-wider text-center">
+                      Clave Maestra
+                    </label>
+                    <div className="relative">
+                      <input
+                        autoFocus
+                        type={showDeletePaymentMasterKeyText ? 'text' : 'password'}
+                        value={deletePaymentMasterKey}
+                        onChange={(e) => {
+                          setDeletePaymentMasterKey(e.target.value);
+                          setDeletePaymentMasterKeyError('');
+                        }}
+                        placeholder="••••••"
+                        className="block w-full text-center py-2.5 px-10 text-lg font-bold font-mono tracking-widest bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24] focus:border-[#ED1C24] outline-none transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDeletePaymentMasterKeyText(!showDeletePaymentMasterKeyText)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 p-1 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showDeletePaymentMasterKeyText ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {deletePaymentMasterKeyError && (
+                      <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-1 mt-1.5 text-center animate-in fade-in">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span>{deletePaymentMasterKeyError}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isDeletingPayment}
+                      onClick={() => {
+                        setPaymentToDelete(null);
+                        setDeletePaymentMasterKey('');
+                        setDeletePaymentMasterKeyError('');
+                      }}
+                      className="w-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-zinc-700 text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isDeletingPayment || !deletePaymentMasterKey.trim()}
+                      className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isDeletingPayment ? (
+                        <span>Anulando Pago...</span>
+                      ) : (
+                        <>
+                          <TrashIcon className="w-4 h-4" />
+                          <span>Eliminar Pago</span>
                         </>
                       )}
                     </button>

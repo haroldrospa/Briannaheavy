@@ -691,3 +691,92 @@ export const deleteInstallment = async (
   saveLocalStorageFinancings(updatedList);
   return true;
 };
+
+export const revertInstallmentPayment = async (
+  financingId: string,
+  installmentNumbers: (number | string)[],
+  dbIds?: string[]
+): Promise<boolean> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const numSet = new Set(installmentNumbers.map(n => String(n)));
+  const idSet = new Set((dbIds || []).filter(Boolean));
+
+  // 1. Revertir en Supabase si está disponible
+  if (isSupabaseConfigured()) {
+    try {
+      if (idSet.size > 0) {
+        for (const dbId of idSet) {
+          if (uuidRegex.test(dbId)) {
+            await supabase
+              .from('installments')
+              .update({
+                paid_amount: 0,
+                status: 'Pendiente',
+                paid_date: null,
+              })
+              .eq('id', dbId);
+          }
+        }
+      }
+      if (uuidRegex.test(financingId)) {
+        for (const num of numSet) {
+          await supabase
+            .from('installments')
+            .update({
+              paid_amount: 0,
+              status: 'Pendiente',
+              paid_date: null,
+            })
+            .eq('financing_id', financingId)
+            .eq('installment_number', Number(num));
+        }
+      }
+    } catch (err) {
+      console.warn('Error revirtiendo cuotas en Supabase:', err);
+    }
+  }
+
+  // 2. Revertir en LocalStorage
+  const current = getLocalStorageFinancings();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const updatedList = current.map(fin => {
+    if (fin.id !== financingId && String(fin.id) !== String(financingId)) {
+      return fin;
+    }
+
+    const updatedInstallments = (fin.installments || []).map(inst => {
+      const matchDb = inst.id && idSet.has(inst.id);
+      const matchNum = numSet.has(String(inst.installment_number)) || numSet.has(String(inst.id));
+
+      if (matchDb || matchNum) {
+        const isPastDue = inst.due_date && inst.due_date < today;
+        return {
+          ...inst,
+          paid_amount: 0,
+          status: (isPastDue ? 'En Mora' : 'Pendiente') as any,
+          paid_date: undefined,
+        };
+      }
+      return inst;
+    });
+
+    const hasMora = updatedInstallments.some(i => i.status === 'En Mora' || (i.due_date && i.due_date < today && i.status !== 'Pagado'));
+    const allPaid = updatedInstallments.length > 0 && updatedInstallments.every(i => i.status === 'Pagado');
+    const newStatus = allPaid ? 'Pagado' : (hasMora ? 'En mora' : 'Al día');
+
+    if (isSupabaseConfigured() && uuidRegex.test(fin.id)) {
+      supabase.from('financings').update({ status: mapStatusToDb(newStatus) }).eq('id', fin.id).then();
+    }
+
+    return {
+      ...fin,
+      status: newStatus as any,
+      installments: updatedInstallments,
+    };
+  });
+
+  saveLocalStorageFinancings(updatedList);
+  return true;
+};
+
