@@ -153,6 +153,28 @@ export const fetchAllSystemSettings = async (): Promise<Record<string, any>> => 
           }
         } catch {}
       }
+
+      if (row.key === 'financing_receipts' && Array.isArray(row.value)) {
+        try {
+          const localRaw = localStorage.getItem('brianna_financing_receipts');
+          const localParsed = localRaw ? JSON.parse(localRaw) : [];
+          const combinedMap = new Map<string, any>();
+          (Array.isArray(localParsed) ? localParsed : []).forEach((r: any) => {
+            if (r && r.id) combinedMap.set(r.id, r);
+          });
+          row.value.forEach((r: any) => {
+            if (r && r.id) combinedMap.set(r.id, r);
+          });
+          const merged = Array.from(combinedMap.values()).sort(
+            (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
+          );
+          const hasNew = merged.length !== localParsed.length;
+          localStorage.setItem('brianna_financing_receipts', JSON.stringify(merged));
+          if (typeof window !== 'undefined' && hasNew) {
+            window.dispatchEvent(new Event('brianna_receipts_updated'));
+          }
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn('Exception during fetchAllSystemSettings:', err);

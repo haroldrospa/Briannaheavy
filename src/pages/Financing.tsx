@@ -2,23 +2,25 @@ import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   PlusIcon, BanknotesIcon, CalculatorIcon, XMarkIcon, ArrowLeftIcon, CheckCircleIcon, 
-  PrinterIcon, UserIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
+  PrinterIcon, UserIcon, UserGroupIcon, CalendarIcon, MagnifyingGlassIcon, DocumentTextIcon, 
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
-import { isShiftOpen, getActiveShift } from '../services/shiftsService';
+import { isShiftOpen, getActiveShift, matchesCashierUser } from '../services/shiftsService';
+import { getActiveRole } from '../utils/rolePermissions';
 import { 
   fetchFinancings, 
   getLocalStorageFinancings, 
   createFinancing, 
   updateFinancing,
   deleteFinancing,
+  deleteInstallment,
   markInstallmentPaid,
   persistFinancingInstallments,
   type Installment 
@@ -26,7 +28,10 @@ import {
 import {
   getOrReconstructReceiptsForFinancing,
   getReceiptsForFinancing,
+  getStoredReceipts,
   saveReceipt,
+  fetchAllFinancingReceipts,
+  fetchReceiptsFromSupabase,
   type FinancingPaymentReceipt
 } from '../services/financingReceiptsService';
 import { fetchCustomers, getLocalStorageCustomers, type Customer } from '../services/customersService';
@@ -46,7 +51,7 @@ export interface PaymentReceiptData {
   paymentExecutionDate?: string;
   scheduledDueDate?: string;
   nextPaymentDate?: string;
-  paymentType: 'cuotas' | 'abono';
+  paymentType: 'cuotas' | 'abono' | 'inicial';
   paidInstallments: MappedInstallment[];
   abonoAmount: number;
   surplusAmount?: number;
@@ -56,6 +61,7 @@ export interface PaymentReceiptData {
   customerCode: string;
   itemName: string;
   cashierName: string;
+  registerName?: string;
   financingId: string;
   qrUrl: string;
   paymentMethod?: 'Efectivo' | 'Transferencia' | 'Cheque';
@@ -85,6 +91,26 @@ export interface MappedInstallment {
   isPenaltyWaived?: boolean;
   originalInterest?: number;
   originalPenalty?: number;
+}
+
+export interface UnifiedFinancialMovement {
+  id: string;
+  sourceType: 'pago_financiamiento' | 'ingreso_caja' | 'egreso_caja';
+  type: 'Ingreso' | 'Egreso';
+  amount: number;
+  concept: string;
+  customerOrOrigin: string;
+  itemOrDescription?: string;
+  paymentMethod: string;
+  bankName?: string;
+  reference?: string;
+  date: string;
+  formattedDate: string;
+  time: string;
+  registerName: string;
+  cashier: string;
+  rawReceipt?: FinancingPaymentReceipt;
+  rawMovement?: CashMovement;
 }
 
 // Automatic grace period mora calculator with editable days limit
@@ -347,6 +373,35 @@ export default function Financing() {
   const [customersList, setCustomersList] = useState<Customer[]>(() => getLocalStorageCustomers());
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>(() => getLocalStorageInventory());
 
+  const [currentRole, setCurrentRole] = useState<string>(() => getActiveRole());
+  const isAdmin = currentRole === 'Administrador';
+  const [loggedInUserName, setLoggedInUserName] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado');
+  const [loggedInUserEmail, setLoggedInUserEmail] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '');
+  const [movementUserScope, setMovementUserScope] = useState<'todos' | 'mi_usuario'>(() => (getActiveRole() === 'Administrador' ? 'todos' : 'mi_usuario'));
+  const [selectedSpecificCashier, setSelectedSpecificCashier] = useState<string>('todos');
+
+  useEffect(() => {
+    const handleRoleUpdate = () => {
+      const role = getActiveRole();
+      setCurrentRole(role);
+      if (role !== 'Administrador') {
+        setMovementUserScope('mi_usuario');
+      }
+    };
+    const handleUserUpdate = () => {
+      setLoggedInUserName((typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado');
+      setLoggedInUserEmail((typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '');
+    };
+    window.addEventListener('brianna_role_updated', handleRoleUpdate);
+    window.addEventListener('brianna_user_updated', handleUserUpdate);
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+      window.removeEventListener('brianna_user_updated', handleUserUpdate);
+    };
+  }, []);
+
+  const effectiveUserScope = isAdmin ? movementUserScope : 'mi_usuario';
+
   useEffect(() => {
     const handleShiftUpdate = () => {
       setIsShiftActive(isShiftOpen(FINANCING_REGISTER));
@@ -368,10 +423,11 @@ export default function Financing() {
   useEffect(() => {
     let isMounted = true;
     const loadDbData = async () => {
-      const [dbF, custs, invItems] = await Promise.all([
+      const [dbF, custs, invItems, dbReceipts] = await Promise.all([
         fetchFinancings(),
         fetchCustomers(),
-        fetchInventory()
+        fetchInventory(),
+        fetchReceiptsFromSupabase(),
       ]);
       if (isMounted) {
         setFinancingsList(mapFinancingsToState(dbF || []));
@@ -380,6 +436,13 @@ export default function Financing() {
         }
         if (invItems && invItems.length > 0) {
           setInventoryList(invItems);
+        }
+        if (dbReceipts && dbReceipts.length > 0 && selectedFinancing) {
+          const targetId = String(selectedFinancing.rawId || selectedFinancing.id);
+          const relevant = dbReceipts.filter(r => String(r.financingId) === targetId);
+          if (relevant.length > 0) {
+            setFinancingReceipts(relevant);
+          }
         }
       }
     };
@@ -394,8 +457,11 @@ export default function Financing() {
   const [isCashMovementOpen, setIsCashMovementOpen] = useState<boolean>(false);
   const [cashMovementInitialTab, setCashMovementInitialTab] = useState<'form' | 'history'>('form');
   const [movementsList, setMovementsList] = useState<CashMovement[]>([]);
-  const [movementFilterType, setMovementFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
+  const [movementFilterType, setMovementFilterType] = useState<'Todos' | 'Pagos' | 'Ingreso' | 'Egreso'>('Todos');
   const [movementFilterMethod, setMovementFilterMethod] = useState<'Todos' | 'Transferencia' | 'Efectivo'>('Todos');
+
+  // Historial global de todos los recibos de pago de financiamientos
+  const [allFinancingReceipts, setAllFinancingReceipts] = useState<FinancingPaymentReceipt[]>(() => fetchAllFinancingReceipts());
 
   useEffect(() => {
     let isMounted = true;
@@ -414,53 +480,197 @@ export default function Financing() {
     };
   }, []);
 
-  // Totales de Movimientos
+  // Sincronizar todos los recibos de financiamiento
+  useEffect(() => {
+    setAllFinancingReceipts(getStoredReceipts());
+
+    const handleReceiptsUpdated = () => {
+      setAllFinancingReceipts(getStoredReceipts());
+    };
+    window.addEventListener('brianna_receipts_updated', handleReceiptsUpdated);
+    return () => window.removeEventListener('brianna_receipts_updated', handleReceiptsUpdated);
+  }, []);
+
+  // Reconstruir silenciosamente recibos históricos si faltan al cargar financiamientos
+  useEffect(() => {
+    if (financingsList && financingsList.length > 0) {
+      let hasNew = false;
+      financingsList.forEach(fin => {
+        const countBefore = getReceiptsForFinancing(fin.rawId || fin.id).length;
+        getOrReconstructReceiptsForFinancing(fin, false);
+        const countAfter = getReceiptsForFinancing(fin.rawId || fin.id).length;
+        if (countAfter > countBefore) hasNew = true;
+      });
+      if (hasNew) {
+        setAllFinancingReceipts(getStoredReceipts());
+      }
+    }
+  }, [financingsList.length]);
+
+  // Lista unificada que combina Pagos de Financiamientos y Movimientos Manuales de Caja
+  const unifiedMovementsList = useMemo<UnifiedFinancialMovement[]>(() => {
+    const list: UnifiedFinancialMovement[] = [];
+
+    // 1. Recibos de pago de financiamientos
+    allFinancingReceipts.forEach(r => {
+      const dateStr = r.createdAt || r.paymentExecutionDate || r.paymentDate || r.date;
+      const validDate = dateStr && !isNaN(new Date(dateStr).getTime()) ? new Date(dateStr) : new Date();
+
+      const cuotasDesc = r.paymentType === 'inicial'
+        ? 'Pago de Inicial / Enganche'
+        : r.paymentType === 'abono'
+        ? 'Abono Directo a Capital'
+        : (r.paidInstallments && r.paidInstallments.length > 0
+            ? `Pago Cuota ${r.paidInstallments.map(i => `#${i.id}`).join(', ')}`
+            : 'Pago de Cuota');
+
+      list.push({
+        id: `rec-${r.id}`,
+        sourceType: 'pago_financiamiento',
+        type: 'Ingreso',
+        amount: Number(r.totalPaid) || 0,
+        concept: cuotasDesc,
+        customerOrOrigin: r.customerName || 'Cliente',
+        itemOrDescription: r.itemName ? `${r.itemName}${r.chassis ? ` • Chasis: ${r.chassis}` : ''}` : 'Equipo en financiamiento',
+        paymentMethod: r.paymentMethod || 'Efectivo',
+        bankName: r.bankName,
+        reference: r.receiptNumber,
+        date: validDate.toISOString(),
+        formattedDate: r.date || validDate.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: validDate.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        registerName: r.registerName || 'Caja Cobros & Financiamientos',
+        cashier: (r.cashierName && !r.cashierName.toLowerCase().includes('carlos mendoza')) ? r.cashierName : 'Harold Rosado',
+        rawReceipt: r,
+      });
+    });
+
+    // 2. Movimientos manuales de caja (ingresos y egresos)
+    movementsList.forEach(m => {
+      const validDate = m.created_at && !isNaN(new Date(m.created_at).getTime()) ? new Date(m.created_at) : new Date();
+
+      list.push({
+        id: `mov-${m.id}`,
+        sourceType: m.type === 'Ingreso' ? 'ingreso_caja' : 'egreso_caja',
+        type: m.type,
+        amount: Number(m.amount) || 0,
+        concept: m.concept || (m.type === 'Ingreso' ? 'Ingreso a caja' : 'Egreso de caja'),
+        customerOrOrigin: m.type === 'Ingreso' ? 'Entrada a Caja / Bancos' : 'Gasto Operativo / Salida',
+        itemOrDescription: m.reference ? `Comprobante: ${m.reference}` : (m.bank_account_name || undefined),
+        paymentMethod: m.payment_method || 'Efectivo',
+        bankName: m.bank_account_name,
+        reference: m.reference,
+        date: validDate.toISOString(),
+        formattedDate: validDate.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: validDate.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        registerName: m.register_name || 'Caja Cobros & Financiamientos',
+        cashier: m.created_by || 'Sistema',
+        rawMovement: m,
+      });
+    });
+
+    // Ordenar cronológicamente descendente
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [allFinancingReceipts, movementsList]);
+
+  // Cajeros únicos presentes en los movimientos (para selector de Admin)
+  const uniqueCashiers = useMemo(() => {
+    const set = new Set<string>();
+    unifiedMovementsList.forEach(m => {
+      if (m.cashier && m.cashier !== 'Sistema') {
+        set.add(m.cashier);
+      }
+    });
+    return Array.from(set).sort();
+  }, [unifiedMovementsList]);
+
+  // Lista de movimientos según permisos de usuario (si no es admin, solo ve sus propios movimientos)
+  const userScopedMovementsList = useMemo<UnifiedFinancialMovement[]>(() => {
+    if (!isAdmin || effectiveUserScope === 'mi_usuario') {
+      return unifiedMovementsList.filter(m => matchesCashierUser(m.cashier, loggedInUserName, loggedInUserEmail));
+    }
+    if (selectedSpecificCashier !== 'todos') {
+      return unifiedMovementsList.filter(m => matchesCashierUser(m.cashier, selectedSpecificCashier));
+    }
+    return unifiedMovementsList;
+  }, [unifiedMovementsList, isAdmin, effectiveUserScope, loggedInUserName, loggedInUserEmail, selectedSpecificCashier]);
+
+  // Totales y Resumen General de Todo según alcance de usuario
   const movementsSummary = useMemo(() => {
-    let totalIngresos = 0;
+    let totalFinanciamientos = 0;
+    let totalIngresosCaja = 0;
     let totalEgresos = 0;
     let bankTransfer = 0;
     let cash = 0;
+    let financiamientosCount = 0;
+    let movimientosCajaCount = 0;
 
-    movementsList.forEach(m => {
-      const amt = Number(m.amount) || 0;
-      if (m.type === 'Ingreso') {
-        totalIngresos += amt;
-        if (m.payment_method === 'Transferencia') bankTransfer += amt;
+    userScopedMovementsList.forEach(item => {
+      const amt = item.amount;
+      const isTransfer = item.paymentMethod === 'Transferencia';
+
+      if (item.sourceType === 'pago_financiamiento') {
+        financiamientosCount++;
+      } else {
+        movimientosCajaCount++;
+      }
+
+      if (item.type === 'Ingreso') {
+        if (item.sourceType === 'pago_financiamiento') {
+          totalFinanciamientos += amt;
+        } else {
+          totalIngresosCaja += amt;
+        }
+
+        if (isTransfer) bankTransfer += amt;
         else cash += amt;
       } else {
         totalEgresos += amt;
-        if (m.payment_method === 'Transferencia') bankTransfer -= amt;
-        else cash -= amt;
+        if (isTransfer) bankTransfer -= amt;
+        else cash += amt;
       }
     });
+
+    const totalIngresos = totalFinanciamientos + totalIngresosCaja;
 
     return {
       totalIngresos,
+      totalFinanciamientos,
+      totalIngresosCaja,
       totalEgresos,
       balanceNeto: totalIngresos - totalEgresos,
-      bankTransfer,
-      cash,
+      bankTransfer: Math.max(0, bankTransfer),
+      cash: Math.max(0, cash),
+      totalCount: userScopedMovementsList.length,
+      financiamientosCount,
+      movimientosCajaCount,
     };
-  }, [movementsList]);
+  }, [userScopedMovementsList]);
 
   // Movimientos filtrados para la tabla
   const filteredMovements = useMemo(() => {
-    return movementsList.filter(m => {
-      if (movementFilterType !== 'Todos' && m.type !== movementFilterType) return false;
+    return userScopedMovementsList.filter(m => {
+      if (movementFilterType === 'Pagos' && m.sourceType !== 'pago_financiamiento') return false;
+      if (movementFilterType === 'Ingreso' && (m.type !== 'Ingreso' || m.sourceType === 'pago_financiamiento')) return false;
+      if (movementFilterType === 'Egreso' && m.type !== 'Egreso') return false;
+
       if (movementFilterMethod !== 'Todos') {
-        if (movementFilterMethod === 'Transferencia' && m.payment_method !== 'Transferencia') return false;
-        if (movementFilterMethod === 'Efectivo' && m.payment_method === 'Transferencia') return false;
+        if (movementFilterMethod === 'Transferencia' && m.paymentMethod !== 'Transferencia') return false;
+        if (movementFilterMethod === 'Efectivo' && m.paymentMethod === 'Transferencia') return false;
       }
+
       if (searchCustomer.trim()) {
         const q = searchCustomer.toLowerCase().trim();
+        const matchCustomer = m.customerOrOrigin?.toLowerCase().includes(q);
         const matchConcept = m.concept?.toLowerCase().includes(q);
-        const matchBank = m.bank_account_name?.toLowerCase().includes(q);
+        const matchItem = m.itemOrDescription?.toLowerCase().includes(q);
+        const matchBank = m.bankName?.toLowerCase().includes(q);
         const matchRef = m.reference?.toLowerCase().includes(q);
-        return matchConcept || matchBank || matchRef;
+        return matchCustomer || matchConcept || matchItem || matchBank || matchRef;
       }
+
       return true;
     });
-  }, [movementsList, movementFilterType, movementFilterMethod, searchCustomer]);
+  }, [userScopedMovementsList, movementFilterType, movementFilterMethod, searchCustomer]);
   
   // Dynamic Mora Grace Period Days State (Editable)
   const [graceDays, setGraceDays] = useState<number>(15);
@@ -705,6 +915,69 @@ export default function Financing() {
       setDeleteMasterKeyError('Error al eliminar el financiamiento. Intente nuevamente.');
     } finally {
       setIsDeletingFinancing(false);
+    }
+  };
+
+  // Estado para eliminación de cuota protegida con Clave Maestra
+  const [installmentToDelete, setInstallmentToDelete] = useState<MappedInstallment | null>(null);
+  const [deleteInstallmentMasterKey, setDeleteInstallmentMasterKey] = useState('');
+  const [deleteInstallmentMasterKeyError, setDeleteInstallmentMasterKeyError] = useState('');
+  const [showDeleteInstallmentMasterKeyText, setShowDeleteInstallmentMasterKeyText] = useState(false);
+  const [isDeletingInstallment, setIsDeletingInstallment] = useState(false);
+
+  const handleRequestDeleteInstallment = (inst: MappedInstallment, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setInstallmentToDelete(inst);
+    setDeleteInstallmentMasterKey('');
+    setDeleteInstallmentMasterKeyError('');
+    setShowDeleteInstallmentMasterKeyText(false);
+  };
+
+  const handleConfirmDeleteInstallmentWithKey = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!installmentToDelete || !selectedFinancing || isDeletingInstallment) return;
+
+    if (!verifyAdminMasterKey(deleteInstallmentMasterKey)) {
+      setDeleteInstallmentMasterKeyError('Clave maestra incorrecta. Verifique e intente nuevamente.');
+      return;
+    }
+
+    setIsDeletingInstallment(true);
+    try {
+      const inst = installmentToDelete;
+      const finId = selectedFinancing.rawId || String(selectedFinancing.id);
+
+      await deleteInstallment(finId, inst.id, inst.dbId);
+
+      // Actualizar cuotas en memoria
+      const rawInsts = selectedFinancing.installments || [];
+      const updatedRawInsts = rawInsts.filter((i: any) => {
+        if (inst.dbId && (i.id === inst.dbId || i.dbId === inst.dbId)) return false;
+        if (Number(i.installment_number) === Number(inst.id)) return false;
+        if (Number(i.id) === Number(inst.id)) return false;
+        return true;
+      });
+
+      const updatedFin = {
+        ...selectedFinancing,
+        installmentsCount: updatedRawInsts.length,
+        installments_count: updatedRawInsts.length,
+        installments: updatedRawInsts,
+      };
+
+      persistFinancingInstallments(finId, updatedFin);
+      setSelectedFinancing(updatedFin);
+      setFinancingsList(prev => prev.map(f => (f.rawId === finId || f.id === selectedFinancing.id) ? updatedFin : f));
+      setSelectedInstallmentIds(prev => prev.filter(id => id !== inst.id));
+
+      setInstallmentToDelete(null);
+      setDeleteInstallmentMasterKey('');
+      setDeleteInstallmentMasterKeyError('');
+    } catch (err) {
+      console.error('Error al eliminar cuota:', err);
+      setDeleteInstallmentMasterKeyError('Error al eliminar la cuota. Intente nuevamente.');
+    } finally {
+      setIsDeletingInstallment(false);
     }
   };
 
@@ -958,7 +1231,6 @@ export default function Financing() {
   // Abonos State
   const [paymentType, setPaymentType] = useState<'cuotas' | 'abono' | 'recibos'>('cuotas');
   const [abonoAmount, setAbonoAmount] = useState<string>('');
-  const [customCuotasPayAmount, setCustomCuotasPayAmount] = useState<string>('');
   
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
@@ -990,7 +1262,7 @@ export default function Financing() {
   // Sync receipts when selectedFinancing changes
   useEffect(() => {
     if (selectedFinancing) {
-      const recs = getOrReconstructReceiptsForFinancing(selectedFinancing);
+      const recs = getOrReconstructReceiptsForFinancing(selectedFinancing, false);
       setFinancingReceipts(recs);
     } else {
       setFinancingReceipts([]);
@@ -1012,6 +1284,34 @@ export default function Financing() {
   const handleOpenReceipt = (receipt: FinancingPaymentReceipt) => {
     setViewingReceipt(receipt);
     setLastReceipt(receipt as any);
+    setHasPrintedReceipt(false);
+    setShowReceipt(true);
+  };
+
+  const handleOpenGlobalReceipt = (receipt: FinancingPaymentReceipt) => {
+    const matchedFin = financingsList.find(
+      f => String(f.rawId || f.id) === String(receipt.financingId)
+    );
+    if (matchedFin) {
+      setSelectedFinancing(matchedFin);
+    } else {
+      const fallbackFin: any = {
+        id: receipt.financingId || 1,
+        rawId: receipt.financingId,
+        customer: receipt.customerName || 'Cliente',
+        item: receipt.itemName || 'Equipo',
+        chassis: receipt.chassis || '',
+        itemPlate: receipt.itemPlate || '',
+        amount: receipt.newBalance || 0,
+        status: receipt.newBalance <= 0 ? 'Pagado' : 'Al día',
+        installments: receipt.paidInstallments || [],
+      };
+      setSelectedFinancing(fallbackFin);
+    }
+    setViewingReceipt(receipt);
+    setLastReceipt(receipt as any);
+    setShowPaymentForm(false);
+    setShowAccountStatement(false);
     setHasPrintedReceipt(false);
     setShowReceipt(true);
   };
@@ -1084,7 +1384,6 @@ export default function Financing() {
     setShowAccountStatement(false);
     setShowPaymentForm(false);
     setSelectedInstallmentIds([]);
-    setCustomCuotasPayAmount('');
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
     setLastReceipt(null);
@@ -1183,21 +1482,12 @@ export default function Financing() {
   const totalSelectedAmount = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.total, 0);
 
   const numAbono = parseCurrencyInput(abonoAmount);
-  const numCustomCuotas = parseCurrencyInput(customCuotasPayAmount);
-  const surplusAmount = paymentType === 'cuotas' && numCustomCuotas > totalSelectedAmount
-    ? Math.round((numCustomCuotas - totalSelectedAmount) * 100) / 100
-    : 0;
   const effectivePayAmount = paymentType === 'abono'
     ? numAbono
-    : (numCustomCuotas > 0 ? numCustomCuotas : totalSelectedAmount);
-
-  const nextUnpaidInstallment = currentInstallments.find(
-    (i: MappedInstallment) => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado'
-  );
+    : totalSelectedAmount;
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
   const handleToggleSequentialInstallment = (targetInstId: number) => {
-    setCustomCuotasPayAmount('');
     const unpaidList: MappedInstallment[] = currentInstallments
       .filter((i: MappedInstallment) => i.status !== 'Pagado')
       .sort((a: MappedInstallment, b: MappedInstallment) => a.id - b.id);
@@ -1226,15 +1516,9 @@ export default function Financing() {
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
 
-      const numCustom = parseCurrencyInput(customCuotasPayAmount);
-      if (customCuotasPayAmount.trim() !== '' && numCustom > 0 && numCustom < totalSelectedAmount) {
-        alert(`El monto ingresado ($${numCustom.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor al total de las cuotas seleccionadas ($${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}).`);
-        return;
-      }
-
-      const totalPaid = effectivePayAmount;
-      const surplus = Math.max(0, totalPaid - totalSelectedAmount);
-      let remainingSurplus = surplus;
+      const totalPaid = totalSelectedAmount;
+      const surplus = 0;
+      let remainingSurplus = 0;
 
       const paidList = [...selectedInsts];
       const totalCap = totalSelectedCapital + surplus;
@@ -1365,7 +1649,6 @@ export default function Financing() {
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setSelectedInstallmentIds([]);
-      setCustomCuotasPayAmount('');
       setCashReceived('');
       setReferenceNumber('');
       setPaymentNotes('');
@@ -1488,7 +1771,10 @@ export default function Financing() {
       const autoExecDate = vr.paymentExecutionDate || vr.date;
       return {
         ...vr,
-        cashierName: (vr.cashierName && vr.cashierName !== 'Carlos Mendoza') ? vr.cashierName : currentCashier,
+        registerName: (vr.registerName && !vr.registerName.toLowerCase().includes('carlos mendoza')) 
+          ? vr.registerName 
+          : (getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER),
+        cashierName: (vr.cashierName && !vr.cashierName.toLowerCase().includes('carlos mendoza')) ? vr.cashierName : currentCashier,
         paymentExecutionDate: autoExecDate,
         scheduledDueDate: autoScheduled,
         nextPaymentDate: autoNext,
@@ -1498,7 +1784,10 @@ export default function Financing() {
       const lr = lastReceipt as any;
       return {
         ...lr,
-        cashierName: (lr.cashierName && lr.cashierName !== 'Carlos Mendoza') ? lr.cashierName : currentCashier,
+        registerName: (lr.registerName && !lr.registerName.toLowerCase().includes('carlos mendoza')) 
+          ? lr.registerName 
+          : (getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER),
+        cashierName: (lr.cashierName && !lr.cashierName.toLowerCase().includes('carlos mendoza')) ? lr.cashierName : currentCashier,
       };
     }
     const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
@@ -1544,13 +1833,14 @@ export default function Financing() {
       paymentType: paymentType,
       paidInstallments: paidList,
       abonoAmount: numAbono,
-      surplusAmount: paymentType === 'cuotas' ? (surplusAmount > 0 ? surplusAmount : undefined) : undefined,
+      surplusAmount: undefined,
       totalPaid: totalPaid,
       newBalance: newBal,
       customerName: selectedFinancing?.customer || 'Cliente General',
       customerCode: `CLI-${(selectedFinancing?.id || '1').toString().padStart(4, '0')}`,
       itemName: selectedFinancing?.item || 'Equipo Pesado',
       cashierName: currentCashier,
+      registerName: getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER,
       financingId: String(selectedFinancing?.id || ''),
       qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
       paymentMethod: paymentMethod,
@@ -1560,7 +1850,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2516,13 +2806,13 @@ export default function Financing() {
                 : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white font-medium hover:bg-gray-50 dark:hover:bg-zinc-800/50'
             }`}
           >
-            <span>Movimientos I/E</span>
+            <span>Historial & Movimientos</span>
             <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
               mainStatusFilter === 'Movimientos'
                 ? 'bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900'
                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400'
             }`}>
-              {movementsList.length}
+              {userScopedMovementsList.length}
             </span>
           </button>
         </div>
@@ -2530,18 +2820,23 @@ export default function Financing() {
 
       {mainStatusFilter === 'Movimientos' ? (
         <div className="space-y-4 animate-in fade-in duration-150">
-          {/* Resumen de Movimientos */}
+          {/* Resumen General de Todo */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Total Ingresos */}
             <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Total Ingresos</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Total Ingresos & Cobros</span>
                 <ArrowDownCircleIcon className="w-4 h-4 text-emerald-600" />
               </div>
               <p className="text-xl sm:text-2xl font-black font-mono text-emerald-700 dark:text-emerald-400">
                 +RD$ {movementsSummary.totalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </p>
-              <p className="text-[10px] text-emerald-600/80 font-medium">Entradas a caja y bancos</p>
+              <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-emerald-700/80 dark:text-emerald-300/80 font-medium">
+                <span>Cobros Financ.: <strong>RD$ {movementsSummary.totalFinanciamientos.toLocaleString('es-DO')}</strong></span>
+                {movementsSummary.totalIngresosCaja > 0 && (
+                  <span>• Otros: <strong>RD$ {movementsSummary.totalIngresosCaja.toLocaleString('es-DO')}</strong></span>
+                )}
+              </div>
             </div>
 
             {/* Total Egresos */}
@@ -2565,7 +2860,7 @@ export default function Financing() {
               <p className={`text-xl sm:text-2xl font-black font-mono ${movementsSummary.balanceNeto >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600'}`}>
                 RD$ {movementsSummary.balanceNeto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </p>
-              <p className="text-[10px] text-gray-400 font-medium">Ingresos menos Egresos</p>
+              <p className="text-[10px] text-gray-400 font-medium">Ingresos totales menos Egresos</p>
             </div>
 
             {/* Bancos vs Efectivo */}
@@ -2581,19 +2876,79 @@ export default function Financing() {
             </div>
           </div>
 
-          {/* Barra de Filtros secundarios & Botón Nuevo Movimiento */}
+          {/* Barra de Filtros secundarios & Acciones */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-gray-100 dark:border-zinc-800">
             <div className="flex flex-wrap items-center gap-2">
+              {/* Selector de alcance por usuario (Admin vs Usuario) */}
+              {isAdmin ? (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMovementUserScope('todos');
+                        setSelectedSpecificCashier('todos');
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        movementUserScope === 'todos' && selectedSpecificCashier === 'todos'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <UserGroupIcon className="w-3.5 h-3.5" />
+                      <span>Todos los Usuarios</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMovementUserScope('mi_usuario')}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        movementUserScope === 'mi_usuario'
+                          ? 'bg-[#ED1C24] text-white shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                    >
+                      <UserIcon className="w-3.5 h-3.5" />
+                      <span>Solo Mi Usuario</span>
+                    </button>
+                  </div>
+
+                  {movementUserScope === 'todos' && uniqueCashiers.length > 0 && (
+                    <select
+                      value={selectedSpecificCashier}
+                      onChange={(e) => setSelectedSpecificCashier(e.target.value)}
+                      className="px-2.5 py-1 text-xs font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl border border-transparent focus:border-gray-300 dark:focus:border-zinc-700 outline-none cursor-pointer"
+                    >
+                      <option value="todos">Todos los Cajeros</option>
+                      {uniqueCashiers.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded-xl border border-blue-200/60 dark:border-blue-800/40 text-xs font-bold">
+                  <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Mis Registros: <strong className="font-black">{loggedInUserName}</strong></span>
+                </div>
+              )}
+
+              <div className="h-4 w-px bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
+
               <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">Filtrar:</span>
               <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
-                {(['Todos', 'Ingreso', 'Egreso'] as const).map(t => (
+                {[
+                  { key: 'Todos', label: `Todos (${movementsSummary.totalCount})` },
+                  { key: 'Pagos', label: `Pagos Financ. (${movementsSummary.financiamientosCount})` },
+                  { key: 'Ingreso', label: `Ingresos Caja` },
+                  { key: 'Egreso', label: `Egresos` },
+                ].map(item => (
                   <button
-                    key={t}
+                    key={item.key}
                     type="button"
-                    onClick={() => setMovementFilterType(t)}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${movementFilterType === t ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                    onClick={() => setMovementFilterType(item.key as any)}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${movementFilterType === item.key ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs font-black' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
                   >
-                    {t === 'Todos' ? 'Todos' : t}
+                    {item.label}
                   </button>
                 ))}
               </div>
@@ -2622,7 +2977,7 @@ export default function Financing() {
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <PrinterIcon className="w-4 h-4" />
-                <span>Historial & Reporte de Sesión</span>
+                <span>Historial de Caja</span>
               </button>
 
               <button
@@ -2639,13 +2994,13 @@ export default function Financing() {
             </div>
           </div>
 
-          {/* Tabla de Movimientos */}
+          {/* Tabla de Movimientos y Pagos */}
           <div className="bg-white dark:bg-[#1a1a1a] shadow-sm rounded-2xl sm:rounded-[2rem] overflow-hidden p-2.5 sm:p-2 border border-gray-200/60 dark:border-gray-800">
             {filteredMovements.length === 0 ? (
               <div className="py-12 text-center space-y-3">
                 <ArrowsRightLeftIcon className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto" />
                 <p className="text-xs text-gray-400 dark:text-zinc-500 font-bold">
-                  No hay movimientos de ingresos o egresos registrados con los filtros seleccionados.
+                  No hay pagos ni movimientos registrados con los filtros seleccionados.
                 </p>
                 <button
                   type="button"
@@ -2655,7 +3010,7 @@ export default function Financing() {
                   }}
                   className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer hover:bg-emerald-700 transition-all"
                 >
-                  Registrar Primer Movimiento
+                  Registrar Movimiento en Caja
                 </button>
               </div>
             ) : (
@@ -2663,10 +3018,11 @@ export default function Financing() {
                 <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800">
                   <thead className="bg-gray-50/50 dark:bg-zinc-900/50">
                     <tr>
-                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Tipo</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Tipo / Origen</th>
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Monto</th>
-                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Método / Cuenta Bancaria</th>
-                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Concepto / Referencia</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Cliente / Concepto</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Método / Banco</th>
+                      <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Comprobante / Recibo</th>
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Fecha / Hora</th>
                       <th className="px-5 py-3.5 text-left text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Caja / Responsable</th>
                       <th className="px-5 py-3.5 text-center text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">Acción</th>
@@ -2674,24 +3030,49 @@ export default function Financing() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 bg-white dark:bg-[#1a1a1a]">
                     {filteredMovements.map(m => {
+                      const isFinancingPayment = m.sourceType === 'pago_financiamiento';
                       const isIngreso = m.type === 'Ingreso';
-                      const isTransfer = m.payment_method === 'Transferencia';
+                      const isTransfer = m.paymentMethod === 'Transferencia';
                       return (
                         <tr key={m.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-900/50 transition-colors">
                           <td className="px-5 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black ${
-                              isIngreso 
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60'
-                                : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200/80 dark:border-red-800/60'
-                            }`}>
-                              {isIngreso ? <ArrowDownCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" /> : <ArrowUpCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" />}
-                              <span>{m.type}</span>
-                            </span>
+                            {isFinancingPayment ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60">
+                                <DocumentTextIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Pago Financ.</span>
+                              </span>
+                            ) : isIngreso ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60">
+                                <ArrowDownCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Ingreso Caja</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200/80 dark:border-red-800/60">
+                                <ArrowUpCircleIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>Egreso / Gasto</span>
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
                             <span className={`font-mono text-sm font-black ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#ED1C24] dark:text-red-400'}`}>
                               {isIngreso ? '+' : '-'}RD$ {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-black text-gray-900 dark:text-white">
+                                {m.customerOrOrigin}
+                              </p>
+                              <p className="text-[11px] text-gray-600 dark:text-zinc-300 font-medium">
+                                {m.concept}
+                              </p>
+                              {m.itemOrDescription && (
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium flex items-center gap-1">
+                                  <TruckIcon className="w-3 h-3 text-gray-400 shrink-0" />
+                                  <span>{m.itemOrDescription}</span>
+                                </p>
+                              )}
+                            </div>
                           </td>
                           <td className="px-5 py-4">
                             <div className="space-y-1">
@@ -2701,46 +3082,57 @@ export default function Financing() {
                                   : 'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300'
                               }`}>
                                 {isTransfer ? <BuildingLibraryIcon className="w-3.5 h-3.5 text-blue-600" /> : <BanknotesIcon className="w-3.5 h-3.5 text-gray-600" />}
-                                <span>{m.payment_method || 'Efectivo'}</span>
+                                <span>{m.paymentMethod || 'Efectivo'}</span>
                               </span>
-                              {isTransfer && m.bank_account_name && (
+                              {m.bankName && (
                                 <p className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1">
-                                  <span>🏦 {m.bank_account_name}</span>
+                                  <span>🏦 {m.bankName}</span>
                                 </p>
                               )}
                             </div>
                           </td>
-                          <td className="px-5 py-4">
-                            <p className="text-xs font-bold text-gray-900 dark:text-white max-w-xs sm:max-w-md">
-                              {m.concept}
-                            </p>
-                            {m.reference && (
-                              <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 mt-0.5 font-bold">
-                                Comprobante: {m.reference}
-                              </p>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            {m.reference ? (
+                              <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200/50 dark:border-blue-900/40">
+                                {m.reference}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">Sin referencia</span>
                             )}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-zinc-400">
-                            <div>{m.created_at ? new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</div>
-                            <div className="text-[10px] text-gray-400">{m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}</div>
+                            <div className="font-bold text-gray-800 dark:text-zinc-200">{m.formattedDate}</div>
+                            <div className="text-[10px] text-gray-400">{m.time}</div>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-xs text-gray-600 dark:text-zinc-400">
-                            <div className="font-semibold text-gray-800 dark:text-zinc-200">{m.register_name || 'Finanzas & Cobros'}</div>
-                            <div className="text-[10px] text-gray-400">{m.created_by || 'Sistema'}</div>
+                            <div className="font-semibold text-gray-800 dark:text-zinc-200">{m.registerName}</div>
+                            <div className="text-[10px] text-gray-400">{m.cashier}</div>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCashMovementInitialTab('history');
-                                setIsCashMovementOpen(true);
-                              }}
-                              title="Ver en Historial e Imprimir Constancia"
-                              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                            >
-                              <PrinterIcon className="w-3.5 h-3.5" />
-                              <span>Constancia</span>
-                            </button>
+                            {isFinancingPayment && m.rawReceipt ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenGlobalReceipt(m.rawReceipt!)}
+                                title="Ver e Imprimir Recibo Oficial"
+                                className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                              >
+                                <PrinterIcon className="w-3.5 h-3.5" />
+                                <span>Ver Recibo</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCashMovementInitialTab('history');
+                                  setIsCashMovementOpen(true);
+                                }}
+                                title="Ver en Historial e Imprimir Constancia"
+                                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                              >
+                                <PrinterIcon className="w-3.5 h-3.5" />
+                                <span>Constancia</span>
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -3084,38 +3476,42 @@ export default function Financing() {
                       </div>
                     </div>
 
-                    {/* Tarjetas Informativas de Fechas: Fecha de Pago Realizada vs Fecha Programada / Vencimiento */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3.5 bg-gradient-to-r from-red-50/60 via-amber-50/40 to-blue-50/60 dark:from-red-950/20 dark:via-zinc-900 dark:to-blue-950/20 rounded-2xl border border-gray-200/80 dark:border-zinc-800 print:bg-gray-50 print:border-gray-300">
-                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-red-100 dark:border-red-900/30 print:bg-white print:border-gray-300">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-[#ED1C24] dark:text-red-400 block mb-1">
-                          💵 Fecha en que se Realizó el Pago
+                    {/* Fechas Informativas de la Transacción */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 bg-gray-50 dark:bg-[#222222] p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-zinc-800 print:bg-gray-50 print:border-gray-200">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block mb-1">
+                          Fecha de Pago
                         </span>
                         <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
                           {activeReceiptData.paymentExecutionDate || activeReceiptData.date}
                         </p>
-                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Cobro procesado en caja</span>
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium block mt-0.5">
+                          Procesado en caja
+                        </span>
                       </div>
 
-                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-amber-100 dark:border-amber-900/30 print:bg-white print:border-gray-300">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-                          🗓️ Fecha Programada de la Cuota
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block mb-1">
+                          Fecha Programada
                         </span>
                         <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
                           {activeReceiptData.scheduledDueDate || activeReceiptData.paidInstallments?.[0]?.dueDate || selectedFinancing?.nextPayment || 'N/A'}
                         </p>
-                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Vencimiento predeterminado</span>
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium block mt-0.5">
+                          Vencimiento de cuota
+                        </span>
                       </div>
 
-                      <div className="p-3 bg-white dark:bg-zinc-800/80 rounded-xl border border-blue-100 dark:border-blue-900/30 print:bg-white print:border-gray-300">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 block mb-1">
-                          ⏳ Próxima Fecha de Pago del Cliente
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block mb-1">
+                          Próximo Vencimiento
                         </span>
                         <p className="font-black text-gray-900 dark:text-white text-xs sm:text-sm print:text-black">
                           {activeReceiptData.newBalance <= 0 
                             ? 'Totalmente Saldado ✓' 
                             : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
                         </p>
-                        <span className="text-[10px] text-gray-400 font-medium block mt-0.5">
+                        <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-medium block mt-0.5">
                           {activeReceiptData.newBalance <= 0 ? 'Sin cuotas pendientes' : 'Siguiente cuota a pagar'}
                         </span>
                       </div>
@@ -3136,7 +3532,7 @@ export default function Financing() {
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Procesado Por</p>
                         <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.cashierName}</p>
-                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Rol: Cajero Principal</p>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">{activeReceiptData.registerName || FINANCING_REGISTER}</p>
                       </div>
                     </div>
 
@@ -3197,7 +3593,16 @@ export default function Financing() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 print:divide-gray-200 text-xs">
-                          {activeReceiptData.paymentType === 'abono' ? (
+                          {activeReceiptData.paymentType === 'inicial' ? (
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Pago de Inicial / Enganche</td>
+                              <td className="py-3.5 px-4 text-center font-mono font-bold text-gray-500 print:text-black">Inicial Contrato</td>
+                              <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                              <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
+                              <td className="py-3.5 px-4 text-right text-gray-400">$0.00</td>
+                              <td className="py-3.5 px-4 text-right font-black text-gray-900 dark:text-white print:text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                            </tr>
+                          ) : activeReceiptData.paymentType === 'abono' ? (
                             <tr>
                               <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Abono Directo al Capital Principal</td>
                               <td className="py-3.5 px-4 text-center font-mono font-bold text-gray-500 print:text-black">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
@@ -3210,7 +3615,7 @@ export default function Financing() {
                             <>
                               {activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                                 <tr key={inst.id}>
-                                  <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                                  <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white print:text-black">Cuota No. {inst.id} de {currentInstallments.length || selectedFinancing?.months || selectedFinancing?.installmentsCount || inst.id}</td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 dark:text-amber-400 print:text-black">{inst.dueDate}</td>
                                   <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                                   <td className="py-3.5 px-4 text-right font-medium text-gray-600 dark:text-zinc-300 print:text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -3286,12 +3691,14 @@ export default function Financing() {
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
                         <p className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider print:text-black">Caja / Firma Autorizada</p>
-                        <p className="text-[9px] font-bold text-gray-700 dark:text-gray-300 mt-0.5 print:text-black">{activeReceiptData.cashierName || 'Cajero(a) Autorizado(a)'} (Cajero/a)</p>
+                        <p className="text-xs font-black text-gray-900 dark:text-white mt-1 print:text-black">{activeReceiptData.cashierName || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado'}</p>
+                        <p className="text-[9px] font-medium text-gray-500 dark:text-zinc-400 print:text-gray-700">{activeReceiptData.registerName || FINANCING_REGISTER} (Cajera / Cajero)</p>
                       </div>
                       <div className="text-center">
                         <div className="border-b border-gray-400 dark:border-gray-500 w-3/4 mx-auto mb-2"></div>
                         <p className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider print:text-black">Firma del Cliente</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5 print:text-gray-500">{activeReceiptData.customerName}</p>
+                        <p className="text-xs font-black text-gray-900 dark:text-white mt-1 print:text-black">{activeReceiptData.customerName}</p>
+                        <p className="text-[9px] font-medium text-gray-400 dark:text-zinc-400 print:text-gray-700">{activeReceiptData.customerCode || 'Cliente Titular'}</p>
                       </div>
                     </div>
 
@@ -3366,6 +3773,7 @@ export default function Financing() {
                             <th className="py-2 font-bold text-right">Mora</th>
                             <th className="py-2 font-bold text-right">Total</th>
                             <th className="py-2 font-bold text-right">Estado</th>
+                            <th className="py-2 font-bold text-right print:hidden">Acción</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -3381,6 +3789,16 @@ export default function Financing() {
                                 <span className={`font-bold ${inst.status === 'Pagado' ? 'text-green-600' : inst.status === 'Atrasado' ? 'text-red-600' : 'text-yellow-600'}`}>
                                   {inst.status}
                                 </span>
+                              </td>
+                              <td className="py-2.5 text-right print:hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestDeleteInstallment(inst)}
+                                  className="p-1 text-gray-400 hover:text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors cursor-pointer"
+                                  title="Eliminar cuota (Requiere Clave Maestra)"
+                                >
+                                  <TrashIcon className="h-3.5 w-3.5 inline" />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -3802,6 +4220,7 @@ export default function Financing() {
                                   <th className="px-3 py-2.5 text-right text-[10px] font-black text-gray-400 uppercase tracking-wider">Mora</th>
                                   <th className="px-3 py-2.5 text-right text-[10px] font-black text-gray-400 uppercase tracking-wider">Total</th>
                                   <th className="px-3 py-2.5 text-center text-[10px] font-black text-gray-400 uppercase tracking-wider">Estado</th>
+                                  <th className="px-2 py-2.5 text-center text-[10px] font-black text-gray-400 uppercase tracking-wider w-10">Eliminar</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60">
@@ -3921,6 +4340,16 @@ export default function Financing() {
                                             </button>
                                           )}
                                         </div>
+                                      </td>
+                                      <td className="px-2 py-2.5 text-center">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleRequestDeleteInstallment(inst, e)}
+                                          className="p-1.5 text-gray-400 hover:text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                          title="Eliminar esta cuota (Requiere Clave Maestra)"
+                                        >
+                                          <TrashIcon className="h-3.5 w-3.5 mx-auto" />
+                                        </button>
                                       </td>
                                     </tr>
                                   );
@@ -4099,91 +4528,21 @@ export default function Financing() {
                         <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm flex items-center gap-1.5">
-                                <span>{paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}</span>
-                                {paymentType === 'cuotas' && (
-                                  <PencilSquareIcon className="w-3.5 h-3.5 text-[#ED1C24]" title="Puedes editar el monto si el cliente paga de más" />
-                                )}
+                              <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
+                                {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}
                               </span>
-                              {paymentType === 'cuotas' && (
-                                <span className="text-[10px] text-gray-400 dark:text-zinc-400 block font-medium">
-                                  {surplusAmount > 0
-                                    ? `Cuota base: $${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                                    : 'Editable si el cliente paga de más'}
-                                </span>
-                              )}
                             </div>
 
                             {paymentType === 'abono' ? (
-                              <span className="font-black text-2xl text-emerald-600 dark:text-emerald-400">
-                                ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                              <span className="font-black text-2xl text-emerald-600 dark:text-emerald-400 font-mono">
+                                RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <div className="relative w-44 sm:w-48">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-red-600 dark:text-red-400 text-sm">
-                                    RD$
-                                  </span>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={customCuotasPayAmount}
-                                    onChange={(e) => setCustomCuotasPayAmount(formatCurrencyInput(e.target.value))}
-                                    placeholder={totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                                    className="w-full pl-11 pr-3 py-1.5 bg-red-50/70 dark:bg-zinc-800 border-2 border-red-300 dark:border-red-900/60 rounded-xl text-xl font-black font-mono text-[#ED1C24] dark:text-red-400 text-right focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-[#ED1C24] transition-all"
-                                  />
-                                </div>
-                              </div>
+                              <span className="font-black text-2xl text-[#ED1C24] dark:text-red-400 font-mono">
+                                RD$ {totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                              </span>
                             )}
                           </div>
-
-                          {/* Botón para restablecer al total de la cuota si fue modificado */}
-                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && parseCurrencyInput(customCuotasPayAmount) !== totalSelectedAmount && (
-                            <div className="flex items-center justify-between text-[11px] pt-0.5">
-                              <span className="text-gray-500 dark:text-zinc-400">
-                                Total cuota: <strong className="text-gray-700 dark:text-zinc-300">${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setCustomCuotasPayAmount('')}
-                                className="font-bold text-[#ED1C24] hover:underline cursor-pointer"
-                              >
-                                Restablecer monto exacto
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Alerta / Detalle de Sobrante a favor del cliente */}
-                          {paymentType === 'cuotas' && surplusAmount > 0 && (
-                            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-xl space-y-1">
-                              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                  <span>Sobrante a favor del cliente:</span>
-                                </span>
-                                <span className="font-mono font-black text-sm text-emerald-700 dark:text-emerald-300">
-                                  +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
-                                Este excedente de <strong>${surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se aplicará automáticamente al capital de la siguiente cuota
-                                {nextUnpaidInstallment ? ` (Cuota No. ${nextUnpaidInstallment.id} del ${nextUnpaidInstallment.dueDate})` : ''}.
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Advertencia si el monto es menor al total de cuotas seleccionadas */}
-                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount && (
-                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1 text-xs">
-                              <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold">
-                                <ExclamationTriangleIcon className="w-4 h-4 text-amber-600 shrink-0" />
-                                <span>Monto menor al total de cuotas</span>
-                              </div>
-                              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">
-                                El monto ingresado (${numCustomCuotas.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor a las cuotas seleccionadas (${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}). Si desea abonar menos, seleccione la opción <strong>Hacer Abono Parcial</strong>.
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -4460,8 +4819,7 @@ export default function Financing() {
                     {(() => {
                       const numCash = parseCurrencyInput(cashReceived);
                       const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
-                      const isCuotasUnderpaid = paymentType === 'cuotas' && customCuotasPayAmount.trim() !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount;
-                      const isInsufficient = isCashInsufficient || isCuotasUnderpaid;
+                      const isInsufficient = isCashInsufficient;
 
                       return (
                         <div className="pt-4 mt-6">
@@ -4477,13 +4835,11 @@ export default function Financing() {
                             }`}
                           >
                             <CheckCircleIcon className="h-6 w-6" />
-                            {isCuotasUnderpaid
-                              ? `Monto Menor al Total de Cuota (${totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                              : isCashInsufficient
-                                ? 'Efectivo Recibido Insuficiente'
-                                : paymentType === 'abono'
-                                  ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                                  : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                            {isCashInsufficient
+                              ? 'Efectivo Recibido Insuficiente'
+                              : paymentType === 'abono'
+                                ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
                           </button>
                         </div>
                       );
@@ -4936,31 +5292,31 @@ export default function Financing() {
             </div>
           </div>
 
-          {/* Tarjetas Informativas de Fechas: Fecha de Pago Realizada vs Fecha Programada / Vencimiento */}
-          <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-gray-50 rounded-xl border border-gray-300">
-            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
-              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
-                💵 Fecha de Pago Realizado
+          {/* Fechas Informativas de la Transacción (Impresión) */}
+          <div className="grid grid-cols-3 gap-4 mb-3 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+                Fecha de Pago
               </span>
               <p className="font-black text-black text-xs">
                 {activeReceiptData.paymentExecutionDate || activeReceiptData.date}
               </p>
-              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Cobro procesado en caja</span>
+              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Procesado en caja</span>
             </div>
 
-            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
-              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
-                🗓️ Fecha Programada de la Cuota
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+                Fecha Programada
               </span>
               <p className="font-black text-black text-xs">
                 {activeReceiptData.scheduledDueDate || activeReceiptData.paidInstallments?.[0]?.dueDate || selectedFinancing?.nextPayment || 'N/A'}
               </p>
-              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Vencimiento predeterminado</span>
+              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Vencimiento de cuota</span>
             </div>
 
-            <div className="p-2.5 bg-white rounded-lg border border-gray-300">
-              <span className="text-[10px] font-black uppercase tracking-wider text-black block mb-0.5">
-                ⏳ Próxima Fecha de Pago
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+                Próximo Vencimiento
               </span>
               <p className="font-black text-black text-xs">
                 {activeReceiptData.newBalance <= 0 
@@ -4994,7 +5350,7 @@ export default function Financing() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Procesado Por</p>
               <p className="font-black text-black text-sm">{activeReceiptData.cashierName}</p>
-              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Rol: Cajero Principal</p>
+              <p className="text-[11px] text-gray-700 font-medium mt-0.5">{activeReceiptData.registerName || FINANCING_REGISTER}</p>
             </div>
           </div>
 
@@ -5055,7 +5411,16 @@ export default function Financing() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-xs">
-                {activeReceiptData.paymentType === 'abono' ? (
+                {activeReceiptData.paymentType === 'inicial' ? (
+                  <tr>
+                    <td className="py-3 px-4 font-bold text-black">Pago de Inicial / Enganche</td>
+                    <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">Inicial Contrato</td>
+                    <td className="py-3 px-4 text-right font-medium text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
+                    <td className="py-3 px-4 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                  </tr>
+                ) : activeReceiptData.paymentType === 'abono' ? (
                   <tr>
                     <td className="py-3 px-4 font-bold text-black">Abono Directo al Capital Principal</td>
                     <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
@@ -5068,7 +5433,7 @@ export default function Financing() {
                   <>
                     {activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                       <tr key={inst.id}>
-                        <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length}</td>
+                        <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length || selectedFinancing?.months || selectedFinancing?.installmentsCount || inst.id}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold text-black">{inst.dueDate}</td>
                         <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -5144,12 +5509,14 @@ export default function Financing() {
             <div className="text-center">
               <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
               <p className="text-[10px] font-black text-black uppercase tracking-wider">Caja / Firma Autorizada</p>
-              <p className="text-[9px] font-bold text-black mt-0.5">{activeReceiptData.cashierName || 'Cajero(a) Autorizado(a)'} (Cajero/a)</p>
+              <p className="text-xs font-black text-black mt-1">{activeReceiptData.cashierName || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado'}</p>
+              <p className="text-[9px] font-medium text-gray-700">{activeReceiptData.registerName || FINANCING_REGISTER} (Cajera / Cajero)</p>
             </div>
             <div className="text-center">
               <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
               <p className="text-[10px] font-black text-black uppercase tracking-wider">Firma del Cliente</p>
-              <p className="text-[9px] text-gray-700 mt-0.5">{activeReceiptData.customerName}</p>
+              <p className="text-xs font-black text-black mt-1">{activeReceiptData.customerName}</p>
+              <p className="text-[9px] font-medium text-gray-700">{activeReceiptData.customerCode || 'Cliente Titular'}</p>
             </div>
           </div>
         </div>,
@@ -5333,6 +5700,108 @@ export default function Financing() {
                         <>
                           <TrashIcon className="w-4 h-4" />
                           <span>Eliminar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal de Confirmación con Clave Maestra para Eliminar Cuota Individual */}
+        {installmentToDelete && (
+          <div className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 10 }}
+              className="bg-white dark:bg-[#15161c] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800"
+            >
+              <div className="p-6 text-center">
+                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200/60 dark:border-red-900/40 mb-3 shadow-xs">
+                  <LockClosedIcon className="h-7 w-7 stroke-[2]" />
+                </div>
+
+                <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                  Autorización Requerida para Eliminar Cuota
+                </h3>
+
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1.5 px-2 leading-relaxed">
+                  Está a punto de eliminar la <strong className="text-gray-900 dark:text-white font-bold">Cuota #{installmentToDelete.id}</strong> (vencimiento: <strong className="text-gray-900 dark:text-white font-bold">{installmentToDelete.dueDate}</strong>) por valor de <strong className="text-gray-900 dark:text-white font-bold">RD$ {Number(installmentToDelete.total || installmentToDelete.amount || 0).toLocaleString('es-DO')}</strong>.
+                </p>
+
+                {(installmentToDelete.isPaid || installmentToDelete.status === 'Pagado') && (
+                  <div className="mt-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2 text-left">
+                    <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span><strong>Advertencia:</strong> Esta cuota figura como PAGADA. Eliminarla afectará el balance y cálculos del financiamiento.</span>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-2 px-2">
+                  Ingrese la <span className="text-[#ED1C24] font-bold">Clave Maestra</span> de administrador para confirmar esta acción.
+                </p>
+
+                <form onSubmit={handleConfirmDeleteInstallmentWithKey} className="mt-5 space-y-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 uppercase tracking-wider text-center">
+                      Clave Maestra
+                    </label>
+                    <div className="relative">
+                      <input
+                        autoFocus
+                        type={showDeleteInstallmentMasterKeyText ? 'text' : 'password'}
+                        value={deleteInstallmentMasterKey}
+                        onChange={(e) => {
+                          setDeleteInstallmentMasterKey(e.target.value);
+                          setDeleteInstallmentMasterKeyError('');
+                        }}
+                        placeholder="••••••"
+                        className="block w-full text-center py-2.5 px-10 text-lg font-bold font-mono tracking-widest bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-[#ED1C24] focus:border-[#ED1C24] outline-none transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteInstallmentMasterKeyText(!showDeleteInstallmentMasterKeyText)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300 p-1 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showDeleteInstallmentMasterKeyText ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {deleteInstallmentMasterKeyError && (
+                      <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-1 mt-1.5 text-center animate-in fade-in">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span>{deleteInstallmentMasterKeyError}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isDeletingInstallment}
+                      onClick={() => {
+                        setInstallmentToDelete(null);
+                        setDeleteInstallmentMasterKey('');
+                        setDeleteInstallmentMasterKeyError('');
+                      }}
+                      className="w-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-zinc-700 text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isDeletingInstallment || !deleteInstallmentMasterKey.trim()}
+                      className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      {isDeletingInstallment ? (
+                        <span>Eliminando...</span>
+                      ) : (
+                        <>
+                          <TrashIcon className="w-4 h-4" />
+                          <span>Eliminar Cuota</span>
                         </>
                       )}
                     </button>

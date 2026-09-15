@@ -175,6 +175,39 @@ CREATE TABLE IF NOT EXISTS public.installments (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 6.1 RECIBOS DE PAGO DE FINANCIAMIENTOS (FINANCING_RECEIPTS)
+CREATE TABLE IF NOT EXISTS public.financing_receipts (
+    id TEXT PRIMARY KEY,
+    receipt_number TEXT NOT NULL,
+    financing_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    payment_date TEXT,
+    payment_execution_date TEXT,
+    scheduled_due_date TEXT,
+    next_payment_date TEXT,
+    payment_type TEXT NOT NULL DEFAULT 'cuotas',
+    paid_installments JSONB DEFAULT '[]'::jsonb,
+    abono_amount DECIMAL(15, 2) DEFAULT 0.00,
+    surplus_amount DECIMAL(15, 2),
+    total_paid DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    new_balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    customer_name TEXT NOT NULL,
+    customer_code TEXT,
+    item_name TEXT NOT NULL,
+    chassis TEXT,
+    item_plate TEXT,
+    cashier_name TEXT NOT NULL,
+    payment_method TEXT DEFAULT 'Efectivo',
+    register_name TEXT DEFAULT 'Caja Cobros & Financiamientos',
+    amount_received DECIMAL(15, 2),
+    change_given DECIMAL(15, 2),
+    bank_name TEXT,
+    reference_number TEXT,
+    payment_notes TEXT,
+    qr_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 7. ÓRDENES DE TRABAJO E INSPECCIONES DE TALLER
 CREATE TABLE IF NOT EXISTS public.work_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,6 +331,10 @@ CREATE POLICY "All Financings" ON public.financings FOR ALL USING (true) WITH CH
 DROP POLICY IF EXISTS "All Installments" ON public.installments;
 CREATE POLICY "All Installments" ON public.installments FOR ALL USING (true) WITH CHECK (true);
 
+ALTER TABLE public.financing_receipts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "All Financing Receipts" ON public.financing_receipts;
+CREATE POLICY "All Financing Receipts" ON public.financing_receipts FOR ALL USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "All Work Orders" ON public.work_orders;
 CREATE POLICY "All Work Orders" ON public.work_orders FOR ALL USING (true) WITH CHECK (true);
 
@@ -322,3 +359,5 @@ CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON public.inventory_items(barco
 CREATE INDEX IF NOT EXISTS idx_inventory_type ON public.inventory_items(type);
 CREATE INDEX IF NOT EXISTS idx_customers_document ON public.customers(document_id);
 CREATE INDEX IF NOT EXISTS idx_cash_closures_created_at ON public.cash_closures(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_financing_receipts_fid ON public.financing_receipts(financing_id);
+CREATE INDEX IF NOT EXISTS idx_financing_receipts_created_at ON public.financing_receipts(created_at DESC);

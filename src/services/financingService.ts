@@ -638,5 +638,56 @@ export const persistFinancingInstallments = (
     return fin;
   });
   saveLocalStorageFinancings(updatedList);
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const targetId = uuidRegex.test(financingId) ? financingId : (updatedFinancing?.rawId && uuidRegex.test(updatedFinancing.rawId) ? updatedFinancing.rawId : null);
+  if (isSupabaseConfigured() && targetId) {
+    const updatePayload: any = {};
+    if (updatedFinancing.amount !== undefined) {
+      updatePayload.financed_amount = Number(updatedFinancing.amount);
+    }
+    if (updatedFinancing.status !== undefined) {
+      updatePayload.status = mapStatusToDb(updatedFinancing.status);
+    }
+    if (Object.keys(updatePayload).length > 0) {
+      supabase.from('financings').update(updatePayload).eq('id', targetId).then();
+    }
+  }
 };
 
+export const deleteInstallment = async (
+  financingId: string,
+  installmentId: number | string,
+  dbId?: string
+): Promise<boolean> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (isSupabaseConfigured() && dbId && uuidRegex.test(dbId)) {
+    try {
+      await supabase.from('installments').delete().eq('id', dbId);
+    } catch (err) {
+      console.warn('Error deleting installment from Supabase:', err);
+    }
+  }
+
+  const current = getLocalStorageFinancings();
+  const updatedList = current.map(fin => {
+    if (fin.id !== financingId && String(fin.id) !== String(financingId)) {
+      return fin;
+    }
+    const filteredInstallments = (fin.installments || []).filter(inst => {
+      if (dbId && inst.id === dbId) return false;
+      if (String(inst.installment_number) === String(installmentId)) return false;
+      if (String(inst.id) === String(installmentId)) return false;
+      return true;
+    });
+
+    return {
+      ...fin,
+      installments_count: filteredInstallments.length,
+      installments: filteredInstallments,
+    };
+  });
+
+  saveLocalStorageFinancings(updatedList);
+  return true;
+};
