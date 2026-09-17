@@ -27,7 +27,7 @@ const routeNames: Record<string, string> = {
   '/cobros': 'Cobros de Repuestos (POS)',
   '/clientes': 'Directorio de Clientes',
   '/inventario': 'Inventario',
-  '/financiamientos': 'Finanzas & Financiamientos',
+  '/financiamientos': 'Financiamientos',
   '/reportes': 'Reportes & Informes',
   '/configuracion': 'Configuración del Sistema',
   '/usuarios': 'Gestión de Usuarios',

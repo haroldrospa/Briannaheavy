@@ -35,7 +35,7 @@ const navigation = [
   { name: 'Inventario', href: '/inventario', icon: WrenchScrewdriverIcon },
   { name: 'Herramientas', href: '/herramientas', icon: WrenchIcon },
   { name: 'Catálogo', href: '/catalogo', icon: TruckIcon },
-  { name: 'Finanzas', href: '/financiamientos', icon: BanknotesIcon },
+  { name: 'Financiamientos', href: '/financiamientos', icon: BanknotesIcon },
   { name: 'Banco', href: '/bancos', icon: BuildingLibraryIcon },
   { name: 'Reportes', href: '/reportes', icon: DocumentChartBarIcon, badge: '2' },
   { name: 'Usuarios', href: '/configuracion?tab=usuarios', icon: ShieldCheckIcon },

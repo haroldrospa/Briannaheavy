@@ -636,6 +636,31 @@ export const markInstallmentPaid = async (
   return true;
 };
 
+export const updateInstallmentInDb = async (
+  installmentId: string,
+  updates: {
+    principal_amount?: number;
+    amount?: number;
+    paid_amount?: number;
+    status?: 'Pendiente' | 'Pagado' | 'En Mora';
+    paid_date?: string | null;
+  }
+): Promise<boolean> => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (isSupabaseConfigured() && uuidRegex.test(installmentId)) {
+    try {
+      await supabase
+        .from('installments')
+        .update(updates)
+        .eq('id', installmentId);
+      return true;
+    } catch (err) {
+      console.warn('Error updating installment in Supabase:', err);
+    }
+  }
+  return false;
+};
+
 export const persistFinancingInstallments = (
   financingId: string,
   updatedFinancing: any
@@ -664,6 +689,33 @@ export const persistFinancingInstallments = (
     }
     if (Object.keys(updatePayload).length > 0) {
       supabase.from('financings').update(updatePayload).eq('id', targetId).then();
+    }
+
+    if (Array.isArray(updatedFinancing.installments)) {
+      for (const inst of updatedFinancing.installments) {
+        const instDbId = inst.dbId || (inst.id && uuidRegex.test(String(inst.id)) ? inst.id : null);
+        if (instDbId) {
+          const instPayload: any = {};
+          if (inst.capital !== undefined || inst.principal_amount !== undefined) {
+            instPayload.principal_amount = Number(inst.capital ?? inst.principal_amount) || 0;
+          }
+          if (inst.total !== undefined || inst.amount !== undefined) {
+            instPayload.amount = Number(inst.total ?? inst.amount) || 0;
+          }
+          if (inst.paidAmount !== undefined || inst.paid_amount !== undefined) {
+            instPayload.paid_amount = Number(inst.paidAmount ?? inst.paid_amount) || 0;
+          }
+          if (inst.status !== undefined) {
+            instPayload.status = inst.status === 'Pagado' ? 'Pagado' : 'Pendiente';
+          }
+          if (inst.paidDate !== undefined || inst.paid_date !== undefined) {
+            instPayload.paid_date = inst.paidDate || inst.paid_date || null;
+          }
+          if (Object.keys(instPayload).length > 0) {
+            supabase.from('installments').update(instPayload).eq('id', instDbId).then();
+          }
+        }
+      }
     }
   }
 };

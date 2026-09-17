@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -22,6 +22,7 @@ import {
   deleteFinancing,
   deleteInstallment,
   markInstallmentPaid,
+  updateInstallmentInDb,
   revertInstallmentPayment,
   persistFinancingInstallments,
   type Installment 
@@ -1422,6 +1423,8 @@ export default function Financing() {
   // Abonos State
   const [paymentType, setPaymentType] = useState<'cuotas' | 'abono' | 'recibos'>('cuotas');
   const [abonoAmount, setAbonoAmount] = useState<string>('');
+  const [customCuotasPayAmount, setCustomCuotasPayAmount] = useState<string>('');
+  const [applyCashAsSurplus, setApplyCashAsSurplus] = useState<boolean>(true);
   
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
@@ -1575,6 +1578,9 @@ export default function Financing() {
     setShowAccountStatement(false);
     setShowPaymentForm(false);
     setSelectedInstallmentIds([]);
+    setCustomCuotasPayAmount('');
+    setApplyCashAsSurplus(true);
+    setCashReceived('');
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
     setLastReceipt(null);
@@ -1673,9 +1679,26 @@ export default function Financing() {
   const totalSelectedAmount = selectedInsts.reduce((sum: number, inst: MappedInstallment) => sum + inst.total, 0);
 
   const numAbono = parseCurrencyInput(abonoAmount);
+  const numCustomCuotas = parseCurrencyInput(customCuotasPayAmount);
+  const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+
+  const surplusFromCustom = paymentType === 'cuotas' && numCustomCuotas > totalSelectedAmount
+    ? Math.round((numCustomCuotas - totalSelectedAmount) * 100) / 100
+    : 0;
+
+  const surplusFromCash = paymentType === 'cuotas' && numCustomCuotas === 0 && paymentMethod === 'Efectivo' && applyCashAsSurplus && numCash > totalSelectedAmount
+    ? Math.round((numCash - totalSelectedAmount) * 100) / 100
+    : 0;
+
+  const surplusAmount = surplusFromCustom > 0 ? surplusFromCustom : surplusFromCash;
+
   const effectivePayAmount = paymentType === 'abono'
     ? numAbono
-    : totalSelectedAmount;
+    : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && applyCashAsSurplus ? surplusFromCash : 0)));
+
+  const nextUnpaidInstallment = useMemo(() => {
+    return currentInstallments.find(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado');
+  }, [currentInstallments, selectedInstallmentIds]);
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
   const handleToggleSequentialInstallment = (targetInstId: number) => {
@@ -1707,9 +1730,15 @@ export default function Financing() {
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
 
-      const totalPaid = totalSelectedAmount;
-      const surplus = 0;
-      let remainingSurplus = 0;
+      const numCustom = parseCurrencyInput(customCuotasPayAmount);
+      if (customCuotasPayAmount.trim() !== '' && numCustom > 0 && numCustom < totalSelectedAmount) {
+        alert(`El monto ingresado ($${numCustom.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor al total de las cuotas seleccionadas ($${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}).`);
+        return;
+      }
+
+      const surplus = surplusAmount;
+      let remainingSurplus = surplus;
+      const totalPaid = totalSelectedAmount + surplus;
 
       const paidList = [...selectedInsts];
       const totalCap = totalSelectedCapital + surplus;
@@ -1726,8 +1755,8 @@ export default function Financing() {
         : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
 
       const activeCashier = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || getActiveShift(FINANCING_REGISTER)?.cashier_name || 'Harold Rosado';
-      const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
-      const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
+      const numCashRec = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+      const amountRec = paymentMethod === 'Efectivo' ? (numCashRec > 0 ? numCashRec : totalPaid) : totalPaid;
       const change = paymentMethod === 'Efectivo' ? Math.max(0, amountRec - totalPaid) : 0;
       const selectedAccount = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
       const finalBank = paymentMethod === 'Transferencia' 
@@ -1744,8 +1773,9 @@ export default function Financing() {
       const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
         if (selectedInstallmentIds.includes(inst.id)) {
           const paidInstTotal = inst.total;
-          if (inst.dbId) {
-            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, paidInstTotal);
+          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
+          if (instDbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, paidInstTotal);
           }
           return {
             ...inst,
@@ -1756,20 +1786,36 @@ export default function Financing() {
           };
         }
 
-        if (!inst.isPaid && remainingSurplus > 0) {
-          const applied = Math.min(inst.capital, remainingSurplus);
+        if (!inst.isPaid && inst.status !== 'Pagado' && remainingSurplus > 0) {
+          const currentCapital = Number(inst.capital ?? inst.principal_amount ?? 0);
+          const applied = Math.min(currentCapital, remainingSurplus);
           remainingSurplus -= applied;
-          const newCapital = Math.max(0, inst.capital - applied);
+          const newCapital = Math.max(0, currentCapital - applied);
           const isFullyPaid = newCapital <= 0;
-          if (inst.dbId) {
-            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), inst.dbId, applied);
+          const newTotal = newCapital + (Number(inst.interest) || Number(inst.interest_amount) || 0) + (Number(inst.penalty) || 0);
+          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
+
+          if (instDbId) {
+            if (isFullyPaid) {
+              markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, applied);
+            } else {
+              updateInstallmentInDb(instDbId, {
+                principal_amount: newCapital,
+                amount: newCapital + (Number(inst.interest) || Number(inst.interest_amount) || 0),
+                paid_amount: (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + applied,
+                status: 'Pendiente',
+              });
+            }
           }
           return {
             ...inst,
             capital: newCapital,
+            principal_amount: newCapital,
             isPaid: isFullyPaid,
             status: isFullyPaid ? 'Pagado' : inst.status,
-            total: newCapital + inst.interest + inst.penalty,
+            total: newTotal,
+            amount: newTotal,
+            paidAmount: (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + applied,
             paidDate: isFullyPaid ? paidIsoDate : inst.paidDate,
           };
         }
@@ -1777,7 +1823,7 @@ export default function Financing() {
         return inst;
       });
 
-      const remainingUnpaid = updatedInsts.filter((i: any) => !i.isPaid);
+      const remainingUnpaid = updatedInsts.filter((i: any) => !i.isPaid && i.status !== 'Pagado');
       const nextDue = newBal <= 0 
         ? 'Totalmente Saldado' 
         : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
@@ -1828,7 +1874,7 @@ export default function Financing() {
       setViewingReceipt(newReceipt);
       setLastReceipt(newReceipt as any);
 
-      const allPaid = updatedInsts.every((i: any) => i.isPaid);
+      const allPaid = updatedInsts.every((i: any) => i.isPaid || i.status === 'Pagado');
       const updatedFin = {
         ...selectedFinancing,
         amount: newBal,
@@ -1840,6 +1886,8 @@ export default function Financing() {
       setSelectedFinancing(updatedFin);
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setSelectedInstallmentIds([]);
+      setCustomCuotasPayAmount('');
+      setApplyCashAsSurplus(true);
       setCashReceived('');
       setReferenceNumber('');
       setPaymentNotes('');
@@ -2024,7 +2072,7 @@ export default function Financing() {
       paymentType: paymentType,
       paidInstallments: paidList,
       abonoAmount: numAbono,
-      surplusAmount: undefined,
+      surplusAmount: paymentType === 'cuotas' && surplusAmount > 0 ? surplusAmount : undefined,
       totalPaid: totalPaid,
       newBalance: newBal,
       customerName: selectedFinancing?.customer || 'Cliente General',
@@ -2041,7 +2089,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, customCuotasPayAmount, applyCashAsSurplus, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -4758,8 +4806,15 @@ export default function Financing() {
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
-                                {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Pagar'}
+                                {paymentType === 'abono' ? 'Total a Abonar' : 'Monto Recibido / Total a Cobrar'}
                               </span>
+                              {paymentType === 'cuotas' && (
+                                <span className="text-[10px] text-gray-400 dark:text-zinc-400 block font-medium">
+                                  {surplusAmount > 0
+                                    ? `Cuota base: $${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                    : 'Editable si el cliente entrega o transfiere un monto mayor (sobrante)'}
+                                </span>
+                              )}
                             </div>
 
                             {paymentType === 'abono' ? (
@@ -4767,11 +4822,68 @@ export default function Financing() {
                                 RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                               </span>
                             ) : (
-                              <span className="font-black text-2xl text-[#ED1C24] dark:text-red-400 font-mono">
-                                RD$ {totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative w-44 sm:w-52">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-red-600 dark:text-red-400 text-sm">
+                                    RD$
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={customCuotasPayAmount}
+                                    onChange={(e) => setCustomCuotasPayAmount(formatCurrencyInput(e.target.value))}
+                                    placeholder={totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                    className="w-full pl-11 pr-3 py-1.5 bg-red-50/70 dark:bg-zinc-800 border-2 border-red-300 dark:border-red-900/60 rounded-xl text-xl font-black font-mono text-[#ED1C24] dark:text-red-400 text-right focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-[#ED1C24] transition-all"
+                                  />
+                                </div>
+                              </div>
                             )}
                           </div>
+
+                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && parseCurrencyInput(customCuotasPayAmount) !== totalSelectedAmount && (
+                            <div className="flex items-center justify-between text-[11px] pt-0.5">
+                              <span className="text-gray-500 dark:text-zinc-400">
+                                Total cuota base: <strong className="text-gray-700 dark:text-zinc-300">${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCustomCuotasPayAmount('')}
+                                className="font-bold text-[#ED1C24] hover:underline cursor-pointer"
+                              >
+                                Restablecer monto exacto
+                              </button>
+                            </div>
+                          )}
+
+                          {paymentType === 'cuotas' && surplusAmount > 0 && (
+                            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-2xl space-y-1.5 animate-in fade-in">
+                              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span>Sobrante a favor del cliente:</span>
+                                </span>
+                                <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-300">
+                                  +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
+                                Este excedente de <strong>RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se aplicará automáticamente como abono al capital de la(s) siguiente(s) cuota(s) del cliente
+                                {nextUnpaidInstallment ? ` (Cuota #${nextUnpaidInstallment.id} con vencimiento el ${nextUnpaidInstallment.dueDate})` : ''}.
+                              </p>
+                            </div>
+                          )}
+
+                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount && (
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1 text-xs">
+                              <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold">
+                                <ExclamationTriangleIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span>Monto menor al total de cuotas</span>
+                              </div>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">
+                                El monto ingresado (${numCustomCuotas.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor a las cuotas seleccionadas (${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}). Si desea abonar menos, seleccione la opción <strong>Hacer Abono Parcial</strong>.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -4895,12 +5007,63 @@ export default function Financing() {
                               )}
                             </div>
 
+                            {/* Opciones cuando el efectivo supera el total de la cuota */}
+                            {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && customCuotasPayAmount.trim() === '' && (
+                              <div className="p-3 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl space-y-2">
+                                <p className="text-xs font-bold text-gray-700 dark:text-zinc-300">
+                                  El cliente entregó <strong className="text-emerald-600 dark:text-emerald-400">RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> por encima de la cuota:
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setApplyCashAsSurplus(true)}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold text-left flex items-center gap-2 border transition-all cursor-pointer ${
+                                      applyCashAsSurplus
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-400'
+                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
+                                    }`}
+                                  >
+                                    <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <span>Aplicar como Sobrante a siguiente cuota</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setApplyCashAsSurplus(false)}
+                                    className={`py-2 px-3 rounded-lg text-xs font-bold text-left flex items-center gap-2 border transition-all cursor-pointer ${
+                                      !applyCashAsSurplus
+                                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-200 shadow-xs ring-1 ring-amber-400'
+                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
+                                    }`}
+                                  >
+                                    <BanknotesIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span>Entregar como Devuelta / Cambio</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Cálculo de Devuelta o Alerta de Faltante */}
                             {(() => {
                               const numCash = parseCurrencyInput(cashReceived);
                               if (!cashReceived || numCash === 0) return null;
-                              if (numCash >= effectivePayAmount) {
-                                const change = numCash - effectivePayAmount;
+                              const requiredAmount = effectivePayAmount;
+                              if (numCash >= requiredAmount) {
+                                const change = numCash - requiredAmount;
+                                if (change === 0 && surplusAmount > 0) {
+                                  return (
+                                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between">
+                                      <div>
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 block">
+                                          Total Cubierto + Sobrante Aplicado
+                                        </span>
+                                        <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 font-mono">
+                                          RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} asignado a capital (sin devuelta pendiente)
+                                        </span>
+                                      </div>
+                                      <CheckCircleIcon className="h-8 w-8 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    </div>
+                                  );
+                                }
                                 return (
                                   <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between">
                                     <div>
@@ -4915,7 +5078,7 @@ export default function Financing() {
                                   </div>
                                 );
                               } else {
-                                const missing = effectivePayAmount - numCash;
+                                const missing = requiredAmount - numCash;
                                 return (
                                   <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-center justify-between">
                                     <div>
@@ -5048,7 +5211,8 @@ export default function Financing() {
                     {(() => {
                       const numCash = parseCurrencyInput(cashReceived);
                       const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
-                      const isInsufficient = isCashInsufficient;
+                      const isCuotasUnderpaid = paymentType === 'cuotas' && customCuotasPayAmount.trim() !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount;
+                      const isInsufficient = isCashInsufficient || isCuotasUnderpaid;
 
                       return (
                         <div className="pt-4 mt-6">
@@ -5066,8 +5230,12 @@ export default function Financing() {
                             <CheckCircleIcon className="h-6 w-6" />
                             {isCashInsufficient
                               ? 'Efectivo Recibido Insuficiente'
+                              : isCuotasUnderpaid
+                              ? 'Monto Menor al Total de Cuotas'
                               : paymentType === 'abono'
                                 ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                : surplusAmount > 0
+                                ? `Confirmar Pago + Sobrante ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
                                 : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
                           </button>
                         </div>
