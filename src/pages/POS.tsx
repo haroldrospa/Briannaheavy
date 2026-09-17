@@ -1898,7 +1898,44 @@ export default function POS() {
       }
     };
     loadPosData();
-  }, []);
+
+    const handleInventoryUpdate = () => {
+      const currentInv = getLocalStorageInventory();
+      if (currentInv) {
+        setDbProducts(currentInv.map(mapInventoryItemToProduct));
+      }
+    };
+
+    const handleCustomersUpdate = () => {
+      const currentCust = getLocalStorageCustomers();
+      if (currentCust) {
+        setDbClients(currentCust.map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
+          rnc: c.document_id,
+        })));
+      }
+    };
+
+    const handleInvoicesUpdate = () => {
+      const currentInvs = getLocalStorageInvoices();
+      if (currentInvs) {
+        setSessionSales(filterInvoicesByShift(currentInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+        setActiveQuotationsCount(getActiveQuotationsCount());
+      }
+    };
+
+    window.addEventListener('brianna_inventory_updated', handleInventoryUpdate);
+    window.addEventListener('brianna_customers_updated', handleCustomersUpdate);
+    window.addEventListener('brianna_invoices_updated', handleInvoicesUpdate);
+
+    return () => {
+      window.removeEventListener('brianna_inventory_updated', handleInventoryUpdate);
+      window.removeEventListener('brianna_customers_updated', handleCustomersUpdate);
+      window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);
+    };
+  }, [activeRegister, currentUserName]);
 
   const filteredProducts = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase();

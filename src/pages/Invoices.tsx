@@ -12,11 +12,13 @@ import {
   ExclamationTriangleIcon,
   BoltIcon,
   PrinterIcon,
-  EyeIcon
+  EyeIcon,
+  ReceiptRefundIcon
 } from '@heroicons/react/24/outline';
 import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
+import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
@@ -46,6 +48,7 @@ export default function Invoices() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [creditNoteInvoice, setCreditNoteInvoice] = useState<Invoice | null>(null);
   const [receiptFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
 
 
@@ -317,7 +320,7 @@ export default function Invoices() {
                     </div>
 
                     {/* Bottom Actions Row */}
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-200/50 dark:border-zinc-800/60">
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-200/50 dark:border-zinc-800/60 gap-1.5">
                       <button
                         type="button"
                         onClick={() => setViewingInvoice(invoice)}
@@ -325,6 +328,16 @@ export default function Invoices() {
                       >
                         <EyeIcon className="w-4 h-4 text-[#ED1C24]" />
                         <span>Ver Factura</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCreditNoteInvoice(invoice)}
+                        className="py-1.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-[#ED1C24] dark:text-red-300 text-xs font-bold rounded-xl border border-red-200/60 dark:border-red-800/40 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        title="Emitir Nota de Crédito (DGII)"
+                      >
+                        <ReceiptRefundIcon className="w-4 h-4 text-[#ED1C24]" />
+                        <span>NC</span>
                       </button>
 
                       {isAdmin && (
@@ -441,6 +454,14 @@ export default function Invoices() {
                               title="Ver Comprobante Fiscal / Imprimir Recibo"
                             >
                               <EyeIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCreditNoteInvoice(invoice)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                              title="Emitir Nota de Crédito (DGII)"
+                            >
+                              <ReceiptRefundIcon className="h-4 w-4 text-red-500" />
                             </button>
                             {isAdmin && (
                               <>
@@ -872,6 +893,14 @@ export default function Invoices() {
         />,
         document.body
       )}
+
+      {/* Modal para emitir Nota de Crédito directamente desde la factura */}
+      <NewCreditNoteModal
+        isOpen={Boolean(creditNoteInvoice)}
+        onClose={() => setCreditNoteInvoice(null)}
+        preselectedInvoice={creditNoteInvoice}
+        onCreated={() => loadData()}
+      />
     </motion.div>
   );
 }

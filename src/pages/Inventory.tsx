@@ -48,6 +48,15 @@ export default function Inventory() {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      setInventory(getLocalStorageInventory());
+    };
+
+    window.addEventListener('brianna_inventory_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('brianna_inventory_updated', handleUpdate);
+    };
   }, []);
 
   const handleSaveItem = useCallback(async (item: any) => {

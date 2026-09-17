@@ -2,14 +2,17 @@ export interface SequenceSettings {
   // Facturación Electrónica e-CF (DGII)
   seqE31: string; // Factura de Crédito Fiscal Electrónica (E31)
   seqE32: string; // Factura de Consumo Electrónica (E32)
+  seqE34: string; // Nota de Crédito Electrónica (E34)
   seqE45: string; // Comprobante Gubernamental Electrónico (E45)
   expiryE31: string;
   expiryE32: string;
+  expiryE34: string;
   expiryE45: string;
   
   // Facturación Interna y Cotizaciones
   seqInternalInvoice: string; // Factura Interna (INT-)
   seqQuotation: string; // Cotización (CT-)
+  seqNCInternal: string; // Nota de Crédito Interna (NC-)
 
   // Secuencias Operativas
   seqInspection: string;
@@ -19,29 +22,36 @@ export interface SequenceSettings {
   // Propiedades retrocompatibles opcionales
   seqB01?: string;
   seqB02?: string;
+  seqB04?: string; // Nota de Crédito tradicional B04
   seqB15?: string;
   expiryB01?: string;
   expiryB02?: string;
+  expiryB04?: string;
   expiryB15?: string;
 }
 
 export const DEFAULT_SEQUENCES: SequenceSettings = {
   seqE31: '0000000001',
   seqE32: '0000000001',
+  seqE34: '0000000001',
   seqE45: '0000000001',
   expiryE31: '2027-12-31',
   expiryE32: '2027-12-31',
+  expiryE34: '2027-12-31',
   expiryE45: '2027-12-31',
   seqInternalInvoice: '000001',
   seqQuotation: '000001',
+  seqNCInternal: '000001',
   seqInspection: '0001',
   seqWorkOrder: '0001',
   seqReport: '1',
   seqB01: '0000000001',
   seqB02: '0000000001',
+  seqB04: '0000000001',
   seqB15: '0000000001',
   expiryB01: '2027-12-31',
   expiryB02: '2027-12-31',
+  expiryB04: '2027-12-31',
   expiryB15: '2027-12-31',
 };
 
@@ -67,32 +77,40 @@ export function formatSequence8Digits(val: string): string {
 export function loadSequenceSettings(): SequenceSettings {
   const e31 = localStorage.getItem('brianna_seq_e31') || localStorage.getItem('brianna_seq_b01') || DEFAULT_SEQUENCES.seqE31;
   const e32 = localStorage.getItem('brianna_seq_e32') || localStorage.getItem('brianna_seq_b02') || DEFAULT_SEQUENCES.seqE32;
+  const e34 = localStorage.getItem('brianna_seq_e34') || localStorage.getItem('brianna_seq_b04') || DEFAULT_SEQUENCES.seqE34;
   const e45 = localStorage.getItem('brianna_seq_e45') || localStorage.getItem('brianna_seq_b15') || DEFAULT_SEQUENCES.seqE45;
 
   const expiryE31 = localStorage.getItem('brianna_expiry_e31') || localStorage.getItem('brianna_expiry_b01') || DEFAULT_SEQUENCES.expiryE31;
   const expiryE32 = localStorage.getItem('brianna_expiry_e32') || localStorage.getItem('brianna_expiry_b02') || DEFAULT_SEQUENCES.expiryE32;
+  const expiryE34 = localStorage.getItem('brianna_expiry_e34') || localStorage.getItem('brianna_expiry_b04') || DEFAULT_SEQUENCES.expiryE34;
   const expiryE45 = localStorage.getItem('brianna_expiry_e45') || localStorage.getItem('brianna_expiry_b15') || DEFAULT_SEQUENCES.expiryE45;
 
   const rawInt = localStorage.getItem('brianna_seq_invoice') || DEFAULT_SEQUENCES.seqInternalInvoice;
   const rawCt = localStorage.getItem('brianna_seq_ct') || DEFAULT_SEQUENCES.seqQuotation;
+  const rawNcInt = localStorage.getItem('brianna_seq_nc_internal') || DEFAULT_SEQUENCES.seqNCInternal;
 
   return {
     seqE31: formatSequence10Digits(e31),
     seqE32: formatSequence10Digits(e32),
+    seqE34: formatSequence10Digits(e34),
     seqE45: formatSequence10Digits(e45),
     expiryE31,
     expiryE32,
+    expiryE34,
     expiryE45,
     seqInternalInvoice: formatSequence6Digits(rawInt),
     seqQuotation: formatSequence6Digits(rawCt),
+    seqNCInternal: formatSequence6Digits(rawNcInt),
     seqInspection: localStorage.getItem('brianna_inspection_seq') || DEFAULT_SEQUENCES.seqInspection,
     seqWorkOrder: localStorage.getItem('brianna_workorder_seq') || DEFAULT_SEQUENCES.seqWorkOrder,
     seqReport: localStorage.getItem('brianna_report_seq') || DEFAULT_SEQUENCES.seqReport,
     seqB01: formatSequence10Digits(e31),
     seqB02: formatSequence10Digits(e32),
+    seqB04: formatSequence10Digits(e34),
     seqB15: formatSequence10Digits(e45),
     expiryB01: expiryE31,
     expiryB02: expiryE32,
+    expiryB04: expiryE34,
     expiryB15: expiryE45,
   };
 }
@@ -116,6 +134,16 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
     const val = formatSequence10Digits(settings.seqB02);
     localStorage.setItem('brianna_seq_e32', val);
     localStorage.setItem('brianna_seq_b02', val);
+  }
+
+  if (settings.seqE34 !== undefined) {
+    const val = formatSequence10Digits(settings.seqE34);
+    localStorage.setItem('brianna_seq_e34', val);
+    localStorage.setItem('brianna_seq_b04', val);
+  } else if (settings.seqB04 !== undefined) {
+    const val = formatSequence10Digits(settings.seqB04);
+    localStorage.setItem('brianna_seq_e34', val);
+    localStorage.setItem('brianna_seq_b04', val);
   }
 
   if (settings.seqE45 !== undefined) {
@@ -144,6 +172,14 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
     localStorage.setItem('brianna_expiry_b02', settings.expiryB02);
   }
 
+  if (settings.expiryE34 !== undefined) {
+    localStorage.setItem('brianna_expiry_e34', settings.expiryE34);
+    localStorage.setItem('brianna_expiry_b04', settings.expiryE34);
+  } else if (settings.expiryB04 !== undefined) {
+    localStorage.setItem('brianna_expiry_e34', settings.expiryB04);
+    localStorage.setItem('brianna_expiry_b04', settings.expiryB04);
+  }
+
   if (settings.expiryE45 !== undefined) {
     localStorage.setItem('brianna_expiry_e45', settings.expiryE45);
     localStorage.setItem('brianna_expiry_b15', settings.expiryE45);
@@ -160,6 +196,10 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
     const val = formatSequence6Digits(settings.seqQuotation);
     localStorage.setItem('brianna_seq_ct', val);
   }
+  if (settings.seqNCInternal !== undefined) {
+    const val = formatSequence6Digits(settings.seqNCInternal);
+    localStorage.setItem('brianna_seq_nc_internal', val);
+  }
 
   if (settings.seqInspection !== undefined) localStorage.setItem('brianna_inspection_seq', settings.seqInspection);
   if (settings.seqWorkOrder !== undefined) localStorage.setItem('brianna_workorder_seq', settings.seqWorkOrder);
@@ -172,20 +212,25 @@ export function resetAllSequencesToZero(): SequenceSettings {
   const zeroSettings: SequenceSettings = {
     seqE31: '0000000001',
     seqE32: '0000000001',
+    seqE34: '0000000001',
     seqE45: '0000000001',
     expiryE31: '2027-12-31',
     expiryE32: '2027-12-31',
+    expiryE34: '2027-12-31',
     expiryE45: '2027-12-31',
     seqInternalInvoice: '000001',
     seqQuotation: '000001',
+    seqNCInternal: '000001',
     seqInspection: '0001',
     seqWorkOrder: '0001',
     seqReport: '1',
     seqB01: '0000000001',
     seqB02: '0000000001',
+    seqB04: '0000000001',
     seqB15: '0000000001',
     expiryB01: '2027-12-31',
     expiryB02: '2027-12-31',
+    expiryB04: '2027-12-31',
     expiryB15: '2027-12-31',
   };
   saveSequenceSettings(zeroSettings);

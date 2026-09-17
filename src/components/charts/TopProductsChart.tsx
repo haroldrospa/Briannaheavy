@@ -25,7 +25,22 @@ export default function TopProductsChart() {
       }
     };
     load();
-    return () => { isMounted = false; };
+
+    const handleUpdate = () => {
+      if (isMounted) {
+        setInventory(getLocalStorageInventory());
+        setInvoices(getLocalStorageInvoices());
+      }
+    };
+
+    window.addEventListener('brianna_inventory_updated', handleUpdate);
+    window.addEventListener('brianna_invoices_updated', handleUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('brianna_inventory_updated', handleUpdate);
+      window.removeEventListener('brianna_invoices_updated', handleUpdate);
+    };
   }, []);
 
   const topProducts = useMemo(() => {

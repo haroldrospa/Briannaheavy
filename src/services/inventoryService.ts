@@ -167,12 +167,104 @@ export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
       console.warn('No fue posible persistir inventario en localStorage (se mantiene en memoria activa):', innerErr);
     }
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+  }
+};
+
+let lastInventoryFetchTime = 0;
+const INVENTORY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache in memory
+
+export const parseInventoryRow = (row: any, local?: InventoryItem): InventoryItem => {
+  const meta = decodeDescriptionMeta(row.description || '');
+
+  let itemImages: string[] = [];
+  if (Array.isArray(meta.images) && meta.images.length > 0) {
+    itemImages = meta.images;
+  } else if (local && Array.isArray(local.images) && local.images.length > 0) {
+    itemImages = local.images;
+  } else if (row.image_url) {
+    itemImages = [row.image_url];
+  } else if (local?.image_url) {
+    itemImages = [local.image_url];
+  }
+
+  const primaryImage = itemImages[0] || row.image_url || local?.image_url || '';
+
+  return {
+    ...row,
+    id: String(row.id),
+    name: row.name || local?.name || '',
+    type: row.type || local?.type || 'Pieza',
+    brand: row.brand || local?.brand || '',
+    model: row.model || local?.model || '',
+    price: Number(row.price) || 0,
+    cost: Number(row.cost) || 0,
+    stock: Number(row.stock) || 0,
+    min_stock: Number(row.min_stock ?? local?.min_stock ?? 5),
+    description: meta.description || local?.description || '',
+    compatibility: meta.description || local?.compatibility || '',
+    department: row.location || meta.department || local?.department || 'Lote 1',
+    location: row.location || meta.department || local?.location || 'Lote 1',
+    includes_itbis: meta.includes_itbis !== undefined 
+      ? meta.includes_itbis 
+      : (local?.includes_itbis !== undefined ? local.includes_itbis : true),
+    itbis_type: meta.itbis_type || local?.itbis_type || 'incluido',
+    show_price: meta.show_price !== undefined 
+      ? meta.show_price 
+      : (local?.show_price !== undefined ? local.show_price : true),
+    images: itemImages,
+    image_url: primaryImage,
+    plate: meta.plate || (row as any).plate || local?.plate || '',
+    color: meta.color || (row as any).color || local?.color || '',
+  };
+};
+
+export const applyRealtimeInventoryChange = (
+  eventType: string,
+  newRecord: any,
+  oldRecord: any
+): void => {
+  const current = getLocalStorageInventory();
+  if (eventType === 'DELETE' && oldRecord?.id) {
+    const filtered = current.filter(it => String(it.id) !== String(oldRecord.id));
+    saveLocalStorageInventory(filtered);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+    }
+    return;
+  }
+
+  if (newRecord?.id) {
+    const local = current.find(it => String(it.id) === String(newRecord.id));
+    const parsed = parseInventoryRow(newRecord, local);
+    let updated: InventoryItem[];
+    if (eventType === 'INSERT') {
+      updated = [parsed, ...current.filter(it => String(it.id) !== String(parsed.id))];
+    } else {
+      updated = current.map(it => String(it.id) === String(parsed.id) ? parsed : it);
+      if (!updated.some(it => String(it.id) === String(parsed.id))) {
+        updated.unshift(parsed);
+      }
+    }
+    saveLocalStorageInventory(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+    }
+  }
 };
 
 export const fetchInventory = async (forceRefresh = false): Promise<InventoryItem[]> => {
   if (isSupabaseConfigured()) {
-    if (!forceRefresh && inFlightInventoryPromise) {
-      return inFlightInventoryPromise;
+    const now = Date.now();
+    // Cache en memoria: no consultar Supabase si los datos están frescos
+    if (!forceRefresh) {
+      if (inMemoryInventory && inMemoryInventory.length > 0 && (now - lastInventoryFetchTime < INVENTORY_CACHE_TTL)) {
+        return inMemoryInventory;
+      }
+      if (inFlightInventoryPromise) {
+        return inFlightInventoryPromise;
+      }
     }
 
     inFlightInventoryPromise = (async () => {
@@ -187,52 +279,11 @@ export const fetchInventory = async (forceRefresh = false): Promise<InventoryIte
           const localItems = getLocalStorageInventory();
           const localMap = new Map(localItems.map(it => [String(it.id), it]));
 
-          const items: InventoryItem[] = (data as any[]).map(row => {
-            const meta = decodeDescriptionMeta(row.description || '');
-            const local = localMap.get(String(row.id));
+          const items: InventoryItem[] = (data as any[]).map(row => 
+            parseInventoryRow(row, localMap.get(String(row.id)))
+          );
 
-            let itemImages: string[] = [];
-            if (Array.isArray(meta.images) && meta.images.length > 0) {
-              itemImages = meta.images;
-            } else if (local && Array.isArray(local.images) && local.images.length > 0) {
-              itemImages = local.images;
-            } else if (row.image_url) {
-              itemImages = [row.image_url];
-            } else if (local?.image_url) {
-              itemImages = [local.image_url];
-            }
-
-            const primaryImage = itemImages[0] || row.image_url || local?.image_url || '';
-
-            return {
-              ...row,
-              id: String(row.id),
-              name: row.name || local?.name || '',
-              type: row.type || local?.type || 'Pieza',
-              brand: row.brand || local?.brand || '',
-              model: row.model || local?.model || '',
-              price: Number(row.price) || 0,
-              cost: Number(row.cost) || 0,
-              stock: Number(row.stock) || 0,
-              min_stock: Number(row.min_stock ?? local?.min_stock ?? 5),
-              description: meta.description || local?.description || '',
-              compatibility: meta.description || local?.compatibility || '',
-              department: row.location || meta.department || local?.department || 'Lote 1',
-              location: row.location || meta.department || local?.location || 'Lote 1',
-              includes_itbis: meta.includes_itbis !== undefined 
-                ? meta.includes_itbis 
-                : (local?.includes_itbis !== undefined ? local.includes_itbis : true),
-              itbis_type: meta.itbis_type || local?.itbis_type || 'incluido',
-              show_price: meta.show_price !== undefined 
-                ? meta.show_price 
-                : (local?.show_price !== undefined ? local.show_price : true),
-              images: itemImages,
-              image_url: primaryImage,
-              plate: meta.plate || (row as any).plate || local?.plate || '',
-              color: meta.color || (row as any).color || local?.color || '',
-            };
-          });
-
+          lastInventoryFetchTime = Date.now();
           saveLocalStorageInventory(items);
           return items;
         }
@@ -289,16 +340,22 @@ const sanitizeForSupabase = (item: Partial<InventoryItem>): Record<string, any> 
   }
 
   // Supabase primary image
+  let primaryImg: string | null = null;
   if (item.image_url !== undefined || (Array.isArray(item.images) && item.images.length > 0)) {
-    const img = (Array.isArray(item.images) && item.images.length > 0) ? item.images[0] : (item.image_url || null);
-    payload.image_url = img;
+    primaryImg = (Array.isArray(item.images) && item.images.length > 0) ? item.images[0] : (item.image_url || null);
+    payload.image_url = primaryImg;
   }
+
+  // Only store secondary images in metadata to prevent storing huge base64 twice
+  const secondaryImages = Array.isArray(item.images) && item.images.length > 1
+    ? item.images.slice(1).filter(img => img !== primaryImg)
+    : undefined;
 
   // Encode extended attributes cleanly into description
   const hasMetaFields = item.includes_itbis !== undefined || 
                         item.itbis_type !== undefined || 
                         item.show_price !== undefined || 
-                        (Array.isArray(item.images) && item.images.length > 0) ||
+                        (secondaryImages && secondaryImages.length > 0) ||
                         item.department !== undefined ||
                         item.plate !== undefined ||
                         item.color !== undefined;
@@ -309,7 +366,7 @@ const sanitizeForSupabase = (item: Partial<InventoryItem>): Record<string, any> 
       includes_itbis: item.includes_itbis,
       itbis_type: item.itbis_type,
       show_price: item.show_price,
-      images: item.images,
+      images: secondaryImages,
       department: item.department || item.location,
       plate: item.plate,
       color: item.color,

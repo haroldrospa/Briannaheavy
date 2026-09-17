@@ -39,6 +39,7 @@ const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const Reports = lazyWithRetry(() => import('./pages/Reports'));
 const Customers = lazyWithRetry(() => import('./pages/Customers'));
 const Invoices = lazyWithRetry(() => import('./pages/Invoices'));
+const CreditNotes = lazyWithRetry(() => import('./pages/CreditNotes'));
 const Banks = lazyWithRetry(() => import('./pages/Banks'));
 const Catalog = lazyWithRetry(() => import('./pages/Catalog'));
 const Tools = lazyWithRetry(() => import('./pages/Tools'));
@@ -87,6 +88,7 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/clientes" element={<Customers />} />
                   <Route path="/facturas" element={<Invoices />} />
+                  <Route path="/notas-credito" element={<CreditNotes />} />
                   <Route path="/usuarios" element={<Navigate to="/configuracion?tab=usuarios" replace />} />
                   <Route path="/pos" element={<POS />} />
                   <Route path="/cobros" element={<Cobros />} />
@@ -109,6 +111,9 @@ function App() {
                   <Route path="/catalog" element={<Navigate to="/catalogo" replace />} />
                   <Route path="/customers" element={<Navigate to="/clientes" replace />} />
                   <Route path="/invoices" element={<Navigate to="/facturas" replace />} />
+                  <Route path="/nota-credito" element={<Navigate to="/notas-credito" replace />} />
+                  <Route path="/credit-notes" element={<Navigate to="/notas-credito" replace />} />
+                  <Route path="/credit-note" element={<Navigate to="/notas-credito" replace />} />
                   <Route path="/users" element={<Navigate to="/configuracion?tab=usuarios" replace />} />
                   <Route path="/permisos" element={<Navigate to="/configuracion?tab=permisos" replace />} />
                   <Route path="/financing" element={<Navigate to="/financiamientos" replace />} />

@@ -251,8 +251,31 @@ export default function Reports() {
     };
 
     loadRealData();
+
+    const handleUpdate = () => {
+      if (isMounted) {
+        const invs = getLocalStorageInvoices();
+        const fins = getLocalStorageFinancings();
+        const custs = getLocalStorageCustomers();
+        const items = getLocalStorageInventory();
+        const closures = getLocalStorageCashClosures();
+        setDbData(mapReportsData(invs, fins, custs, items, closures));
+      }
+    };
+
+    window.addEventListener('brianna_invoices_updated', handleUpdate);
+    window.addEventListener('brianna_financings_updated', handleUpdate);
+    window.addEventListener('brianna_customers_updated', handleUpdate);
+    window.addEventListener('brianna_inventory_updated', handleUpdate);
+    window.addEventListener('brianna_cash_closures_updated', handleUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('brianna_invoices_updated', handleUpdate);
+      window.removeEventListener('brianna_financings_updated', handleUpdate);
+      window.removeEventListener('brianna_customers_updated', handleUpdate);
+      window.removeEventListener('brianna_inventory_updated', handleUpdate);
+      window.removeEventListener('brianna_cash_closures_updated', handleUpdate);
     };
   }, []);
 

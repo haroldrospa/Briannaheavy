@@ -36,15 +36,29 @@ export default function Dashboard() {
 
   useEffect(() => {
     let isMounted = true;
-    const loadMetrics = async () => {
-      const data = await fetchDashboardMetrics();
+    const loadMetrics = async (force = false) => {
+      const data = await fetchDashboardMetrics(force);
       if (isMounted) {
         setMetrics(data);
       }
     };
     loadMetrics();
+
+    const handleUpdate = () => {
+      loadMetrics(true);
+    };
+
+    window.addEventListener('brianna_invoices_updated', handleUpdate);
+    window.addEventListener('brianna_inventory_updated', handleUpdate);
+    window.addEventListener('brianna_customers_updated', handleUpdate);
+    window.addEventListener('brianna_financings_updated', handleUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('brianna_invoices_updated', handleUpdate);
+      window.removeEventListener('brianna_inventory_updated', handleUpdate);
+      window.removeEventListener('brianna_customers_updated', handleUpdate);
+      window.removeEventListener('brianna_financings_updated', handleUpdate);
     };
   }, []);
 

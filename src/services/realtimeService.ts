@@ -1,15 +1,17 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { fetchInvoices } from './invoicesService';
-import { fetchInventory } from './inventoryService';
-import { fetchCustomers } from './customersService';
+import { fetchInvoices, applyRealtimeInvoiceChange } from './invoicesService';
+import { fetchInventory, applyRealtimeInventoryChange } from './inventoryService';
+import { fetchCustomers, applyRealtimeCustomerChange } from './customersService';
 import { fetchAllSystemSettings } from './settingsService';
 import { fetchCashClosures } from './cashClosuresService';
 import { fetchCashMovements } from './cashMovementsService';
+import { fetchFinancings } from './financingService';
+import { fetchCreditNotes } from './creditNotesService';
 
 let isRealtimeInitialized = false;
 
 /**
- * Inicializa los canales de Supabase Realtime para recibir cambios en vivo.
+ * Inicializa los canales de Supabase Realtime para recibir cambios en vivo de manera eficiente sin saturar el egress.
  */
 export const initRealtimeSync = (): (() => void) => {
   if (typeof window === 'undefined' || !isSupabaseConfigured() || isRealtimeInitialized) {
@@ -18,26 +20,25 @@ export const initRealtimeSync = (): (() => void) => {
 
   isRealtimeInitialized = true;
 
-  // 1. Carga inicial directa desde la base de datos
+  // 1. Carga inicial controlada (aprovecha la caché local y memoria, evitando consultas redundantes)
   fetchAllSystemSettings();
-  fetchInvoices(true);
-  fetchInventory(true);
-  fetchCustomers(true);
-  fetchCashClosures(true);
-  fetchCashMovements(true);
+  fetchInvoices(false);
+  fetchInventory(false);
+  fetchCustomers(false);
+  fetchCashClosures(false);
+  fetchCashMovements(false);
+  fetchFinancings(false);
+  fetchCreditNotes(false);
 
-  // 2. Canal en vivo para Invoices
+  // 2. Canal en vivo para Invoices: actualiza la caché local inmediatamente
   const invoicesChannel = supabase
     .channel('brianna_realtime_invoices')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'invoices' },
-      async () => {
+      (payload: any) => {
         try {
-          await fetchInvoices(true);
-          window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
-          window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
-          window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
+          applyRealtimeInvoiceChange(payload.eventType, payload.new, payload.old);
         } catch (err) {
           console.warn('Invoices realtime error:', err);
         }
@@ -45,16 +46,15 @@ export const initRealtimeSync = (): (() => void) => {
     )
     .subscribe();
 
-  // 3. Canal en vivo para Inventario
+  // 3. Canal en vivo para Inventario: aplica el cambio puntual al item en memoria/local (0 bytes de Egress)
   const inventoryChannel = supabase
     .channel('brianna_realtime_inventory')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'inventory_items' },
-      async () => {
+      (payload: any) => {
         try {
-          await fetchInventory(true);
-          window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
+          applyRealtimeInventoryChange(payload.eventType, payload.new, payload.old);
         } catch (err) {
           console.warn('Inventory realtime error:', err);
         }
@@ -62,16 +62,15 @@ export const initRealtimeSync = (): (() => void) => {
     )
     .subscribe();
 
-  // 4. Canal en vivo para Clientes
+  // 4. Canal en vivo para Clientes: actualiza la lista local al instante
   const customersChannel = supabase
     .channel('brianna_realtime_customers')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'customers' },
-      async () => {
+      (payload: any) => {
         try {
-          await fetchCustomers(true);
-          window.dispatchEvent(new CustomEvent('brianna_customers_updated'));
+          applyRealtimeCustomerChange(payload.eventType, payload.new, payload.old);
         } catch (err) {
           console.warn('Customers realtime error:', err);
         }
@@ -79,7 +78,39 @@ export const initRealtimeSync = (): (() => void) => {
     )
     .subscribe();
 
-  // 5. Canal en vivo para Configuraciones Globales (system_settings)
+  // 5. Canal en vivo para Financiamientos
+  const financingsChannel = supabase
+    .channel('brianna_realtime_financings')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'financings' },
+      async () => {
+        try {
+          await fetchFinancings(true);
+        } catch (err) {
+          console.warn('Financings realtime error:', err);
+        }
+      }
+    )
+    .subscribe();
+
+  // 6. Canal en vivo para Notas de Crédito
+  const creditNotesChannel = supabase
+    .channel('brianna_realtime_credit_notes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'credit_notes' },
+      async () => {
+        try {
+          await fetchCreditNotes(true);
+        } catch (err) {
+          console.warn('Credit notes realtime error:', err);
+        }
+      }
+    )
+    .subscribe();
+
+  // 7. Canal en vivo para Configuraciones Globales (system_settings)
   const settingsChannel = supabase
     .channel('brianna_realtime_settings')
     .on(
@@ -95,7 +126,7 @@ export const initRealtimeSync = (): (() => void) => {
     )
     .subscribe();
 
-  // 6. Canal en vivo para Movimientos de Caja
+  // 8. Canal en vivo para Movimientos de Caja
   const movementsChannel = supabase
     .channel('brianna_realtime_movements')
     .on(
@@ -113,7 +144,7 @@ export const initRealtimeSync = (): (() => void) => {
     )
     .subscribe();
 
-  // 7. Canal en vivo para Arqueos de Caja
+  // 9. Canal en vivo para Arqueos de Caja
   const closuresChannel = supabase
     .channel('brianna_realtime_closures')
     .on(
@@ -134,6 +165,8 @@ export const initRealtimeSync = (): (() => void) => {
     supabase.removeChannel(invoicesChannel);
     supabase.removeChannel(inventoryChannel);
     supabase.removeChannel(customersChannel);
+    supabase.removeChannel(financingsChannel);
+    supabase.removeChannel(creditNotesChannel);
     supabase.removeChannel(settingsChannel);
     supabase.removeChannel(movementsChannel);
     supabase.removeChannel(closuresChannel);

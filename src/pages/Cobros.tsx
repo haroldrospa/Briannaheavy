@@ -174,6 +174,15 @@ export default function Cobros() {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      setReceivables(mapInvoicesToReceivables(getLocalStorageInvoices()));
+    };
+
+    window.addEventListener('brianna_invoices_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('brianna_invoices_updated', handleUpdate);
+    };
   }, [loadData]);
 
   // Filtered List

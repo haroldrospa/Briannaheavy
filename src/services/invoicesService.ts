@@ -105,8 +105,39 @@ export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
   inMemoryInvoices = filtered;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+      window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
+    }
   } catch (e) {
     console.warn('Error saving invoices to localStorage:', e);
+  }
+};
+
+export const applyRealtimeInvoiceChange = (
+  eventType: string,
+  newRecord: any,
+  oldRecord: any
+): void => {
+  const current = getLocalStorageInvoices();
+  if (eventType === 'DELETE' && oldRecord?.id) {
+    const filtered = current.filter(inv => String(inv.id) !== String(oldRecord.id));
+    saveLocalStorageInvoices(filtered);
+    return;
+  }
+
+  if (newRecord?.id) {
+    if (isQuotationInvoice(newRecord)) return;
+    let updated: Invoice[];
+    if (eventType === 'INSERT') {
+      updated = [newRecord as Invoice, ...current.filter(inv => String(inv.id) !== String(newRecord.id))];
+    } else {
+      updated = current.map(inv => String(inv.id) === String(newRecord.id) ? { ...inv, ...newRecord } : inv);
+      if (!updated.some(inv => String(inv.id) === String(newRecord.id))) {
+        updated.unshift(newRecord as Invoice);
+      }
+    }
+    saveLocalStorageInvoices(updated);
   }
 };
 
@@ -138,10 +169,19 @@ const parseCtSeqNum = (inv: { invoice_number?: string; ncf?: string }): number |
   return null;
 };
 
+let lastInvoicesFetchTime = 0;
+const INVOICES_CACHE_TTL = 5 * 60 * 1000; // 5 minutos de caché
+
 export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> => {
   if (isSupabaseConfigured()) {
-    if (!forceRefresh && inFlightInvoicesPromise) {
-      return inFlightInvoicesPromise;
+    const now = Date.now();
+    if (!forceRefresh) {
+      if (inMemoryInvoices && inMemoryInvoices.length > 0 && (now - lastInvoicesFetchTime < INVOICES_CACHE_TTL)) {
+        return inMemoryInvoices;
+      }
+      if (inFlightInvoicesPromise) {
+        return inFlightInvoicesPromise;
+      }
     }
 
     inFlightInvoicesPromise = (async () => {
@@ -154,6 +194,7 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
 
         if (!error && data) {
           const supabaseInvoices = (data as Invoice[]).filter(inv => !isQuotationInvoice(inv));
+          lastInvoicesFetchTime = Date.now();
           saveLocalStorageInvoices(supabaseInvoices);
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos

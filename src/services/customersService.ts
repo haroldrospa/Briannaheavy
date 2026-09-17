@@ -40,15 +40,53 @@ export const saveLocalStorageCustomers = (customers: Customer[]): void => {
   inMemoryCustomers = customers;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(customers));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_customers_updated'));
+    }
   } catch (e) {
     console.warn('Error saving customers to localStorage:', e);
   }
 };
 
+export const applyRealtimeCustomerChange = (
+  eventType: string,
+  newRecord: any,
+  oldRecord: any
+): void => {
+  const current = getLocalStorageCustomers();
+  if (eventType === 'DELETE' && oldRecord?.id) {
+    const filtered = current.filter(c => String(c.id) !== String(oldRecord.id));
+    saveLocalStorageCustomers(filtered);
+    return;
+  }
+
+  if (newRecord?.id) {
+    let updated: Customer[];
+    if (eventType === 'INSERT') {
+      updated = [newRecord as Customer, ...current.filter(c => String(c.id) !== String(newRecord.id))];
+    } else {
+      updated = current.map(c => String(c.id) === String(newRecord.id) ? { ...c, ...newRecord } : c);
+      if (!updated.some(c => String(c.id) === String(newRecord.id))) {
+        updated.unshift(newRecord as Customer);
+      }
+    }
+    saveLocalStorageCustomers(updated);
+  }
+};
+
+let lastCustomersFetchTime = 0;
+const CUSTOMERS_CACHE_TTL = 10 * 60 * 1000; // 10 minutos de caché
+
 export const fetchCustomers = async (forceRefresh = false): Promise<Customer[]> => {
   if (isSupabaseConfigured()) {
-    if (!forceRefresh && inFlightCustomersPromise) {
-      return inFlightCustomersPromise;
+    const now = Date.now();
+    if (!forceRefresh) {
+      if (inMemoryCustomers && inMemoryCustomers.length > 0 && (now - lastCustomersFetchTime < CUSTOMERS_CACHE_TTL)) {
+        return inMemoryCustomers;
+      }
+      if (inFlightCustomersPromise) {
+        return inFlightCustomersPromise;
+      }
     }
 
     inFlightCustomersPromise = (async () => {
@@ -61,6 +99,7 @@ export const fetchCustomers = async (forceRefresh = false): Promise<Customer[]> 
 
         if (!error && data) {
           const customers = data as Customer[];
+          lastCustomersFetchTime = Date.now();
           saveLocalStorageCustomers(customers);
           return customers;
         }

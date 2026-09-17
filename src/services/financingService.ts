@@ -121,6 +121,9 @@ const saveLocalStorageFinancings = (items: Financing[]): void => {
   inMemoryFinancings = cleanItems;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanItems));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_financings_updated'));
+    }
   } catch (e) {
     console.warn('Error saving financings to localStorage:', e);
   }
@@ -295,12 +298,21 @@ export const syncPendingLocalFinancings = async (): Promise<void> => {
   }
 };
 
+let lastFinancingsFetchTime = 0;
+const FINANCINGS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos de caché
+
 export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]> => {
   const deletedIds = getDeletedFinancingIds();
 
   if (isSupabaseConfigured()) {
-    if (!forceRefresh && inFlightFinancingsPromise) {
-      return inFlightFinancingsPromise;
+    const now = Date.now();
+    if (!forceRefresh) {
+      if (inMemoryFinancings && inMemoryFinancings.length > 0 && (now - lastFinancingsFetchTime < FINANCINGS_CACHE_TTL)) {
+        return getLocalStorageFinancings();
+      }
+      if (inFlightFinancingsPromise) {
+        return inFlightFinancingsPromise;
+      }
     }
 
     inFlightFinancingsPromise = (async () => {
@@ -323,6 +335,7 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
                 ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
                 : f.installments
             }));
+          lastFinancingsFetchTime = Date.now();
           saveLocalStorageFinancings(financings);
           return financings;
         }

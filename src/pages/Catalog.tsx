@@ -52,8 +52,18 @@ export default function Catalog({ isPublic: isPublicProp }: CatalogProps) {
       }
     };
     loadData();
+
+    const handleUpdate = () => {
+      if (isMounted) {
+        setInventory(getLocalStorageInventory());
+      }
+    };
+
+    window.addEventListener('brianna_inventory_updated', handleUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('brianna_inventory_updated', handleUpdate);
     };
   }, []);
 

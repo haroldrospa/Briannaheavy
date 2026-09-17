@@ -449,8 +449,32 @@ export default function Financing() {
       }
     };
     loadDbData();
+
+    const handleFinancingsUpdate = () => {
+      if (isMounted) {
+        setFinancingsList(mapFinancingsToState(getLocalStorageFinancings()));
+      }
+    };
+    const handleCustomersUpdate = () => {
+      if (isMounted) {
+        setCustomersList(getLocalStorageCustomers());
+      }
+    };
+    const handleInventoryUpdate = () => {
+      if (isMounted) {
+        setInventoryList(getLocalStorageInventory());
+      }
+    };
+
+    window.addEventListener('brianna_financings_updated', handleFinancingsUpdate);
+    window.addEventListener('brianna_customers_updated', handleCustomersUpdate);
+    window.addEventListener('brianna_inventory_updated', handleInventoryUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('brianna_financings_updated', handleFinancingsUpdate);
+      window.removeEventListener('brianna_customers_updated', handleCustomersUpdate);
+      window.removeEventListener('brianna_inventory_updated', handleInventoryUpdate);
     };
   }, []);
   

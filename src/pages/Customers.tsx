@@ -55,6 +55,15 @@ export default function Customers() {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      setCustomers(getLocalStorageCustomers());
+    };
+
+    window.addEventListener('brianna_customers_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('brianna_customers_updated', handleUpdate);
+    };
   }, [loadData]);
 
   const handleSearchDgii = async (rncInput?: string) => {

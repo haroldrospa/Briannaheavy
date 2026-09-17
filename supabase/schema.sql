@@ -353,11 +353,63 @@ CREATE POLICY "All Cash Closures" ON public.cash_closures FOR ALL USING (true) W
 DROP POLICY IF EXISTS "All System Settings" ON public.system_settings;
 CREATE POLICY "All System Settings" ON public.system_settings FOR ALL USING (true) WITH CHECK (true);
 
+-- 9.1 NOTAS DE CRÉDITO (DGII e-CF E34, B04 & INTERNAS)
+CREATE TABLE IF NOT EXISTS public.credit_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    credit_note_number TEXT UNIQUE NOT NULL,
+    ncf TEXT,
+    ncf_type TEXT NOT NULL DEFAULT 'NC-INT',
+    invoice_id UUID REFERENCES public.invoices(id) ON DELETE SET NULL,
+    invoice_number TEXT NOT NULL,
+    ncf_modificado TEXT NOT NULL,
+    invoice_date TIMESTAMPTZ,
+    customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL,
+    customer_name TEXT NOT NULL,
+    customer_rnc TEXT,
+    reason_code TEXT NOT NULL DEFAULT '01',
+    reason_text TEXT NOT NULL,
+    subtotal DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    tax_amount DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    total_amount DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    return_to_inventory BOOLEAN DEFAULT false,
+    status TEXT DEFAULT 'Emitida',
+    cashier_name TEXT DEFAULT 'Sistema',
+    register_name TEXT DEFAULT 'Caja 1 - Repuestos',
+    is_electronic BOOLEAN DEFAULT false,
+    ecf_security_code TEXT,
+    ecf_track_id TEXT,
+    ecf_qr_url TEXT,
+    ecf_dgii_status TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.credit_note_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    credit_note_id UUID REFERENCES public.credit_notes(id) ON DELETE CASCADE,
+    item_id UUID REFERENCES public.inventory_items(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price DECIMAL(15, 2) NOT NULL,
+    total_price DECIMAL(15, 2) NOT NULL
+);
+
+ALTER TABLE public.credit_notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "All Credit Notes" ON public.credit_notes;
+CREATE POLICY "All Credit Notes" ON public.credit_notes FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.credit_note_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "All Credit Note Items" ON public.credit_note_items;
+CREATE POLICY "All Credit Note Items" ON public.credit_note_items FOR ALL USING (true) WITH CHECK (true);
+
 CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON public.invoices(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invoices_ncf ON public.invoices(ncf);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_created_at ON public.credit_notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_ncf ON public.credit_notes(ncf);
+CREATE INDEX IF NOT EXISTS idx_credit_notes_invoice ON public.credit_notes(invoice_number);
 CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON public.inventory_items(barcode);
 CREATE INDEX IF NOT EXISTS idx_inventory_type ON public.inventory_items(type);
 CREATE INDEX IF NOT EXISTS idx_customers_document ON public.customers(document_id);
 CREATE INDEX IF NOT EXISTS idx_cash_closures_created_at ON public.cash_closures(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_financing_receipts_fid ON public.financing_receipts(financing_id);
 CREATE INDEX IF NOT EXISTS idx_financing_receipts_created_at ON public.financing_receipts(created_at DESC);
+
