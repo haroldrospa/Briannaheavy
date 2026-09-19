@@ -640,6 +640,7 @@ export const updateInstallmentInDb = async (
   installmentId: string,
   updates: {
     principal_amount?: number;
+    interest_amount?: number;
     amount?: number;
     paid_amount?: number;
     status?: 'Pendiente' | 'Pagado' | 'En Mora';
@@ -698,6 +699,9 @@ export const persistFinancingInstallments = (
           const instPayload: any = {};
           if (inst.capital !== undefined || inst.principal_amount !== undefined) {
             instPayload.principal_amount = Number(inst.capital ?? inst.principal_amount) || 0;
+          }
+          if (inst.interest !== undefined || inst.interest_amount !== undefined) {
+            instPayload.interest_amount = Number(inst.interest ?? inst.interest_amount) || 0;
           }
           if (inst.total !== undefined || inst.amount !== undefined) {
             instPayload.amount = Number(inst.total ?? inst.amount) || 0;

@@ -91,7 +91,11 @@ export default function Tools() {
     serial_number: '',
     location: '',
     notes: '',
+    photo_url: '',
   });
+
+  // Modal para vista previa de fotos
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
   // Notificaciones Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -325,6 +329,7 @@ export default function Tools() {
       serial_number: '',
       location: 'Estante A',
       notes: '',
+      photo_url: '',
     });
     setIsToolModalOpen(true);
   };
@@ -340,8 +345,28 @@ export default function Tools() {
       serial_number: tool.serial_number || '',
       location: tool.location,
       notes: tool.notes || '',
+      photo_url: tool.photo_url || '',
     });
     setIsToolModalOpen(true);
+  };
+
+  const handleToolPhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressed = await compressImage(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.75,
+        mimeType: 'image/jpeg'
+      });
+      setToolForm(prev => ({ ...prev, photo_url: compressed }));
+      showToast('¡Foto de la herramienta agregada con éxito!');
+    } catch (err) {
+      console.error('Error al procesar la foto de la herramienta:', err);
+      showToast('No se pudo procesar la imagen de la herramienta', 'error');
+    }
   };
 
   const handleSubmitTool = async (e: React.FormEvent) => {
@@ -365,6 +390,7 @@ export default function Tools() {
           serial_number: toolForm.serial_number.trim() || undefined,
           location: toolForm.location.trim() || 'Taller General',
           notes: toolForm.notes.trim() || undefined,
+          photo_url: toolForm.photo_url ? toolForm.photo_url : undefined,
         });
         showToast('Herramienta actualizada con éxito');
       } else {
@@ -377,6 +403,7 @@ export default function Tools() {
           serial_number: toolForm.serial_number.trim() || undefined,
           location: toolForm.location.trim() || 'Taller General',
           notes: toolForm.notes.trim() || undefined,
+          photo_url: toolForm.photo_url ? toolForm.photo_url : undefined,
         });
         showToast('Nueva herramienta agregada al taller');
       }
@@ -715,16 +742,21 @@ export default function Tools() {
                     <div>
                       <div className="flex items-start gap-3 mb-3">
                         {tool.photo_url || loan?.photo_url ? (
-                          <div className="relative group shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoUrl(tool.photo_url || loan?.photo_url || null)}
+                            className="relative group shrink-0 text-left cursor-pointer"
+                            title="Click para ver foto ampliada"
+                          >
                             <img 
                               src={tool.photo_url || loan?.photo_url} 
                               alt={tool.name} 
-                              className="h-12 w-12 rounded-xl object-cover border-2 border-amber-400 shadow-2xs"
+                              className="h-12 w-12 rounded-xl object-cover border-2 border-amber-400 shadow-2xs group-hover:scale-105 transition-transform"
                             />
                             <div className="absolute -bottom-1 -right-1 bg-black/70 text-white p-0.5 rounded-full">
                               <CameraIcon className="w-3 h-3" />
                             </div>
-                          </div>
+                          </button>
                         ) : (
                           <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#C1121F] flex items-center justify-center shrink-0">
                             <WrenchIcon className="w-5 h-5" />
@@ -882,13 +914,36 @@ export default function Tools() {
                       return (
                         <tr key={tool.id} className="hover:bg-gray-50/60 dark:hover:bg-zinc-800/30 transition-colors">
                           <td className="py-3 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <span className="font-mono text-xs font-bold text-[#C1121F] dark:text-red-400 shrink-0">
-                                {tool.code}
-                              </span>
+                            <div className="flex items-center gap-3">
+                              {tool.photo_url ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPhotoUrl(tool.photo_url || null)}
+                                  className="relative group shrink-0 cursor-pointer"
+                                  title="Click para ver foto ampliada"
+                                >
+                                  <img
+                                    src={tool.photo_url}
+                                    alt={tool.name}
+                                    className="w-10 h-10 rounded-xl object-cover border border-gray-200 dark:border-zinc-700 shadow-2xs group-hover:scale-105 group-hover:ring-2 group-hover:ring-[#C1121F] transition-all"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <MagnifyingGlassIcon className="w-4 h-4 text-white" />
+                                  </div>
+                                </button>
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700/60 flex items-center justify-center text-gray-400 dark:text-zinc-500 shrink-0">
+                                  <WrenchIcon className="w-5 h-5" />
+                                </div>
+                              )}
                               <div>
-                                <div className="font-bold text-gray-900 dark:text-white">
-                                  {tool.name}
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs font-bold text-[#C1121F] dark:text-red-400 shrink-0">
+                                    {tool.code}
+                                  </span>
+                                  <span className="font-bold text-gray-900 dark:text-white">
+                                    {tool.name}
+                                  </span>
                                 </div>
                                 {tool.model && (
                                   <div className="text-[11px] text-gray-400 dark:text-zinc-500">
@@ -1048,19 +1103,18 @@ export default function Tools() {
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
                               {loan.photo_url ? (
-                                <a 
-                                  href={loan.photo_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
+                                <button 
+                                  type="button"
+                                  onClick={() => setPreviewPhotoUrl(loan.photo_url || null)}
                                   title="Ver foto de la herramienta"
-                                  className="shrink-0"
+                                  className="shrink-0 cursor-pointer"
                                 >
                                   <img 
                                     src={loan.photo_url} 
                                     alt={loan.tool_name} 
-                                    className="h-9 w-9 rounded-lg object-cover border border-amber-400 shadow-2xs hover:scale-110 transition-transform cursor-pointer"
+                                    className="h-9 w-9 rounded-lg object-cover border border-amber-400 shadow-2xs hover:scale-110 transition-transform"
                                   />
-                                </a>
+                                </button>
                               ) : null}
                               <div>
                                 <span className="font-mono text-[11px] font-bold text-[#C1121F] dark:text-red-400 mr-1.5">
@@ -1643,6 +1697,96 @@ export default function Tools() {
                   />
                 </div>
 
+                {/* Foto de la Herramienta */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 uppercase">
+                      Foto de la Herramienta (Opcional)
+                    </label>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                      📸 Cámara o Galería
+                    </span>
+                  </div>
+
+                  {toolForm.photo_url ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 dark:border-zinc-700 bg-gray-50/80 dark:bg-zinc-800/60 p-2.5">
+                      <div className="relative h-40 w-full flex items-center justify-center bg-black/5 dark:bg-black/30 rounded-xl overflow-hidden group">
+                        <img
+                          src={toolForm.photo_url}
+                          alt="Foto de la herramienta"
+                          className="h-full w-full object-contain"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPhotoUrl(toolForm.photo_url)}
+                            className="px-3 py-1.5 rounded-lg bg-black/70 hover:bg-black text-white text-xs font-bold transition-colors flex items-center gap-1"
+                          >
+                            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
+                            <span>Ver Ampliada</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 px-1">
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                          <CheckCircleIcon className="w-4 h-4" />
+                          Foto cargada
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <label className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5">
+                            <CameraIcon className="w-3.5 h-3.5 text-[#C1121F]" />
+                            <span>Cambiar</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleToolPhotoCapture}
+                              disabled={isSubmitting}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setToolForm(prev => ({ ...prev, photo_url: '' }))}
+                            className="px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/40 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 text-xs font-bold transition-colors flex items-center gap-1"
+                            title="Quitar foto"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Quitar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 bg-gray-50/60 dark:bg-zinc-800/40 hover:bg-red-50/30 hover:border-[#C1121F] dark:hover:border-red-800 text-gray-700 dark:text-zinc-300 text-xs font-bold cursor-pointer transition-all active:scale-[0.98]">
+                        <CameraIcon className="w-4 h-4 text-[#C1121F]" />
+                        <span>Tomar Foto</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={handleToolPhotoCapture}
+                          disabled={isSubmitting}
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-dashed border-gray-300 dark:border-zinc-700 bg-gray-50/60 dark:bg-zinc-800/40 hover:bg-red-50/30 hover:border-[#C1121F] dark:hover:border-red-800 text-gray-700 dark:text-zinc-300 text-xs font-bold cursor-pointer transition-all active:scale-[0.98]">
+                        <PhotoIcon className="w-4 h-4 text-[#C1121F]" />
+                        <span>Subir Imagen</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleToolPhotoCapture}
+                          disabled={isSubmitting}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 uppercase mb-1">
                     Notas Técnicas / Mantenimiento
@@ -1681,6 +1825,46 @@ export default function Tools() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: VISTA PREVIA DE FOTO EN TAMAÑO REAL */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {previewPhotoUrl && (
+          <div 
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+            onClick={() => setPreviewPhotoUrl(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-2xl w-full bg-white dark:bg-zinc-900 rounded-2xl p-4 shadow-2xl border border-gray-200 dark:border-zinc-800"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-3">
+                <span className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <CameraIcon className="w-4 h-4 text-[#C1121F]" />
+                  <span>Foto de la Herramienta</span>
+                </span>
+                <button
+                  onClick={() => setPreviewPhotoUrl(null)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="max-h-[75vh] flex items-center justify-center overflow-hidden rounded-xl bg-black/5 dark:bg-black/40">
+                <img
+                  src={previewPhotoUrl}
+                  alt="Herramienta ampliada"
+                  className="max-h-[70vh] w-auto object-contain rounded-lg"
+                />
+              </div>
             </motion.div>
           </div>
         )}

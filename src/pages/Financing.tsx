@@ -1696,9 +1696,6 @@ export default function Financing() {
     ? numAbono
     : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && applyCashAsSurplus ? surplusFromCash : 0)));
 
-  const nextUnpaidInstallment = useMemo(() => {
-    return currentInstallments.find(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado');
-  }, [currentInstallments, selectedInstallmentIds]);
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
   const handleToggleSequentialInstallment = (targetInstId: number) => {
@@ -1740,9 +1737,11 @@ export default function Financing() {
       let remainingSurplus = surplus;
       const totalPaid = totalSelectedAmount + surplus;
 
-      const paidList = [...selectedInsts];
-      const totalCap = totalSelectedCapital + surplus;
-      const newBal = Math.max(0, selectedFinancing.amount - totalCap);
+      const paidList: any[] = [...selectedInsts];
+      const surplusFullyPaidInsts: any[] = [];
+      let surplusPartiallyPaidInst: { inst: any; applied: number; remaining: number } | null = null;
+      let totalCapAmortized = totalSelectedCapital;
+
       const recNumber = getNextReceiptNumber();
       const now = new Date();
       const formattedDate = formatPaymentDateToSpanish(paymentDate);
@@ -1750,6 +1749,133 @@ export default function Financing() {
       const paidIsoDate = paymentDate 
         ? new Date(`${paymentDate}T${now.toTimeString().slice(0, 8)}`).toISOString() 
         : now.toISOString();
+
+      // Clonar y ordenar cuotas para procesamiento secuencial
+      const sortedCurrentInsts = [...(selectedFinancing.installments || [])].sort((a: any, b: any) => {
+        const numA = Number(a.installment_number) || Number(a.id) || 0;
+        const numB = Number(b.installment_number) || Number(b.id) || 0;
+        return numA - numB;
+      });
+
+      const updatedInsts: any[] = [];
+      for (const inst of sortedCurrentInsts) {
+        // 1. Cuota seleccionada directamente por el usuario
+        if (selectedInstallmentIds.includes(inst.id)) {
+          const paidInstTotal = inst.total;
+          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
+          if (instDbId) {
+            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, paidInstTotal);
+          }
+          updatedInsts.push({
+            ...inst,
+            status: 'Pagado',
+            isPaid: true,
+            paidAmount: paidInstTotal,
+            paidDate: paidIsoDate,
+          });
+          continue;
+        }
+
+        // 2. Si sobra dinero, se abona a la(s) siguiente(s) cuota(s) consecutivas (no solo al capital)
+        if (!inst.isPaid && inst.status !== 'Pagado' && remainingSurplus > 0) {
+          const instPenalty = Number(inst.penalty) || 0;
+          const instInterest = Number(inst.interest ?? inst.interest_amount) || 0;
+          const instCapital = Number(inst.capital ?? inst.principal_amount) || 0;
+          const instTotal = Number(inst.total ?? inst.amount) || (instPenalty + instInterest + instCapital);
+          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
+
+          // Caso A: El sobrante cubre la cuota completa
+          if (remainingSurplus >= instTotal) {
+            remainingSurplus = Math.round((remainingSurplus - instTotal) * 100) / 100;
+            totalCapAmortized += instCapital;
+
+            const fullyPaidInst = {
+              ...inst,
+              capital: instCapital,
+              interest: instInterest,
+              penalty: instPenalty,
+              total: instTotal,
+              amount: instTotal,
+              status: 'Pagado',
+              isPaid: true,
+              paidAmount: instTotal,
+              paidDate: paidIsoDate,
+            };
+
+            paidList.push(fullyPaidInst);
+            surplusFullyPaidInsts.push(fullyPaidInst);
+
+            if (instDbId) {
+              markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, instTotal);
+            }
+
+            updatedInsts.push(fullyPaidInst);
+            continue;
+          }
+
+          // Caso B: El sobrante abona parcialmente a esta cuota
+          const appliedToThisCuota = remainingSurplus;
+          remainingSurplus = 0;
+
+          // Se cubre en orden financiero: Mora -> Interés -> Capital
+          const appliedPenalty = Math.min(instPenalty, appliedToThisCuota);
+          const remAfterPenalty = appliedToThisCuota - appliedPenalty;
+
+          const appliedInterest = Math.min(instInterest, remAfterPenalty);
+          const remAfterInterest = remAfterPenalty - appliedInterest;
+
+          const appliedCapital = Math.min(instCapital, remAfterInterest);
+          totalCapAmortized += appliedCapital;
+
+          const newPenalty = Math.max(0, Math.round((instPenalty - appliedPenalty) * 100) / 100);
+          const newInterest = Math.max(0, Math.round((instInterest - appliedInterest) * 100) / 100);
+          const newCapital = Math.max(0, Math.round((instCapital - appliedCapital) * 100) / 100);
+          const newTotal = Math.max(0, Math.round((newPenalty + newInterest + newCapital) * 100) / 100);
+          const newPaidAmount = (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + appliedToThisCuota;
+
+          surplusPartiallyPaidInst = {
+            inst,
+            applied: appliedToThisCuota,
+            remaining: newTotal,
+          };
+
+          if (instDbId) {
+            updateInstallmentInDb(instDbId, {
+              principal_amount: newCapital,
+              interest_amount: newInterest,
+              amount: newTotal,
+              paid_amount: newPaidAmount,
+              status: 'Pendiente',
+            });
+          }
+
+          updatedInsts.push({
+            ...inst,
+            capital: newCapital,
+            principal_amount: newCapital,
+            interest: newInterest,
+            interest_amount: newInterest,
+            penalty: newPenalty,
+            total: newTotal,
+            amount: newTotal,
+            paidAmount: newPaidAmount,
+            paid_amount: newPaidAmount,
+            isPaid: false,
+            status: 'Pendiente',
+          });
+          continue;
+        }
+
+        updatedInsts.push(inst);
+      }
+
+      // Si aún quedó sobrante residual tras saldar todas las cuotas, amortiza al balance
+      if (remainingSurplus > 0) {
+        totalCapAmortized += remainingSurplus;
+        remainingSurplus = 0;
+      }
+
+      const newBal = Math.max(0, Math.round((selectedFinancing.amount - totalCapAmortized) * 100) / 100);
       const scheduledDue = paidList.length === 1 
         ? paidList[0].dueDate 
         : (paidList.length > 1 ? `${paidList[0].dueDate} al ${paidList[paidList.length - 1].dueDate}` : (selectedFinancing.nextPayment || 'N/A'));
@@ -1763,70 +1889,31 @@ export default function Financing() {
         ? (selectedAccount ? `${selectedAccount.bankName} - Cta. ${selectedAccount.accountNumber}` : (bankName || 'Transferencia Bancaria'))
         : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
-      const surplusNote = surplus > 0 
-        ? `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicado a capital de cuota(s) siguiente(s)`
-        : '';
+      let surplusNote = '';
+      if (surplus > 0) {
+        if (surplusFullyPaidInsts.length > 0 && surplusPartiallyPaidInst) {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} cubrió Cuota(s) #${surplusFullyPaidInsts.map(i => i.id).join(', #')} y abonó RD$ ${surplusPartiallyPaidInst.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })} a Cuota #${surplusPartiallyPaidInst.inst.id} (restante: RD$ ${surplusPartiallyPaidInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
+        } else if (surplusFullyPaidInsts.length > 0) {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} cubrió Cuota(s) #${surplusFullyPaidInsts.map(i => i.id).join(', #')} en su totalidad`;
+        } else if (surplusPartiallyPaidInst) {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a Cuota #${surplusPartiallyPaidInst.inst.id} (restante a pagar: RD$ ${surplusPartiallyPaidInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
+        } else {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a cuota(s) siguiente(s)`;
+        }
+      }
+
       const finalNotes = paymentNotes.trim()
         ? (surplusNote ? `${paymentNotes.trim()} | ${surplusNote}` : paymentNotes.trim())
         : (surplusNote || undefined);
-
-      const updatedInsts = (selectedFinancing.installments || []).map((inst: any) => {
-        if (selectedInstallmentIds.includes(inst.id)) {
-          const paidInstTotal = inst.total;
-          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
-          if (instDbId) {
-            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, paidInstTotal);
-          }
-          return {
-            ...inst,
-            status: 'Pagado',
-            isPaid: true,
-            paidAmount: paidInstTotal,
-            paidDate: paidIsoDate,
-          };
-        }
-
-        if (!inst.isPaid && inst.status !== 'Pagado' && remainingSurplus > 0) {
-          const currentCapital = Number(inst.capital ?? inst.principal_amount ?? 0);
-          const applied = Math.min(currentCapital, remainingSurplus);
-          remainingSurplus -= applied;
-          const newCapital = Math.max(0, currentCapital - applied);
-          const isFullyPaid = newCapital <= 0;
-          const newTotal = newCapital + (Number(inst.interest) || Number(inst.interest_amount) || 0) + (Number(inst.penalty) || 0);
-          const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
-
-          if (instDbId) {
-            if (isFullyPaid) {
-              markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, applied);
-            } else {
-              updateInstallmentInDb(instDbId, {
-                principal_amount: newCapital,
-                amount: newCapital + (Number(inst.interest) || Number(inst.interest_amount) || 0),
-                paid_amount: (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + applied,
-                status: 'Pendiente',
-              });
-            }
-          }
-          return {
-            ...inst,
-            capital: newCapital,
-            principal_amount: newCapital,
-            isPaid: isFullyPaid,
-            status: isFullyPaid ? 'Pagado' : inst.status,
-            total: newTotal,
-            amount: newTotal,
-            paidAmount: (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + applied,
-            paidDate: isFullyPaid ? paidIsoDate : inst.paidDate,
-          };
-        }
-
-        return inst;
-      });
 
       const remainingUnpaid = updatedInsts.filter((i: any) => !i.isPaid && i.status !== 'Pagado');
       const nextDue = newBal <= 0 
         ? 'Totalmente Saldado' 
         : (remainingUnpaid.length > 0 ? remainingUnpaid[0].dueDate : 'Totalmente Saldado');
+
+      const receiptSurplusAmt = surplusPartiallyPaidInst 
+        ? surplusPartiallyPaidInst.applied 
+        : (surplusFullyPaidInsts.length === 0 && surplus > 0 ? surplus : undefined);
 
       const newReceipt: FinancingPaymentReceipt = {
         id: `rec-${Date.now()}-${recNumber}`,
@@ -1847,7 +1934,7 @@ export default function Financing() {
           total: inst.total,
         })),
         abonoAmount: 0,
-        surplusAmount: surplus > 0 ? surplus : undefined,
+        surplusAmount: receiptSurplusAmt,
         totalPaid: totalPaid,
         newBalance: newBal,
         customerName: selectedFinancing.customer,
@@ -2029,12 +2116,41 @@ export default function Financing() {
         cashierName: (lr.cashierName && !lr.cashierName.toLowerCase().includes('carlos mendoza')) ? lr.cashierName : currentCashier,
       };
     }
-    const paidList = selectedInsts.length > 0 ? selectedInsts : currentInstallments.filter(i => i.isPaid);
+    let simulatedPaidList = [...selectedInsts];
+    let simulatedSurplus = surplusAmount;
+    let simulatedCapPaid = totalSelectedCapital;
+
+    if (paymentType === 'cuotas' && simulatedSurplus > 0) {
+      const unpaidRemaining = currentInstallments
+        .filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado')
+        .sort((a, b) => a.id - b.id);
+
+      let remSurp = simulatedSurplus;
+      for (const inst of unpaidRemaining) {
+        if (remSurp <= 0) break;
+        const instTot = inst.total;
+        if (remSurp >= instTot) {
+          remSurp = Math.round((remSurp - instTot) * 100) / 100;
+          simulatedCapPaid += inst.capital;
+          simulatedPaidList.push(inst);
+        } else {
+          // Abono parcial a la cuota: Mora -> Interés -> Capital
+          const remAfterPen = Math.max(0, remSurp - inst.penalty);
+          const remAfterInt = Math.max(0, remAfterPen - inst.interest);
+          const appliedCap = Math.min(inst.capital, remAfterInt);
+          simulatedCapPaid += appliedCap;
+          remSurp = 0;
+        }
+      }
+      simulatedSurplus = remSurp;
+    }
+
+    const paidList = simulatedPaidList.length > 0 ? simulatedPaidList : currentInstallments.filter(i => i.isPaid);
     const totalPaid = paymentType === 'abono'
       ? numAbono
       : (effectivePayAmount > 0 ? effectivePayAmount : (totalSelectedAmount > 0 ? totalSelectedAmount : paidList.reduce((s, i) => s + i.total, 0)));
-    const cuotasCapPaid = (totalSelectedCapital > 0 ? totalSelectedCapital : paidList.reduce((s, i) => s + i.capital, 0)) + Math.max(0, (effectivePayAmount || 0) - (totalSelectedAmount || 0));
-    const newBal = selectedFinancing ? Math.max(0, selectedFinancing.amount - (paymentType === 'abono' ? numAbono : cuotasCapPaid)) : 0;
+    const cuotasCapPaid = simulatedCapPaid > 0 ? simulatedCapPaid : paidList.reduce((s, i) => s + i.capital, 0);
+    const newBal = selectedFinancing ? Math.max(0, Math.round((selectedFinancing.amount - (paymentType === 'abono' ? numAbono : cuotasCapPaid)) * 100) / 100) : 0;
     const recNumber = peekCurrentReceiptNumber();
     const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
     const amountRec = paymentMethod === 'Efectivo' ? (numCash > 0 ? numCash : totalPaid) : totalPaid;
@@ -2062,6 +2178,10 @@ export default function Financing() {
       nextDue = newBal <= 0 ? 'Totalmente Saldado' : scheduledDue;
     }
 
+    const liveSurplusAmt = paymentType === 'cuotas' && surplusAmount > 0
+      ? (simulatedPaidList.length > selectedInsts.length && simulatedSurplus === 0 ? undefined : (simulatedSurplus > 0 ? simulatedSurplus : surplusAmount))
+      : undefined;
+
     return {
       receiptNumber: recNumber,
       date: formattedDate,
@@ -2072,7 +2192,7 @@ export default function Financing() {
       paymentType: paymentType,
       paidInstallments: paidList,
       abonoAmount: numAbono,
-      surplusAmount: paymentType === 'cuotas' && surplusAmount > 0 ? surplusAmount : undefined,
+      surplusAmount: liveSurplusAmt,
       totalPaid: totalPaid,
       newBalance: newBal,
       customerName: selectedFinancing?.customer || 'Cliente General',
@@ -3875,10 +3995,10 @@ export default function Financing() {
                               {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
                                 <tr className="bg-emerald-50/70 dark:bg-emerald-950/30">
                                   <td className="py-3.5 px-4 font-bold text-emerald-800 dark:text-emerald-300 print:text-black">
-                                    Sobrante Aplicado a Próxima Cuota (Abono a Capital)
+                                    Abono a Siguiente Cuota (Sobrante)
                                   </td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-700 dark:text-emerald-400 print:text-black">
-                                    {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Amortización Directa'}
+                                    {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Siguiente Cuota'}
                                   </td>
                                   <td className="py-3.5 px-4 text-right font-medium text-emerald-700 dark:text-emerald-300 print:text-black">
                                     ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
@@ -4855,23 +4975,62 @@ export default function Financing() {
                             </div>
                           )}
 
-                          {paymentType === 'cuotas' && surplusAmount > 0 && (
-                            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-2xl space-y-1.5 animate-in fade-in">
-                              <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                  <span>Sobrante a favor del cliente:</span>
-                                </span>
-                                <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-300">
-                                  +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </span>
+                          {paymentType === 'cuotas' && surplusAmount > 0 && (() => {
+                            const unpaidRemaining = currentInstallments
+                              .filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado')
+                              .sort((a, b) => a.id - b.id);
+                            
+                            let rem = surplusAmount;
+                            const coveredIds: number[] = [];
+                            let partialInfo: { id: number; applied: number; remaining: number } | null = null;
+                            for (const inst of unpaidRemaining) {
+                              if (rem <= 0) break;
+                              if (rem >= inst.total) {
+                                rem = Math.round((rem - inst.total) * 100) / 100;
+                                coveredIds.push(inst.id);
+                              } else {
+                                partialInfo = {
+                                  id: inst.id,
+                                  applied: rem,
+                                  remaining: Math.round((inst.total - rem) * 100) / 100,
+                                };
+                                rem = 0;
+                              }
+                            }
+
+                            return (
+                              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-2xl space-y-1.5 animate-in fade-in">
+                                <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                                  <span className="flex items-center gap-1.5">
+                                    <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <span>Sobrante a favor del cliente:</span>
+                                  </span>
+                                  <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-300">
+                                    +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
+                                  {coveredIds.length > 0 && partialInfo ? (
+                                    <>
+                                      Este excedente cubrirá por completo la(s) <strong>Cuota(s) #{coveredIds.join(', #')}</strong> y abonará <strong>RD$ {partialInfo.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> a la <strong>Cuota #{partialInfo.id}</strong> (dejando solo RD$ {partialInfo.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} restante por pagar en esa cuota).
+                                    </>
+                                  ) : coveredIds.length > 0 ? (
+                                    <>
+                                      Este excedente cubrirá por completo la(s) <strong>Cuota(s) #{coveredIds.join(', #')}</strong>, quedando marcada(s) como Pagada(s).
+                                    </>
+                                  ) : partialInfo ? (
+                                    <>
+                                      Este excedente se abonará directamente a la <strong>Cuota #{partialInfo.id}</strong>, reduciendo el monto pendiente de dicha cuota a solo <strong>RD$ {partialInfo.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>.
+                                    </>
+                                  ) : (
+                                    <>
+                                      Este excedente de <strong>RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se abonará a la(s) siguiente(s) cuota(s).
+                                    </>
+                                  )}
+                                </p>
                               </div>
-                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
-                                Este excedente de <strong>RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se aplicará automáticamente como abono al capital de la(s) siguiente(s) cuota(s) del cliente
-                                {nextUnpaidInstallment ? ` (Cuota #${nextUnpaidInstallment.id} con vencimiento el ${nextUnpaidInstallment.dueDate})` : ''}.
-                              </p>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {paymentType === 'cuotas' && customCuotasPayAmount !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount && (
                             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1 text-xs">
@@ -5057,7 +5216,7 @@ export default function Financing() {
                                           Total Cubierto + Sobrante Aplicado
                                         </span>
                                         <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 font-mono">
-                                          RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} asignado a capital (sin devuelta pendiente)
+                                          RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a siguiente(s) cuota(s) (sin devuelta pendiente)
                                         </span>
                                       </div>
                                       <CheckCircleIcon className="h-8 w-8 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -5841,10 +6000,10 @@ export default function Financing() {
                     {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
                       <tr className="bg-gray-100">
                         <td className="py-3 px-4 font-bold text-black">
-                          Sobrante Aplicado a Próxima Cuota (Abono a Capital)
+                          Abono a Siguiente Cuota (Sobrante)
                         </td>
                         <td className="py-3 px-4 text-center font-mono font-bold text-black">
-                          {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Amortización Directa'}
+                          {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Siguiente Cuota'}
                         </td>
                         <td className="py-3 px-4 text-right font-medium text-black">
                           ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
