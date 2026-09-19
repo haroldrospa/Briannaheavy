@@ -1899,31 +1899,43 @@ export default function POS() {
     };
     loadPosData();
 
+    let invDebounce: ReturnType<typeof setTimeout> | null = null;
     const handleInventoryUpdate = () => {
-      const currentInv = getLocalStorageInventory();
-      if (currentInv) {
-        setDbProducts(currentInv.map(mapInventoryItemToProduct));
-      }
+      if (invDebounce) clearTimeout(invDebounce);
+      invDebounce = setTimeout(() => {
+        const currentInv = getLocalStorageInventory();
+        if (currentInv) {
+          setDbProducts(currentInv.map(mapInventoryItemToProduct));
+        }
+      }, 200);
     };
 
+    let custDebounce: ReturnType<typeof setTimeout> | null = null;
     const handleCustomersUpdate = () => {
-      const currentCust = getLocalStorageCustomers();
-      if (currentCust) {
-        setDbClients(currentCust.map(c => ({
-          id: c.id,
-          name: c.name,
-          type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
-          rnc: c.document_id,
-        })));
-      }
+      if (custDebounce) clearTimeout(custDebounce);
+      custDebounce = setTimeout(() => {
+        const currentCust = getLocalStorageCustomers();
+        if (currentCust) {
+          setDbClients(currentCust.map(c => ({
+            id: c.id,
+            name: c.name,
+            type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
+            rnc: c.document_id,
+          })));
+        }
+      }, 200);
     };
 
+    let invsDebounce: ReturnType<typeof setTimeout> | null = null;
     const handleInvoicesUpdate = () => {
-      const currentInvs = getLocalStorageInvoices();
-      if (currentInvs) {
-        setSessionSales(filterInvoicesByShift(currentInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
-        setActiveQuotationsCount(getActiveQuotationsCount());
-      }
+      if (invsDebounce) clearTimeout(invsDebounce);
+      invsDebounce = setTimeout(() => {
+        const currentInvs = getLocalStorageInvoices();
+        if (currentInvs) {
+          setSessionSales(filterInvoicesByShift(currentInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+          setActiveQuotationsCount(getActiveQuotationsCount());
+        }
+      }, 200);
     };
 
     window.addEventListener('brianna_inventory_updated', handleInventoryUpdate);
@@ -1931,6 +1943,9 @@ export default function POS() {
     window.addEventListener('brianna_invoices_updated', handleInvoicesUpdate);
 
     return () => {
+      if (invDebounce) clearTimeout(invDebounce);
+      if (custDebounce) clearTimeout(custDebounce);
+      if (invsDebounce) clearTimeout(invsDebounce);
       window.removeEventListener('brianna_inventory_updated', handleInventoryUpdate);
       window.removeEventListener('brianna_customers_updated', handleCustomersUpdate);
       window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);

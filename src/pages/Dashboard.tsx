@@ -44,8 +44,12 @@ export default function Dashboard() {
     };
     loadMetrics();
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleUpdate = () => {
-      loadMetrics(true);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadMetrics(true);
+      }, 300);
     };
 
     window.addEventListener('brianna_invoices_updated', handleUpdate);
@@ -55,6 +59,7 @@ export default function Dashboard() {
 
     return () => {
       isMounted = false;
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_invoices_updated', handleUpdate);
       window.removeEventListener('brianna_inventory_updated', handleUpdate);
       window.removeEventListener('brianna_customers_updated', handleUpdate);

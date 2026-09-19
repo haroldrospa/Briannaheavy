@@ -1,9 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
-import { AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
-import PageTransition from '../components/PageTransition';
 import { getActiveRole, isRouteAllowed } from '../utils/rolePermissions';
 import { isSystemUnlocked } from '../utils/scheduleStorage';
 import SystemLockScreen from '../components/SystemLockScreen';
@@ -83,11 +81,7 @@ export default function DashboardLayout() {
         )}
         <main className={`flex-1 relative overflow-y-auto overflow-x-hidden focus:outline-none print:overflow-visible ${isPos ? '' : 'p-3 sm:p-5 md:p-6 w-full'} print:p-0`}>
           <div className={isPos ? 'h-full' : 'max-w-[1600px] mx-auto'}>
-            <AnimatePresence mode="wait">
-              <PageTransition key={location.pathname}>
-                <Outlet />
-              </PageTransition>
-            </AnimatePresence>
+            <Outlet />
           </div>
         </main>
       </div>

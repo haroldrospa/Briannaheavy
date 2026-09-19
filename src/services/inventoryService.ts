@@ -119,7 +119,7 @@ export const getLocalStorageInventory = (): InventoryItem[] => {
   }
 };
 
-export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
+export const saveLocalStorageInventory = (items: InventoryItem[], dispatchEvent = true): void => {
   inMemoryInventory = items;
 
   const sanitizeForStorage = (list: InventoryItem[], removeAllImages = false): any[] => {
@@ -167,7 +167,7 @@ export const saveLocalStorageInventory = (items: InventoryItem[]): void => {
       console.warn('No fue posible persistir inventario en localStorage (se mantiene en memoria activa):', innerErr);
     }
   }
-  if (typeof window !== 'undefined') {
+  if (dispatchEvent && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('brianna_inventory_updated'));
   }
 };
@@ -284,7 +284,7 @@ export const fetchInventory = async (forceRefresh = false): Promise<InventoryIte
           );
 
           lastInventoryFetchTime = Date.now();
-          saveLocalStorageInventory(items);
+          saveLocalStorageInventory(items, false);
           return items;
         }
       } catch (err) {

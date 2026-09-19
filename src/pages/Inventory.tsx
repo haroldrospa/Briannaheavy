@@ -9,7 +9,9 @@ import {
   TagIcon, 
   PrinterIcon,
   ArrowUpTrayIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import ItemModal from '../components/inventory/ItemModal';
 import BarcodePrintModal from '../components/inventory/BarcodePrintModal';
@@ -34,6 +36,8 @@ export default function Inventory() {
   const [itemToPrintBarcode, setItemToPrintBarcode] = useState<InventoryItem | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [isBulkPrintOpen, setIsBulkPrintOpen] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
   // Debounce search — filteredInventory useMemo only fires 120ms after user stops typing
   useEffect(() => {
@@ -190,6 +194,16 @@ export default function Inventory() {
     });
   }, [inventory, activeTab, debouncedSearchTerm, stockFilter]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, debouncedSearchTerm, stockFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredInventory.length / pageSize));
+  const paginatedInventory = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredInventory.slice(start, start + pageSize);
+  }, [filteredInventory, currentPage, pageSize]);
 
   const handleToggleSelectItem = useCallback((id: string) => {
     setSelectedItemIds(prev => {
@@ -339,7 +353,7 @@ export default function Inventory() {
           <>
             {/* Mobile Card List (md:hidden) */}
             <div className="md:hidden space-y-3 p-1">
-              {filteredInventory.map(item => {
+              {paginatedInventory.map(item => {
                 const isLowStock = (item.stock ?? 1) <= (item.min_stock ?? 1);
                 const isSelected = selectedItemIds.has(String(item.id));
 
@@ -498,15 +512,13 @@ export default function Inventory() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-zinc-800/50">
-                  {filteredInventory.map(item => {
+                  {paginatedInventory.map(item => {
                     const isLowStock = (item.stock ?? 1) <= (item.min_stock ?? 1);
                     const isSelected = selectedItemIds.has(String(item.id));
 
                     return (
-                      <motion.tr 
+                      <tr 
                         key={item.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
                         className={`transition-colors ${
                           isSelected 
                             ? 'bg-red-50/40 dark:bg-red-950/20' 
@@ -635,12 +647,44 @@ export default function Inventory() {
                             </button>
                           </div>
                         </td>
-                      </motion.tr>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {filteredInventory.length > pageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-gray-50/70 dark:bg-zinc-900/60 border-t border-gray-100 dark:border-zinc-800 rounded-b-2xl text-xs mt-1">
+                <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                  Mostrando <strong className="text-gray-900 dark:text-white">{((currentPage - 1) * pageSize) + 1}</strong> - <strong className="text-gray-900 dark:text-white">{Math.min(currentPage * pageSize, filteredInventory.length)}</strong> de <strong className="text-gray-900 dark:text-white">{filteredInventory.length}</strong> artículos
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors shadow-2xs text-gray-700 dark:text-zinc-200"
+                  >
+                    <ChevronLeftIcon className="w-3.5 h-3.5" />
+                    <span>Anterior</span>
+                  </button>
+                  <span className="px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors shadow-2xs text-gray-700 dark:text-zinc-200"
+                  >
+                    <span>Siguiente</span>
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

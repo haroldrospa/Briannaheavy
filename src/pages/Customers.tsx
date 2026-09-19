@@ -9,7 +9,9 @@ import {
   XMarkIcon,
   DocumentTextIcon,
   CheckCircleIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { fetchCustomers, getLocalStorageCustomers, createCustomer, deleteCustomer, type Customer } from '../services/customersService';
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
@@ -185,6 +187,20 @@ export default function Customers() {
     return matchesSearch && matchesStatus;
   }), [customers, search, statusFilter]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
+  const paginatedCustomers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredCustomers.slice(start, start + pageSize);
+  }, [filteredCustomers, currentPage, pageSize]);
+
 
   return (
     <motion.div 
@@ -254,7 +270,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-[#121318] divide-y divide-gray-50 dark:divide-zinc-800/50">
-                {filteredCustomers.map((customer) => (
+                {paginatedCustomers.map((customer) => (
                   <tr key={customer.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
@@ -314,6 +330,38 @@ export default function Customers() {
             </table>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {filteredCustomers.length > pageSize && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 bg-gray-50/70 dark:bg-zinc-900/60 border-t border-gray-100 dark:border-zinc-800 rounded-b-2xl sm:rounded-b-[2rem] text-xs">
+            <span className="text-gray-500 dark:text-zinc-400 font-medium">
+              Mostrando <strong className="text-gray-900 dark:text-white">{((currentPage - 1) * pageSize) + 1}</strong> - <strong className="text-gray-900 dark:text-white">{Math.min(currentPage * pageSize, filteredCustomers.length)}</strong> de <strong className="text-gray-900 dark:text-white">{filteredCustomers.length}</strong> clientes
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors shadow-2xs text-gray-700 dark:text-zinc-200"
+              >
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
+                <span>Anterior</span>
+              </button>
+              <span className="px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300">
+                Página {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors shadow-2xs text-gray-700 dark:text-zinc-200"
+              >
+                <span>Siguiente</span>
+                <ChevronRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* New Customer Modal */}

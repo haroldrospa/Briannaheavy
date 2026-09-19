@@ -52,19 +52,24 @@ export default function Invoices() {
   const [receiptFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
 
 
-  const loadData = async () => {
-    const data = await fetchInvoices(true);
+  const loadData = async (force = false) => {
+    const data = await fetchInvoices(force);
     setInvoices(data);
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false);
 
     const handleRoleUpdate = () => {
       setCurrentRole(getActiveRole());
     };
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleInvoicesUpdate = () => {
-      loadData();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        setInvoices(getLocalStorageInvoices());
+      }, 200);
     };
 
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
@@ -72,6 +77,7 @@ export default function Invoices() {
     window.addEventListener('brianna_invoices_changed', handleInvoicesUpdate);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_role_updated', handleRoleUpdate);
       window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);
       window.removeEventListener('brianna_invoices_changed', handleInvoicesUpdate);

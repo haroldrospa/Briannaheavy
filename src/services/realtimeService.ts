@@ -20,15 +20,23 @@ export const initRealtimeSync = (): (() => void) => {
 
   isRealtimeInitialized = true;
 
-  // 1. Carga inicial controlada (aprovecha la caché local y memoria, evitando consultas redundantes)
-  fetchAllSystemSettings();
-  fetchInvoices(false);
-  fetchInventory(false);
-  fetchCustomers(false);
-  fetchCashClosures(false);
-  fetchCashMovements(false);
-  fetchFinancings(false);
-  fetchCreditNotes(false);
+  // 1. Carga inicial en segundo plano diferida (permite que la pantalla inicial pinte de inmediato)
+  const runBackgroundSync = () => {
+    fetchAllSystemSettings();
+    fetchInvoices(false);
+    fetchInventory(false);
+    fetchCustomers(false);
+    fetchCashClosures(false);
+    fetchCashMovements(false);
+    fetchFinancings(false);
+    fetchCreditNotes(false);
+  };
+
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(runBackgroundSync, { timeout: 1500 });
+  } else {
+    setTimeout(runBackgroundSync, 400);
+  }
 
   // 2. Canal en vivo para Invoices: actualiza la caché local inmediatamente
   const invoicesChannel = supabase

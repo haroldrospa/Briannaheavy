@@ -91,6 +91,7 @@ export const getCachedDashboardMetrics = (): DashboardMetrics => {
 
 // Module-level TTL cache — avoids 4 parallel Supabase queries on every Dashboard mount
 let _dashboardCache: { data: DashboardMetrics; ts: number } | null = null;
+let _dashboardInFlight: Promise<DashboardMetrics> | null = null;
 const DASHBOARD_CACHE_TTL = 30_000; // 30 seconds
 
 export const fetchDashboardMetrics = async (forceRefresh = false): Promise<DashboardMetrics> => {
@@ -98,15 +99,26 @@ export const fetchDashboardMetrics = async (forceRefresh = false): Promise<Dashb
   if (!forceRefresh && _dashboardCache && (now - _dashboardCache.ts) < DASHBOARD_CACHE_TTL) {
     return _dashboardCache.data;
   }
+  if (_dashboardInFlight) {
+    return _dashboardInFlight;
+  }
 
-  const [invoices, customers, inventory, financings] = await Promise.all([
-    fetchInvoices(),
-    fetchCustomers(),
-    fetchInventory(),
-    fetchFinancings()
-  ]);
+  _dashboardInFlight = (async () => {
+    try {
+      const [invoices, customers, inventory, financings] = await Promise.all([
+        fetchInvoices(),
+        fetchCustomers(),
+        fetchInventory(),
+        fetchFinancings()
+      ]);
 
-  const data = computeDashboardMetrics(invoices, customers, inventory, financings);
-  _dashboardCache = { data, ts: Date.now() };
-  return data;
+      const data = computeDashboardMetrics(invoices, customers, inventory, financings);
+      _dashboardCache = { data, ts: Date.now() };
+      return data;
+    } finally {
+      _dashboardInFlight = null;
+    }
+  })();
+
+  return _dashboardInFlight;
 };

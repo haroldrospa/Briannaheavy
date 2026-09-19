@@ -17,7 +17,7 @@ import {
   UserCircleIcon 
 } from '@heroicons/react/24/outline';
 import { useTheme } from '../contexts/ThemeContext';
-import loginBg from '../assets/login-bg.png';
+import loginBg from '../assets/login-bg.webp';
 import logo from '../assets/logo.png';
 import { setActiveRole, type UserRole } from '../utils/rolePermissions';
 import { 
