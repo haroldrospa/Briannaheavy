@@ -13,7 +13,8 @@ import {
   BoltIcon,
   PrinterIcon,
   EyeIcon,
-  ReceiptRefundIcon
+  ReceiptRefundIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 import QRCode from '../components/ui/QRCode';
 import ModernReceipt from '../components/ui/ModernReceipt';
@@ -21,9 +22,115 @@ import LetterInvoice from '../components/ui/LetterInvoice';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
+import { fetchFinancings, getLocalStorageFinancings, type Financing } from '../services/financingService';
+import { fetchReceiptsFromSupabase, getStoredReceipts, type FinancingPaymentReceipt } from '../services/financingReceiptsService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import { matchesCashierUser } from '../services/shiftsService';
 
+export function buildUnifiedInvoices(
+  rawInvoices: Invoice[] = [],
+  rawFinancings: Financing[] = [],
+  rawReceipts: FinancingPaymentReceipt[] = []
+): Invoice[] {
+  const result: Invoice[] = [];
+
+  // 1. Facturas normales del POS (excluyendo cotizaciones)
+  const validPos = (rawInvoices || []).filter(inv => !isQuotationInvoice(inv));
+  result.push(...validPos);
+
+  // 2. Financiamientos (Contratos de venta de vehículos / maquinaria pesada)
+  if (rawFinancings && rawFinancings.length > 0) {
+    const sortedFins = [...rawFinancings].sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tA - tB;
+    });
+
+    sortedFins.forEach((f, idx) => {
+      const seq = String(idx + 1).padStart(6, '0');
+      const invNum = `FIN-${seq}`;
+      const total = Number(f.total_amount) || Number(f.financed_amount) || 0;
+      const down = Number(f.down_payment) || 0;
+      const instCount = f.installments_count || 24;
+      const freq = f.frequency || 'Mensual';
+
+      result.push({
+        id: `fin-${f.id}`,
+        invoice_number: invNum,
+        ncf: `FIN-${f.id.replace(/-/g, '').slice(0, 8).toUpperCase()}`,
+        ncf_type: 'FIN',
+        customer_name: f.customer_name || 'Cliente de Financiamiento',
+        customer_rnc: f.customer_rnc || '',
+        subtotal: total,
+        tax_amount: 0,
+        total_amount: total,
+        payment_method: down > 0 
+          ? `Financiamiento (${instCount} cuotas ${freq.toLowerCase()} • Inicial: RD$ ${down.toLocaleString('es-DO')})`
+          : `Financiamiento (${instCount} cuotas ${freq.toLowerCase()})`,
+        cashier_name: (f as any).cashier_name || 'Caja Cobros & Financiamientos',
+        register_name: 'Caja Cobros & Financiamientos',
+        status: f.status === 'Activo' ? 'Activo (Financiado)' : (f.status || 'Activo'),
+        created_at: f.created_at || f.start_date || new Date().toISOString(),
+        is_electronic: false,
+        billing_mode: 'internal',
+        items: [
+          {
+            description: `${f.item_name || 'Equipo / Maquinaria Pesada'}${f.chassis ? ` • Chasis: ${f.chassis}` : ''}${f.item_brand ? ` • Marca: ${f.item_brand}` : ''}${f.item_model ? ` • Modelo: ${f.item_model}` : ''}${f.item_year ? ` (${f.item_year})` : ''}${f.item_plate ? ` • Placa: ${f.item_plate}` : ''}`,
+            quantity: 1,
+            unit_price: total,
+            total_price: total,
+          }
+        ],
+      });
+    });
+  }
+
+  // 3. Recibos de Cobro de Cuotas de Financiamiento
+  if (rawReceipts && rawReceipts.length > 0) {
+    rawReceipts
+      .filter(r => r && r.customerName && !r.customerName.toLowerCase().includes('prueba'))
+      .forEach(r => {
+        const total = Number(r.totalPaid) || Number(r.amountReceived) || 0;
+        const recNum = r.receiptNumber || `REC-${r.id}`;
+
+        result.push({
+          id: `rec-${r.id || recNum}`,
+          invoice_number: recNum,
+          ncf: recNum,
+          ncf_type: 'REC',
+          customer_name: r.customerName || 'Cliente',
+          customer_rnc: r.customerCode || '',
+          subtotal: total,
+          tax_amount: 0,
+          total_amount: total,
+          payment_method: r.paymentMethod ? `Cuota Fin. (${r.paymentMethod})` : 'Cuota Fin.',
+          cashier_name: r.cashierName || 'Caja Cobros & Financiamientos',
+          register_name: r.registerName || 'Caja Cobros & Financiamientos',
+          status: 'Cobro / Pagado',
+          created_at: r.createdAt || (r.paymentDate ? `${r.paymentDate}T12:00:00.000Z` : new Date().toISOString()),
+          is_electronic: false,
+          billing_mode: 'internal',
+          items: [
+            {
+              description: `Pago Cuota Financiamiento - ${r.itemName || 'Equipo'}${r.scheduledDueDate ? ` • Vence: ${r.scheduledDueDate}` : ''}${r.chassis ? ` • Chasis: ${r.chassis}` : ''}`,
+              quantity: 1,
+              unit_price: total,
+              total_price: total,
+            }
+          ],
+        });
+      });
+  }
+
+  // Ordenar cronológicamente descendente (más recientes primero)
+  result.sort((a, b) => {
+    const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return tB - tA;
+  });
+
+  return result;
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -39,9 +146,11 @@ const itemVariants = {
 };
 
 export default function Invoices() {
-  const [invoices, setInvoices] = useState<Invoice[]>(getLocalStorageInvoices);
+  const [invoices, setInvoices] = useState<Invoice[]>(() => 
+    buildUnifiedInvoices(getLocalStorageInvoices(), getLocalStorageFinancings(), getStoredReceipts())
+  );
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<'todos' | 'electronic' | 'internal'>('todos');
+  const [filterMode, setFilterMode] = useState<'todos' | 'electronic' | 'internal' | 'financing' | 'receipts'>('todos');
   const [salesScope, setSalesScope] = useState<'mis_facturas' | 'todas'>('todas');
   const [currentRole, setCurrentRole] = useState<UserRole>(getActiveRole);
 
@@ -53,8 +162,17 @@ export default function Invoices() {
 
 
   const loadData = async (force = false) => {
-    const data = await fetchInvoices(force);
-    setInvoices(data);
+    try {
+      const [invData, finData, recData] = await Promise.all([
+        fetchInvoices(force),
+        fetchFinancings(force),
+        fetchReceiptsFromSupabase()
+      ]);
+      setInvoices(buildUnifiedInvoices(invData, finData, recData));
+    } catch (e) {
+      console.warn('Error loading unified invoices:', e);
+      setInvoices(buildUnifiedInvoices(getLocalStorageInvoices(), getLocalStorageFinancings(), getStoredReceipts()));
+    }
   };
 
   useEffect(() => {
@@ -68,19 +186,25 @@ export default function Invoices() {
     const handleInvoicesUpdate = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        setInvoices(getLocalStorageInvoices());
+        setInvoices(buildUnifiedInvoices(getLocalStorageInvoices(), getLocalStorageFinancings(), getStoredReceipts()));
       }, 200);
     };
 
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
     window.addEventListener('brianna_invoices_updated', handleInvoicesUpdate);
     window.addEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+    window.addEventListener('brianna_financings_updated', handleInvoicesUpdate);
+    window.addEventListener('brianna_financing_receipt_saved', handleInvoicesUpdate);
+    window.addEventListener('brianna_financing_receipts_updated', handleInvoicesUpdate);
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_role_updated', handleRoleUpdate);
       window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);
       window.removeEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+      window.removeEventListener('brianna_financings_updated', handleInvoicesUpdate);
+      window.removeEventListener('brianna_financing_receipt_saved', handleInvoicesUpdate);
+      window.removeEventListener('brianna_financing_receipts_updated', handleInvoicesUpdate);
     };
   }, []);
 
@@ -115,7 +239,7 @@ export default function Invoices() {
   const filteredInvoices = invoices.filter(inv => {
     if (isQuotationInvoice(inv)) return false;
 
-    // Cada usuario solo puede ver las ventas que él mismo facturó
+    // Cada usuario solo puede ver las ventas que él mismo facturó si está en 'mis_facturas'
     if (salesScope === 'mis_facturas' || !isAdmin) {
       const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
       const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
@@ -127,15 +251,26 @@ export default function Invoices() {
     const matchesSearch = 
       inv.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.ncf && inv.ncf.toLowerCase().includes(searchTerm.toLowerCase()));
+      (inv.ncf && inv.ncf.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (inv.items && inv.items.some(it => it.description.toLowerCase().includes(searchTerm.toLowerCase())));
 
     if (!matchesSearch) return false;
 
     const isElectronic = inv.is_electronic || (inv.ncf_type && inv.ncf_type.startsWith('E')) || inv.billing_mode === 'electronic';
+    const isFinancing = inv.invoice_number?.startsWith('FIN-') || inv.ncf_type === 'FIN';
+    const isReceipt = inv.invoice_number?.startsWith('REC-') || inv.ncf_type === 'REC';
+
     if (filterMode === 'electronic') return isElectronic;
-    if (filterMode === 'internal') return !isElectronic;
+    if (filterMode === 'internal') return !isElectronic && !isFinancing && !isReceipt;
+    if (filterMode === 'financing') return isFinancing;
+    if (filterMode === 'receipts') return isReceipt;
     return true;
   });
+
+  const countElectronic = invoices.filter(inv => inv.is_electronic || (inv.ncf_type && inv.ncf_type.startsWith('E')) || inv.billing_mode === 'electronic').length;
+  const countInternal = invoices.filter(inv => !inv.is_electronic && !inv.ncf_type?.startsWith('E') && !inv.invoice_number?.startsWith('FIN-') && !inv.invoice_number?.startsWith('REC-')).length;
+  const countFinancing = invoices.filter(inv => inv.invoice_number?.startsWith('FIN-') || inv.ncf_type === 'FIN').length;
+  const countReceipts = invoices.filter(inv => inv.invoice_number?.startsWith('REC-') || inv.ncf_type === 'REC').length;
 
   return (
     <motion.div 
@@ -235,7 +370,7 @@ export default function Invoices() {
             }`}
           >
             <BoltIcon className="w-3.5 h-3.5" />
-            <span>e-CF DGII</span>
+            <span>e-CF DGII ({countElectronic})</span>
           </button>
           <button
             type="button"
@@ -247,8 +382,34 @@ export default function Invoices() {
             }`}
           >
             <DocumentTextIcon className="w-3.5 h-3.5" />
-            <span>Internas</span>
+            <span>Internas ({countInternal})</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('financing')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              filterMode === 'financing'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'text-gray-600 dark:text-zinc-400 hover:text-purple-600 dark:hover:text-purple-400'
+            }`}
+          >
+            <BanknotesIcon className="w-3.5 h-3.5" />
+            <span>Financiamientos ({countFinancing})</span>
+          </button>
+          {countReceipts > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterMode('receipts')}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                filterMode === 'receipts'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+            >
+              <DocumentTextIcon className="w-3.5 h-3.5" />
+              <span>Recibos Cuotas ({countReceipts})</span>
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -265,8 +426,10 @@ export default function Invoices() {
             <div className="md:hidden space-y-3">
               {filteredInvoices.map((invoice) => {
                 const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
-                const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada');
-                const isPending = invoice.status?.toLowerCase().includes('pendiente');
+                const isFinancing = invoice.invoice_number?.startsWith('FIN-') || invoice.ncf_type === 'FIN';
+                const isReceipt = invoice.invoice_number?.startsWith('REC-') || invoice.ncf_type === 'REC';
+                const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada') || invoice.status?.toLowerCase().includes('pagado');
+                const isPending = invoice.status?.toLowerCase().includes('pendiente') || invoice.status?.toLowerCase().includes('activo');
 
                 return (
                   <div
@@ -282,6 +445,14 @@ export default function Invoices() {
                         {isElectronic ? (
                           <span className="inline-flex items-center text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200/50 dark:border-red-900/30 shrink-0">
                             e-CF {invoice.ncf_type || 'E32'}
+                          </span>
+                        ) : isFinancing ? (
+                          <span className="inline-flex items-center text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200/50 dark:border-purple-800/40 shrink-0">
+                            Financiamiento
+                          </span>
+                        ) : isReceipt ? (
+                          <span className="inline-flex items-center text-[9px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-800/40 shrink-0">
+                            Recibo Cuota
                           </span>
                         ) : (
                           <span className="inline-flex items-center text-[9px] font-bold text-gray-600 dark:text-zinc-400 bg-gray-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
@@ -333,20 +504,22 @@ export default function Invoices() {
                         className="flex-1 py-1.5 px-3 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-900 dark:text-white text-xs font-bold rounded-xl border border-gray-200/80 dark:border-zinc-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                       >
                         <EyeIcon className="w-4 h-4 text-[#ED1C24]" />
-                        <span>Ver Factura</span>
+                        <span>Ver Comprobante</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setCreditNoteInvoice(invoice)}
-                        className="py-1.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-[#ED1C24] dark:text-red-300 text-xs font-bold rounded-xl border border-red-200/60 dark:border-red-800/40 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="Emitir Nota de Crédito (DGII)"
-                      >
-                        <ReceiptRefundIcon className="w-4 h-4 text-[#ED1C24]" />
-                        <span>NC</span>
-                      </button>
+                      {!isFinancing && !isReceipt && (
+                        <button
+                          type="button"
+                          onClick={() => setCreditNoteInvoice(invoice)}
+                          className="py-1.5 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-[#ED1C24] dark:text-red-300 text-xs font-bold rounded-xl border border-red-200/60 dark:border-red-800/40 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                          title="Emitir Nota de Crédito (DGII)"
+                        >
+                          <ReceiptRefundIcon className="w-4 h-4 text-[#ED1C24]" />
+                          <span>NC</span>
+                        </button>
+                      )}
 
-                      {isAdmin && (
+                      {isAdmin && !isFinancing && !isReceipt && (
                         <div className="flex items-center gap-1 pl-2">
                           <button
                             type="button"
@@ -388,8 +561,10 @@ export default function Invoices() {
                 <tbody className="divide-y divide-gray-100/80 dark:divide-zinc-800/50">
                   {filteredInvoices.map((invoice) => {
                     const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
-                    const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada');
-                    const isPending = invoice.status?.toLowerCase().includes('pendiente');
+                    const isFinancing = invoice.invoice_number?.startsWith('FIN-') || invoice.ncf_type === 'FIN';
+                    const isReceipt = invoice.invoice_number?.startsWith('REC-') || invoice.ncf_type === 'REC';
+                    const isPaid = invoice.status?.toLowerCase().includes('emitida') || invoice.status?.toLowerCase().includes('pagada') || invoice.status?.toLowerCase().includes('pagado');
+                    const isPending = invoice.status?.toLowerCase().includes('pendiente') || invoice.status?.toLowerCase().includes('activo');
                     
                     return (
                       <tr key={invoice.id} className="hover:bg-gray-50/70 dark:hover:bg-zinc-800/30 transition-colors group">
@@ -401,6 +576,14 @@ export default function Invoices() {
                             {isElectronic ? (
                               <span className="inline-flex items-center text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-md border border-red-200/50 dark:border-red-900/30">
                                 e-CF {invoice.ncf_type || 'E32'}
+                              </span>
+                            ) : isFinancing ? (
+                              <span className="inline-flex items-center text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-md border border-purple-200/50 dark:border-purple-800/40">
+                                Financiamiento
+                              </span>
+                            ) : isReceipt ? (
+                              <span className="inline-flex items-center text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200/50 dark:border-blue-800/40">
+                                Recibo Cuota
                               </span>
                             ) : (
                               <span className="inline-flex items-center text-[10px] font-medium text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md">
@@ -426,7 +609,7 @@ export default function Invoices() {
                           <div className="text-xs font-medium text-gray-800 dark:text-zinc-200">
                             {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
                           </div>
-                          <div className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase font-medium mt-0.5">
+                          <div className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase font-medium mt-0.5 max-w-[200px] truncate" title={invoice.payment_method}>
                             {invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15} Días)` : (invoice.payment_method || 'Efectivo')}
                           </div>
                         </td>
@@ -437,12 +620,12 @@ export default function Invoices() {
                           {isPaid ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              {invoice.status?.includes('Emitida') ? 'Emitida' : 'Pagada'}
+                              {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
                             </span>
                           ) : isPending ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              Pendiente
+                              {invoice.status || 'Pendiente'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40">
@@ -461,15 +644,17 @@ export default function Invoices() {
                             >
                               <EyeIcon className="h-4 w-4" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setCreditNoteInvoice(invoice)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-                              title="Emitir Nota de Crédito (DGII)"
-                            >
-                              <ReceiptRefundIcon className="h-4 w-4 text-red-500" />
-                            </button>
-                            {isAdmin && (
+                            {!isFinancing && !isReceipt && (
+                              <button
+                                type="button"
+                                onClick={() => setCreditNoteInvoice(invoice)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                title="Emitir Nota de Crédito (DGII)"
+                              >
+                                <ReceiptRefundIcon className="h-4 w-4 text-red-500" />
+                              </button>
+                            )}
+                            {isAdmin && !isFinancing && !isReceipt && (
                               <>
                                 <button
                                   type="button"
@@ -716,7 +901,13 @@ export default function Invoices() {
                 <div className="flex justify-between items-start border-b border-gray-100 dark:border-zinc-800/80 pb-3 mb-3">
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                      {isElec ? 'Factura Electrónica DGII' : 'Comprobante Digital'}
+                      {isElec 
+                        ? 'Factura Electrónica DGII' 
+                        : viewingInvoice.invoice_number?.startsWith('FIN-')
+                        ? 'Factura / Contrato de Financiamiento'
+                        : viewingInvoice.invoice_number?.startsWith('REC-')
+                        ? 'Comprobante de Pago de Cuota'
+                        : 'Comprobante Digital'}
                     </span>
                     <h3 className="text-lg font-black text-gray-900 dark:text-white font-mono">
                       {viewingInvoice.ncf || viewingInvoice.invoice_number}

@@ -46,6 +46,9 @@ export const formatInvoiceNumber = (num?: string): string => {
     const raw = num.replace(/\D/g, '') || '1';
     return `CT-${raw.padStart(6, '0')}`;
   }
+  if (num.startsWith('FIN-') || num.startsWith('REC-')) {
+    return num;
+  }
   const digits = num.replace(/^FAC(-INT|-E)?-?/i, '').replace(/\D/g, '');
   if (digits) {
     return digits.length <= 6 ? digits.padStart(6, '0') : digits;
