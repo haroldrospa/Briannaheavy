@@ -434,26 +434,68 @@ export const createInvoice = async (
   return localInvoice;
 };
 
-export const updateInvoice = async (id: string, updates: Partial<Invoice>): Promise<Invoice | null> => {
+export const updateInvoice = async (id: string, updates: Partial<Invoice> & Record<string, any>): Promise<Invoice | null> => {
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase.from('invoices').update(updates).eq('id', id).select().single();
-      if (!error && data) {
-        const current = getLocalStorageInvoices();
-        const updatedList = current.map(inv => inv.id === id ? (data as Invoice) : inv);
-        saveLocalStorageInvoices(updatedList);
-        return data as Invoice;
+      const allowedDbColumns = [
+        'invoice_number', 'ncf', 'ncf_type', 'customer_name', 'customer_rnc',
+        'subtotal', 'tax_amount', 'total_amount', 'payment_method', 'cashier_name',
+        'register_name', 'shift_id', 'status', 'created_at', 'is_electronic',
+        'billing_mode', 'ecf_security_code', 'ecf_track_id', 'ecf_qr_url',
+        'ecf_dgii_status', 'credit_days', 'due_date'
+      ];
+      const dbPayload: Record<string, any> = {};
+      for (const [k, v] of Object.entries(updates)) {
+        if (allowedDbColumns.includes(k) && v !== undefined) {
+          dbPayload[k] = v;
+        }
       }
+
+      let data: any = null;
+      if (Object.keys(dbPayload).length > 0) {
+        const res = await supabase.from('invoices').update(dbPayload).eq('id', id).select().maybeSingle();
+        if (!res.error) data = res.data;
+      }
+
+      if (updates.items && Array.isArray(updates.items)) {
+        try {
+          await supabase.from('invoice_items').delete().eq('invoice_id', id);
+          const preparedItems = updates.items.map((it: any) => ({
+            invoice_id: id,
+            description: it.description,
+            quantity: it.quantity || 1,
+            unit_price: it.unit_price || 0,
+            total_price: it.total_price || 0
+          }));
+          await supabase.from('invoice_items').insert(preparedItems);
+        } catch (itemErr) {
+          console.warn('Error updating invoice_items in Supabase:', itemErr);
+        }
+      }
+
+      const current = getLocalStorageInvoices();
+      let mergedInvoice: Invoice | null = null;
+      const updatedList: Invoice[] = current.map(inv => {
+        if (inv.id === id) {
+          const updated: Invoice = { ...inv, ...(data || {}), ...updates };
+          mergedInvoice = updated;
+          return updated;
+        }
+        return inv;
+      });
+      saveLocalStorageInvoices(updatedList);
+      return mergedInvoice;
     } catch (err) {
       console.warn('Error updating invoice in Supabase:', err);
     }
   }
   const current = getLocalStorageInvoices();
   let updatedInvoice: Invoice | null = null;
-  const updatedList = current.map(inv => {
+  const updatedList: Invoice[] = current.map(inv => {
     if (inv.id === id) {
-      updatedInvoice = { ...inv, ...updates };
-      return updatedInvoice;
+      const updated: Invoice = { ...inv, ...updates };
+      updatedInvoice = updated;
+      return updated;
     }
     return inv;
   });

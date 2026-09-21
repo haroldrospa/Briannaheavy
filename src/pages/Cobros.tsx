@@ -8,10 +8,12 @@ import {
   BanknotesIcon,
   BuildingStorefrontIcon,
   LockClosedIcon,
-  CalendarIcon
+  CalendarIcon,
+  PencilSquareIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, type Invoice } from '../services/invoicesService';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen } from '../services/shiftsService';
@@ -49,12 +51,13 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
   if (!invs || invs.length === 0) return [];
   
   return invs
-    .filter(inv => inv.payment_method === 'Crédito' || inv.status === 'Crédito' || inv.status === 'Pendiente' || (inv as any).is_credit)
+    .filter(inv => inv.payment_method === 'Crédito' || inv.status === 'Crédito' || inv.status === 'Pendiente' || inv.status === 'Con Abono' || inv.status === 'Atrasado' || (inv as any).is_credit || (inv as any).balance > 0)
     .map((inv, idx) => {
       const totalAmount = inv.total_amount || 0;
       const payments = (inv as any).payments_history || [];
-      const paidAmount = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-      const balance = Math.max(0, totalAmount - paidAmount);
+      const calculatedPaid = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+      const paidAmount = (inv as any).paid_amount !== undefined ? Number((inv as any).paid_amount) : calculatedPaid;
+      const balance = (inv as any).balance !== undefined ? Number((inv as any).balance) : Math.max(0, totalAmount - paidAmount);
 
       const creditDays = Number(inv.credit_days || (inv as any).creditDays) || 15;
       const issueDate = inv.created_at ? inv.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10);
@@ -66,13 +69,19 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
       const isOverdue = balance > 0 && new Date() > new Date(dueDate);
 
       let status: 'Pendiente' | 'Con Abono' | 'Atrasado' | 'Saldado' = 'Pendiente';
-      if (balance <= 0.01) {
+      if (inv.status === 'Saldado' || inv.status === 'Pagada' || balance <= 0.01) {
         status = 'Saldado';
-      } else if (isOverdue) {
+      } else if (inv.status === 'Atrasado' || isOverdue) {
         status = 'Atrasado';
-      } else if (paidAmount > 0) {
+      } else if (inv.status === 'Con Abono' || paidAmount > 0) {
         status = 'Con Abono';
+      } else if (inv.status === 'Pendiente' || inv.status === 'Crédito') {
+        status = 'Pendiente';
       }
+
+      const itemsDesc = (inv as any).items_description || (inv.items && inv.items.length > 0 
+        ? inv.items.map(i => `${i.quantity > 1 ? `${i.quantity}x ` : ''}${i.description}`).join(', ') 
+        : 'Repuestos & Mercancía POS');
 
       return {
         id: inv.id || `rec_${idx + 1}`,
@@ -82,9 +91,7 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
         phone: (inv as any).customer_phone || '',
         invoice: inv.invoice_number,
         ncf: inv.ncf || 'INT-000000',
-        items: inv.items && inv.items.length > 0 
-          ? inv.items.map(i => `${i.quantity}x ${i.description}`).join(', ') 
-          : 'Repuestos & Mercancía POS',
+        items: itemsDesc,
         totalAmount,
         paidAmount,
         balance,
@@ -110,6 +117,25 @@ export default function Cobros() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   
+  // Edit Receivable Modal State
+  const [editingReceivable, setEditingReceivable] = useState<ReceivableItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    customer: '',
+    rnc: '',
+    phone: '',
+    invoice: '',
+    ncf: '',
+    items: '',
+    issueDate: '',
+    dueDate: '',
+    creditDays: 15,
+    totalAmount: 0,
+    balance: 0,
+    status: 'Pendiente' as 'Pendiente' | 'Con Abono' | 'Atrasado' | 'Saldado',
+  });
+
   // Success / Receipt Voucher Modal
   const [lastPaymentReceipt, setLastPaymentReceipt] = useState<{
     receiptNumber: string;
@@ -281,6 +307,8 @@ export default function Cobros() {
     try {
       await updateInvoice(selectedReceivable.invoice_id, {
         status: newBalance <= 0.01 ? 'Pagada' : 'Pendiente',
+        balance: newBalance,
+        paid_amount: (selectedReceivable.paidAmount || 0) + amount,
         ...( { payments_history: updatedHistory } as any)
       });
     } catch (err) {
@@ -307,6 +335,128 @@ export default function Cobros() {
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setIsPaymentModalOpen(false);
     setIsReceiptModalOpen(true);
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (item: ReceivableItem) => {
+    setEditingReceivable(item);
+    setEditForm({
+      customer: item.customer,
+      rnc: item.rnc,
+      phone: item.phone || '',
+      invoice: item.invoice,
+      ncf: item.ncf,
+      items: item.items,
+      issueDate: item.issueDate,
+      dueDate: item.dueDate,
+      creditDays: item.creditDays || 15,
+      totalAmount: item.totalAmount,
+      balance: item.balance,
+      status: item.status,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Submit Edit Form
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReceivable) return;
+
+    setIsSavingEdit(true);
+    try {
+      const totalAmountNum = Number(editForm.totalAmount) || 0;
+      const balanceNum = Number(editForm.balance) || 0;
+      const creditDaysNum = Number(editForm.creditDays) || 15;
+
+      const invoiceUpdates: any = {
+        customer_name: editForm.customer.trim(),
+        customer_rnc: editForm.rnc.trim(),
+        customer_phone: editForm.phone.trim(),
+        invoice_number: editForm.invoice.trim(),
+        ncf: editForm.ncf.trim(),
+        total_amount: totalAmountNum,
+        subtotal: totalAmountNum,
+        credit_days: creditDaysNum,
+        due_date: editForm.dueDate,
+        status: editForm.status === 'Saldado' ? 'Pagada' : (editForm.status === 'Con Abono' ? 'Con Abono' : (editForm.status === 'Atrasado' ? 'Atrasado' : 'Pendiente')),
+        balance: balanceNum,
+        paid_amount: Math.max(0, totalAmountNum - balanceNum),
+        items_description: editForm.items.trim(),
+      };
+
+      if (editForm.issueDate) {
+        invoiceUpdates.created_at = `${editForm.issueDate}T12:00:00.000Z`;
+      }
+
+      if (editForm.items) {
+        invoiceUpdates.items = [
+          {
+            description: editForm.items.trim(),
+            quantity: 1,
+            unit_price: totalAmountNum,
+            total_price: totalAmountNum,
+          }
+        ];
+      }
+
+      await updateInvoice(editingReceivable.invoice_id, invoiceUpdates);
+
+      // Notify system of invoice updates
+      window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+      window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
+
+      // Local state update
+      setReceivables(prev => prev.map(r => {
+        if (r.id === editingReceivable.id) {
+          return {
+            ...r,
+            customer: editForm.customer.trim(),
+            rnc: editForm.rnc.trim(),
+            phone: editForm.phone.trim(),
+            invoice: editForm.invoice.trim(),
+            ncf: editForm.ncf.trim(),
+            items: editForm.items.trim(),
+            totalAmount: totalAmountNum,
+            balance: balanceNum,
+            paidAmount: Math.max(0, totalAmountNum - balanceNum),
+            issueDate: editForm.issueDate,
+            dueDate: editForm.dueDate,
+            creditDays: creditDaysNum,
+            status: editForm.status,
+          };
+        }
+        return r;
+      }));
+
+      setIsEditModalOpen(false);
+      setEditingReceivable(null);
+    } catch (err) {
+      console.error('Error al guardar cambios de la cuenta por cobrar:', err);
+      alert('Error al guardar los cambios. Intente de nuevo.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Delete Receivable / Associated Invoice
+  const handleDeleteReceivable = async () => {
+    if (!editingReceivable) return;
+    const confirmDelete = window.confirm(
+      `¿Estás seguro de eliminar la cuenta por cobrar de "${editingReceivable.customer}" (Factura ${editingReceivable.invoice})?\n\nEsta acción eliminará el registro del sistema.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      await deleteInvoice(editingReceivable.invoice_id);
+      window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+      window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
+      setReceivables(prev => prev.filter(r => r.id !== editingReceivable.id));
+      setIsEditModalOpen(false);
+      setEditingReceivable(null);
+    } catch (err) {
+      console.error('Error al eliminar la cuenta por cobrar:', err);
+      alert('Error al eliminar la cuenta por cobrar.');
+    }
   };
 
   return (
@@ -470,17 +620,27 @@ export default function Cobros() {
                       </span>
                     </div>
 
-                    {item.balance > 0 ? (
+                    <div className="flex items-center gap-2">
+                      {item.balance > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPayment(item)}
+                          className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs cursor-pointer"
+                        >
+                          Abonar
+                        </button>
+                      ) : (
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">✓ Pagado</span>
+                      )}
                       <button
                         type="button"
-                        onClick={() => handleOpenPayment(item)}
-                        className="px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-sm cursor-pointer"
+                        onClick={() => handleOpenEdit(item)}
+                        className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                        title="Editar cuenta por cobrar"
                       >
-                        Abonar / Cobrar
+                        <PencilSquareIcon className="w-4 h-4" />
                       </button>
-                    ) : (
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">✓ Totalmente Pagado</span>
-                    )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -539,17 +699,27 @@ export default function Cobros() {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        {item.balance > 0 ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {item.balance > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPayment(item)}
+                              className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <span>Abonar</span>
+                            </button>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs">✓ Saldado</span>
+                          )}
                           <button
                             type="button"
-                            onClick={() => handleOpenPayment(item)}
-                            className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer inline-flex items-center gap-1"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                            title="Editar cuenta por cobrar"
                           >
-                            <span>Abonar</span>
+                            <PencilSquareIcon className="w-4 h-4" />
                           </button>
-                        ) : (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ Saldado</span>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -764,6 +934,338 @@ export default function Cobros() {
           </div>
         </div>
       )}
+
+      {/* Modal para Editar Cuenta por Cobrar */}
+      <AnimatePresence>
+        {isEditModalOpen && editingReceivable && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+              onClick={() => !isSavingEdit && setIsEditModalOpen(false)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-2xl bg-white dark:bg-[#16171d] rounded-3xl p-5 sm:p-7 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3.5 border-b border-gray-100 dark:border-zinc-800 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-red-50 dark:bg-red-950/50 text-[#ED1C24] border border-red-200/50 dark:border-red-900/40">
+                    <PencilSquareIcon className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                      Editar Cuenta por Cobrar
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                      Factura <span className="font-mono font-bold text-gray-800 dark:text-zinc-200">{editingReceivable.invoice}</span> • {editingReceivable.customer}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={isSavingEdit}
+                  className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                {/* 1. Datos del Cliente */}
+                <div className="bg-[#f4f3f1] dark:bg-zinc-900/60 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800 space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block">
+                    1. Información del Cliente
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Nombre o Razón Social del Cliente
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.customer}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, customer: e.target.value }))}
+                        required
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="Ej. JOSE ADAMES / AGRUBLA..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        RNC / Cédula
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.rnc}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, rnc: e.target.value }))}
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="CF-688146 o RNC..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Teléfono de Contacto
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.phone}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="809-000-0000"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Factura & Repuestos Vendidos */}
+                <div className="bg-[#f4f3f1] dark:bg-zinc-900/60 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800 space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block">
+                    2. Comprobante & Repuestos Vendidos
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        No. Factura
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.invoice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, invoice: e.target.value }))}
+                        required
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="000011"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        NCF / e-NCF
+                      </label>
+                      <input
+                        type="text"
+                        value={editForm.ncf}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, ncf: e.target.value }))}
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="INT-000011 o E32..."
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Repuestos Vendidos / Detalle
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={editForm.items}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, items: e.target.value }))}
+                        className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                        placeholder="Ej. 1x TANQUE DE ALUMINIO, 1x TRANSMISION..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Fechas & Plazo */}
+                <div className="bg-[#f4f3f1] dark:bg-zinc-900/60 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800 space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block">
+                    3. Fechas & Plazo de Crédito
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Fecha de Emisión
+                      </label>
+                      <input
+                        type="date"
+                        value={editForm.issueDate}
+                        onChange={(e) => {
+                          const newIssue = e.target.value;
+                          const base = new Date(newIssue);
+                          base.setDate(base.getDate() + (Number(editForm.creditDays) || 15));
+                          setEditForm(prev => ({
+                            ...prev,
+                            issueDate: newIssue,
+                            dueDate: base.toISOString().slice(0, 10)
+                          }));
+                        }}
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Días de Crédito
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editForm.creditDays}
+                        onChange={(e) => {
+                          const days = parseInt(e.target.value) || 0;
+                          const base = new Date(editForm.issueDate || new Date().toISOString().slice(0, 10));
+                          base.setDate(base.getDate() + days);
+                          setEditForm(prev => ({
+                            ...prev,
+                            creditDays: days,
+                            dueDate: base.toISOString().slice(0, 10)
+                          }));
+                        }}
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Fecha de Vencimiento
+                      </label>
+                      <input
+                        type="date"
+                        value={editForm.dueDate}
+                        onChange={(e) => {
+                          const newDue = e.target.value;
+                          const base = new Date(editForm.issueDate || new Date().toISOString().slice(0, 10));
+                          const due = new Date(newDue);
+                          const diffTime = due.getTime() - base.getTime();
+                          const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+                          setEditForm(prev => ({
+                            ...prev,
+                            dueDate: newDue,
+                            creditDays: diffDays > 0 ? diffDays : 0
+                          }));
+                        }}
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Montos & Estado */}
+                <div className="bg-[#f4f3f1] dark:bg-zinc-900/60 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800 space-y-3">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block">
+                    4. Montos & Estado de la Deuda
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Total Factura (RD$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={editForm.totalAmount}
+                        onChange={(e) => {
+                          const newTotal = parseFloat(e.target.value) || 0;
+                          const wasFull = editForm.balance === editForm.totalAmount;
+                          setEditForm(prev => ({
+                            ...prev,
+                            totalAmount: newTotal,
+                            balance: wasFull ? newTotal : Math.min(prev.balance, newTotal)
+                          }));
+                        }}
+                        required
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-black border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Saldo Pendiente (RD$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={editForm.balance}
+                        onChange={(e) => {
+                          const newBal = parseFloat(e.target.value) || 0;
+                          let nextStatus = editForm.status;
+                          if (newBal <= 0.01) {
+                            nextStatus = 'Saldado';
+                          } else if (newBal < editForm.totalAmount) {
+                            nextStatus = 'Con Abono';
+                          } else {
+                            nextStatus = 'Pendiente';
+                          }
+                          setEditForm(prev => ({
+                            ...prev,
+                            balance: newBal,
+                            status: nextStatus
+                          }));
+                        }}
+                        required
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-mono font-black border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                        Estado
+                      </label>
+                      <select
+                        value={editForm.status}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setEditForm(prev => ({
+                            ...prev,
+                            status: val,
+                            balance: val === 'Saldado' ? 0 : (prev.balance === 0 ? prev.totalAmount : prev.balance)
+                          }));
+                        }}
+                        className="block w-full px-3 py-2 bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] outline-none transition-all"
+                      >
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Con Abono">Con Abono</option>
+                        <option value="Atrasado">Atrasado</option>
+                        <option value="Saldado">Saldado</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-gray-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={handleDeleteReceivable}
+                    disabled={isSavingEdit}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    <span>Eliminar Cuenta</span>
+                  </button>
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditModalOpen(false)}
+                      disabled={isSavingEdit}
+                      className="px-4 py-2 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingEdit}
+                      className="px-5 py-2.5 rounded-full bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-red-900/20 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    >
+                      {isSavingEdit ? (
+                        <span>Guardando...</span>
+                      ) : (
+                        <>
+                          <CheckCircleIcon className="w-4 h-4" />
+                          <span>Guardar Cambios</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Cash Closure Modal */}
       <AnimatePresence>
