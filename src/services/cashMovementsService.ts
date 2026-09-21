@@ -102,10 +102,13 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
         if (!error && data) {
           const supabaseList: CashMovement[] = (data as any[]).map(row => {
             const rawReason = String(row.reason || row.concept || (row.type === 'Ingreso' ? 'Ingreso de Fondos' : 'Egreso / Gasto'));
+            const isCard = rawReason.toLowerCase().includes('tarjeta');
             const bankMatch = rawReason.match(/\(Banco:\s*([^)]+)\)/i);
             const refMatch = rawReason.match(/\[Ref:\s*([^\]]+)\]/i);
             const regMatch = rawReason.match(/\[(Caja[^\]]+)\]/i);
             const cleanConcept = rawReason
+              .replace(/\[Tarjeta[^\]]*\]/gi, '')
+              .replace(/\(Tarjeta[^)]*\)/gi, '')
               .replace(/\(Banco:\s*([^)]+)\)/i, '')
               .replace(/\[Ref:\s*([^\]]+)\]/i, '')
               .replace(/\[(Caja[^\]]+)\]/i, '')
@@ -116,7 +119,7 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
               type: (row.type === 'Ingreso' ? 'Ingreso' : 'Egreso') as 'Ingreso' | 'Egreso',
               amount: Number(row.amount) || 0,
               concept: cleanConcept || rawReason,
-              payment_method: row.payment_method || (bankMatch ? 'Transferencia' : 'Efectivo'),
+              payment_method: row.payment_method || (isCard ? 'Tarjeta' : (bankMatch ? 'Transferencia' : 'Efectivo')),
               bank_account_id: row.bank_account_id,
               bank_account_name: bankMatch ? bankMatch[1].trim() : row.bank_account_name,
               reference: refMatch ? refMatch[1].trim() : row.reference,
@@ -195,6 +198,7 @@ export const createCashMovement = async (
       try {
         const formattedReason = [
           newMov.concept,
+          newMov.payment_method === 'Tarjeta' ? '[Tarjeta de Crédito]' : '',
           newMov.bank_account_name ? `(Banco: ${newMov.bank_account_name})` : '',
           newMov.reference ? `[Ref: ${newMov.reference}]` : '',
           newMov.register_name ? `[${newMov.register_name}]` : ''

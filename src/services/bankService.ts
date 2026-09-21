@@ -11,8 +11,8 @@ export interface BankTransaction {
   amount: number;
   concept: string;
   reference?: string;
-  payment_method?: 'Efectivo' | 'Transferencia' | 'Cheque' | string;
-  category?: 'Venta / Facturación' | 'Depósito / Transferencia' | 'Retiro / Pago' | 'Cobro Financiamiento' | 'Aporte de Capital' | 'Gasto / Servicio' | 'Movimiento de Efectivo' | 'Otro';
+  payment_method?: 'Efectivo' | 'Transferencia' | 'Tarjeta' | 'Cheque' | string;
+  category?: 'Venta / Facturación' | 'Depósito / Transferencia' | 'Retiro / Pago' | 'Cobro Financiamiento' | 'Aporte de Capital' | 'Gasto / Servicio' | 'Movimiento de Efectivo' | 'Cobro con Tarjeta' | 'Pago con Tarjeta' | 'Otro';
   date: string;
   created_by?: string;
   source_id?: string;
@@ -144,6 +144,7 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
     const pm = (m.payment_method || '').toLowerCase();
     const isBankMove = pm.includes('transferencia') || 
                        pm.includes('transf') || 
+                       pm.includes('tarjeta') ||
                        Boolean(m.bank_account_id) || 
                        Boolean(m.bank_account_name);
 
@@ -167,16 +168,20 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
         bankId = defaultBank.id;
       }
 
+      const isCard = pm.includes('tarjeta');
+
       aggregated.push({
         id: txId,
         bank_account_id: bankId,
         bank_account_name: bankName,
         type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
         amount: Number(m.amount) || 0,
-        concept: m.concept || (m.type === 'Ingreso' ? 'Depósito Bancario' : 'Retiro Bancario'),
+        concept: m.concept || (m.type === 'Ingreso' ? (isCard ? 'Cobro con Tarjeta' : 'Depósito Bancario') : (isCard ? 'Pago con Tarjeta' : 'Retiro Bancario')),
         reference: m.reference || undefined,
-        payment_method: 'Transferencia',
-        category: m.type === 'Ingreso' ? 'Depósito / Transferencia' : 'Retiro / Pago',
+        payment_method: isCard ? 'Tarjeta' : 'Transferencia',
+        category: isCard 
+          ? (m.type === 'Ingreso' ? 'Cobro con Tarjeta' : 'Pago con Tarjeta') 
+          : (m.type === 'Ingreso' ? 'Depósito / Transferencia' : 'Retiro / Pago'),
         date: m.created_at || new Date().toISOString(),
         created_by: m.created_by || 'Sistema',
         source_id: m.id,

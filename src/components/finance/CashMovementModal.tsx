@@ -11,7 +11,8 @@ import {
   PrinterIcon,
   DocumentTextIcon,
   PlusIcon,
-  TrashIcon
+  TrashIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../../utils/receiptSettings';
@@ -29,7 +30,7 @@ interface CashMovementModalProps {
 export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultRegister, initialTab = 'form' }: CashMovementModalProps) {
   const [activeTab, setActiveTab] = useState<'form' | 'history'>(initialTab);
   const [type, setType] = useState<'Ingreso' | 'Egreso'>('Ingreso');
-  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia'>('Efectivo');
+  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta'>('Efectivo');
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [selectedBankId, setSelectedBankId] = useState<string>(() => getCompanyBankAccounts()[0]?.id || '');
   const [reference, setReference] = useState<string>('');
@@ -159,7 +160,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
     setIsSubmitting(true);
     try {
-      const bankAccountLabel = paymentMethod === 'Transferencia' && selectedAccount
+      const isBankOrCard = paymentMethod === 'Transferencia' || paymentMethod === 'Tarjeta';
+      const bankAccountLabel = isBankOrCard && selectedAccount
         ? `${selectedAccount.bankName} - ${selectedAccount.accountNumber} (${selectedAccount.accountType})`
         : undefined;
 
@@ -168,9 +170,9 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         amount: parsedAmount,
         concept: concept.trim(),
         payment_method: paymentMethod,
-        bank_account_id: paymentMethod === 'Transferencia' ? selectedAccount?.id : undefined,
+        bank_account_id: isBankOrCard ? selectedAccount?.id : undefined,
         bank_account_name: bankAccountLabel,
-        reference: paymentMethod === 'Transferencia' ? reference.trim() : undefined,
+        reference: isBankOrCard ? reference.trim() : undefined,
         register_name: defaultRegister || localStorage.getItem('brianna_active_register') || 'Caja 1 - Repuestos',
         created_by: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
       });
@@ -342,36 +344,49 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </div>
               </div>
 
-              {/* Selector de Método: Efectivo vs Transferencia */}
+              {/* Selector de Método: Efectivo vs Transferencia vs Tarjeta de Crédito */}
               <div className="space-y-1">
                 <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block">
                   2. Método de Movimiento
                 </span>
-                <div className="grid grid-cols-2 gap-2 bg-[#f4f3f1] dark:bg-[#222222] p-1.5 rounded-2xl">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 bg-[#f4f3f1] dark:bg-[#222222] p-1.5 rounded-2xl">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('Efectivo')}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       paymentMethod === 'Efectivo'
                         ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                         : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
-                    <BanknotesIcon className="h-4 w-4" />
-                    <span>Efectivo (Caja)</span>
+                    <BanknotesIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Efectivo (Caja)</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('Transferencia')}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       paymentMethod === 'Transferencia'
                         ? 'bg-blue-600 text-white shadow-xs font-black'
                         : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
-                    <BuildingLibraryIcon className="h-4 w-4" />
-                    <span>Transferencia Bancaria</span>
+                    <BuildingLibraryIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Transferencia</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('Tarjeta')}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      paymentMethod === 'Tarjeta'
+                        ? 'bg-purple-600 text-white shadow-xs font-black'
+                        : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <CreditCardIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Tarjeta de Crédito</span>
                   </button>
                 </div>
               </div>
@@ -444,6 +459,79 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                       onChange={(e) => setReference(e.target.value)}
                       className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-blue-200 dark:border-blue-900/60 rounded-xl focus:ring-2 focus:ring-blue-500/30 transition-all font-bold text-xs uppercase outline-none"
                       placeholder="Ej. REF-983021 / Confirmación Banco..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-panel: Selección de Cuenta / Terminal cuando es Tarjeta */}
+              {paymentMethod === 'Tarjeta' && (
+                <div className="space-y-2.5 p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-2xl border border-purple-200/80 dark:border-purple-900/40 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-300">
+                      <CreditCardIcon className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="text-[11px] font-black uppercase tracking-wider">
+                        {type === 'Ingreso' ? 'Banco Adquiriente / Terminal' : 'Cuenta / Tarjeta de Pago'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-300/70 dark:border-purple-700/60">
+                      Tarjeta de Crédito / Débito
+                    </span>
+                  </div>
+
+                  {/* Lista / Selector de Cuentas */}
+                  <div className="space-y-1.5">
+                    {bankAccounts.map((acc) => {
+                      const isSelected = (selectedAccount?.id === acc.id);
+                      return (
+                        <div
+                          key={acc.id}
+                          onClick={() => setSelectedBankId(acc.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-white dark:bg-zinc-900 border-purple-600 dark:border-purple-500 shadow-xs ring-1 ring-purple-600'
+                              : 'bg-white/70 dark:bg-zinc-900/60 border-purple-200/60 dark:border-purple-900/40 hover:bg-white dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-gray-900 dark:text-white">
+                                {acc.bankName}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 font-bold uppercase">
+                                {acc.accountType}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                                {acc.currency}
+                              </span>
+                            </div>
+                            <p className="text-[11px] font-mono font-bold text-gray-700 dark:text-zinc-300 mt-0.5 truncate">
+                              No. {acc.accountNumber}
+                            </p>
+                          </div>
+                          <div className="shrink-0">
+                            {isSelected ? (
+                              <CheckCircleIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border border-gray-300 dark:border-zinc-700" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Referencia de Tarjeta / Voucher */}
+                  <div className="pt-1">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-purple-900 dark:text-purple-300 mb-1">
+                      No. de Autorización / Voucher / Últimos 4 dígitos (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-purple-200 dark:border-purple-900/60 rounded-xl focus:ring-2 focus:ring-purple-500/30 transition-all font-bold text-xs uppercase outline-none"
+                      placeholder="Ej. VOUCHER-9481 / APROB: 4321 / VISA-1234..."
                     />
                   </div>
                 </div>
@@ -585,7 +673,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                               {mov.concept}
                             </p>
                             <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
-                              {mov.payment_method}
+                              {mov.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : mov.payment_method}
                               {mov.bank_account_name ? ` • ${mov.bank_account_name}` : ''}
                               {mov.reference ? ` • Ref: ${mov.reference}` : ''}
                               {' • '}
@@ -734,11 +822,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </div>
                 <div>
                   <span className="font-bold text-gray-600 block uppercase text-[10px]">Método de Movimiento:</span>
-                  <span className="font-black text-gray-900">{selectedMovementForPrint.payment_method}</span>
+                  <span className="font-black text-gray-900">
+                    {selectedMovementForPrint.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : selectedMovementForPrint.payment_method}
+                  </span>
                 </div>
                 <div>
                   <span className="font-bold text-gray-600 block uppercase text-[10px]">Referencia / Comprobante:</span>
-                  <span className="font-mono font-bold text-gray-900">{selectedMovementForPrint.reference || 'N/A (Efectivo Directo)'}</span>
+                  <span className="font-mono font-bold text-gray-900">
+                    {selectedMovementForPrint.reference || (selectedMovementForPrint.payment_method === 'Tarjeta' ? 'N/A (Tarjeta / Voucher)' : 'N/A (Efectivo Directo)')}
+                  </span>
                 </div>
               </div>
 
@@ -890,7 +982,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                       </span>
                     </td>
                     <td className="border border-gray-300 p-2">
-                      <div className="font-bold">{m.payment_method}</div>
+                      <div className="font-bold">{m.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : m.payment_method}</div>
                       {m.bank_account_name && <div className="text-[9px] text-gray-600">{m.bank_account_name}</div>}
                     </td>
                     <td className="border border-gray-300 p-2">
