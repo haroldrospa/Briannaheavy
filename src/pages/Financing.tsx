@@ -4926,54 +4926,18 @@ export default function Financing() {
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
-                                {paymentType === 'abono' ? 'Total a Abonar' : 'Monto Recibido / Total a Cobrar'}
+                                {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Cobrar'}
                               </span>
-                              {paymentType === 'cuotas' && (
-                                <span className="text-[10px] text-gray-400 dark:text-zinc-400 block font-medium">
-                                  {surplusAmount > 0
-                                    ? `Cuota base: $${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                                    : 'Editable si el cliente entrega o transfiere un monto mayor (sobrante)'}
-                                </span>
-                              )}
                             </div>
 
-                            {paymentType === 'abono' ? (
-                              <span className="font-black text-2xl text-emerald-600 dark:text-emerald-400 font-mono">
-                                RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                              </span>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <div className="relative w-44 sm:w-52">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-red-600 dark:text-red-400 text-sm">
-                                    RD$
-                                  </span>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={customCuotasPayAmount}
-                                    onChange={(e) => setCustomCuotasPayAmount(formatCurrencyInput(e.target.value))}
-                                    placeholder={totalSelectedAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                                    className="w-full pl-11 pr-3 py-1.5 bg-red-50/70 dark:bg-zinc-800 border-2 border-red-300 dark:border-red-900/60 rounded-xl text-xl font-black font-mono text-[#ED1C24] dark:text-red-400 text-right focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-[#ED1C24] transition-all"
-                                  />
-                                </div>
-                              </div>
-                            )}
+                            <span className={`font-black text-2xl font-mono ${
+                              paymentType === 'abono'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-[#ED1C24] dark:text-red-400'
+                            }`}>
+                              RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                            </span>
                           </div>
-
-                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && parseCurrencyInput(customCuotasPayAmount) !== totalSelectedAmount && (
-                            <div className="flex items-center justify-between text-[11px] pt-0.5">
-                              <span className="text-gray-500 dark:text-zinc-400">
-                                Total cuota base: <strong className="text-gray-700 dark:text-zinc-300">${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setCustomCuotasPayAmount('')}
-                                className="font-bold text-[#ED1C24] hover:underline cursor-pointer"
-                              >
-                                Restablecer monto exacto
-                              </button>
-                            </div>
-                          )}
 
                           {paymentType === 'cuotas' && surplusAmount > 0 && (() => {
                             const unpaidRemaining = currentInstallments
