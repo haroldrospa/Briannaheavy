@@ -30,7 +30,8 @@ import {
   ChevronRightIcon,
   BanknotesIcon,
   PlusIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { 
   fetchUsers, 
@@ -82,9 +83,13 @@ import {
   getCompanyBankAccounts,
   saveCompanyBankAccounts,
   DEFAULT_BANK_ACCOUNTS,
+  getCompanyCreditCards,
+  saveCompanyCreditCards,
+  DEFAULT_CREDIT_CARDS,
   type ReceiptFontSize,
   type InvoiceCustomConfig,
-  type CompanyBankAccount
+  type CompanyBankAccount,
+  type CompanyCreditCard
 } from '../utils/receiptSettings';
 import ModernReceipt from '../components/ui/ModernReceipt';
 
@@ -293,6 +298,98 @@ export default function Settings() {
     setBankToastMessage('Cuentas bancarias restablecidas a los valores predeterminados');
     setShowBankToast(true);
     setTimeout(() => setShowBankToast(false), 3500);
+  };
+
+  // Estado y Gestión de Tarjetas de Crédito de la Empresa
+  const [creditCards, setCreditCards] = useState<CompanyCreditCard[]>(getCompanyCreditCards);
+  const [isCreditCardModalOpen, setIsCreditCardModalOpen] = useState(false);
+  const [editingCreditCard, setEditingCreditCard] = useState<CompanyCreditCard | null>(null);
+  const [creditCardForm, setCreditCardForm] = useState<Omit<CompanyCreditCard, 'id'>>({
+    bankName: 'Banco Popular Dominicano',
+    cardName: 'Tarjeta Corporativa',
+    lastFourDigits: '0106',
+    cardType: 'Visa',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+  });
+  const [showCardToast, setShowCardToast] = useState(false);
+  const [cardToastMessage, setCardToastMessage] = useState('');
+  const [copiedCardId, setCopiedCardId] = useState<string | null>(null);
+
+  const handleOpenAddCreditCardModal = () => {
+    setEditingCreditCard(null);
+    setCreditCardForm({
+      bankName: 'Banco Popular Dominicano',
+      cardName: 'Tarjeta de Crédito Corporativa',
+      lastFourDigits: '',
+      cardType: 'Visa',
+      currency: 'DOP',
+      holderName: companyProfile.name || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    });
+    setIsCreditCardModalOpen(true);
+  };
+
+  const handleOpenEditCreditCardModal = (card: CompanyCreditCard) => {
+    setEditingCreditCard(card);
+    setCreditCardForm({
+      bankName: card.bankName,
+      cardName: card.cardName,
+      lastFourDigits: card.lastFourDigits,
+      cardType: card.cardType || 'Visa',
+      currency: card.currency || 'DOP',
+      holderName: card.holderName || companyProfile.name,
+    });
+    setIsCreditCardModalOpen(true);
+  };
+
+  const handleSaveCreditCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!creditCardForm.lastFourDigits.trim() || !creditCardForm.bankName.trim()) return;
+
+    let updatedList: CompanyCreditCard[];
+    const cleanedDigits = creditCardForm.lastFourDigits.replace(/\D/g, '').slice(-4);
+    if (editingCreditCard) {
+      updatedList = creditCards.map(c => 
+        c.id === editingCreditCard.id 
+          ? { ...editingCreditCard, ...creditCardForm, lastFourDigits: cleanedDigits }
+          : c
+      );
+      setCardToastMessage('¡Tarjeta de crédito actualizada correctamente!');
+    } else {
+      const newCard: CompanyCreditCard = {
+        id: `card_${Date.now()}`,
+        ...creditCardForm,
+        lastFourDigits: cleanedDigits,
+      };
+      updatedList = [...creditCards, newCard];
+      setCardToastMessage('¡Nueva tarjeta de crédito añadida con éxito!');
+    }
+
+    setCreditCards(updatedList);
+    saveCompanyCreditCards(updatedList);
+    await saveRemoteSetting('company_credit_cards', updatedList);
+    setIsCreditCardModalOpen(false);
+    setShowCardToast(true);
+    setTimeout(() => setShowCardToast(false), 3500);
+  };
+
+  const handleDeleteCreditCard = async (id: string) => {
+    const updatedList = creditCards.filter(c => c.id !== id);
+    setCreditCards(updatedList);
+    saveCompanyCreditCards(updatedList);
+    await saveRemoteSetting('company_credit_cards', updatedList);
+    setCardToastMessage('Tarjeta de crédito eliminada');
+    setShowCardToast(true);
+    setTimeout(() => setShowCardToast(false), 3500);
+  };
+
+  const handleResetDefaultCreditCards = async () => {
+    setCreditCards(DEFAULT_CREDIT_CARDS);
+    saveCompanyCreditCards(DEFAULT_CREDIT_CARDS);
+    await saveRemoteSetting('company_credit_cards', DEFAULT_CREDIT_CARDS);
+    setCardToastMessage('Tarjetas restablecidas a las predeterminadas (0106 y 7100)');
+    setShowCardToast(true);
+    setTimeout(() => setShowCardToast(false), 3500);
   };
 
   const handleSaveCompanyProfile = async (e: React.FormEvent) => {
@@ -948,6 +1045,142 @@ export default function Settings() {
                         </button>
                       </div>
                     )}
+                  </div>
+
+                  {/* Tarjetas de Crédito de la Empresa */}
+                  <div className="pt-8 border-t border-gray-200/80 dark:border-zinc-800">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h4 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
+                          <CreditCardIcon className="w-5 h-5 text-purple-600" />
+                          Tarjetas de Crédito de la Empresa
+                        </h4>
+                        <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-0.5">
+                          Tarjetas corporativas utilizadas para cobros, compras y movimientos de caja (ej. terminadas en 0106 y 7100).
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultCreditCards}
+                          className="px-3 py-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          title="Restablecer a las predeterminadas (0106 y 7100)"
+                        >
+                          Restablecer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddCreditCardModal}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                        >
+                          <PlusIcon className="w-4 h-4 stroke-[2.5]" />
+                          <span>Nueva Tarjeta</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {showCardToast && (
+                      <div className="p-2.5 mb-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 animate-in fade-in">
+                        <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-bold">{cardToastMessage}</span>
+                      </div>
+                    )}
+
+                    {/* Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {creditCards.map((card) => (
+                        <div
+                          key={card.id}
+                          className="p-4 bg-[#f4f3f1] dark:bg-zinc-800 rounded-2xl border border-gray-200/60 dark:border-zinc-800 flex flex-col justify-between gap-3 shadow-2xs hover:border-gray-300 dark:hover:border-zinc-700 transition-all group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <h4 className="font-black text-sm text-gray-900 dark:text-white truncate">
+                                {card.bankName}
+                              </h4>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="px-2 py-0.5 text-[10px] font-black bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 rounded-md">
+                                  {card.currency || 'DOP'}
+                                </span>
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-md">
+                                  {card.cardType || 'Visa'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Card Number display */}
+                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 mt-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <CreditCardIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                                <span className="font-mono font-black text-sm text-purple-600 dark:text-purple-400 tracking-wider truncate">
+                                  •••• •••• •••• {card.lastFourDigits}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(card.lastFourDigits);
+                                  setCopiedCardId(card.id);
+                                  setTimeout(() => setCopiedCardId(null), 2000);
+                                }}
+                                className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ml-2 ${
+                                  copiedCardId === card.id
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800'
+                                }`}
+                                title="Copiar terminación"
+                              >
+                                {copiedCardId === card.id ? (
+                                  <CheckCircleIcon className="w-4 h-4" />
+                                ) : (
+                                  <DocumentDuplicateIcon className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="mt-2.5 space-y-0.5 text-[11px] text-gray-500 dark:text-zinc-400">
+                              <p className="truncate"><strong>Nombre:</strong> {card.cardName || 'Tarjeta Corporativa'}</p>
+                              <p className="truncate"><strong>Titular:</strong> {card.holderName || companyProfile.name}</p>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-gray-200/60 dark:border-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCreditCardModal(card)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300 hover:text-purple-600 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
+                            >
+                              <PencilSquareIcon className="w-3.5 h-3.5" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCreditCard(card.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-all cursor-pointer"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                              <span>Eliminar</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {creditCards.length === 0 && (
+                        <div className="col-span-full p-8 text-center bg-[#f4f3f1] dark:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 space-y-2">
+                          <CreditCardIcon className="w-8 h-8 text-gray-400 mx-auto" />
+                          <p className="text-sm font-bold text-gray-700 dark:text-zinc-300">No hay tarjetas de crédito registradas</p>
+                          <p className="text-xs text-gray-400">Registra las tarjetas corporativas para seleccionarlas en movimientos de caja y compras.</p>
+                          <button
+                            type="button"
+                            onClick={handleResetDefaultCreditCards}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:underline cursor-pointer"
+                          >
+                            Cargar tarjetas predeterminadas (0106 y 7100)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2875,6 +3108,172 @@ export default function Settings() {
                     className="px-5 py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-900/20 cursor-pointer"
                   >
                     {editingAccount ? 'Actualizar Cuenta' : 'Guardar Cuenta'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Modal para Crear / Editar Tarjeta de Crédito */}
+        {isCreditCardModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs"
+          >
+            <div className="fixed inset-0" onClick={() => setIsCreditCardModalOpen(false)} />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-md bg-white dark:bg-[#16171d] rounded-3xl p-6 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-4">
+                <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+                  <CreditCardIcon className="w-5 h-5 text-purple-600" />
+                  {editingCreditCard ? 'Editar Tarjeta de Crédito' : 'Nueva Tarjeta de Crédito'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsCreditCardModalOpen(false)}
+                  className="p-1 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCreditCard} className="space-y-3.5">
+                {/* Banco Emisor */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Banco Emisor
+                  </label>
+                  <select
+                    value={DOMINICAN_BANKS.includes(creditCardForm.bankName) ? creditCardForm.bankName : 'Otro'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val !== 'Otro') {
+                        setCreditCardForm(prev => ({ ...prev, bankName: val }));
+                      } else {
+                        setCreditCardForm(prev => ({ ...prev, bankName: '' }));
+                      }
+                    }}
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                  >
+                    {DOMINICAN_BANKS.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                    <option value="Otro">Otro Banco / Entidad Personalizada...</option>
+                  </select>
+                  {(!DOMINICAN_BANKS.includes(creditCardForm.bankName) || creditCardForm.bankName === '') && (
+                    <input
+                      type="text"
+                      placeholder="Escribe el nombre del banco emisor..."
+                      value={creditCardForm.bankName}
+                      onChange={(e) => setCreditCardForm(prev => ({ ...prev, bankName: e.target.value }))}
+                      required
+                      className="mt-1.5 block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    />
+                  )}
+                </div>
+
+                {/* Nombre de la Tarjeta */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Nombre o Etiqueta de la Tarjeta
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Tarjeta de Crédito Corporativa"
+                    value={creditCardForm.cardName}
+                    onChange={(e) => setCreditCardForm(prev => ({ ...prev, cardName: e.target.value }))}
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                  />
+                </div>
+
+                {/* Últimos 4 Dígitos */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Últimos 4 Dígitos de la Tarjeta
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-gray-400 dark:text-zinc-500 font-bold text-sm tracking-wider">
+                      •••• •••• ••••
+                    </span>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      placeholder="0106"
+                      value={creditCardForm.lastFourDigits}
+                      onChange={(e) => setCreditCardForm(prev => ({ ...prev, lastFourDigits: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      required
+                      className="flex-1 px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-sm font-mono font-black border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all text-center tracking-widest"
+                    />
+                  </div>
+                </div>
+
+                {/* Tipo de Tarjeta y Moneda */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                      Tipo de Tarjeta
+                    </label>
+                    <select
+                      value={creditCardForm.cardType}
+                      onChange={(e) => setCreditCardForm(prev => ({ ...prev, cardType: e.target.value }))}
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    >
+                      <option value="Visa">Visa</option>
+                      <option value="Mastercard">Mastercard</option>
+                      <option value="American Express">American Express</option>
+                      <option value="Otro">Otro</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                      Moneda
+                    </label>
+                    <select
+                      value={creditCardForm.currency}
+                      onChange={(e) => setCreditCardForm(prev => ({ ...prev, currency: e.target.value }))}
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    >
+                      <option value="DOP">DOP (Pesos Dominicanos)</option>
+                      <option value="USD">USD (Dólares)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Titular */}
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Titular de la Tarjeta
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="BRIANNA HEAVY EQUIPMENT S.R.L."
+                    value={creditCardForm.holderName}
+                    onChange={(e) => setCreditCardForm(prev => ({ ...prev, holderName: e.target.value }))}
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreditCardModalOpen(false)}
+                    className="px-4 py-2 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md shadow-purple-900/20 cursor-pointer"
+                  >
+                    {editingCreditCard ? 'Actualizar Tarjeta' : 'Guardar Tarjeta'}
                   </button>
                 </div>
               </form>

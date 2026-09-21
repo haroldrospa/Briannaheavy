@@ -229,4 +229,68 @@ export const saveCompanyBankAccounts = (accounts: CompanyBankAccount[]): void =>
   }
 };
 
+export interface CompanyCreditCard {
+  id: string;
+  bankName: string;
+  cardName: string;
+  lastFourDigits: string;
+  cardType: string; // 'Visa' | 'Mastercard' | 'American Express' | 'Otro'
+  currency: string; // 'DOP' | 'USD'
+  holderName: string;
+}
+
+export const DEFAULT_CREDIT_CARDS: CompanyCreditCard[] = [
+  {
+    id: 'card_0106',
+    bankName: 'Banco Popular Dominicano',
+    cardName: 'Tarjeta de Crédito Corporativa',
+    lastFourDigits: '0106',
+    cardType: 'Visa',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+  },
+  {
+    id: 'card_7100',
+    bankName: 'Banreservas',
+    cardName: 'Tarjeta de Crédito Empresarial',
+    lastFourDigits: '7100',
+    cardType: 'Mastercard',
+    currency: 'DOP',
+    holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+  }
+];
+
+const CREDIT_CARD_STORAGE_KEY = 'brianna_company_credit_cards';
+const CREDIT_CARD_STORAGE_VERSION_KEY = 'brianna_credit_cards_version';
+const CURRENT_CREDIT_CARD_VERSION = 'v1_2026';
+
+export const getCompanyCreditCards = (): CompanyCreditCard[] => {
+  try {
+    const raw = localStorage.getItem(CREDIT_CARD_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(CREDIT_CARD_STORAGE_KEY, JSON.stringify(DEFAULT_CREDIT_CARDS));
+      localStorage.setItem(CREDIT_CARD_STORAGE_VERSION_KEY, CURRENT_CREDIT_CARD_VERSION);
+      return DEFAULT_CREDIT_CARDS;
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch (err) {
+    console.error('Error loading company credit cards:', err);
+  }
+  return DEFAULT_CREDIT_CARDS;
+};
+
+export const saveCompanyCreditCards = (cards: CompanyCreditCard[]): void => {
+  try {
+    localStorage.setItem(CREDIT_CARD_STORAGE_KEY, JSON.stringify(cards));
+    localStorage.setItem(CREDIT_CARD_STORAGE_VERSION_KEY, CURRENT_CREDIT_CARD_VERSION);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_credit_cards_changed', { detail: cards }));
+    }
+    saveRemoteSetting('company_credit_cards', cards).catch(e => console.warn('Supabase credit cards sync warning:', e));
+  } catch (err) {
+    console.error('Error saving company credit cards:', err);
+  }
+};
+
 

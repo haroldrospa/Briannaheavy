@@ -15,7 +15,7 @@ import {
   CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
-import { getCompanyBankAccounts, type CompanyBankAccount } from '../../utils/receiptSettings';
+import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift } from '../../services/shiftsService';
 import logo from '../../assets/logo.png';
 
@@ -33,6 +33,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta'>('Efectivo');
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [selectedBankId, setSelectedBankId] = useState<string>(() => getCompanyBankAccounts()[0]?.id || '');
+  const [creditCards, setCreditCards] = useState<CompanyCreditCard[]>(getCompanyCreditCards);
+  const [selectedCardId, setSelectedCardId] = useState<string>(() => getCompanyCreditCards()[0]?.id || '');
   const [reference, setReference] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [concept, setConcept] = useState<string>('');
@@ -66,10 +68,26 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
       if (accounts.length > 0 && !selectedBankId) {
         setSelectedBankId(accounts[0].id);
       }
+
+      const cards = getCompanyCreditCards();
+      setCreditCards(cards);
+      if (cards.length > 0 && !selectedCardId) {
+        setSelectedCardId(cards[0].id);
+      }
+
       loadMovements();
       if (initialTab) setActiveTab(initialTab);
     }
-  }, [isOpen, selectedBankId, initialTab]);
+
+    const handleCardsChanged = (e: any) => {
+      const updated = e.detail || getCompanyCreditCards();
+      setCreditCards(updated);
+    };
+    window.addEventListener('brianna_credit_cards_changed', handleCardsChanged);
+    return () => {
+      window.removeEventListener('brianna_credit_cards_changed', handleCardsChanged);
+    };
+  }, [isOpen, selectedBankId, selectedCardId, initialTab]);
 
   const sessionMovements = useMemo(() => {
     return filterMovementsByShift(movements, 'shift', activeShift, activeRegisterName, 'todos');
@@ -152,6 +170,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   };
 
   const selectedAccount = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
+  const selectedCard = creditCards.find(c => c.id === selectedCardId) || creditCards[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,19 +179,28 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
     setIsSubmitting(true);
     try {
-      const isBankOrCard = paymentMethod === 'Transferencia' || paymentMethod === 'Tarjeta';
-      const bankAccountLabel = isBankOrCard && selectedAccount
-        ? `${selectedAccount.bankName} - ${selectedAccount.accountNumber} (${selectedAccount.accountType})`
-        : undefined;
+      const isTransfer = paymentMethod === 'Transferencia';
+      const isCard = paymentMethod === 'Tarjeta';
+
+      let entityId: string | undefined;
+      let entityLabel: string | undefined;
+
+      if (isTransfer && selectedAccount) {
+        entityId = selectedAccount.id;
+        entityLabel = `${selectedAccount.bankName} - ${selectedAccount.accountNumber} (${selectedAccount.accountType})`;
+      } else if (isCard && selectedCard) {
+        entityId = selectedCard.id;
+        entityLabel = `${selectedCard.bankName} • Tarjeta •••• ${selectedCard.lastFourDigits}${selectedCard.cardName ? ` (${selectedCard.cardName})` : ''}`;
+      }
 
       const created = await createCashMovement({
         type,
         amount: parsedAmount,
         concept: concept.trim(),
         payment_method: paymentMethod,
-        bank_account_id: isBankOrCard ? selectedAccount?.id : undefined,
-        bank_account_name: bankAccountLabel,
-        reference: isBankOrCard ? reference.trim() : undefined,
+        bank_account_id: entityId,
+        bank_account_name: entityLabel,
+        reference: (isTransfer || isCard) ? reference.trim() : undefined,
         register_name: defaultRegister || localStorage.getItem('brianna_active_register') || 'Caja 1 - Repuestos',
         created_by: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
       });
@@ -464,50 +492,64 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </div>
               )}
 
-              {/* Sub-panel: Selección de Cuenta / Terminal cuando es Tarjeta */}
+              {/* Sub-panel: Selección de Tarjeta de Crédito de la Empresa */}
               {paymentMethod === 'Tarjeta' && (
                 <div className="space-y-2.5 p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-2xl border border-purple-200/80 dark:border-purple-900/40 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-300">
                       <CreditCardIcon className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
                       <span className="text-[11px] font-black uppercase tracking-wider">
-                        {type === 'Ingreso' ? 'Banco Adquiriente / Terminal' : 'Cuenta / Tarjeta de Pago'}
+                        {type === 'Ingreso' ? 'Tarjeta Receptora / Terminal' : 'Tarjeta de Crédito Corporativa'}
                       </span>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-300/70 dark:border-purple-700/60">
-                      Tarjeta de Crédito / Débito
+                      Tarjeta de Crédito
                     </span>
                   </div>
 
-                  {/* Lista / Selector de Cuentas */}
+                  {/* Lista / Selector de Tarjetas de Crédito */}
                   <div className="space-y-1.5">
-                    {bankAccounts.map((acc) => {
-                      const isSelected = (selectedAccount?.id === acc.id);
+                    {creditCards.map((card) => {
+                      const isSelected = (selectedCard?.id === card.id);
                       return (
                         <div
-                          key={acc.id}
-                          onClick={() => setSelectedBankId(acc.id)}
-                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                          key={card.id}
+                          onClick={() => setSelectedCardId(card.id)}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
                               ? 'bg-white dark:bg-zinc-900 border-purple-600 dark:border-purple-500 shadow-xs ring-1 ring-purple-600'
                               : 'bg-white/70 dark:bg-zinc-900/60 border-purple-200/60 dark:border-purple-900/40 hover:bg-white dark:hover:bg-zinc-800'
                           }`}
                         >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black text-gray-900 dark:text-white">
-                                {acc.bankName}
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 font-bold uppercase">
-                                {acc.accountType}
-                              </span>
-                              <span className="text-[10px] font-mono font-bold text-purple-600 dark:text-purple-400">
-                                {acc.currency}
-                              </span>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              isSelected 
+                                ? 'bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300' 
+                                : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'
+                            }`}>
+                              <CreditCardIcon className="w-5 h-5" />
                             </div>
-                            <p className="text-[11px] font-mono font-bold text-gray-700 dark:text-zinc-300 mt-0.5 truncate">
-                              No. {acc.accountNumber}
-                            </p>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-gray-900 dark:text-white truncate">
+                                  {card.bankName}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold uppercase shrink-0">
+                                  {card.cardType || 'Visa'}
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-purple-600 dark:text-purple-400 shrink-0">
+                                  {card.currency || 'DOP'}
+                                </span>
+                              </div>
+                              <p className="text-[12px] font-mono font-black text-gray-900 dark:text-white mt-0.5 tracking-wider">
+                                •••• •••• •••• <span className="text-purple-600 dark:text-purple-400">{card.lastFourDigits}</span>
+                                {card.cardName ? (
+                                  <span className="text-[10px] font-sans font-medium text-gray-500 dark:text-zinc-400 ml-2">
+                                    ({card.cardName})
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
                           </div>
                           <div className="shrink-0">
                             {isSelected ? (
@@ -519,6 +561,18 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                         </div>
                       );
                     })}
+                  </div>
+
+                  <div className="flex justify-between items-center text-[10px] px-1 text-gray-400 dark:text-zinc-500 font-bold">
+                    <span>* Configurables desde Ajustes → Empresa</span>
+                    <a
+                      href="#/configuracion?tab=empresa"
+                      onClick={() => onClose()}
+                      className="text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Gestionar en Configuración</span>
+                      <span>→</span>
+                    </a>
                   </div>
 
                   {/* Referencia de Tarjeta / Voucher */}
