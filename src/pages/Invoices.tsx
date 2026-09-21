@@ -42,7 +42,7 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>(getLocalStorageInvoices);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'todos' | 'electronic' | 'internal'>('todos');
-  const [salesScope, setSalesScope] = useState<'mis_facturas' | 'todas'>('mis_facturas');
+  const [salesScope, setSalesScope] = useState<'mis_facturas' | 'todas'>('todas');
   const [currentRole, setCurrentRole] = useState<UserRole>(getActiveRole);
 
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -203,7 +203,7 @@ export default function Invoices() {
               onClick={() => setSalesScope('todas')}
               className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 salesScope === 'todas'
-                  ? 'bg-gray-900 text-white dark:bg-zinc-100 dark:text-gray-900 shadow-xs'
+                  ? 'bg-[#ED1C24] text-white shadow-xs'
                   : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
