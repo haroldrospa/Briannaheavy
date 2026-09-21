@@ -22,8 +22,8 @@ import LetterInvoice from '../components/ui/LetterInvoice';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
 import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
-import { fetchFinancings, getLocalStorageFinancings, type Financing } from '../services/financingService';
-import { fetchReceiptsFromSupabase, getStoredReceipts, type FinancingPaymentReceipt } from '../services/financingReceiptsService';
+import { fetchFinancings, getLocalStorageFinancings, updateFinancing, deleteFinancing, type Financing } from '../services/financingService';
+import { fetchReceiptsFromSupabase, getStoredReceipts, saveReceipt, deleteFinancingReceipt, type FinancingPaymentReceipt } from '../services/financingReceiptsService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import { matchesCashierUser } from '../services/shiftsService';
 
@@ -216,24 +216,69 @@ export default function Invoices() {
 
     const formData = new FormData(e.currentTarget);
     const updates = {
-      customer_name: formData.get('customer_name') as string,
-      customer_rnc: formData.get('customer_rnc') as string,
-      payment_method: formData.get('payment_method') as string,
-      status: formData.get('status') as string,
+      customer_name: (formData.get('customer_name') as string) || editingInvoice.customer_name,
+      customer_rnc: (formData.get('customer_rnc') as string) || editingInvoice.customer_rnc || '',
+      payment_method: (formData.get('payment_method') as string) || editingInvoice.payment_method,
+      status: (formData.get('status') as string) || editingInvoice.status,
       total_amount: parseFloat(formData.get('total_amount') as string) || editingInvoice.total_amount,
-      ncf: formData.get('ncf') as string,
+      ncf: (formData.get('ncf') as string) || editingInvoice.ncf || '',
     };
 
-    await updateInvoice(editingInvoice.id, updates);
+    if (editingInvoice.id.startsWith('fin-')) {
+      const realFinId = editingInvoice.id.replace(/^fin-/, '');
+      await updateFinancing(realFinId, {
+        customer_name: updates.customer_name,
+        customer_rnc: updates.customer_rnc,
+        total_amount: updates.total_amount,
+        status: (
+          updates.status.toLowerCase().includes('pagad') ? 'Pagado' :
+          updates.status.toLowerCase().includes('cancel') ? 'Cancelado' :
+          updates.status.toLowerCase().includes('vencid') ? 'Vencido' :
+          'Activo'
+        ) as any,
+      });
+      window.dispatchEvent(new CustomEvent('brianna_financings_updated'));
+    } else if (editingInvoice.id.startsWith('rec-')) {
+      const realRecId = editingInvoice.id.replace(/^rec-/, '');
+      const allRecs = getStoredReceipts();
+      const existing = allRecs.find(r => r.id === realRecId || r.receiptNumber === realRecId || r.receiptNumber === editingInvoice.invoice_number);
+      if (existing) {
+        const updatedRec: FinancingPaymentReceipt = {
+          ...existing,
+          customerName: updates.customer_name,
+          customerCode: updates.customer_rnc || existing.customerCode,
+          totalPaid: updates.total_amount,
+          amountReceived: updates.total_amount,
+          paymentMethod: (updates.payment_method || existing.paymentMethod) as any,
+        };
+        saveReceipt(updatedRec, true);
+        window.dispatchEvent(new CustomEvent('brianna_financing_receipts_updated'));
+      }
+    } else {
+      await updateInvoice(editingInvoice.id, updates);
+    }
+
     setEditingInvoice(null);
-    loadData();
+    loadData(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deletingInvoice || !isAdmin) return;
-    await deleteInvoice(deletingInvoice.id);
+
+    if (deletingInvoice.id.startsWith('fin-')) {
+      const realFinId = deletingInvoice.id.replace(/^fin-/, '');
+      await deleteFinancing(realFinId);
+      window.dispatchEvent(new CustomEvent('brianna_financings_updated'));
+    } else if (deletingInvoice.id.startsWith('rec-')) {
+      const realRecId = deletingInvoice.id.replace(/^rec-/, '');
+      await deleteFinancingReceipt(realRecId);
+      window.dispatchEvent(new CustomEvent('brianna_financing_receipts_updated'));
+    } else {
+      await deleteInvoice(deletingInvoice.id);
+    }
+
     setDeletingInvoice(null);
-    loadData();
+    loadData(true);
   };
 
   const filteredInvoices = invoices.filter(inv => {
@@ -519,13 +564,13 @@ export default function Invoices() {
                         </button>
                       )}
 
-                      {isAdmin && !isFinancing && !isReceipt && (
+                      {isAdmin && (
                         <div className="flex items-center gap-1 pl-2">
                           <button
                             type="button"
                             onClick={() => setEditingInvoice(invoice)}
                             className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 transition-colors cursor-pointer"
-                            title="Editar factura"
+                            title="Editar comprobante / factura"
                           >
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
@@ -533,7 +578,7 @@ export default function Invoices() {
                             type="button"
                             onClick={() => setDeletingInvoice(invoice)}
                             className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 transition-colors cursor-pointer"
-                            title="Eliminar factura"
+                            title="Eliminar comprobante / factura"
                           >
                             <TrashIcon className="h-4 w-4" />
                           </button>
@@ -654,13 +699,13 @@ export default function Invoices() {
                                 <ReceiptRefundIcon className="h-4 w-4 text-red-500" />
                               </button>
                             )}
-                            {isAdmin && !isFinancing && !isReceipt && (
+                            {isAdmin && (
                               <>
                                 <button
                                   type="button"
                                   onClick={() => setEditingInvoice(invoice)}
                                   className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
-                                  title="Editar factura (Solo Administrador)"
+                                  title="Editar comprobante / factura (Solo Administrador)"
                                 >
                                   <PencilSquareIcon className="h-4 w-4" />
                                 </button>
@@ -668,7 +713,7 @@ export default function Invoices() {
                                   type="button"
                                   onClick={() => setDeletingInvoice(invoice)}
                                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
-                                  title="Eliminar factura (Solo Administrador)"
+                                  title="Eliminar comprobante / factura (Solo Administrador)"
                                 >
                                   <TrashIcon className="h-4 w-4" />
                                 </button>
@@ -766,31 +811,43 @@ export default function Invoices() {
                     <label className="block text-xs font-extrabold text-gray-700 dark:text-zinc-300 mb-1">
                       Método de Pago
                     </label>
-                    <select 
+                    <input 
+                      type="text" 
                       name="payment_method" 
                       defaultValue={editingInvoice.payment_method} 
-                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer"
-                    >
-                      <option value="Efectivo">Efectivo</option>
-                      <option value="Tarjeta">Tarjeta</option>
-                      <option value="Transferencia">Transferencia</option>
-                      <option value="Crédito">Crédito</option>
-                    </select>
+                      list="payment-methods-list"
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/20" 
+                    />
+                    <datalist id="payment-methods-list">
+                      <option value="Efectivo" />
+                      <option value="Tarjeta" />
+                      <option value="Transferencia" />
+                      <option value="Crédito" />
+                      <option value="Financiamiento" />
+                    </datalist>
                   </div>
 
                   <div>
                     <label className="block text-xs font-extrabold text-gray-700 dark:text-zinc-300 mb-1">
                       Estado
                     </label>
-                    <select 
+                    <input 
+                      type="text" 
                       name="status" 
                       defaultValue={editingInvoice.status} 
-                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer"
-                    >
-                      <option value="Pagada">Pagada</option>
-                      <option value="Pendiente">Pendiente</option>
-                      <option value="Anulada">Anulada</option>
-                    </select>
+                      list="statuses-list"
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/20" 
+                    />
+                    <datalist id="statuses-list">
+                      <option value="Pagada" />
+                      <option value="Pendiente" />
+                      <option value="Anulada" />
+                      <option value="Activo (Financiado)" />
+                      <option value="Cobro / Pagado" />
+                      <option value="Pagado" />
+                      <option value="Atrasado" />
+                      <option value="Cancelado" />
+                    </datalist>
                   </div>
                 </div>
 
