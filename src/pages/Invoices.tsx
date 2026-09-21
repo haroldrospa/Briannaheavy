@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -312,6 +312,16 @@ export default function Invoices() {
     return true;
   });
 
+  const [displayLimit, setDisplayLimit] = useState(50);
+
+  useEffect(() => {
+    setDisplayLimit(50);
+  }, [searchTerm, filterMode, salesScope]);
+
+  const displayedInvoices = useMemo(() => {
+    return filteredInvoices.slice(0, displayLimit);
+  }, [filteredInvoices, displayLimit]);
+
   const countElectronic = invoices.filter(inv => inv.is_electronic || (inv.ncf_type && inv.ncf_type.startsWith('E')) || inv.billing_mode === 'electronic').length;
   const countInternal = invoices.filter(inv => !inv.is_electronic && !inv.ncf_type?.startsWith('E') && !inv.invoice_number?.startsWith('FIN-') && !inv.invoice_number?.startsWith('REC-')).length;
   const countFinancing = invoices.filter(inv => inv.invoice_number?.startsWith('FIN-') || inv.ncf_type === 'FIN').length;
@@ -469,7 +479,7 @@ export default function Invoices() {
           <>
             {/* Mobile Card List (md:hidden) */}
             <div className="md:hidden space-y-3">
-              {filteredInvoices.map((invoice) => {
+              {displayedInvoices.map((invoice) => {
                 const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
                 const isFinancing = invoice.invoice_number?.startsWith('FIN-') || invoice.ncf_type === 'FIN';
                 const isReceipt = invoice.invoice_number?.startsWith('REC-') || invoice.ncf_type === 'REC';
@@ -604,7 +614,7 @@ export default function Invoices() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100/80 dark:divide-zinc-800/50">
-                  {filteredInvoices.map((invoice) => {
+                  {displayedInvoices.map((invoice) => {
                     const isElectronic = invoice.is_electronic || (invoice.ncf_type && invoice.ncf_type.startsWith('E')) || invoice.billing_mode === 'electronic';
                     const isFinancing = invoice.invoice_number?.startsWith('FIN-') || invoice.ncf_type === 'FIN';
                     const isReceipt = invoice.invoice_number?.startsWith('REC-') || invoice.ncf_type === 'REC';
@@ -662,30 +672,24 @@ export default function Invoices() {
                           RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          {isPaid ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
-                            </span>
-                          ) : isPending ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              {invoice.status || 'Pendiente'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40">
-                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                              {invoice.status || 'Anulada'}
-                            </span>
-                          )}
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            isPaid
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
+                              : isPending
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                            {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
+                          </span>
                         </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-right text-xs font-medium">
+                        <td className="px-5 py-3.5 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => setViewingInvoice(invoice)}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                              title="Ver Comprobante Fiscal / Imprimir Recibo"
+                              title="Ver Comprobante"
                             >
                               <EyeIcon className="h-4 w-4" />
                             </button>
@@ -693,7 +697,7 @@ export default function Invoices() {
                               <button
                                 type="button"
                                 onClick={() => setCreditNoteInvoice(invoice)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                                 title="Emitir Nota de Crédito (DGII)"
                               >
                                 <ReceiptRefundIcon className="h-4 w-4 text-red-500" />
@@ -727,6 +731,19 @@ export default function Invoices() {
                 </tbody>
               </table>
             </div>
+
+            {/* Load More Button for large list */}
+            {filteredInvoices.length > displayLimit && (
+              <div className="p-4 text-center border-t border-gray-100 dark:border-zinc-800/80 bg-gray-50/40 dark:bg-zinc-900/20">
+                <button
+                  type="button"
+                  onClick={() => setDisplayLimit(prev => prev + 50)}
+                  className="px-6 py-2.5 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-100 rounded-full text-xs font-black transition-all cursor-pointer shadow-xs border border-gray-200/80 dark:border-zinc-700 hover:border-gray-400"
+                >
+                  Cargar más facturas ({displayLimit} de {filteredInvoices.length})
+                </button>
+              </div>
+            )}
           </>
         )}
       </motion.div>

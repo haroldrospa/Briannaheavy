@@ -189,7 +189,7 @@ export default function Cobros() {
 
   const loadData = useCallback(async () => {
     try {
-      const invs = await fetchInvoices(true);
+      const invs = await fetchInvoices(false);
       if (invs && invs.length > 0) {
         setReceivables(mapInvoicesToReceivables(invs));
       }
@@ -201,12 +201,17 @@ export default function Cobros() {
   useEffect(() => {
     loadData();
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleUpdate = () => {
-      setReceivables(mapInvoicesToReceivables(getLocalStorageInvoices()));
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        setReceivables(mapInvoicesToReceivables(getLocalStorageInvoices()));
+      }, 100);
     };
 
     window.addEventListener('brianna_invoices_updated', handleUpdate);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_invoices_updated', handleUpdate);
     };
   }, [loadData]);
@@ -733,7 +738,7 @@ export default function Cobros() {
       {/* Modal para Registrar Abono / Pago */}
       {isPaymentModalOpen && selectedReceivable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setIsPaymentModalOpen(false)} />
+          <div className="fixed inset-0 bg-black/60" onClick={() => setIsPaymentModalOpen(false)} />
           <div className="relative w-full max-w-md bg-white dark:bg-[#16171d] rounded-3xl p-6 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-4">
               <div>
@@ -943,7 +948,7 @@ export default function Cobros() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+              className="fixed inset-0 bg-black/60"
               onClick={() => !isSavingEdit && setIsEditModalOpen(false)}
             />
             <motion.div

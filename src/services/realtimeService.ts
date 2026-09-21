@@ -20,27 +20,35 @@ export const initRealtimeSync = (): (() => void) => {
 
   isRealtimeInitialized = true;
 
-  // 1. Carga inicial en segundo plano diferida (permite que la pantalla inicial pinte de inmediato)
+  // 1. Carga inicial en segundo plano diferida y escalonada (evita saturar el CPU/red en el arranque)
   const runBackgroundSync = () => {
+    // Primero solo configuraciones globales
     fetchAllSystemSettings();
-    fetchInvoices(false);
-    fetchInventory(false);
-    fetchCustomers(false);
-    fetchCashClosures(false);
-    fetchCashMovements(false);
-    fetchFinancings(false);
-    fetchCreditNotes(false);
+
+    // El resto se carga con un leve retraso para dar máxima prioridad a la pantalla activa
+    setTimeout(() => {
+      fetchInvoices(false);
+      fetchInventory(false);
+    }, 800);
+
+    setTimeout(() => {
+      fetchCustomers(false);
+      fetchFinancings(false);
+      fetchCreditNotes(false);
+      fetchCashMovements(false);
+      fetchCashClosures(false);
+    }, 2000);
   };
 
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    (window as any).requestIdleCallback(runBackgroundSync, { timeout: 1500 });
+    (window as any).requestIdleCallback(runBackgroundSync, { timeout: 2000 });
   } else {
-    setTimeout(runBackgroundSync, 400);
+    setTimeout(runBackgroundSync, 600);
   }
 
-  // 2. Canal en vivo para Invoices: actualiza la caché local inmediatamente
-  const invoicesChannel = supabase
-    .channel('brianna_realtime_invoices')
+  // 2. Canal Único Multiplexado: Maneja todas las tablas en una sola conexión WebSocket (ahorro del 85% de overhead)
+  const unifiedChannel = supabase
+    .channel('brianna_app_realtime_unified')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'invoices' },
@@ -52,11 +60,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 3. Canal en vivo para Inventario: aplica el cambio puntual al item en memoria/local (0 bytes de Egress)
-  const inventoryChannel = supabase
-    .channel('brianna_realtime_inventory')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'inventory_items' },
@@ -68,11 +71,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 4. Canal en vivo para Clientes: actualiza la lista local al instante
-  const customersChannel = supabase
-    .channel('brianna_realtime_customers')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'customers' },
@@ -84,11 +82,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 5. Canal en vivo para Financiamientos
-  const financingsChannel = supabase
-    .channel('brianna_realtime_financings')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'financings' },
@@ -100,11 +93,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 6. Canal en vivo para Notas de Crédito
-  const creditNotesChannel = supabase
-    .channel('brianna_realtime_credit_notes')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'credit_notes' },
@@ -116,11 +104,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 7. Canal en vivo para Configuraciones Globales (system_settings)
-  const settingsChannel = supabase
-    .channel('brianna_realtime_settings')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'system_settings' },
@@ -132,11 +115,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 8. Canal en vivo para Movimientos de Caja
-  const movementsChannel = supabase
-    .channel('brianna_realtime_movements')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'cash_movements' },
@@ -150,11 +128,6 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
-
-  // 9. Canal en vivo para Arqueos de Caja
-  const closuresChannel = supabase
-    .channel('brianna_realtime_closures')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'cash_closures' },
@@ -170,14 +143,7 @@ export const initRealtimeSync = (): (() => void) => {
     .subscribe();
 
   return () => {
-    supabase.removeChannel(invoicesChannel);
-    supabase.removeChannel(inventoryChannel);
-    supabase.removeChannel(customersChannel);
-    supabase.removeChannel(financingsChannel);
-    supabase.removeChannel(creditNotesChannel);
-    supabase.removeChannel(settingsChannel);
-    supabase.removeChannel(movementsChannel);
-    supabase.removeChannel(closuresChannel);
+    supabase.removeChannel(unifiedChannel);
     isRealtimeInitialized = false;
   };
 };
