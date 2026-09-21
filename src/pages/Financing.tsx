@@ -3806,22 +3806,22 @@ export default function Financing() {
               transition={{ duration: 0.15 }}
               className="bg-white dark:bg-[#1a1a1a] rounded-[2rem] shadow-2xl w-full max-w-5xl flex flex-col max-h-[95vh] print:max-h-none print:flex-none print:max-w-none print:w-full print:shadow-none print:rounded-none"
             >
-              <div className="flex-none flex justify-between items-center p-8 pb-4 print:hidden">
-                <div className="flex items-center gap-4">
+              <div className="flex-none flex justify-between items-center px-6 py-3.5 border-b border-gray-100 dark:border-zinc-800/80 print:hidden">
+                <div className="flex items-center gap-3">
                   {showPaymentForm && !showReceipt && (
-                    <button onClick={() => setShowPaymentForm(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-2 rounded-full transition-all">
-                      <ArrowLeftIcon className="h-6 w-6" />
+                    <button onClick={() => setShowPaymentForm(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-1.5 rounded-full transition-all">
+                      <ArrowLeftIcon className="h-5 w-5" />
                     </button>
                   )}
-                  <h3 className="text-2xl font-black text-gray-900 dark:text-white">
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white">
                     {showReceipt ? 'Recibo de Pago' : (showAccountStatement ? 'Estado de Cuenta' : (showPaymentForm ? 'Registrar Pago' : 'Detalles del Financiamiento'))}
                   </h3>
                 </div>
-                <button onClick={handleAttemptCloseModal} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-2 rounded-full transition-all">
-                  <XMarkIcon className="h-6 w-6" />
+                <button onClick={handleAttemptCloseModal} className="text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-50 dark:bg-[#222222] p-1.5 rounded-full transition-all">
+                  <XMarkIcon className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-8 pt-4 print:overflow-visible print:p-0 print:m-0">
+              <div className="flex-1 overflow-y-auto px-6 py-4 print:overflow-visible print:p-0 print:m-0">
                 {showReceipt ? (
                   <div className="max-w-3xl mx-auto bg-white dark:bg-[#1a1a1a] p-8 sm:p-10 border border-gray-200/80 dark:border-gray-800 rounded-3xl shadow-sm print:max-w-none print:w-full print:shadow-none print:border-none print:p-6 print:text-black print:bg-white">
                     {/* Header Marca / Factura */}
@@ -4852,8 +4852,9 @@ export default function Financing() {
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="bg-[#f4f3f1] dark:bg-[#222222] p-6 rounded-3xl space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                    {/* Columna Izquierda (5 columnas): Desglose y Fecha */}
+                    <div className="lg:col-span-5 bg-[#f4f3f1] dark:bg-[#222222] p-4 sm:p-5 rounded-2xl space-y-3.5 border border-gray-200/60 dark:border-zinc-800/80">
                       <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
                         <button
                           type="button"
@@ -4863,17 +4864,16 @@ export default function Financing() {
                           <ArrowLeftIcon className="h-4 w-4" />
                           <span>Volver a selección</span>
                         </button>
-                        <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                          {paymentType === 'abono' ? 'Desglose de Abono a Capital' : 'Desglose de Pago'}
+                        <h4 className="text-[11px] font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                          {paymentType === 'abono' ? 'Abono a Capital' : 'Desglose de Pago'}
                         </h4>
                       </div>
 
-
                       {/* Monto editable if in Abono */}
                       {paymentType === 'abono' && (
-                        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-2">
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <label className="text-xs font-black uppercase text-emerald-900 dark:text-emerald-300">
+                            <label className="text-[11px] font-black uppercase text-emerald-900 dark:text-emerald-300">
                               Monto a Abonar ($)
                             </label>
                             <button
@@ -4882,55 +4882,52 @@ export default function Financing() {
                                 setPaymentType('cuotas');
                                 setAbonoAmount('');
                               }}
-                              className="text-[11px] font-bold text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white underline cursor-pointer"
+                              className="text-[10px] font-bold text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white underline cursor-pointer"
                             >
-                              Volver a Cuota Completa
+                              Volver a Cuotas
                             </button>
                           </div>
                           <div className="relative">
-                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-emerald-600 dark:text-emerald-400 text-lg">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-emerald-600 dark:text-emerald-400 text-base">$</span>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={abonoAmount}
                               onChange={(e) => setAbonoAmount(formatCurrencyInput(e.target.value))}
                               placeholder="0.00"
-                              className="w-full pl-8 pr-4 py-2 bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xl font-black font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                              className="w-full pl-7 pr-3 py-1.5 bg-white dark:bg-zinc-900 border border-emerald-300 dark:border-emerald-800 rounded-lg text-lg font-black font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                             />
                           </div>
                         </div>
                       )}
 
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center text-sm">
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
                           <span className="font-bold text-gray-500">
                             {paymentType === 'abono' ? 'Abono Directo a Capital' : 'Capital'}
                           </span>
-                          <span className="font-bold text-gray-900 dark:text-white">
+                          <span className="font-bold text-gray-900 dark:text-white font-mono">
                             ${(paymentType === 'abono' ? numAbono : totalSelectedCapital).toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center text-sm">
+                        <div className="flex justify-between items-center">
                           <span className="font-bold text-gray-500">Intereses Ordinarios</span>
-                          <span className="font-bold text-gray-900 dark:text-white">
+                          <span className="font-bold text-gray-900 dark:text-white font-mono">
                             ${(paymentType === 'abono' ? 0 : totalSelectedInterest).toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center text-sm">
+                        <div className="flex justify-between items-center">
                           <span className="font-bold text-gray-500">Cargos por Mora</span>
-                          <span className="font-bold text-gray-900 dark:text-white">
+                          <span className="font-bold text-gray-900 dark:text-white font-mono">
                             ${(paymentType === 'abono' ? 0 : totalSelectedPenalty).toLocaleString('en-US', {minimumFractionDigits: 2})}
                           </span>
                         </div>
-                        <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
+                        <div className="pt-2.5 mt-2 border-t border-gray-200 dark:border-gray-800">
                           <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-sm">
-                                {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Cobrar'}
-                              </span>
-                            </div>
-
-                            <span className={`font-black text-2xl font-mono ${
+                            <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-xs">
+                              {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Cobrar'}
+                            </span>
+                            <span className={`font-black text-xl font-mono ${
                               paymentType === 'abono'
                                 ? 'text-emerald-600 dark:text-emerald-400'
                                 : 'text-[#ED1C24] dark:text-red-400'
@@ -4938,119 +4935,44 @@ export default function Financing() {
                               RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                             </span>
                           </div>
-
-                          {paymentType === 'cuotas' && surplusAmount > 0 && (() => {
-                            const unpaidRemaining = currentInstallments
-                              .filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado')
-                              .sort((a, b) => a.id - b.id);
-                            
-                            let rem = surplusAmount;
-                            const coveredIds: number[] = [];
-                            let partialInfo: { id: number; applied: number; remaining: number } | null = null;
-                            for (const inst of unpaidRemaining) {
-                              if (rem <= 0) break;
-                              if (rem >= inst.total) {
-                                rem = Math.round((rem - inst.total) * 100) / 100;
-                                coveredIds.push(inst.id);
-                              } else {
-                                partialInfo = {
-                                  id: inst.id,
-                                  applied: rem,
-                                  remaining: Math.round((inst.total - rem) * 100) / 100,
-                                };
-                                rem = 0;
-                              }
-                            }
-
-                            return (
-                              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 rounded-2xl space-y-1.5 animate-in fade-in">
-                                <div className="flex items-center justify-between text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                                  <span className="flex items-center gap-1.5">
-                                    <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                    <span>Sobrante a favor del cliente:</span>
-                                  </span>
-                                  <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-300">
-                                    +RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-tight">
-                                  {coveredIds.length > 0 && partialInfo ? (
-                                    <>
-                                      Este excedente cubrirá por completo la(s) <strong>Cuota(s) #{coveredIds.join(', #')}</strong> y abonará <strong>RD$ {partialInfo.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> a la <strong>Cuota #{partialInfo.id}</strong> (dejando solo RD$ {partialInfo.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} restante por pagar en esa cuota).
-                                    </>
-                                  ) : coveredIds.length > 0 ? (
-                                    <>
-                                      Este excedente cubrirá por completo la(s) <strong>Cuota(s) #{coveredIds.join(', #')}</strong>, quedando marcada(s) como Pagada(s).
-                                    </>
-                                  ) : partialInfo ? (
-                                    <>
-                                      Este excedente se abonará directamente a la <strong>Cuota #{partialInfo.id}</strong>, reduciendo el monto pendiente de dicha cuota a solo <strong>RD$ {partialInfo.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>.
-                                    </>
-                                  ) : (
-                                    <>
-                                      Este excedente de <strong>RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> se abonará a la(s) siguiente(s) cuota(s).
-                                    </>
-                                  )}
-                                </p>
-                              </div>
-                            );
-                          })()}
-
-                          {paymentType === 'cuotas' && customCuotasPayAmount !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount && (
-                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-xl space-y-1 text-xs">
-                              <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold">
-                                <ExclamationTriangleIcon className="w-4 h-4 text-amber-600 shrink-0" />
-                                <span>Monto menor al total de cuotas</span>
-                              </div>
-                              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-tight">
-                                El monto ingresado (${numCustomCuotas.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor a las cuotas seleccionadas (${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}). Si desea abonar menos, seleccione la opción <strong>Hacer Abono Parcial</strong>.
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
 
-                      {/* Fecha en que se Realizó el Pago */}
-                      <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
-                            <CalendarIcon className="w-4 h-4 text-[#ED1C24]" />
-                            <span>Fecha en que se Realizó el Pago</span>
+                      {/* Fecha del Pago */}
+                      <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                            <CalendarIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                            <span>Fecha del Pago</span>
                           </label>
-                          {paymentDate !== new Date().toISOString().slice(0, 10) ? (
+                          {paymentDate !== new Date().toISOString().slice(0, 10) && (
                             <button
                               type="button"
                               onClick={() => setPaymentDate(new Date().toISOString().slice(0, 10))}
-                              className="text-[11px] font-bold text-[#ED1C24] hover:underline cursor-pointer flex items-center gap-1"
+                              className="text-[10px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
                             >
-                              <span>Restablecer a Hoy</span>
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-md">
                               Hoy
-                            </span>
+                            </button>
                           )}
                         </div>
-                        <div className="relative">
-                          <input
-                            type="date"
-                            value={paymentDate}
-                            onChange={(e) => setPaymentDate(e.target.value)}
-                            className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-bold text-xs focus:outline-none focus:border-[#ED1C24] focus:bg-white dark:focus:bg-zinc-900 transition-all cursor-pointer"
-                          />
-                        </div>
-                        <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-1">
-                          Esta fecha se reflejará en el comprobante, el estado de cuenta y el historial del cliente.
-                        </p>
+                        <input
+                          type="date"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold"
+                        />
                       </div>
+                    </div>
 
-                      {/* Selector Profesional de Método de Pago */}
-                      <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-4">
+                    {/* Columna Derecha (7 columnas): Método de pago + Detalles + Notas + Botón */}
+                    <div className="lg:col-span-7 bg-[#f4f3f1] dark:bg-[#222222] p-4 sm:p-5 rounded-2xl space-y-3.5 border border-gray-200/60 dark:border-zinc-800/80 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        {/* Selector de Método de Pago */}
                         <div>
-                          <label className="block text-xs font-black uppercase text-gray-500 dark:text-zinc-400 mb-2.5">
+                          <label className="block text-[11px] font-black uppercase text-gray-500 dark:text-zinc-400 mb-1.5">
                             Forma / Método de Pago Recibido
                           </label>
-                          <div className="grid grid-cols-3 gap-2.5">
+                          <div className="grid grid-cols-3 gap-2">
                             {[
                               { id: 'Efectivo' as const, label: 'Efectivo', icon: BanknotesIcon },
                               { id: 'Transferencia' as const, label: 'Transferencia', icon: BuildingLibraryIcon },
@@ -5060,32 +4982,32 @@ export default function Financing() {
                                 key={id}
                                 type="button"
                                 onClick={() => setPaymentMethod(id)}
-                                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl font-bold text-xs transition-all cursor-pointer border ${
+                                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer border ${
                                   paymentMethod === id
-                                    ? 'bg-[#ED1C24] text-white border-[#ED1C24] shadow-md shadow-red-900/20'
-                                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-red-300 hover:bg-red-50/20'
+                                    ? 'bg-[#ED1C24] text-white border-[#ED1C24] shadow-sm'
+                                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-red-300'
                                 }`}
                               >
-                                <Icon className="h-4 w-4 shrink-0" />
+                                <Icon className="h-3.5 w-3.5 shrink-0" />
                                 <span>{label}</span>
                               </button>
                             ))}
                           </div>
                         </div>
 
-                        {/* Campos dinámicos según el método seleccionado */}
+                        {/* Campos según Método */}
                         {paymentMethod === 'Efectivo' && (
-                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                              <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300">
+                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
                                 Efectivo Recibido (Paga con):
                               </label>
-                              <span className="text-[11px] font-bold text-gray-400">
+                              <span className="text-[10px] font-bold text-gray-400 font-mono">
                                 Total: ${effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                               </span>
                             </div>
                             <div className="relative">
-                              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center font-black text-gray-400 text-sm">
+                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-gray-400 text-xs">
                                 RD$
                               </span>
                               <input
@@ -5093,16 +5015,16 @@ export default function Financing() {
                                 value={cashReceived}
                                 onChange={(e) => setCashReceived(formatCurrencyInput(e.target.value))}
                                 placeholder={effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                className="w-full pl-14 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-lg focus:outline-none focus:border-[#ED1C24] transition-all"
+                                className="w-full pl-11 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-[#ED1C24]"
                               />
                             </div>
 
-                            {/* Botones de sugerencia rápida de efectivo */}
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {/* Botones de sugerencia rápida */}
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
                               <button
                                 type="button"
                                 onClick={() => setCashReceived(effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }))}
-                                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
                               >
                                 Monto Exacto
                               </button>
@@ -5114,7 +5036,7 @@ export default function Financing() {
                                     const current = parseCurrencyInput(cashReceived) || effectivePayAmount;
                                     setCashReceived(formatCurrencyInput(current + addAmt));
                                   }}
-                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                                 >
                                   +${addAmt.toLocaleString()}
                                 </button>
@@ -5123,96 +5045,80 @@ export default function Financing() {
                                 <button
                                   type="button"
                                   onClick={() => setCashReceived('')}
-                                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                  className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                                 >
                                   Limpiar
                                 </button>
                               )}
                             </div>
 
-                            {/* Opciones cuando el efectivo supera el total de la cuota */}
-                            {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && customCuotasPayAmount.trim() === '' && (
-                              <div className="p-3 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl space-y-2">
-                                <p className="text-xs font-bold text-gray-700 dark:text-zinc-300">
-                                  El cliente entregó <strong className="text-emerald-600 dark:text-emerald-400">RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> por encima de la cuota:
+                            {/* Opciones cuando el efectivo supera el total */}
+                            {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && (
+                              <div className="p-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-lg space-y-1 text-xs">
+                                <p className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                                  Excedente: <strong className="text-emerald-600 dark:text-emerald-400">RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>:
                                 </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-1.5">
                                   <button
                                     type="button"
                                     onClick={() => setApplyCashAsSurplus(true)}
-                                    className={`py-2 px-3 rounded-lg text-xs font-bold text-left flex items-center gap-2 border transition-all cursor-pointer ${
+                                    className={`py-1 px-2 rounded text-[10px] font-bold text-left flex items-center gap-1 border transition-all cursor-pointer ${
                                       applyCashAsSurplus
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 shadow-xs ring-1 ring-emerald-400'
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-400'
                                         : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
                                     }`}
                                   >
-                                    <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                    <span>Aplicar como Sobrante a siguiente cuota</span>
+                                    <SparklesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span>Abonar a sig. cuota</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setApplyCashAsSurplus(false)}
-                                    className={`py-2 px-3 rounded-lg text-xs font-bold text-left flex items-center gap-2 border transition-all cursor-pointer ${
+                                    className={`py-1 px-2 rounded text-[10px] font-bold text-left flex items-center gap-1 border transition-all cursor-pointer ${
                                       !applyCashAsSurplus
-                                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-200 shadow-xs ring-1 ring-amber-400'
+                                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-800 dark:text-amber-200 ring-1 ring-amber-400'
                                         : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
                                     }`}
                                   >
-                                    <BanknotesIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                                    <span>Entregar como Devuelta / Cambio</span>
+                                    <BanknotesIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>Entregar Devuelta</span>
                                   </button>
                                 </div>
                               </div>
                             )}
 
-                            {/* Cálculo de Devuelta o Alerta de Faltante */}
+                            {/* Devuelta calculada */}
                             {(() => {
-                              const numCash = parseCurrencyInput(cashReceived);
-                              if (!cashReceived || numCash === 0) return null;
-                              const requiredAmount = effectivePayAmount;
-                              if (numCash >= requiredAmount) {
-                                const change = numCash - requiredAmount;
+                              const numC = parseCurrencyInput(cashReceived);
+                              if (!cashReceived || numC === 0) return null;
+                              if (numC >= effectivePayAmount) {
+                                const change = numC - effectivePayAmount;
                                 if (change === 0 && surplusAmount > 0) {
                                   return (
-                                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between">
-                                      <div>
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 block">
-                                          Total Cubierto + Sobrante Aplicado
-                                        </span>
-                                        <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 font-mono">
-                                          RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a siguiente(s) cuota(s) (sin devuelta pendiente)
-                                        </span>
-                                      </div>
-                                      <CheckCircleIcon className="h-8 w-8 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                      <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                        RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicado a sig. cuota
+                                      </span>
+                                      <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
                                     </div>
                                   );
                                 }
                                 return (
-                                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between">
-                                    <div>
-                                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 block">
-                                        Devuelta / Cambio a Entregar al Cliente
-                                      </span>
-                                      <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                                        RD$ {change.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                      </span>
-                                    </div>
-                                    <CheckCircleIcon className="h-8 w-8 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                    <span className="font-bold text-emerald-800 dark:text-emerald-300">Devuelta / Cambio:</span>
+                                    <span className="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                                      RD$ {change.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </span>
                                   </div>
                                 );
                               } else {
-                                const missing = requiredAmount - numCash;
+                                const missing = effectivePayAmount - numC;
                                 return (
-                                  <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-center justify-between">
-                                    <div>
-                                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 block">
-                                        Monto Recibido Insuficiente
-                                      </span>
-                                      <span className="text-sm font-bold text-amber-700 dark:text-amber-300">
-                                        Faltan RD$ {missing.toLocaleString('en-US', { minimumFractionDigits: 2 })} para cubrir el total
-                                      </span>
-                                    </div>
-                                    <ExclamationTriangleIcon className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-center justify-between text-xs">
+                                    <span className="font-bold text-amber-700 dark:text-amber-300">
+                                      Faltan RD$ {missing.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <ExclamationTriangleIcon className="h-4 w-4 text-amber-600 shrink-0" />
                                   </div>
                                 );
                               }
@@ -5221,75 +5127,63 @@ export default function Financing() {
                         )}
 
                         {paymentMethod === 'Transferencia' && (
-                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
-                                <BuildingLibraryIcon className="w-4 h-4 text-[#ED1C24]" />
-                                <span>Cuenta Bancaria Receptora</span>
-                              </label>
-                              <span className="text-[10px] font-bold text-gray-400">
-                                {bankAccounts.length} cuentas disponibles
-                              </span>
-                            </div>
-
-                            {/* Cuentas Bancarias Registradas de la Empresa */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
+                            <label className="block text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1">
+                              <BuildingLibraryIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                              <span>Cuenta Bancaria Receptora</span>
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               {bankAccounts.map((acc) => {
                                 const isSelected = selectedBankId === acc.id;
                                 return (
                                   <div
                                     key={acc.id}
                                     onClick={() => setSelectedBankId(acc.id)}
-                                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                                    className={`p-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                                       isSelected
-                                        ? 'bg-red-50/40 dark:bg-red-950/30 border-[#ED1C24] shadow-xs ring-2 ring-[#ED1C24]/30'
-                                        : 'bg-gray-50/60 dark:bg-zinc-800/60 border-gray-200 dark:border-zinc-700 hover:border-red-200 dark:hover:border-zinc-600'
+                                        ? 'bg-red-50/40 dark:bg-red-950/30 border-[#ED1C24] ring-1 ring-[#ED1C24]/30'
+                                        : 'bg-gray-50/60 dark:bg-zinc-800/60 border-gray-200 dark:border-zinc-700 hover:border-red-200'
                                     }`}
                                   >
-                                    <div className="flex items-center justify-between gap-1 mb-1">
-                                      <span className="text-xs font-black text-gray-900 dark:text-white truncate">
+                                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                                      <span className="text-[11px] font-black text-gray-900 dark:text-white truncate">
                                         {acc.bankName}
                                       </span>
                                       {isSelected ? (
-                                        <CheckCircleIcon className="w-4 h-4 text-[#ED1C24] shrink-0" />
+                                        <CheckCircleIcon className="w-3.5 h-3.5 text-[#ED1C24] shrink-0" />
                                       ) : (
-                                        <div className="w-3.5 h-3.5 rounded-full border border-gray-300 dark:border-zinc-600" />
+                                        <div className="w-3 h-3 rounded-full border border-gray-300 dark:border-zinc-600" />
                                       )}
                                     </div>
-                                    <p className="text-xs font-mono font-black text-gray-800 dark:text-zinc-200 tracking-tight">
+                                    <p className="text-[11px] font-mono font-black text-gray-800 dark:text-zinc-200 tracking-tight">
                                       {acc.accountNumber}
                                     </p>
-                                    <p className="text-[10px] font-semibold text-gray-500 dark:text-zinc-400 truncate mt-0.5" title={acc.holderName}>
+                                    <p className="text-[9px] text-gray-500 truncate" title={acc.holderName}>
                                       {acc.holderName}
                                     </p>
-                                    <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-zinc-400 mt-1 pt-1 border-t border-gray-200/50 dark:border-zinc-700/50">
-                                      <span className="font-medium">{acc.accountType}</span>
-                                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{acc.currency}</span>
-                                    </div>
                                   </div>
                                 );
                               })}
                             </div>
-
-                            <div className="pt-1">
-                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                                No. de Referencia / Comprobante de Transferencia
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-700 dark:text-zinc-300 mb-0.5">
+                                No. de Referencia / Comprobante
                               </label>
                               <input
                                 type="text"
                                 value={referenceNumber}
                                 onChange={(e) => setReferenceNumber(e.target.value)}
-                                placeholder="Ej: TRANS-98421045 / No. Confirmación..."
-                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                                placeholder="Ej: TRANS-98421045..."
+                                className="w-full px-2.5 py-1 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
                               />
                             </div>
                           </div>
                         )}
 
                         {paymentMethod === 'Cheque' && (
-                          <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 space-y-3">
+                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                              <label className="block text-[10px] font-bold text-gray-700 dark:text-zinc-300 mb-0.5">
                                 Banco Emisor del Cheque
                               </label>
                               <input
@@ -5297,11 +5191,11 @@ export default function Financing() {
                                 value={bankName}
                                 onChange={(e) => setBankName(e.target.value)}
                                 placeholder="Ej: Banco Popular Dominicano"
-                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                                className="w-full px-2.5 py-1 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                              <label className="block text-[10px] font-bold text-gray-700 dark:text-zinc-300 mb-0.5">
                                 No. de Cheque
                               </label>
                               <input
@@ -5309,7 +5203,7 @@ export default function Financing() {
                                 value={referenceNumber}
                                 onChange={(e) => setReferenceNumber(e.target.value)}
                                 placeholder="Ej: CHQ-001248"
-                                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
+                                className="w-full px-2.5 py-1 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-xs font-bold focus:outline-none focus:border-[#ED1C24]"
                               />
                             </div>
                           </div>
@@ -5317,7 +5211,7 @@ export default function Financing() {
 
                         {/* Observaciones Opcionales */}
                         <div>
-                          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 mb-1">
+                          <label className="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-0.5">
                             Notas u Observaciones del Cobro (Opcional)
                           </label>
                           <input
@@ -5325,45 +5219,43 @@ export default function Financing() {
                             value={paymentNotes}
                             onChange={(e) => setPaymentNotes(e.target.value)}
                             placeholder="Ej: Pago de cuota realizado puntualmente..."
-                            className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:border-[#ED1C24]"
+                            className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white text-xs focus:outline-none focus:border-[#ED1C24]"
                           />
                         </div>
                       </div>
-                    </div>
 
-                    {(() => {
-                      const numCash = parseCurrencyInput(cashReceived);
-                      const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
-                      const isCuotasUnderpaid = paymentType === 'cuotas' && customCuotasPayAmount.trim() !== '' && numCustomCuotas > 0 && numCustomCuotas < totalSelectedAmount;
-                      const isInsufficient = isCashInsufficient || isCuotasUnderpaid;
+                      {/* Botón Confirmar y Procesar Pago */}
+                      {(() => {
+                        const numCash = parseCurrencyInput(cashReceived);
+                        const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
+                        const isInsufficient = isCashInsufficient;
 
-                      return (
-                        <div className="pt-4 mt-6">
-                          <button 
-                            disabled={isInsufficient}
-                            onClick={handleConfirmAndProcessPayment} 
-                            className={`w-full flex items-center justify-center gap-2 py-4 px-4 rounded-full font-bold transition-all shadow-md text-lg cursor-pointer ${
-                              isInsufficient
-                                ? 'bg-gray-300 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 cursor-not-allowed'
+                        return (
+                          <div className="pt-2">
+                            <button 
+                              disabled={isInsufficient}
+                              onClick={handleConfirmAndProcessPayment} 
+                              className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black transition-all shadow-md text-sm cursor-pointer ${
+                                isInsufficient
+                                  ? 'bg-gray-300 dark:bg-zinc-700 text-gray-500 dark:text-zinc-400 cursor-not-allowed'
+                                  : paymentType === 'abono'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20 active:scale-[0.99]'
+                                    : 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]'
+                              }`}
+                            >
+                              <CheckCircleIcon className="h-5 w-5" />
+                              {isCashInsufficient
+                                ? 'Efectivo Recibido Insuficiente'
                                 : paymentType === 'abono'
-                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-900/20 active:scale-[0.99]'
-                                  : 'bg-[#ED1C24] hover:bg-red-700 text-white shadow-red-900/20 active:scale-[0.99]'
-                            }`}
-                          >
-                            <CheckCircleIcon className="h-6 w-6" />
-                            {isCashInsufficient
-                              ? 'Efectivo Recibido Insuficiente'
-                              : isCuotasUnderpaid
-                              ? 'Monto Menor al Total de Cuotas'
-                              : paymentType === 'abono'
-                                ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                                : surplusAmount > 0
-                                ? `Confirmar Pago + Sobrante ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                                : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
-                          </button>
-                        </div>
-                      );
-                    })()}
+                                  ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  : surplusAmount > 0
+                                  ? `Confirmar Pago + Sobrante ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 )}
               </div>
