@@ -1052,7 +1052,7 @@ export default function Settings() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                       <div>
                         <h4 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-                          <CreditCardIcon className="w-5 h-5 text-purple-600" />
+                          <CreditCardIcon className="w-5 h-5 text-gray-700 dark:text-zinc-300" />
                           Tarjetas de Crédito de la Empresa
                         </h4>
                         <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-0.5">
@@ -1071,7 +1071,7 @@ export default function Settings() {
                         <button
                           type="button"
                           onClick={handleOpenAddCreditCardModal}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
                         >
                           <PlusIcon className="w-4 h-4 stroke-[2.5]" />
                           <span>Nueva Tarjeta</span>
@@ -1099,7 +1099,7 @@ export default function Settings() {
                                 {card.bankName}
                               </h4>
                               <div className="flex items-center gap-1 shrink-0">
-                                <span className="px-2 py-0.5 text-[10px] font-black bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 rounded-md">
+                                <span className="px-2 py-0.5 text-[10px] font-black bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-md">
                                   {card.currency || 'DOP'}
                                 </span>
                                 <span className="px-2 py-0.5 text-[10px] font-bold bg-gray-200 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-md">
@@ -1111,8 +1111,8 @@ export default function Settings() {
                             {/* Card Number display */}
                             <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/80 dark:border-zinc-800 mt-2">
                               <div className="flex items-center gap-2 min-w-0">
-                                <CreditCardIcon className="w-4 h-4 text-purple-600 shrink-0" />
-                                <span className="font-mono font-black text-sm text-purple-600 dark:text-purple-400 tracking-wider truncate">
+                                <CreditCardIcon className="w-4 h-4 text-gray-600 dark:text-zinc-400 shrink-0" />
+                                <span className="font-mono font-black text-sm text-gray-900 dark:text-white tracking-wider truncate">
                                   •••• •••• •••• {card.lastFourDigits}
                                 </span>
                               </div>
@@ -1149,7 +1149,7 @@ export default function Settings() {
                             <button
                               type="button"
                               onClick={() => handleOpenEditCreditCardModal(card)}
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300 hover:text-purple-600 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-gray-700 dark:text-zinc-300 hover:text-[#ED1C24] hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer"
                             >
                               <PencilSquareIcon className="w-3.5 h-3.5" />
                               <span>Editar</span>
@@ -1174,7 +1174,7 @@ export default function Settings() {
                           <button
                             type="button"
                             onClick={handleResetDefaultCreditCards}
-                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:underline cursor-pointer"
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#ED1C24] hover:underline cursor-pointer"
                           >
                             Cargar tarjetas predeterminadas (0106 y 7100)
                           </button>
@@ -3132,7 +3132,7 @@ export default function Settings() {
             >
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-4">
                 <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
-                  <CreditCardIcon className="w-5 h-5 text-purple-600" />
+                  <CreditCardIcon className="w-5 h-5 text-[#ED1C24]" />
                   {editingCreditCard ? 'Editar Tarjeta de Crédito' : 'Nueva Tarjeta de Crédito'}
                 </h3>
                 <button
@@ -3160,7 +3160,7 @@ export default function Settings() {
                         setCreditCardForm(prev => ({ ...prev, bankName: '' }));
                       }
                     }}
-                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                   >
                     {DOMINICAN_BANKS.map((b) => (
                       <option key={b} value={b}>{b}</option>
@@ -3174,7 +3174,7 @@ export default function Settings() {
                       value={creditCardForm.bankName}
                       onChange={(e) => setCreditCardForm(prev => ({ ...prev, bankName: e.target.value }))}
                       required
-                      className="mt-1.5 block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                      className="mt-1.5 block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                     />
                   )}
                 </div>
@@ -3189,7 +3189,7 @@ export default function Settings() {
                     placeholder="Ej: Tarjeta de Crédito Corporativa"
                     value={creditCardForm.cardName}
                     onChange={(e) => setCreditCardForm(prev => ({ ...prev, cardName: e.target.value }))}
-                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                   />
                 </div>
 
@@ -3209,7 +3209,7 @@ export default function Settings() {
                       value={creditCardForm.lastFourDigits}
                       onChange={(e) => setCreditCardForm(prev => ({ ...prev, lastFourDigits: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
                       required
-                      className="flex-1 px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-sm font-mono font-black border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all text-center tracking-widest"
+                      className="flex-1 px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-sm font-mono font-black border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all text-center tracking-widest"
                     />
                   </div>
                 </div>
@@ -3223,7 +3223,7 @@ export default function Settings() {
                     <select
                       value={creditCardForm.cardType}
                       onChange={(e) => setCreditCardForm(prev => ({ ...prev, cardType: e.target.value }))}
-                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                     >
                       <option value="Visa">Visa</option>
                       <option value="Mastercard">Mastercard</option>
@@ -3238,7 +3238,7 @@ export default function Settings() {
                     <select
                       value={creditCardForm.currency}
                       onChange={(e) => setCreditCardForm(prev => ({ ...prev, currency: e.target.value }))}
-                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                      className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                     >
                       <option value="DOP">DOP (Pesos Dominicanos)</option>
                       <option value="USD">USD (Dólares)</option>
@@ -3256,7 +3256,7 @@ export default function Settings() {
                     placeholder="BRIANNA HEAVY EQUIPMENT S.R.L."
                     value={creditCardForm.holderName}
                     onChange={(e) => setCreditCardForm(prev => ({ ...prev, holderName: e.target.value }))}
-                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-purple-600 transition-all"
+                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
                   />
                 </div>
 
@@ -3271,7 +3271,7 @@ export default function Settings() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md shadow-purple-900/20 cursor-pointer"
+                    className="px-5 py-2 rounded-full bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-900/20 cursor-pointer"
                   >
                     {editingCreditCard ? 'Actualizar Tarjeta' : 'Guardar Tarjeta'}
                   </button>

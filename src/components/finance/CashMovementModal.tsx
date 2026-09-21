@@ -396,7 +396,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     onClick={() => setPaymentMethod('Transferencia')}
                     className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       paymentMethod === 'Transferencia'
-                        ? 'bg-blue-600 text-white shadow-xs font-black'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                         : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -409,7 +409,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     onClick={() => setPaymentMethod('Tarjeta')}
                     className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       paymentMethod === 'Tarjeta'
-                        ? 'bg-purple-600 text-white shadow-xs font-black'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                         : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
@@ -421,15 +421,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
               {/* Sub-panel: Selección de Cuenta Bancaria cuando es Transferencia */}
               {paymentMethod === 'Transferencia' && (
-                <div className="space-y-2.5 p-3.5 bg-blue-50/70 dark:bg-blue-950/30 rounded-2xl border border-blue-200/80 dark:border-blue-900/40 animate-in fade-in zoom-in-95 duration-150">
+                <div className="space-y-2.5 p-3.5 bg-[#f4f3f1] dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-300">
-                      <BuildingLibraryIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-gray-800 dark:text-zinc-200">
+                      <BuildingLibraryIcon className="w-4 h-4 text-gray-600 dark:text-zinc-400 shrink-0" />
                       <span className="text-[11px] font-black uppercase tracking-wider">
                         {type === 'Ingreso' ? 'Cuenta Bancaria Destino' : 'Cuenta Bancaria Origen'}
                       </span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-blue-900/60 text-blue-900 dark:text-blue-200 border border-blue-300/70 dark:border-blue-700/60">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700">
                       {type === 'Ingreso' ? 'Dónde entra el dinero' : 'De dónde sale el dinero'}
                     </span>
                   </div>
@@ -444,8 +444,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                           onClick={() => setSelectedBankId(acc.id)}
                           className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
                             isSelected
-                              ? 'bg-white dark:bg-zinc-900 border-blue-600 dark:border-blue-500 shadow-xs ring-1 ring-blue-600'
-                              : 'bg-white/70 dark:bg-zinc-900/60 border-blue-200/60 dark:border-blue-900/40 hover:bg-white dark:hover:bg-zinc-800'
+                              ? 'bg-white dark:bg-zinc-800 border-gray-900 dark:border-white shadow-xs ring-1 ring-gray-900 dark:ring-white'
+                              : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/70 dark:border-zinc-800 hover:bg-white dark:hover:bg-zinc-800'
                           }`}
                         >
                           <div className="min-w-0">
@@ -456,7 +456,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 font-bold uppercase">
                                 {acc.accountType}
                               </span>
-                              <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                              <span className="text-[10px] font-mono font-bold text-gray-500 dark:text-zinc-400">
                                 {acc.currency}
                               </span>
                             </div>
@@ -466,7 +466,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                           </div>
                           <div className="shrink-0">
                             {isSelected ? (
-                              <CheckCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                              <CheckCircleIcon className="w-5 h-5 text-gray-900 dark:text-white" />
                             ) : (
                               <div className="w-4 h-4 rounded-full border border-gray-300 dark:border-zinc-700" />
                             )}
@@ -478,14 +478,14 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
                   {/* Referencia de Transferencia */}
                   <div className="pt-1">
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-blue-900 dark:text-blue-300 mb-1">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-600 dark:text-zinc-400 mb-1">
                       Número de Referencia / Comprobante (Opcional)
                     </label>
                     <input
                       type="text"
                       value={reference}
                       onChange={(e) => setReference(e.target.value)}
-                      className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-blue-200 dark:border-blue-900/60 rounded-xl focus:ring-2 focus:ring-blue-500/30 transition-all font-bold text-xs uppercase outline-none"
+                      className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-800 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-bold text-xs uppercase outline-none"
                       placeholder="Ej. REF-983021 / Confirmación Banco..."
                     />
                   </div>
@@ -494,15 +494,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
               {/* Sub-panel: Selección de Tarjeta de Crédito de la Empresa */}
               {paymentMethod === 'Tarjeta' && (
-                <div className="space-y-2.5 p-3.5 bg-purple-50/70 dark:bg-purple-950/30 rounded-2xl border border-purple-200/80 dark:border-purple-900/40 animate-in fade-in zoom-in-95 duration-150">
+                <div className="space-y-2.5 p-3.5 bg-[#f4f3f1] dark:bg-zinc-900/60 rounded-2xl border border-gray-200/80 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-300">
-                      <CreditCardIcon className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-gray-800 dark:text-zinc-200">
+                      <CreditCardIcon className="w-4 h-4 text-gray-600 dark:text-zinc-400 shrink-0" />
                       <span className="text-[11px] font-black uppercase tracking-wider">
                         {type === 'Ingreso' ? 'Tarjeta Receptora / Terminal' : 'Tarjeta de Crédito Corporativa'}
                       </span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 border border-purple-300/70 dark:border-purple-700/60">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700">
                       Tarjeta de Crédito
                     </span>
                   </div>
@@ -517,14 +517,14 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                           onClick={() => setSelectedCardId(card.id)}
                           className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
-                              ? 'bg-white dark:bg-zinc-900 border-purple-600 dark:border-purple-500 shadow-xs ring-1 ring-purple-600'
-                              : 'bg-white/70 dark:bg-zinc-900/60 border-purple-200/60 dark:border-purple-900/40 hover:bg-white dark:hover:bg-zinc-800'
+                              ? 'bg-white dark:bg-zinc-800 border-gray-900 dark:border-white shadow-xs ring-1 ring-gray-900 dark:ring-white'
+                              : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/70 dark:border-zinc-800 hover:bg-white dark:hover:bg-zinc-800'
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                               isSelected 
-                                ? 'bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-300' 
+                                ? 'bg-gray-100 dark:bg-zinc-700 text-gray-900 dark:text-white' 
                                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'
                             }`}>
                               <CreditCardIcon className="w-5 h-5" />
@@ -534,15 +534,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                                 <span className="text-xs font-black text-gray-900 dark:text-white truncate">
                                   {card.bankName}
                                 </span>
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold uppercase shrink-0">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold uppercase shrink-0">
                                   {card.cardType || 'Visa'}
                                 </span>
-                                <span className="text-[10px] font-mono font-bold text-purple-600 dark:text-purple-400 shrink-0">
+                                <span className="text-[10px] font-mono font-bold text-gray-500 dark:text-zinc-400 shrink-0">
                                   {card.currency || 'DOP'}
                                 </span>
                               </div>
                               <p className="text-[12px] font-mono font-black text-gray-900 dark:text-white mt-0.5 tracking-wider">
-                                •••• •••• •••• <span className="text-purple-600 dark:text-purple-400">{card.lastFourDigits}</span>
+                                •••• •••• •••• <span className="font-mono font-black text-gray-900 dark:text-white">{card.lastFourDigits}</span>
                                 {card.cardName ? (
                                   <span className="text-[10px] font-sans font-medium text-gray-500 dark:text-zinc-400 ml-2">
                                     ({card.cardName})
@@ -553,7 +553,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                           </div>
                           <div className="shrink-0">
                             {isSelected ? (
-                              <CheckCircleIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                              <CheckCircleIcon className="w-5 h-5 text-gray-900 dark:text-white" />
                             ) : (
                               <div className="w-4 h-4 rounded-full border border-gray-300 dark:border-zinc-700" />
                             )}
@@ -568,7 +568,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     <a
                       href="#/configuracion?tab=empresa"
                       onClick={() => onClose()}
-                      className="text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <span>Gestionar en Configuración</span>
                       <span>→</span>
@@ -577,15 +577,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
                   {/* Referencia de Tarjeta / Voucher */}
                   <div className="pt-1">
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-purple-900 dark:text-purple-300 mb-1">
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-600 dark:text-zinc-400 mb-1">
                       No. de Autorización / Voucher / Últimos 4 dígitos (Opcional)
                     </label>
                     <input
                       type="text"
                       value={reference}
                       onChange={(e) => setReference(e.target.value)}
-                      className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-purple-200 dark:border-purple-900/60 rounded-xl focus:ring-2 focus:ring-purple-500/30 transition-all font-bold text-xs uppercase outline-none"
-                      placeholder="Ej. VOUCHER-9481 / APROB: 4321 / VISA-1234..."
+                      className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-800 rounded-xl focus:ring-2 focus:ring-[#ED1C24]/20 transition-all font-bold text-xs uppercase outline-none"
+                      placeholder="Ej. VOUCHER-9481 / APROB: 4321..."
                     />
                   </div>
                 </div>
