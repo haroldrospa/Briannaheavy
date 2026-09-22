@@ -28,7 +28,7 @@ import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermi
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'POS', href: '/pos', icon: ShoppingCartIcon },
-  { name: 'Cobros POS', href: '/cobros', icon: CurrencyDollarIcon },
+  { name: 'Cuentas Por Cobrar', href: '/cobros', icon: CurrencyDollarIcon },
   { name: 'Clientes', href: '/clientes', icon: UsersIcon },
   { name: 'Facturas', href: '/facturas', icon: DocumentTextIcon },
   { name: 'Notas de Crédito', href: '/notas-credito', icon: ReceiptRefundIcon },

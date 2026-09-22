@@ -475,7 +475,7 @@ export default function Cobros() {
             </span>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                Cobros POS & Cuentas por Cobrar
+                Cuentas Por Cobrar
               </h1>
               <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
                 Gestión y registro de abonos de facturas a crédito de repuestos emitidas en el Punto de Venta.

@@ -24,7 +24,7 @@ import {
 const routeNames: Record<string, string> = {
   '/dashboard': 'Panel Principal',
   '/pos': 'Punto de Venta (POS)',
-  '/cobros': 'Cobros de Repuestos (POS)',
+  '/cobros': 'Cuentas Por Cobrar',
   '/clientes': 'Directorio de Clientes',
   '/inventario': 'Inventario',
   '/financiamientos': 'Financiamientos',
