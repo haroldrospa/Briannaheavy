@@ -1693,7 +1693,7 @@ export default function POS() {
   const [searchTerm, setSearchTerm] = useState(''); // debounced filter value
   const [selectedCategory, setSelectedCategory] = useState<'Todas' | 'Piezas' | 'Camiones' | 'Equipos'>('Todas');
   const [searchCriteria, setSearchCriteria] = useState<'all' | 'barcode' | 'internal_code' | 'name'>('all');
-  const [viewMode, setViewMode] = useState<'catalog' | 'compact' | 'list'>(() => (localStorage.getItem('brianna_pos_view_mode') as any) || 'catalog');
+  const [viewMode, setViewMode] = useState<'catalog' | 'compact' | 'list'>(() => (localStorage.getItem('brianna_pos_view_mode') as any) || 'list');
   const [sortBy, setSortBy] = useState<'default' | 'name' | 'price_asc' | 'price_desc' | 'stock'>('default');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [activeRegister] = useState<string>(() => {
