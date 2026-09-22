@@ -27,6 +27,9 @@ export interface FinancingPaymentReceipt {
   itemName: string;
   chassis?: string;
   itemPlate?: string;
+  itemBrand?: string;
+  itemModel?: string;
+  itemYear?: string;
   cashierName: string;
   paymentMethod?: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Cheque';
   registerName?: string;
@@ -61,6 +64,9 @@ const toDbRow = (r: FinancingPaymentReceipt) => ({
   item_name: r.itemName || 'Equipo',
   chassis: r.chassis || null,
   item_plate: r.itemPlate || null,
+  item_brand: r.itemBrand || null,
+  item_model: r.itemModel || null,
+  item_year: r.itemYear || null,
   cashier_name: r.cashierName || 'Harold Rosado',
   payment_method: r.paymentMethod || 'Efectivo',
   register_name: r.registerName || 'Caja Cobros & Financiamientos',
@@ -93,6 +99,9 @@ const fromDbRow = (row: any): FinancingPaymentReceipt => ({
   itemName: row.item_name || row.itemName || 'Equipo',
   chassis: row.chassis,
   itemPlate: row.item_plate || row.itemPlate,
+  itemBrand: row.item_brand || row.itemBrand,
+  itemModel: row.item_model || row.itemModel,
+  itemYear: row.item_year || row.itemYear,
   cashierName: row.cashier_name || row.cashierName || 'Harold Rosado',
   paymentMethod: row.payment_method || row.paymentMethod || 'Efectivo',
   registerName: row.register_name || row.registerName || 'Caja Cobros & Financiamientos',
@@ -421,6 +430,9 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
         itemName: financing.item || financing.item_name || 'Equipo',
         chassis: financing.chassis,
         itemPlate: financing.itemPlate || financing.item_plate,
+        itemBrand: financing.itemBrand || financing.item_brand,
+        itemModel: financing.itemModel || financing.item_model,
+        itemYear: financing.itemYear || financing.item_year,
         cashierName: (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado',
         paymentMethod: 'Efectivo',
         registerName: 'Caja Cobros & Financiamientos',
@@ -460,6 +472,9 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
       itemName: financing.item || financing.item_name || 'Equipo',
       chassis: financing.chassis,
       itemPlate: financing.itemPlate || financing.item_plate,
+      itemBrand: financing.itemBrand || financing.item_brand,
+      itemModel: financing.itemModel || financing.item_model,
+      itemYear: financing.itemYear || financing.item_year,
       cashierName: (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado',
       paymentMethod: 'Efectivo',
       registerName: 'Caja Cobros & Financiamientos',

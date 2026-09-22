@@ -63,6 +63,11 @@ export interface PaymentReceiptData {
   customerName: string;
   customerCode: string;
   itemName: string;
+  chassis?: string;
+  itemPlate?: string;
+  itemBrand?: string;
+  itemModel?: string;
+  itemYear?: string;
   cashierName: string;
   registerName?: string;
   financingId: string;
@@ -203,6 +208,8 @@ const generateAmortizationSchedule = (
 
 const mapFinancingsToState = (dbF: any[]): any[] => {
   if (!dbF || dbF.length === 0) return [];
+  const localInventory = getLocalStorageInventory();
+
   return dbF.map((f, idx) => {
     let installments: any[] = [];
     if (f.installments && Array.isArray(f.installments) && f.installments.length > 0) {
@@ -250,38 +257,79 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
     const firstUnpaid = installments.find(i => !i.isPaid);
     const nextPay = firstUnpaid ? firstUnpaid.dueDate : (f.start_date || new Date().toISOString().split('T')[0]);
 
+    // Buscar en inventario local para rellenar datos faltantes del equipo
+    const matchedItem = f.item_id 
+      ? localInventory.find(inv => String(inv.id) === String(f.item_id)) 
+      : ((f.chassis || f.vin) 
+          ? localInventory.find(inv => (inv.vin && inv.vin === (f.chassis || f.vin)) || (inv.chassis_number && inv.chassis_number === (f.chassis || f.vin)))
+          : null);
+
+    const item = f.item_name || f.item || matchedItem?.name || 'Equipo / Maquinaria';
+    const chassis = f.chassis || f.chassis_number || f.vin || matchedItem?.vin || matchedItem?.chassis_number || '';
+    const itemBrand = f.item_brand || f.itemBrand || f.brand || matchedItem?.brand || '';
+    const itemModel = f.item_model || f.itemModel || f.model || matchedItem?.model || '';
+    const itemYear = (f.item_year || f.itemYear || f.year) ? String(f.item_year || f.itemYear || f.year) : (matchedItem?.year ? String(matchedItem.year) : '');
+    const itemColor = f.item_color || f.itemColor || f.color || matchedItem?.color || '';
+    const itemPlate = f.item_plate || f.itemPlate || f.plate || matchedItem?.plate || '';
+    const itemEngineNumber = f.item_engine_number || f.itemEngineNumber || f.engine_number || matchedItem?.engine_number || '';
+    const itemMileageHours = (f.item_mileage_hours || f.itemMileageHours || f.mileage_hours) ? String(f.item_mileage_hours || f.itemMileageHours || f.mileage_hours) : (matchedItem?.mileage_hours ? String(matchedItem.mileage_hours) : '');
+    const itemType = f.item_type || f.itemType || f.type || matchedItem?.type || '';
+
     return {
       id: f.id || idx + 1,
       rawId: f.id,
       customer_id: f.customer_id,
       item_id: f.item_id,
-      customer: f.customer_name || 'Cliente Sin Nombre',
+      customer: f.customer_name || f.customer || 'Cliente Sin Nombre',
+      customer_name: f.customer_name || f.customer || 'Cliente Sin Nombre',
       customerPhoto: f.customer_photo || (f as any).customerPhoto || '',
-      rnc: f.customer_rnc || f.customer_id || '101-00000-1',
-      phone: f.customer_phone || '',
-      item: f.item_name || 'Equipo / Maquinaria',
-      chassis: f.chassis || '',
-      itemBrand: f.item_brand || '',
-      itemModel: f.item_model || '',
-      itemYear: f.item_year || '',
-      itemColor: f.item_color || '',
-      itemPlate: f.item_plate || '',
-      itemEngineNumber: f.item_engine_number || '',
-      itemMileageHours: f.item_mileage_hours || '',
-      itemType: f.item_type || '',
+      customer_photo: f.customer_photo || (f as any).customerPhoto || '',
+      rnc: f.customer_rnc || f.customerRnc || f.rnc || f.customer_id || '101-00000-1',
+      customer_rnc: f.customer_rnc || f.customerRnc || f.rnc || f.customer_id || '101-00000-1',
+      phone: f.customer_phone || f.customerPhone || f.phone || '',
+      customer_phone: f.customer_phone || f.customerPhone || f.phone || '',
+      item,
+      item_name: item,
+      chassis,
+      itemBrand,
+      item_brand: itemBrand,
+      itemModel,
+      item_model: itemModel,
+      itemYear,
+      item_year: itemYear,
+      itemColor,
+      item_color: itemColor,
+      itemPlate,
+      item_plate: itemPlate,
+      itemEngineNumber,
+      item_engine_number: itemEngineNumber,
+      itemMileageHours,
+      item_mileage_hours: itemMileageHours,
+      itemType,
+      item_type: itemType,
       amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
+      financed_amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
       totalValue: Number(f.total_amount) || 0,
+      total_amount: Number(f.total_amount) || 0,
       downPayment: Number(f.down_payment) || 0,
+      down_payment: Number(f.down_payment) || 0,
       rate: Number(f.interest_rate) || 16,
+      interest_rate: Number(f.interest_rate) || 16,
       months: Number(f.installments_count) || installments.length,
+      installments_count: Number(f.installments_count) || installments.length,
       status: computedStatus,
       nextPayment: nextPay,
       startDate: f.start_date || new Date().toISOString().split('T')[0],
+      start_date: f.start_date || new Date().toISOString().split('T')[0],
       guarantor: f.guarantor || '',
-      guarantorRnc: f.guarantor_rnc || '',
-      guarantorPhone: f.guarantor_phone || '',
-      guarantorRelation: f.guarantor_relation || '',
-      guarantorAddress: f.guarantor_address || '',
+      guarantorRnc: f.guarantor_rnc || f.guarantorRnc || '',
+      guarantor_rnc: f.guarantor_rnc || f.guarantorRnc || '',
+      guarantorPhone: f.guarantor_phone || f.guarantorPhone || '',
+      guarantor_phone: f.guarantor_phone || f.guarantorPhone || '',
+      guarantorRelation: f.guarantor_relation || f.guarantorRelation || '',
+      guarantor_relation: f.guarantor_relation || f.guarantorRelation || '',
+      guarantorAddress: f.guarantor_address || f.guarantorAddress || '',
+      guarantor_address: f.guarantor_address || f.guarantorAddress || '',
       installments,
     };
   });
@@ -871,30 +919,30 @@ export default function Financing() {
   const handleOpenEditForm = (fin: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingFinancing(fin);
-    setNewCustomer(fin.customer || '');
+    setNewCustomer(fin.customer || fin.customer_name || '');
     setNewCustomerPhoto(fin.customerPhoto || fin.customer_photo || '');
-    setNewRnc(fin.rnc || '');
-    setNewPhone(fin.phone || '');
-    setNewItem(fin.item || '');
-    setNewItemBrand(fin.itemBrand || '');
-    setNewItemModel(fin.itemModel || '');
-    setNewItemYear(fin.itemYear ? String(fin.itemYear) : '');
-    setNewChassis(fin.chassis || '');
-    setNewItemEngine(fin.itemEngineNumber || '');
-    setNewItemPlate(fin.itemPlate || '');
-    setNewItemColor(fin.itemColor || '');
-    setNewItemMileageHours(fin.itemMileageHours ? String(fin.itemMileageHours) : '');
-    setNewItemType(fin.itemType || 'Equipo_Pesado');
-    setNewTotalValue(formatCurrencyInput(fin.totalValue || fin.amount));
-    setNewDownPayment(formatCurrencyInput(fin.downPayment || 0));
-    setNewRate(String(fin.rate !== undefined && fin.rate !== null ? fin.rate : 2.0));
-    setNewMonths(String(fin.months || fin.installments?.length || 24));
-    setNewNextPayment(fin.nextPayment || fin.startDate || defaultNextMonthDate());
+    setNewRnc(fin.rnc || fin.customer_rnc || '');
+    setNewPhone(fin.phone || fin.customer_phone || '');
+    setNewItem(fin.item || fin.item_name || '');
+    setNewItemBrand(fin.itemBrand || fin.item_brand || fin.brand || '');
+    setNewItemModel(fin.itemModel || fin.item_model || fin.model || '');
+    setNewItemYear(fin.itemYear ? String(fin.itemYear) : (fin.item_year ? String(fin.item_year) : (fin.year ? String(fin.year) : '')));
+    setNewChassis(fin.chassis || fin.chassis_number || fin.vin || '');
+    setNewItemEngine(fin.itemEngineNumber || fin.item_engine_number || fin.engine_number || '');
+    setNewItemPlate(fin.itemPlate || fin.item_plate || fin.plate || '');
+    setNewItemColor(fin.itemColor || fin.item_color || fin.color || '');
+    setNewItemMileageHours(fin.itemMileageHours ? String(fin.itemMileageHours) : (fin.item_mileage_hours ? String(fin.item_mileage_hours) : (fin.mileage_hours ? String(fin.mileage_hours) : '')));
+    setNewItemType(fin.itemType || fin.item_type || fin.type || 'Equipo_Pesado');
+    setNewTotalValue(formatCurrencyInput(fin.totalValue || fin.total_amount || fin.amount || 0));
+    setNewDownPayment(formatCurrencyInput(fin.downPayment || fin.down_payment || 0));
+    setNewRate(String(fin.rate !== undefined && fin.rate !== null ? fin.rate : (fin.interest_rate !== undefined && fin.interest_rate !== null ? fin.interest_rate : 2.0)));
+    setNewMonths(String(fin.months || fin.installments_count || fin.installments?.length || 24));
+    setNewNextPayment(fin.nextPayment || fin.startDate || fin.start_date || defaultNextMonthDate());
     setNewGuarantorName(fin.guarantor || '');
-    setNewGuarantorRnc(fin.guarantorRnc || '');
-    setNewGuarantorPhone(fin.guarantorPhone || '');
-    setNewGuarantorRelation(fin.guarantorRelation || 'Socio / Propietario');
-    setNewGuarantorAddress(fin.guarantorAddress || '');
+    setNewGuarantorRnc(fin.guarantorRnc || fin.guarantor_rnc || '');
+    setNewGuarantorPhone(fin.guarantorPhone || fin.guarantor_phone || '');
+    setNewGuarantorRelation(fin.guarantorRelation || fin.guarantor_relation || 'Socio / Propietario');
+    setNewGuarantorAddress(fin.guarantorAddress || fin.guarantor_address || '');
     setShowGuarantorSection(!!fin.guarantor);
     setSelectedCustomerId(fin.customer_id);
     setSelectedItemId(fin.item_id);
@@ -1290,19 +1338,32 @@ export default function Financing() {
     const financingPayload: any = {
       customer_id: selectedCustomerId,
       item_id: selectedItemId,
+      customer: newCustomer.trim(),
       customer_name: newCustomer.trim(),
+      customerPhoto: newCustomerPhoto || undefined,
       customer_photo: newCustomerPhoto || undefined,
+      rnc: newRnc.trim() || undefined,
       customer_rnc: newRnc.trim() || undefined,
+      phone: newPhone.trim() || undefined,
       customer_phone: newPhone.trim() || undefined,
+      item: newItem.trim(),
       item_name: newItem.trim(),
       chassis: newChassis.trim() || undefined,
+      itemBrand: newItemBrand.trim() || undefined,
       item_brand: newItemBrand.trim() || undefined,
+      itemModel: newItemModel.trim() || undefined,
       item_model: newItemModel.trim() || undefined,
+      itemYear: newItemYear.trim() || undefined,
       item_year: newItemYear.trim() || undefined,
+      itemColor: newItemColor.trim() || undefined,
       item_color: newItemColor.trim() || undefined,
+      itemPlate: newItemPlate.trim() || undefined,
       item_plate: newItemPlate.trim() || undefined,
+      itemEngineNumber: newItemEngine.trim() || undefined,
       item_engine_number: newItemEngine.trim() || undefined,
+      itemMileageHours: newItemMileageHours.trim() || undefined,
       item_mileage_hours: newItemMileageHours.trim() || undefined,
+      itemType: newItemType || undefined,
       item_type: newItemType || undefined,
       total_amount: finalTotal,
       down_payment: finalInicial,
@@ -1433,6 +1494,8 @@ export default function Financing() {
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [selectedBankId, setSelectedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [transferAmount, setTransferAmount] = useState<string>('');
+  const [chequeAmount, setChequeAmount] = useState<string>('');
   const [bankName, setBankName] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
@@ -1581,6 +1644,8 @@ export default function Financing() {
     setCustomCuotasPayAmount('');
     setApplyCashAsSurplus(true);
     setCashReceived('');
+    setTransferAmount('');
+    setChequeAmount('');
     setHasPrintedReceipt(false);
     setShowExitConfirmModal(false);
     setLastReceipt(null);
@@ -1681,6 +1746,8 @@ export default function Financing() {
   const numAbono = parseCurrencyInput(abonoAmount);
   const numCustomCuotas = parseCurrencyInput(customCuotasPayAmount);
   const numCash = paymentMethod === 'Efectivo' ? parseCurrencyInput(cashReceived) : 0;
+  const numTransfer = paymentMethod === 'Transferencia' ? parseCurrencyInput(transferAmount) : 0;
+  const numCheque = paymentMethod === 'Cheque' ? parseCurrencyInput(chequeAmount) : 0;
 
   const surplusFromCustom = paymentType === 'cuotas' && numCustomCuotas > totalSelectedAmount
     ? Math.round((numCustomCuotas - totalSelectedAmount) * 100) / 100
@@ -1690,11 +1757,29 @@ export default function Financing() {
     ? Math.round((numCash - totalSelectedAmount) * 100) / 100
     : 0;
 
-  const surplusAmount = surplusFromCustom > 0 ? surplusFromCustom : surplusFromCash;
+  const surplusFromTransfer = paymentType === 'cuotas' && paymentMethod === 'Transferencia' && numTransfer > totalSelectedAmount
+    ? Math.round((numTransfer - totalSelectedAmount) * 100) / 100
+    : 0;
+
+  const surplusFromCheque = paymentType === 'cuotas' && paymentMethod === 'Cheque' && numCheque > totalSelectedAmount
+    ? Math.round((numCheque - totalSelectedAmount) * 100) / 100
+    : 0;
+
+  const surplusAmount = surplusFromCustom > 0 
+    ? surplusFromCustom 
+    : surplusFromCash > 0 
+      ? surplusFromCash 
+      : surplusFromTransfer > 0 
+        ? surplusFromTransfer 
+        : surplusFromCheque;
 
   const effectivePayAmount = paymentType === 'abono'
-    ? numAbono
-    : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && applyCashAsSurplus ? surplusFromCash : 0)));
+    ? (paymentMethod === 'Transferencia' && numTransfer > 0 ? numTransfer : (paymentMethod === 'Cheque' && numCheque > 0 ? numCheque : numAbono))
+    : (paymentMethod === 'Transferencia' && numTransfer > 0
+        ? numTransfer
+        : paymentMethod === 'Cheque' && numCheque > 0
+          ? numCheque
+          : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && applyCashAsSurplus ? surplusFromCash : 0))));
 
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
@@ -1726,21 +1811,17 @@ export default function Financing() {
 
     if (paymentType === 'cuotas') {
       if (selectedInstallmentIds.length === 0) return;
-
-      const numCustom = parseCurrencyInput(customCuotasPayAmount);
-      if (customCuotasPayAmount.trim() !== '' && numCustom > 0 && numCustom < totalSelectedAmount) {
-        alert(`El monto ingresado ($${numCustom.toLocaleString('en-US', { minimumFractionDigits: 2 })}) es menor al total de las cuotas seleccionadas ($${totalSelectedAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}).`);
-        return;
-      }
+      if (effectivePayAmount <= 0) return;
 
       const surplus = surplusAmount;
-      let remainingSurplus = surplus;
-      const totalPaid = totalSelectedAmount + surplus;
+      let remainingToApply = effectivePayAmount;
+      const totalPaid = effectivePayAmount;
 
-      const paidList: any[] = [...selectedInsts];
+      const paidList: any[] = [];
       const surplusFullyPaidInsts: any[] = [];
       let surplusPartiallyPaidInst: { inst: any; applied: number; remaining: number } | null = null;
-      let totalCapAmortized = totalSelectedCapital;
+      let partialSelectedInst: { inst: any; applied: number; remaining: number } | null = null;
+      let totalCapAmortized = 0;
 
       const recNumber = getNextReceiptNumber();
       const now = new Date();
@@ -1761,23 +1842,94 @@ export default function Financing() {
       for (const inst of sortedCurrentInsts) {
         // 1. Cuota seleccionada directamente por el usuario
         if (selectedInstallmentIds.includes(inst.id)) {
-          const paidInstTotal = inst.total;
+          const instPenalty = Number(inst.penalty) || 0;
+          const instInterest = Number(inst.interest ?? inst.interest_amount) || 0;
+          const instCapital = Number(inst.capital ?? inst.principal_amount) || 0;
+          const instTotal = Number(inst.total ?? inst.amount) || (instPenalty + instInterest + instCapital);
           const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
-          if (instDbId) {
-            markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, paidInstTotal);
+
+          if (remainingToApply >= instTotal) {
+            remainingToApply = Math.round((remainingToApply - instTotal) * 100) / 100;
+            totalCapAmortized += instCapital;
+            if (instDbId) {
+              markInstallmentPaid(selectedFinancing.rawId || String(selectedFinancing.id), instDbId, instTotal);
+            }
+            const fullInst = {
+              ...inst,
+              status: 'Pagado',
+              isPaid: true,
+              paidAmount: instTotal,
+              paidDate: paidIsoDate,
+            };
+            paidList.push(fullInst);
+            updatedInsts.push(fullInst);
+            continue;
           }
-          updatedInsts.push({
-            ...inst,
-            status: 'Pagado',
-            isPaid: true,
-            paidAmount: paidInstTotal,
-            paidDate: paidIsoDate,
-          });
+
+          if (remainingToApply > 0) {
+            const appliedToThisCuota = remainingToApply;
+            remainingToApply = 0;
+
+            const appliedPenalty = Math.min(instPenalty, appliedToThisCuota);
+            const remAfterPenalty = appliedToThisCuota - appliedPenalty;
+            const appliedInterest = Math.min(instInterest, remAfterPenalty);
+            const remAfterInterest = remAfterPenalty - appliedInterest;
+            const appliedCapital = Math.min(instCapital, remAfterInterest);
+            totalCapAmortized += appliedCapital;
+
+            const newPenalty = Math.max(0, Math.round((instPenalty - appliedPenalty) * 100) / 100);
+            const newInterest = Math.max(0, Math.round((instInterest - appliedInterest) * 100) / 100);
+            const newCapital = Math.max(0, Math.round((instCapital - appliedCapital) * 100) / 100);
+            const newTotal = Math.max(0, Math.round((newPenalty + newInterest + newCapital) * 100) / 100);
+            const newPaidAmount = (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + appliedToThisCuota;
+
+            partialSelectedInst = {
+              inst,
+              applied: appliedToThisCuota,
+              remaining: newTotal,
+            };
+
+            if (instDbId) {
+              updateInstallmentInDb(instDbId, {
+                principal_amount: newCapital,
+                interest_amount: newInterest,
+                amount: newTotal,
+                paid_amount: newPaidAmount,
+                status: 'Pendiente',
+              });
+            }
+
+            paidList.push({
+              ...inst,
+              capital: appliedCapital,
+              interest: appliedInterest,
+              penalty: appliedPenalty,
+              total: appliedToThisCuota,
+            });
+
+            updatedInsts.push({
+              ...inst,
+              capital: newCapital,
+              principal_amount: newCapital,
+              interest: newInterest,
+              interest_amount: newInterest,
+              penalty: newPenalty,
+              total: newTotal,
+              amount: newTotal,
+              paidAmount: newPaidAmount,
+              paid_amount: newPaidAmount,
+              isPaid: false,
+              status: 'Pendiente',
+            });
+            continue;
+          }
+
+          updatedInsts.push(inst);
           continue;
         }
 
         // 2. Si sobra dinero, se abona a la(s) siguiente(s) cuota(s) consecutivas (no solo al capital)
-        if (!inst.isPaid && inst.status !== 'Pagado' && remainingSurplus > 0) {
+        if (!inst.isPaid && inst.status !== 'Pagado' && remainingToApply > 0) {
           const instPenalty = Number(inst.penalty) || 0;
           const instInterest = Number(inst.interest ?? inst.interest_amount) || 0;
           const instCapital = Number(inst.capital ?? inst.principal_amount) || 0;
@@ -1785,8 +1937,8 @@ export default function Financing() {
           const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
 
           // Caso A: El sobrante cubre la cuota completa
-          if (remainingSurplus >= instTotal) {
-            remainingSurplus = Math.round((remainingSurplus - instTotal) * 100) / 100;
+          if (remainingToApply >= instTotal) {
+            remainingToApply = Math.round((remainingToApply - instTotal) * 100) / 100;
             totalCapAmortized += instCapital;
 
             const fullyPaidInst = {
@@ -1814,8 +1966,8 @@ export default function Financing() {
           }
 
           // Caso B: El sobrante abona parcialmente a esta cuota
-          const appliedToThisCuota = remainingSurplus;
-          remainingSurplus = 0;
+          const appliedToThisCuota = remainingToApply;
+          remainingToApply = 0;
 
           // Se cubre en orden financiero: Mora -> Interés -> Capital
           const appliedPenalty = Math.min(instPenalty, appliedToThisCuota);
@@ -1870,9 +2022,9 @@ export default function Financing() {
       }
 
       // Si aún quedó sobrante residual tras saldar todas las cuotas, amortiza al balance
-      if (remainingSurplus > 0) {
-        totalCapAmortized += remainingSurplus;
-        remainingSurplus = 0;
+      if (remainingToApply > 0) {
+        totalCapAmortized += remainingToApply;
+        remainingToApply = 0;
       }
 
       const newBal = Math.max(0, Math.round((selectedFinancing.amount - totalCapAmortized) * 100) / 100);
@@ -1900,6 +2052,8 @@ export default function Financing() {
         } else {
           surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a cuota(s) siguiente(s)`;
         }
+      } else if (partialSelectedInst) {
+        surplusNote = `Abono parcial a Cuota #${partialSelectedInst.inst.id}: RD$ ${partialSelectedInst.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicados (restante a pagar: RD$ ${partialSelectedInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
       }
 
       const finalNotes = paymentNotes.trim()
@@ -1939,9 +2093,12 @@ export default function Financing() {
         newBalance: newBal,
         customerName: selectedFinancing.customer,
         customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
-        itemName: selectedFinancing.item,
-        chassis: selectedFinancing.chassis,
-        itemPlate: selectedFinancing.itemPlate,
+        itemName: selectedFinancing.item || selectedFinancing.item_name || 'Equipo Pesado',
+        chassis: selectedFinancing.chassis || '',
+        itemPlate: selectedFinancing.itemPlate || selectedFinancing.item_plate || '',
+        itemBrand: selectedFinancing.itemBrand || selectedFinancing.item_brand || '',
+        itemModel: selectedFinancing.itemModel || selectedFinancing.item_model || '',
+        itemYear: (selectedFinancing.itemYear || selectedFinancing.item_year) ? String(selectedFinancing.itemYear || selectedFinancing.item_year) : undefined,
         cashierName: activeCashier,
         paymentMethod: paymentMethod,
         registerName: 'Caja Cobros & Financiamientos',
@@ -1976,6 +2133,8 @@ export default function Financing() {
       setCustomCuotasPayAmount('');
       setApplyCashAsSurplus(true);
       setCashReceived('');
+      setTransferAmount('');
+      setChequeAmount('');
       setReferenceNumber('');
       setPaymentNotes('');
       setPaymentDate(new Date().toISOString().slice(0, 10));
@@ -2022,9 +2181,12 @@ export default function Financing() {
         newBalance: newBal,
         customerName: selectedFinancing.customer,
         customerCode: `CLI-${selectedFinancing.id.toString().padStart(4, '0')}`,
-        itemName: selectedFinancing.item,
-        chassis: selectedFinancing.chassis,
-        itemPlate: selectedFinancing.itemPlate,
+        itemName: selectedFinancing.item || selectedFinancing.item_name || 'Equipo Pesado',
+        chassis: selectedFinancing.chassis || '',
+        itemPlate: selectedFinancing.itemPlate || selectedFinancing.item_plate || '',
+        itemBrand: selectedFinancing.itemBrand || selectedFinancing.item_brand || '',
+        itemModel: selectedFinancing.itemModel || selectedFinancing.item_model || '',
+        itemYear: (selectedFinancing.itemYear || selectedFinancing.item_year) ? String(selectedFinancing.itemYear || selectedFinancing.item_year) : undefined,
         cashierName: activeCashier,
         paymentMethod: paymentMethod,
         registerName: 'Caja Cobros & Financiamientos',
@@ -2078,6 +2240,8 @@ export default function Financing() {
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setAbonoAmount('');
       setCashReceived('');
+      setTransferAmount('');
+      setChequeAmount('');
       setReferenceNumber('');
       setPaymentNotes('');
       setPaymentDate(new Date().toISOString().slice(0, 10));
@@ -2097,6 +2261,12 @@ export default function Financing() {
       const autoExecDate = vr.paymentExecutionDate || vr.date;
       return {
         ...vr,
+        itemName: vr.itemName || selectedFinancing?.item || selectedFinancing?.item_name || 'Equipo Pesado',
+        chassis: vr.chassis || selectedFinancing?.chassis || '',
+        itemPlate: vr.itemPlate || vr.item_plate || selectedFinancing?.itemPlate || selectedFinancing?.item_plate || '',
+        itemBrand: vr.itemBrand || vr.item_brand || selectedFinancing?.itemBrand || selectedFinancing?.item_brand || '',
+        itemModel: vr.itemModel || vr.item_model || selectedFinancing?.itemModel || selectedFinancing?.item_model || '',
+        itemYear: (vr.itemYear || vr.item_year) ? String(vr.itemYear || vr.item_year) : (selectedFinancing?.itemYear || selectedFinancing?.item_year ? String(selectedFinancing?.itemYear || selectedFinancing?.item_year) : ''),
         registerName: (vr.registerName && !vr.registerName.toLowerCase().includes('carlos mendoza')) 
           ? vr.registerName 
           : (getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER),
@@ -2110,6 +2280,12 @@ export default function Financing() {
       const lr = lastReceipt as any;
       return {
         ...lr,
+        itemName: lr.itemName || selectedFinancing?.item || selectedFinancing?.item_name || 'Equipo Pesado',
+        chassis: lr.chassis || selectedFinancing?.chassis || '',
+        itemPlate: lr.itemPlate || lr.item_plate || selectedFinancing?.itemPlate || selectedFinancing?.item_plate || '',
+        itemBrand: lr.itemBrand || lr.item_brand || selectedFinancing?.itemBrand || selectedFinancing?.item_brand || '',
+        itemModel: lr.itemModel || lr.item_model || selectedFinancing?.itemModel || selectedFinancing?.item_model || '',
+        itemYear: (lr.itemYear || lr.item_year) ? String(lr.itemYear || lr.item_year) : (selectedFinancing?.itemYear || selectedFinancing?.item_year ? String(selectedFinancing?.itemYear || selectedFinancing?.item_year) : ''),
         registerName: (lr.registerName && !lr.registerName.toLowerCase().includes('carlos mendoza')) 
           ? lr.registerName 
           : (getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER),
@@ -2120,7 +2296,37 @@ export default function Financing() {
     let simulatedSurplus = surplusAmount;
     let simulatedCapPaid = totalSelectedCapital;
 
-    if (paymentType === 'cuotas' && simulatedSurplus > 0) {
+    if (paymentType === 'cuotas' && effectivePayAmount > 0 && effectivePayAmount < totalSelectedAmount) {
+      simulatedPaidList = [];
+      simulatedCapPaid = 0;
+      let remSim = effectivePayAmount;
+      for (const inst of selectedInsts) {
+        if (remSim <= 0) break;
+        const instTot = inst.total;
+        if (remSim >= instTot) {
+          remSim = Math.round((remSim - instTot) * 100) / 100;
+          simulatedCapPaid += inst.capital;
+          simulatedPaidList.push(inst);
+        } else {
+          const appliedToThis = remSim;
+          remSim = 0;
+          const instPen = Number(inst.penalty) || 0;
+          const instInt = Number(inst.interest) || 0;
+          const instCap = Number(inst.capital) || 0;
+          const remAfterPen = Math.max(0, appliedToThis - instPen);
+          const remAfterInt = Math.max(0, remAfterPen - instInt);
+          const appliedCap = Math.min(instCap, remAfterInt);
+          simulatedCapPaid += appliedCap;
+          simulatedPaidList.push({
+            ...inst,
+            capital: appliedCap,
+            interest: Math.min(instInt, remAfterPen),
+            penalty: Math.min(instPen, appliedToThis),
+            total: appliedToThis,
+          });
+        }
+      }
+    } else if (paymentType === 'cuotas' && simulatedSurplus > 0) {
       const unpaidRemaining = currentInstallments
         .filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado')
         .sort((a, b) => a.id - b.id);
@@ -2197,7 +2403,12 @@ export default function Financing() {
       newBalance: newBal,
       customerName: selectedFinancing?.customer || 'Cliente General',
       customerCode: `CLI-${(selectedFinancing?.id || '1').toString().padStart(4, '0')}`,
-      itemName: selectedFinancing?.item || 'Equipo Pesado',
+      itemName: selectedFinancing?.item || selectedFinancing?.item_name || 'Equipo Pesado',
+      chassis: selectedFinancing?.chassis || '',
+      itemPlate: selectedFinancing?.itemPlate || selectedFinancing?.item_plate || '',
+      itemBrand: selectedFinancing?.itemBrand || selectedFinancing?.item_brand || '',
+      itemModel: selectedFinancing?.itemModel || selectedFinancing?.item_model || '',
+      itemYear: (selectedFinancing?.itemYear || selectedFinancing?.item_year) ? String(selectedFinancing?.itemYear || selectedFinancing?.item_year) : '',
       cashierName: currentCashier,
       registerName: getActiveShift(FINANCING_REGISTER)?.register_name || FINANCING_REGISTER,
       financingId: String(selectedFinancing?.id || ''),
@@ -2209,7 +2420,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, customCuotasPayAmount, applyCashAsSurplus, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, customCuotasPayAmount, applyCashAsSurplus, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, transferAmount, chequeAmount, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -3896,6 +4107,17 @@ export default function Financing() {
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Detalle del Equipo</p>
                         <p className="font-black text-gray-900 dark:text-white text-sm print:text-black">{activeReceiptData.itemName}</p>
+                        {(activeReceiptData.itemBrand || activeReceiptData.itemModel || activeReceiptData.itemYear) && (
+                          <p className="text-xs font-semibold text-gray-800 dark:text-zinc-200 mt-0.5 print:text-black">
+                            {[activeReceiptData.itemBrand, activeReceiptData.itemModel, activeReceiptData.itemYear].filter(Boolean).join(' ')}
+                          </p>
+                        )}
+                        {(activeReceiptData.chassis || activeReceiptData.itemPlate) && (
+                          <div className="flex flex-wrap gap-2 text-[10px] font-mono text-gray-500 dark:text-zinc-400 mt-0.5 print:text-gray-700">
+                            {activeReceiptData.chassis && <span>VIN: {activeReceiptData.chassis}</span>}
+                            {activeReceiptData.itemPlate && <span>Placa: {activeReceiptData.itemPlate}</span>}
+                          </div>
+                        )}
                         <p className="text-[11px] text-gray-500 font-medium mt-0.5 print:text-gray-700">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
                       </div>
                       <div>
@@ -4115,7 +4337,20 @@ export default function Financing() {
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Artículo Financiado</p>
-                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.item}</p>
+                        <p className="font-bold text-gray-900 dark:text-white text-base">{selectedFinancing.item || selectedFinancing.item_name || 'Equipo Pesado'}</p>
+                        {(selectedFinancing.itemBrand || selectedFinancing.item_brand || selectedFinancing.itemModel || selectedFinancing.item_model || selectedFinancing.chassis || selectedFinancing.vin || selectedFinancing.itemPlate || selectedFinancing.item_plate) && (
+                          <div className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5 space-y-0.5">
+                            {(selectedFinancing.itemBrand || selectedFinancing.item_brand || selectedFinancing.itemModel || selectedFinancing.item_model) && (
+                              <p className="font-medium text-gray-700 dark:text-zinc-300">
+                                {[selectedFinancing.itemBrand || selectedFinancing.item_brand, selectedFinancing.itemModel || selectedFinancing.item_model, selectedFinancing.itemYear || selectedFinancing.item_year].filter(Boolean).join(' ')}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2 text-[10px] font-mono">
+                              {(selectedFinancing.chassis || selectedFinancing.vin) && <span>VIN: {selectedFinancing.chassis || selectedFinancing.vin}</span>}
+                              {(selectedFinancing.itemPlate || selectedFinancing.item_plate) && <span>Placa: {selectedFinancing.itemPlate || selectedFinancing.item_plate}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Monto Financiado</p>
@@ -4291,51 +4526,51 @@ export default function Financing() {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                         <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                           <span className="text-[10px] font-bold text-gray-400 uppercase block">Descripción</span>
-                          <span className="font-black text-gray-900 dark:text-white truncate block">{selectedFinancing.item}</span>
+                          <span className="font-black text-gray-900 dark:text-white truncate block">{selectedFinancing.item || selectedFinancing.item_name || 'Equipo / Maquinaria'}</span>
                         </div>
                         <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                           <span className="text-[10px] font-bold text-gray-400 uppercase block">Marca & Modelo</span>
                           <span className="font-bold text-gray-900 dark:text-white truncate block">
-                            {selectedFinancing.itemBrand || selectedFinancing.itemModel 
-                              ? `${selectedFinancing.itemBrand || ''} ${selectedFinancing.itemModel || ''}`.trim()
+                            {(selectedFinancing.itemBrand || selectedFinancing.item_brand || selectedFinancing.itemModel || selectedFinancing.item_model)
+                              ? `${selectedFinancing.itemBrand || selectedFinancing.item_brand || ''} ${selectedFinancing.itemModel || selectedFinancing.item_model || ''}`.trim()
                               : 'No especificado'}
                           </span>
                         </div>
                         <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                           <span className="text-[10px] font-bold text-gray-400 uppercase block">Año / Tipo</span>
                           <span className="font-bold text-gray-900 dark:text-white truncate block">
-                            {selectedFinancing.itemYear || 'N/A'} {selectedFinancing.itemType ? `• ${selectedFinancing.itemType}` : ''}
+                            {selectedFinancing.itemYear || selectedFinancing.item_year || 'N/A'} {(selectedFinancing.itemType || selectedFinancing.item_type) ? `• ${selectedFinancing.itemType || selectedFinancing.item_type}` : ''}
                           </span>
                         </div>
                         <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                           <span className="text-[10px] font-bold text-gray-400 uppercase block">Chasis / VIN</span>
                           <span className="font-mono font-bold text-gray-900 dark:text-white truncate block text-[11px]">
-                            {selectedFinancing.chassis || 'No registrado'}
+                            {selectedFinancing.chassis || selectedFinancing.vin || 'No registrado'}
                           </span>
                         </div>
 
-                        {selectedFinancing.itemEngineNumber && (
+                        {(selectedFinancing.itemEngineNumber || selectedFinancing.item_engine_number) && (
                           <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                             <span className="text-[10px] font-bold text-gray-400 uppercase block">No. de Motor</span>
-                            <span className="font-mono font-bold text-gray-900 dark:text-white truncate block text-[11px]">{selectedFinancing.itemEngineNumber}</span>
+                            <span className="font-mono font-bold text-gray-900 dark:text-white truncate block text-[11px]">{selectedFinancing.itemEngineNumber || selectedFinancing.item_engine_number}</span>
                           </div>
                         )}
-                        {selectedFinancing.itemPlate && (
+                        {(selectedFinancing.itemPlate || selectedFinancing.item_plate) && (
                           <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                             <span className="text-[10px] font-bold text-gray-400 uppercase block">Placa</span>
-                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 truncate block text-[11px]">{selectedFinancing.itemPlate}</span>
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 truncate block text-[11px]">{selectedFinancing.itemPlate || selectedFinancing.item_plate}</span>
                           </div>
                         )}
-                        {selectedFinancing.itemColor && (
+                        {(selectedFinancing.itemColor || selectedFinancing.item_color) && (
                           <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                             <span className="text-[10px] font-bold text-gray-400 uppercase block">Color</span>
-                            <span className="font-bold text-gray-900 dark:text-white truncate block">{selectedFinancing.itemColor}</span>
+                            <span className="font-bold text-gray-900 dark:text-white truncate block">{selectedFinancing.itemColor || selectedFinancing.item_color}</span>
                           </div>
                         )}
-                        {selectedFinancing.itemMileageHours && (
+                        {(selectedFinancing.itemMileageHours || selectedFinancing.item_mileage_hours) && (
                           <div className="p-2.5 bg-white dark:bg-zinc-800/70 rounded-xl border border-gray-200/60 dark:border-zinc-700/60">
                             <span className="text-[10px] font-bold text-gray-400 uppercase block">Horas / Kilometraje</span>
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">{selectedFinancing.itemMileageHours}</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 truncate block">{selectedFinancing.itemMileageHours || selectedFinancing.item_mileage_hours}</span>
                           </div>
                         )}
                       </div>
@@ -5127,7 +5362,88 @@ export default function Financing() {
                         )}
 
                         {paymentMethod === 'Transferencia' && (
-                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
+                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2.5">
+                            {/* Monto de la Transferencia */}
+                            <div className="space-y-1.5 pb-2 border-b border-gray-100 dark:border-zinc-800">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
+                                  Monto Transferido:
+                                </label>
+                                <span className="text-[10px] font-bold text-gray-400 font-mono">
+                                  Total Cuota(s): ${(paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="relative">
+                                <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-gray-400 text-xs">
+                                  RD$
+                                </span>
+                                <input
+                                  type="text"
+                                  value={transferAmount}
+                                  onChange={(e) => setTransferAmount(formatCurrencyInput(e.target.value))}
+                                  placeholder={(paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  className="w-full pl-11 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-[#ED1C24]"
+                                />
+                              </div>
+
+                              {/* Botones de sugerencia rápida */}
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setTransferAmount((paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 }))}
+                                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                                >
+                                  Monto Exacto
+                                </button>
+                                {[500, 1000, 2000, 5000].map((addAmt) => (
+                                  <button
+                                    key={addAmt}
+                                    type="button"
+                                    onClick={() => {
+                                      const base = paymentType === 'abono' ? numAbono : totalSelectedAmount;
+                                      const current = parseCurrencyInput(transferAmount) || base;
+                                      setTransferAmount(formatCurrencyInput(current + addAmt));
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                  >
+                                    +${addAmt.toLocaleString()}
+                                  </button>
+                                ))}
+                                {transferAmount && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setTransferAmount('')}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                  >
+                                    Limpiar
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Excedente o Pago Parcial informativo para transferencia */}
+                              {paymentType === 'cuotas' && parseCurrencyInput(transferAmount) > totalSelectedAmount && (
+                                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                  <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                                    Excedente: RD$ {(parseCurrencyInput(transferAmount) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                    Se abonará a sig. cuota
+                                  </span>
+                                </div>
+                              )}
+
+                              {paymentType === 'cuotas' && parseCurrencyInput(transferAmount) > 0 && parseCurrencyInput(transferAmount) < totalSelectedAmount && (
+                                <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-center justify-between text-xs">
+                                  <span className="font-bold text-amber-800 dark:text-amber-300">
+                                    Abono parcial a cuota(s): RD$ {parseCurrencyInput(transferAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                    Restarán RD$ {(totalSelectedAmount - parseCurrencyInput(transferAmount)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
                             <label className="block text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300 flex items-center gap-1">
                               <BuildingLibraryIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
                               <span>Cuenta Bancaria Receptora</span>
@@ -5181,7 +5497,48 @@ export default function Financing() {
                         )}
 
                         {paymentMethod === 'Cheque' && (
-                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
+                          <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2.5">
+                            {/* Monto del Cheque */}
+                            <div className="space-y-1.5 pb-2 border-b border-gray-100 dark:border-zinc-800">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
+                                  Monto del Cheque:
+                                </label>
+                                <span className="text-[10px] font-bold text-gray-400 font-mono">
+                                  Total Cuota(s): ${(paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="relative">
+                                <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-gray-400 text-xs">
+                                  RD$
+                                </span>
+                                <input
+                                  type="text"
+                                  value={chequeAmount}
+                                  onChange={(e) => setChequeAmount(formatCurrencyInput(e.target.value))}
+                                  placeholder={(paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  className="w-full pl-11 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-[#ED1C24]"
+                                />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setChequeAmount((paymentType === 'abono' ? numAbono : totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 }))}
+                                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                                >
+                                  Monto Exacto
+                                </button>
+                                {chequeAmount && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setChequeAmount('')}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                  >
+                                    Limpiar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                             <div>
                               <label className="block text-[10px] font-bold text-gray-700 dark:text-zinc-300 mb-0.5">
                                 Banco Emisor del Cheque
@@ -5228,7 +5585,11 @@ export default function Financing() {
                       {(() => {
                         const numCash = parseCurrencyInput(cashReceived);
                         const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
-                        const isInsufficient = isCashInsufficient;
+                        const numTrans = parseCurrencyInput(transferAmount);
+                        const isTransferInvalid = paymentMethod === 'Transferencia' && transferAmount.trim() !== '' && numTrans <= 0;
+                        const numChq = parseCurrencyInput(chequeAmount);
+                        const isChequeInvalid = paymentMethod === 'Cheque' && chequeAmount.trim() !== '' && numChq <= 0;
+                        const isInsufficient = isCashInsufficient || isTransferInvalid || isChequeInvalid || effectivePayAmount <= 0;
 
                         return (
                           <div className="pt-2">
@@ -5246,10 +5607,16 @@ export default function Financing() {
                               <CheckCircleIcon className="h-5 w-5" />
                               {isCashInsufficient
                                 ? 'Efectivo Recibido Insuficiente'
+                                : isTransferInvalid
+                                ? 'Monto de Transferencia Inválido'
+                                : isChequeInvalid
+                                ? 'Monto de Cheque Inválido'
                                 : paymentType === 'abono'
                                   ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
                                   : surplusAmount > 0
                                   ? `Confirmar Pago + Sobrante ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  : (effectivePayAmount < totalSelectedAmount && effectivePayAmount > 0)
+                                  ? `Confirmar Abono Parcial ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
                                   : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
                             </button>
                           </div>
@@ -5751,11 +6118,16 @@ export default function Financing() {
             <div>
               <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-0.5">Detalle del Equipo</p>
               <p className="font-black text-black text-xs">{activeReceiptData.itemName}</p>
-              {selectedFinancing?.chassis && (
-                <p className="text-[9px] text-gray-700 font-mono">VIN: {selectedFinancing.chassis}</p>
+              {(activeReceiptData.itemBrand || activeReceiptData.itemModel || activeReceiptData.itemYear) && (
+                <p className="text-[10px] text-gray-800 font-semibold mt-0.5">
+                  {[activeReceiptData.itemBrand, activeReceiptData.itemModel, activeReceiptData.itemYear].filter(Boolean).join(' ')}
+                </p>
               )}
-              {selectedFinancing?.itemPlate && (
-                <p className="text-[9px] text-gray-700 font-mono">Placa: {selectedFinancing.itemPlate}</p>
+              {(activeReceiptData.chassis || selectedFinancing?.chassis) && (
+                <p className="text-[9px] text-gray-700 font-mono">VIN/Chasis: {activeReceiptData.chassis || selectedFinancing?.chassis}</p>
+              )}
+              {(activeReceiptData.itemPlate || selectedFinancing?.itemPlate) && (
+                <p className="text-[9px] text-gray-700 font-mono">Placa: {activeReceiptData.itemPlate || selectedFinancing?.itemPlate}</p>
               )}
               <p className="text-[10px] text-gray-700 font-medium mt-0.5">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
             </div>

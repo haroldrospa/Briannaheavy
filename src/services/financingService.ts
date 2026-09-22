@@ -327,14 +327,33 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
           .limit(200);
 
         if (!error && data) {
+          const localBefore = getLocalStorageFinancings();
           const financings = (data as Financing[])
             .filter(f => !deletedIds.has(String(f.id)))
-            .map(f => ({
-              ...f,
-              installments: f.installments && Array.isArray(f.installments)
-                ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
-                : f.installments
-            }));
+            .map(f => {
+              const matchedLocal = localBefore.find(l => String(l.id) === String(f.id) || (l.rawId && String(l.rawId) === String(f.id)));
+              return {
+                ...matchedLocal,
+                ...f,
+                chassis: f.chassis || matchedLocal?.chassis,
+                item_brand: f.item_brand || (matchedLocal as any)?.item_brand || (matchedLocal as any)?.itemBrand,
+                item_model: f.item_model || (matchedLocal as any)?.item_model || (matchedLocal as any)?.itemModel,
+                item_year: f.item_year || (matchedLocal as any)?.item_year || (matchedLocal as any)?.itemYear,
+                item_color: f.item_color || (matchedLocal as any)?.item_color || (matchedLocal as any)?.itemColor,
+                item_plate: f.item_plate || (matchedLocal as any)?.item_plate || (matchedLocal as any)?.itemPlate,
+                item_engine_number: f.item_engine_number || (matchedLocal as any)?.item_engine_number || (matchedLocal as any)?.itemEngineNumber,
+                item_mileage_hours: f.item_mileage_hours || (matchedLocal as any)?.item_mileage_hours || (matchedLocal as any)?.itemMileageHours,
+                item_type: f.item_type || (matchedLocal as any)?.item_type || (matchedLocal as any)?.itemType,
+                guarantor: f.guarantor || (matchedLocal as any)?.guarantor,
+                guarantor_rnc: f.guarantor_rnc || (matchedLocal as any)?.guarantor_rnc || (matchedLocal as any)?.guarantorRnc,
+                guarantor_phone: f.guarantor_phone || (matchedLocal as any)?.guarantor_phone || (matchedLocal as any)?.guarantorPhone,
+                guarantor_relation: f.guarantor_relation || (matchedLocal as any)?.guarantor_relation || (matchedLocal as any)?.guarantorRelation,
+                guarantor_address: f.guarantor_address || (matchedLocal as any)?.guarantor_address || (matchedLocal as any)?.guarantorAddress,
+                installments: f.installments && Array.isArray(f.installments)
+                  ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+                  : (matchedLocal?.installments || f.installments)
+              };
+            });
           lastFinancingsFetchTime = Date.now();
           saveLocalStorageFinancings(financings);
           return financings;
@@ -360,9 +379,22 @@ export const createFinancing = async (
   if (isSupabaseConfigured()) {
     const createdInSupabase = await insertFinancingToSupabase(financingData, installments);
     if (createdInSupabase) {
+      const fullCreated: Financing = {
+        ...financingData,
+        ...createdInSupabase,
+        chassis: createdInSupabase.chassis || financingData.chassis,
+        item_brand: createdInSupabase.item_brand || financingData.item_brand,
+        item_model: createdInSupabase.item_model || financingData.item_model,
+        item_year: createdInSupabase.item_year || financingData.item_year,
+        item_color: createdInSupabase.item_color || financingData.item_color,
+        item_plate: createdInSupabase.item_plate || financingData.item_plate,
+        item_engine_number: createdInSupabase.item_engine_number || financingData.item_engine_number,
+        item_mileage_hours: createdInSupabase.item_mileage_hours || financingData.item_mileage_hours,
+        item_type: createdInSupabase.item_type || financingData.item_type,
+      };
       const current = getLocalStorageFinancings();
-      saveLocalStorageFinancings([createdInSupabase, ...current.filter(f => f.id !== createdInSupabase.id)]);
-      return createdInSupabase;
+      saveLocalStorageFinancings([fullCreated, ...current.filter(f => f.id !== fullCreated.id)]);
+      return fullCreated;
     }
   }
 
