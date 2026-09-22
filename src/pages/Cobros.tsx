@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   CurrencyDollarIcon,
   MagnifyingGlassIcon,
@@ -10,7 +11,9 @@ import {
   LockClosedIcon,
   CalendarIcon,
   PencilSquareIcon,
-  TrashIcon
+  TrashIcon,
+  EyeIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, type Invoice } from '../services/invoicesService';
@@ -18,6 +21,7 @@ import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen } from '../services/shiftsService';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
+import logo from '../assets/logo.png';
 
 const COBROS_REGISTER = 'Caja Cobros & Repuestos';
 
@@ -152,6 +156,111 @@ export default function Cobros() {
     cashier: string;
   } | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+
+  // Detail & Account Statement Modal State
+  const [selectedDetailItem, setSelectedDetailItem] = useState<ReceivableItem | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'statement'>('details');
+
+  const handleOpenDetails = (item: ReceivableItem, tab: 'details' | 'statement' = 'details') => {
+    setSelectedDetailItem(item);
+    setActiveDetailTab(tab);
+    setIsDetailModalOpen(true);
+  };
+
+  // Facturas asociadas al cliente seleccionado
+  const associatedCustomerInvoices = useMemo(() => {
+    if (!selectedDetailItem) return [];
+    const cleanName = selectedDetailItem.customer.trim().toLowerCase();
+    const cleanRnc = (selectedDetailItem.rnc || '').trim().toLowerCase();
+    return receivables.filter(r => {
+      const rName = r.customer.trim().toLowerCase();
+      const rRnc = (r.rnc || '').trim().toLowerCase();
+      if (cleanRnc && cleanRnc !== '000000000' && cleanRnc === rRnc) return true;
+      return rName === cleanName;
+    });
+  }, [selectedDetailItem, receivables]);
+
+  // Totales financieros acumulados del cliente
+  const customerTotals = useMemo(() => {
+    const totalBilled = associatedCustomerInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+    const totalPaid = associatedCustomerInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+    const totalBalance = associatedCustomerInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
+    const totalPendingInvoices = associatedCustomerInvoices.filter(i => i.balance > 0.01).length;
+    const totalPaidInvoices = associatedCustomerInvoices.filter(i => i.balance <= 0.01).length;
+
+    return {
+      totalBilled,
+      totalPaid,
+      totalBalance,
+      totalPendingInvoices,
+      totalPaidInvoices,
+      count: associatedCustomerInvoices.length
+    };
+  }, [associatedCustomerInvoices]);
+
+  // Historial consolidado de abonos del cliente
+  const customerAllPayments = useMemo(() => {
+    const all: Array<{
+      id: string;
+      invoice: string;
+      ncf: string;
+      date: string;
+      amount: number;
+      method: string;
+      reference?: string;
+      cashier?: string;
+    }> = [];
+
+    associatedCustomerInvoices.forEach(inv => {
+      if (inv.paymentsHistory && inv.paymentsHistory.length > 0) {
+        inv.paymentsHistory.forEach(p => {
+          all.push({
+            id: p.id || `${inv.id}_${p.date}_${p.amount}`,
+            invoice: inv.invoice,
+            ncf: inv.ncf,
+            date: p.date,
+            amount: p.amount,
+            method: p.method,
+            reference: p.reference,
+            cashier: p.cashier,
+          });
+        });
+      }
+    });
+
+    return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [associatedCustomerInvoices]);
+
+  const handlePrintStatement = () => {
+    document.body.classList.remove('print-ticket-mode', 'print-letter-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode');
+    document.body.classList.add('print-statement-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 150);
+    });
+  };
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      if (selectedDetailItem) {
+        document.body.classList.remove('print-ticket-mode', 'print-letter-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode');
+        document.body.classList.add('print-statement-mode');
+      }
+    };
+    const handleAfterPrint = () => {
+      setTimeout(() => {
+        document.body.classList.remove('print-statement-mode');
+      }, 500);
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [selectedDetailItem]);
 
   // Cash Closure & Shift State
   const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
@@ -594,10 +703,15 @@ export default function Cobros() {
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-gray-100 dark:divide-zinc-800">
               {filteredReceivables.map((item) => (
-                <div key={item.id} className="p-4 space-y-3">
+                <div 
+                  key={item.id} 
+                  onClick={() => handleOpenDetails(item)}
+                  className="p-4 space-y-3 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
+                  title="Click para ver información completa y estado de cuenta"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h4 className="font-black text-sm text-gray-900 dark:text-white">{item.customer}</h4>
+                      <h4 className="font-black text-sm text-gray-900 dark:text-white hover:text-[#ED1C24] transition-colors">{item.customer}</h4>
                       <p className="text-[11px] font-mono text-gray-400">RNC: {item.rnc} • Fact: {item.invoice}</p>
                     </div>
                     <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full ${
@@ -625,11 +739,25 @@ export default function Cobros() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenDetails(item);
+                        }}
+                        className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        title="Ver Información y Estado de Cuenta"
+                      >
+                        <EyeIcon className="w-4 h-4" />
+                      </button>
                       {item.balance > 0 ? (
                         <button
                           type="button"
-                          onClick={() => handleOpenPayment(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPayment(item);
+                          }}
                           className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs cursor-pointer"
                         >
                           Abonar
@@ -639,7 +767,10 @@ export default function Cobros() {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleOpenEdit(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(item);
+                        }}
                         className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                         title="Editar cuenta por cobrar"
                       >
@@ -668,9 +799,14 @@ export default function Cobros() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 text-xs">
                   {filteredReceivables.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/60 dark:hover:bg-zinc-800/30 transition-colors">
+                    <tr 
+                      key={item.id} 
+                      onClick={() => handleOpenDetails(item)}
+                      className="hover:bg-red-50/30 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                      title="Click para ver información completa y estado de cuenta del cliente"
+                    >
                       <td className="px-5 py-4">
-                        <span className="font-black text-gray-900 dark:text-white block">{item.customer}</span>
+                        <span className="font-black text-gray-900 dark:text-white block group-hover:text-[#ED1C24] transition-colors">{item.customer}</span>
                         <span className="font-mono text-[11px] text-gray-400">{item.rnc}</span>
                       </td>
                       <td className="px-5 py-4 font-mono">
@@ -703,12 +839,26 @@ export default function Cobros() {
                           {item.status}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDetails(item);
+                            }}
+                            className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            title="Ver información y estado de cuenta"
+                          >
+                            <EyeIcon className="w-4 h-4" />
+                          </button>
                           {item.balance > 0 ? (
                             <button
                               type="button"
-                              onClick={() => handleOpenPayment(item)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPayment(item);
+                              }}
                               className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer inline-flex items-center gap-1"
                             >
                               <span>Abonar</span>
@@ -718,7 +868,10 @@ export default function Cobros() {
                           )}
                           <button
                             type="button"
-                            onClick={() => handleOpenEdit(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(item);
+                            }}
                             className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                             title="Editar cuenta por cobrar"
                           >
@@ -1349,6 +1502,643 @@ export default function Cobros() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Información Completa y Estado de Cuenta del Cliente */}
+      <AnimatePresence>
+        {isDetailModalOpen && selectedDetailItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+              onClick={() => setIsDetailModalOpen(false)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-4xl bg-white dark:bg-[#16171d] rounded-3xl p-5 sm:p-7 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 max-h-[92vh] flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-gray-100 dark:border-zinc-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-red-50 dark:bg-red-950/50 text-[#ED1C24] border border-red-200/50 dark:border-red-900/40 shrink-0">
+                    <DocumentTextIcon className="w-6 h-6 stroke-[2.2]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">
+                        {selectedDetailItem.customer}
+                      </h3>
+                      <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full ${
+                        selectedDetailItem.status === 'Saldado'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          : selectedDetailItem.status === 'Atrasado'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                          : selectedDetailItem.status === 'Con Abono'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}>
+                        {selectedDetailItem.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
+                      RNC / Cédula: <span className="font-mono font-bold text-gray-700 dark:text-zinc-200">{selectedDetailItem.rnc || 'Consumidor Final'}</span>
+                      {selectedDetailItem.phone && <span> • Tel: {selectedDetailItem.phone}</span>}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={handlePrintStatement}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer"
+                    title="Imprimir Estado de Cuenta Oficial del Cliente"
+                  >
+                    <PrinterIcon className="w-4 h-4" />
+                    <span>Imprimir Estado de Cuenta</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailModalOpen(false)}
+                    className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                  >
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="flex items-center gap-2 pt-3 pb-2 shrink-0 border-b border-gray-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailTab('details')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    activeDetailTab === 'details'
+                      ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs font-black'
+                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  📋 Detalle de la Factura ({selectedDetailItem.invoice})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailTab('statement')}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    activeDetailTab === 'statement'
+                      ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs font-black'
+                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  📄 Estado de Cuenta del Cliente ({associatedCustomerInvoices.length} {associatedCustomerInvoices.length === 1 ? 'Factura' : 'Facturas'})
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto space-y-4 pt-3 pr-1 scrollbar-thin">
+                {activeDetailTab === 'details' ? (
+                  <>
+                    {/* Financial Summary Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                          Total Factura
+                        </span>
+                        <span className="text-xl font-black font-mono text-gray-900 dark:text-white">
+                          RD$ {selectedDetailItem.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-gray-500 block mt-0.5 font-medium">Monto original a crédito</span>
+                      </div>
+
+                      <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                          Total Pagado / Abonado
+                        </span>
+                        <span className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                          RD$ {selectedDetailItem.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70 block mt-0.5 font-medium">Abonos recibidos</span>
+                      </div>
+
+                      <div className="p-3.5 bg-red-50/50 dark:bg-red-950/20 rounded-2xl border border-red-200/60 dark:border-red-900/40">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-[#ED1C24] block">
+                          Saldo Pendiente
+                        </span>
+                        <span className="text-xl font-black font-mono text-[#ED1C24]">
+                          RD$ {selectedDetailItem.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-red-600/70 dark:text-red-400/70 block mt-0.5 font-medium">
+                          {selectedDetailItem.balance <= 0 ? 'Totalmente saldada' : 'Pendiente de cobro'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Invoice & Due Date Box */}
+                    <div className="bg-[#f4f3f1] dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Comprobante Fiscal</span>
+                        <p className="font-mono font-bold text-gray-900 dark:text-white text-sm">{selectedDetailItem.invoice}</p>
+                        <p className="font-mono text-[11px] text-[#ED1C24] font-black">{selectedDetailItem.ncf}</p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Plazo & Emisión</span>
+                        <p className="font-bold text-gray-900 dark:text-white">Emisión: {selectedDetailItem.issueDate}</p>
+                        <p className="text-gray-500 font-medium">Plazo: {selectedDetailItem.creditDays} días</p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Vencimiento</span>
+                        <p className="font-bold text-gray-900 dark:text-white font-mono">{selectedDetailItem.dueDate}</p>
+                        {selectedDetailItem.balance > 0 ? (
+                          new Date() > new Date(selectedDetailItem.dueDate) ? (
+                            <span className="text-[10px] font-bold text-red-600 block">
+                              ⚠️ Vencida hace {Math.max(1, Math.floor((new Date().getTime() - new Date(selectedDetailItem.dueDate).getTime()) / (1000 * 60 * 60 * 24)))} días
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-emerald-600 block">
+                              ✓ Vigente (restan {Math.max(0, Math.ceil((new Date(selectedDetailItem.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días)
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-600 block">✓ Factura Saldada</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Items Description */}
+                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block mb-1">
+                        Repuestos / Artículos Facturados
+                      </span>
+                      <p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-zinc-200">
+                        {selectedDetailItem.items}
+                      </p>
+                    </div>
+
+                    {/* Payments History of this Invoice */}
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                        <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
+                          Historial de Abonos a esta Factura
+                        </span>
+                        <span className="text-[11px] font-bold text-gray-400">
+                          {selectedDetailItem.paymentsHistory?.length || 0} {selectedDetailItem.paymentsHistory?.length === 1 ? 'pago' : 'pagos'}
+                        </span>
+                      </div>
+
+                      {selectedDetailItem.paymentsHistory && selectedDetailItem.paymentsHistory.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                              <tr>
+                                <th className="px-4 py-2.5">Fecha</th>
+                                <th className="px-4 py-2.5">Método</th>
+                                <th className="px-4 py-2.5">Referencia</th>
+                                <th className="px-4 py-2.5">Cajero</th>
+                                <th className="px-4 py-2.5 text-right">Monto Abonado</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                              {selectedDetailItem.paymentsHistory.map((p, idx) => (
+                                <tr key={p.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
+                                  <td className="px-4 py-2.5 font-medium">{p.date}</td>
+                                  <td className="px-4 py-2.5">
+                                    <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[10px] font-bold">
+                                      {p.method}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5 font-mono text-gray-500">{p.reference || 'N/A'}</td>
+                                  <td className="px-4 py-2.5 text-gray-500">{p.cashier || 'Cajero POS'}</td>
+                                  <td className="px-4 py-2.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
+                                    RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-gray-400 font-medium">
+                          No se han registrado abonos previos a esta factura.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Statement Tab View */}
+                    <div className="space-y-4">
+                      {/* Customer Global KPI Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                            Facturas a Crédito
+                          </span>
+                          <span className="text-xl font-black text-gray-900 dark:text-white">
+                            {customerTotals.count}
+                          </span>
+                          <span className="text-[10px] text-gray-500 block mt-0.5">
+                            {customerTotals.totalPendingInvoices} pendientes • {customerTotals.totalPaidInvoices} saldadas
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                            Total Facturado
+                          </span>
+                          <span className="text-lg font-black font-mono text-gray-900 dark:text-white">
+                            RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-gray-500 block mt-0.5">Acumulado del cliente</span>
+                        </div>
+
+                        <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                            Total Abonado
+                          </span>
+                          <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400">
+                            RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70 block mt-0.5">Cobrado exitosamente</span>
+                        </div>
+
+                        <div className="p-3.5 bg-red-50/50 dark:bg-red-950/20 rounded-2xl border border-red-200/60 dark:border-red-900/40">
+                          <span className="text-[10px] uppercase font-black tracking-wider text-[#ED1C24] block">
+                            Balance Total Adeudado
+                          </span>
+                          <span className="text-lg font-black font-mono text-[#ED1C24]">
+                            RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-[10px] text-red-600/70 dark:text-red-400/70 block mt-0.5 font-bold">
+                            {customerTotals.totalBalance <= 0 ? 'Sin deudas pendientes' : 'Por cobrar'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* All Customer Invoices Table */}
+                      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
+                            Todas las Facturas a Crédito del Cliente ({associatedCustomerInvoices.length})
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400">
+                            Corte: {new Date().toLocaleDateString('es-DO')}
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                              <tr>
+                                <th className="px-3.5 py-2.5">Factura</th>
+                                <th className="px-3.5 py-2.5">e-NCF</th>
+                                <th className="px-3.5 py-2.5">Emisión</th>
+                                <th className="px-3.5 py-2.5">Vencimiento</th>
+                                <th className="px-3.5 py-2.5 text-right">Total Factura</th>
+                                <th className="px-3.5 py-2.5 text-right">Abonado</th>
+                                <th className="px-3.5 py-2.5 text-right">Saldo Pendiente</th>
+                                <th className="px-3.5 py-2.5 text-center">Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                              {associatedCustomerInvoices.map((inv) => (
+                                <tr key={inv.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
+                                  <td className="px-3.5 py-2.5 font-mono font-bold text-gray-900 dark:text-white">{inv.invoice}</td>
+                                  <td className="px-3.5 py-2.5 font-mono text-[10px] text-[#ED1C24] font-bold">{inv.ncf}</td>
+                                  <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400">{inv.issueDate}</td>
+                                  <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400 font-mono">{inv.dueDate}</td>
+                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">
+                                    RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                    RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3.5 py-2.5 text-right font-mono font-black text-[#ED1C24]">
+                                    RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3.5 py-2.5 text-center">
+                                    <span className={`px-2 py-0.5 text-[9px] font-black rounded-full ${
+                                      inv.status === 'Saldado'
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                        : inv.status === 'Atrasado'
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                                        : inv.status === 'Con Abono'
+                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    }`}>
+                                      {inv.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-[#f4f3f1] dark:bg-zinc-800 font-black text-xs border-t-2 border-gray-200 dark:border-zinc-700">
+                              <tr>
+                                <td colSpan={4} className="px-3.5 py-3 uppercase tracking-wider text-gray-900 dark:text-white">
+                                  Totales Consolidados
+                                </td>
+                                <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
+                                  RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-3.5 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                  RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-3.5 py-3 text-right font-mono text-[#ED1C24]">
+                                  RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Customer Payments Consolidated */}
+                      {customerAllPayments.length > 0 && (
+                        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
+                            <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
+                              Historial Consolidado de Abonos del Cliente ({customerAllPayments.length})
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                                <tr>
+                                  <th className="px-4 py-2.5">Fecha</th>
+                                  <th className="px-4 py-2.5">Factura Aplicada</th>
+                                  <th className="px-4 py-2.5">Método</th>
+                                  <th className="px-4 py-2.5">Referencia</th>
+                                  <th className="px-4 py-2.5">Cajero</th>
+                                  <th className="px-4 py-2.5 text-right">Monto</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                                {customerAllPayments.map((p, pIdx) => (
+                                  <tr key={p.id || pIdx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
+                                    <td className="px-4 py-2 font-medium">{p.date}</td>
+                                    <td className="px-4 py-2 font-mono font-bold text-gray-800 dark:text-zinc-200">{p.invoice}</td>
+                                    <td className="px-4 py-2">
+                                      <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[10px] font-bold">
+                                        {p.method}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 font-mono text-gray-500 text-[11px]">{p.reference || 'N/A'}</td>
+                                    <td className="px-4 py-2 text-gray-500">{p.cashier || 'Caja'}</td>
+                                    <td className="px-4 py-2 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
+                                      RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Bottom Action Footer */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-zinc-800 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrintStatement}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                  >
+                    <PrinterIcon className="w-4 h-4" />
+                    <span>Imprimir Estado de Cuenta</span>
+                  </button>
+                  {activeDetailTab === 'details' ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveDetailTab('statement')}
+                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-full text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Ver Estado de Cuenta Consolidado
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveDetailTab('details')}
+                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-full text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Volver a Detalle de Factura
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  {selectedDetailItem.balance > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDetailModalOpen(false);
+                        handleOpenPayment(selectedDetailItem);
+                      }}
+                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <CurrencyDollarIcon className="w-4 h-4" />
+                      <span>Registrar Abono a esta Factura</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailModalOpen(false)}
+                    className="px-4 py-2.5 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Portal de Impresión: Estado de Cuenta Oficial del Cliente (Rendered in document.body) */}
+      {selectedDetailItem && typeof document !== 'undefined' && createPortal(
+        <div className="printable-customer-statement font-sans text-black bg-white">
+          {/* Header Membrete */}
+          <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-3">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Brianna Heavy" className="h-12 object-contain" />
+              <div>
+                <h1 className="text-xl font-black text-black tracking-tight leading-none">BRIANNA HEAVY, SRL</h1>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mt-0.5">Soluciones en Maquinaria Pesada & Repuestos</p>
+                <p className="text-[9px] text-gray-600 font-medium mt-0.5">RNC: 131-48841-7 • Tel: (809) 555-0199 • Santiago, República Dominicana</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="inline-block px-2.5 py-0.5 bg-gray-100 text-black font-black text-[10px] uppercase tracking-widest rounded-full border border-gray-300">
+                Estado de Cuenta
+              </span>
+              <p className="text-xs font-mono font-black text-black mt-1">
+                DOC: EDC-{selectedDetailItem.rnc ? selectedDetailItem.rnc.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'CLI'}-{Date.now().toString().slice(-4)}
+              </p>
+              <p className="text-[10px] text-gray-700 font-medium mt-0.5">
+                Fecha de Corte: <strong className="font-bold text-black">{new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Ficha Cliente */}
+          <div className="grid grid-cols-3 gap-2.5 mb-3 bg-gray-50 p-2.5 rounded-xl border border-gray-300 text-xs">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">Cliente / Razón Social</span>
+              <p className="font-black text-black text-xs sm:text-sm">{selectedDetailItem.customer}</p>
+            </div>
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">RNC / Cédula</span>
+              <p className="font-mono font-bold text-black text-xs">{selectedDetailItem.rnc || 'Consumidor Final'}</p>
+              {selectedDetailItem.phone && <span className="text-[9px] text-gray-600 block mt-0.5">Tel: {selectedDetailItem.phone}</span>}
+            </div>
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">Estado de la Cuenta</span>
+              <p className="font-black text-xs">
+                {customerTotals.totalBalance <= 0 
+                  ? <span className="text-emerald-700">Totalmente Saldado ✓</span> 
+                  : <span className="text-[#ED1C24]">Balance Pendiente por Cobrar</span>}
+              </p>
+              <span className="text-[9px] text-gray-500 block mt-0.5">{customerTotals.count} facturas ({customerTotals.totalPendingInvoices} pendientes)</span>
+            </div>
+          </div>
+
+          {/* Resumen Financiero en Cajas */}
+          <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+            <div className="p-2 bg-gray-50 rounded-xl border border-gray-300">
+              <span className="text-[9px] font-black uppercase text-gray-500 block">Total Facturado</span>
+              <span className="text-xs font-black text-black font-mono">
+                RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="p-2 bg-gray-50 rounded-xl border border-gray-300">
+              <span className="text-[9px] font-black uppercase text-gray-500 block">Total Abonado</span>
+              <span className="text-xs font-black text-emerald-700 font-mono">
+                RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="p-2 bg-red-50 rounded-xl border border-red-300">
+              <span className="text-[9px] font-black uppercase text-red-700 block">Balance Pendiente</span>
+              <span className="text-xs font-black text-[#ED1C24] font-mono">
+                RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla de Facturas */}
+          <div className="mb-3 overflow-hidden rounded-xl border border-gray-300">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-100 text-black uppercase tracking-wider text-[9px] font-black">
+                <tr>
+                  <th className="py-1.5 px-2.5">Factura</th>
+                  <th className="py-1.5 px-2.5">e-NCF</th>
+                  <th className="py-1.5 px-2.5">Emisión</th>
+                  <th className="py-1.5 px-2.5">Vencimiento</th>
+                  <th className="py-1.5 px-2.5 text-right">Total Factura</th>
+                  <th className="py-1.5 px-2.5 text-right">Monto Pagado</th>
+                  <th className="py-1.5 px-2.5 text-right">Saldo Pendiente</th>
+                  <th className="py-1.5 px-2.5 text-center">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-300 text-[10.5px]">
+                {associatedCustomerInvoices.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="py-1.5 px-2.5 font-bold font-mono text-black">{inv.invoice}</td>
+                    <td className="py-1.5 px-2.5 font-mono text-gray-700 text-[9.5px]">{inv.ncf}</td>
+                    <td className="py-1.5 px-2.5">{inv.issueDate}</td>
+                    <td className="py-1.5 px-2.5">{inv.dueDate}</td>
+                    <td className="py-1.5 px-2.5 text-right font-mono font-medium">RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-1.5 px-2.5 text-right font-mono text-emerald-700 font-medium">RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-1.5 px-2.5 text-right font-mono font-black text-black">RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-1.5 px-2.5 text-center font-bold text-[9px]">
+                      {inv.status}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-100 border-t-2 border-gray-400 font-black text-[10.5px]">
+                <tr>
+                  <td colSpan={4} className="py-2 px-2.5 uppercase tracking-wider text-black">
+                    Totales Consolidados
+                  </td>
+                  <td className="py-2 px-2.5 text-right font-mono">
+                    RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 px-2.5 text-right font-mono text-emerald-700">
+                    RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 px-2.5 text-right font-mono text-[#ED1C24]">
+                    RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Historial de Abonos si existen */}
+          {customerAllPayments.length > 0 && (
+            <div className="mb-3">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-1">
+                Historial de Abonos Registrados ({customerAllPayments.length})
+              </span>
+              <div className="overflow-hidden rounded-xl border border-gray-300">
+                <table className="w-full text-left text-[10px]">
+                  <thead className="bg-gray-100 text-black uppercase tracking-wider text-[8.5px] font-black">
+                    <tr>
+                      <th className="py-1 px-2.5">Fecha</th>
+                      <th className="py-1 px-2.5">Factura Aplicada</th>
+                      <th className="py-1 px-2.5">Método de Pago</th>
+                      <th className="py-1 px-2.5">Referencia / Comprobante</th>
+                      <th className="py-1 px-2.5 text-right">Monto Abonado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {customerAllPayments.slice(0, 6).map((pay, pIdx) => (
+                      <tr key={pIdx}>
+                        <td className="py-1 px-2.5">{pay.date}</td>
+                        <td className="py-1 px-2.5 font-mono font-bold">{pay.invoice}</td>
+                        <td className="py-1 px-2.5">{pay.method}</td>
+                        <td className="py-1 px-2.5 font-mono text-[9px]">{pay.reference || 'N/A'}</td>
+                        <td className="py-1 px-2.5 text-right font-mono font-bold text-emerald-700">
+                          RD$ {Number(pay.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Nota Oficial */}
+          <div className="mb-3 p-2 bg-gray-50 rounded-xl border border-gray-300 text-[8.5px] text-gray-600 leading-tight">
+            <strong>Aviso de Balance:</strong> Este estado de cuenta certifica el historial de créditos y balance pendiente de pago emitido por Brianna Heavy, SRL. Para aclaraciones o acuerdos de pago, favor comunicarse al departamento de cobros al (809) 555-0199.
+          </div>
+
+          {/* Firmas */}
+          <div className="grid grid-cols-2 gap-10 mt-5 pt-3 border-t border-dashed border-gray-400">
+            <div className="text-center">
+              <div className="border-b border-black w-3/4 mx-auto mb-1.5"></div>
+              <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Departamento de Cobros / Caja</p>
+              <p className="text-[8.5px] text-gray-600">Brianna Heavy, SRL</p>
+            </div>
+            <div className="text-center">
+              <div className="border-b border-black w-3/4 mx-auto mb-1.5"></div>
+              <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Firma de Recibido Conforme</p>
+              <p className="text-[8.5px] text-gray-600">{selectedDetailItem.customer}</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
+
