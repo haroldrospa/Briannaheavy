@@ -5684,50 +5684,50 @@ export default function Financing() {
       {showReceipt && typeof document !== 'undefined' && createPortal(
         <div className="printable-financing-receipt font-sans text-black bg-white">
           {/* Header */}
-          <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-5">
-            <div className="flex items-center gap-4">
-              <img src={logo} alt="Brianna Heavy Logo" className="h-14 object-contain" />
+          <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-3">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Brianna Heavy Logo" className="h-12 object-contain" />
               <div>
-                <h1 className="text-2xl font-black text-black tracking-tight">BRIANNA HEAVY</h1>
-                <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">Soluciones en Maquinaria Pesada</p>
-                <p className="text-[10px] text-gray-600 font-medium mt-0.5">RNC: 131-48841-7 • Tel: (809) 555-0199 • Santiago, República Dominicana</p>
+                <h1 className="text-xl font-black text-black tracking-tight leading-none">BRIANNA HEAVY</h1>
+                <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mt-0.5">Soluciones en Maquinaria Pesada</p>
+                <p className="text-[9px] text-gray-600 font-medium mt-0.5">RNC: 131-48841-7 • Tel: (809) 555-0199 • Santiago, República Dominicana</p>
               </div>
             </div>
             <div className="text-right">
-              <span className="inline-block px-3 py-1 bg-gray-100 text-black font-black text-xs uppercase tracking-widest rounded-full border border-gray-300">
+              <span className="inline-block px-2.5 py-0.5 bg-gray-100 text-black font-black text-[10px] uppercase tracking-widest rounded-full border border-gray-300">
                 Recibo Oficial de Pago
               </span>
-              <p className="text-sm font-black font-mono tracking-wide text-black mt-2">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
-              <p className="text-xs font-bold text-gray-800 mt-1">
+              <p className="text-sm font-black font-mono tracking-wide text-black mt-1">No. {activeReceiptData.receiptNumber.replace(/^#+/, '')}</p>
+              <p className="text-[11px] font-bold text-gray-800 mt-0.5">
                 Fecha de Pago: <span className="font-black text-black">{activeReceiptData.paymentExecutionDate || activeReceiptData.date}</span>
               </p>
             </div>
           </div>
 
           {/* Fechas Informativas de la Transacción (Impresión) */}
-          <div className="grid grid-cols-3 gap-4 mb-3 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+          <div className="grid grid-cols-3 gap-3 mb-2.5 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
                 Fecha de Pago
               </span>
               <p className="font-black text-black text-xs">
                 {activeReceiptData.paymentExecutionDate || activeReceiptData.date}
               </p>
-              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Procesado en caja</span>
+              <span className="text-[8.5px] text-gray-500 font-medium block mt-0.5">Procesado en caja</span>
             </div>
 
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
                 Fecha Programada
               </span>
               <p className="font-black text-black text-xs">
                 {activeReceiptData.scheduledDueDate || activeReceiptData.paidInstallments?.[0]?.dueDate || selectedFinancing?.nextPayment || 'N/A'}
               </p>
-              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">Vencimiento de cuota</span>
+              <span className="text-[8.5px] text-gray-500 font-medium block mt-0.5">Vencimiento de cuota</span>
             </div>
 
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-0.5">
                 Próximo Vencimiento
               </span>
               <p className="font-black text-black text-xs">
@@ -5735,51 +5735,51 @@ export default function Financing() {
                   ? 'Totalmente Saldado ✓' 
                   : (activeReceiptData.nextPaymentDate || selectedFinancing?.nextPayment || 'N/A')}
               </p>
-              <span className="text-[9px] text-gray-500 font-medium block mt-0.5">
+              <span className="text-[8.5px] text-gray-500 font-medium block mt-0.5">
                 {activeReceiptData.newBalance <= 0 ? 'Sin cuotas pendientes' : 'Siguiente cuota a pagar'}
               </span>
             </div>
           </div>
 
           {/* Details Box */}
-          <div className="grid grid-cols-3 gap-4 mb-3 bg-gray-50 p-4 rounded-xl border border-gray-300">
+          <div className="grid grid-cols-3 gap-3 mb-2.5 bg-gray-50 p-2.5 rounded-xl border border-gray-300">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Datos del Cliente</p>
-              <p className="font-black text-black text-sm">{activeReceiptData.customerName}</p>
-              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Código: {activeReceiptData.customerCode}</p>
+              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-0.5">Datos del Cliente</p>
+              <p className="font-black text-black text-xs">{activeReceiptData.customerName}</p>
+              <p className="text-[10px] text-gray-700 font-medium mt-0.5">Código: {activeReceiptData.customerCode}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Detalle del Equipo</p>
-              <p className="font-black text-black text-sm">{activeReceiptData.itemName}</p>
+              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-0.5">Detalle del Equipo</p>
+              <p className="font-black text-black text-xs">{activeReceiptData.itemName}</p>
               {selectedFinancing?.chassis && (
-                <p className="text-[10px] text-gray-700 font-mono">VIN: {selectedFinancing.chassis}</p>
+                <p className="text-[9px] text-gray-700 font-mono">VIN: {selectedFinancing.chassis}</p>
               )}
               {selectedFinancing?.itemPlate && (
-                <p className="text-[10px] text-gray-700 font-mono">Placa: {selectedFinancing.itemPlate}</p>
+                <p className="text-[9px] text-gray-700 font-mono">Placa: {selectedFinancing.itemPlate}</p>
               )}
-              <p className="text-[11px] text-gray-700 font-medium mt-0.5">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
+              <p className="text-[10px] text-gray-700 font-medium mt-0.5">Modalidad: {activeReceiptData.paymentType === 'abono' ? 'Abono Directo a Capital' : 'Cuota Regular'}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Procesado Por</p>
-              <p className="font-black text-black text-sm">{activeReceiptData.cashierName}</p>
-              <p className="text-[11px] text-gray-700 font-medium mt-0.5">{activeReceiptData.registerName || FINANCING_REGISTER}</p>
+              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-0.5">Procesado Por</p>
+              <p className="font-black text-black text-xs">{activeReceiptData.cashierName}</p>
+              <p className="text-[10px] text-gray-700 font-medium mt-0.5">{activeReceiptData.registerName || FINANCING_REGISTER}</p>
             </div>
           </div>
 
           {/* Forma de Pago & Transacción (Impresión) */}
-          <div className="mb-6 p-3 bg-gray-50 rounded-xl border border-gray-300 flex flex-wrap items-center justify-between gap-3 text-xs text-black">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="px-2.5 py-0.5 bg-gray-200 text-black font-black text-[11px] uppercase tracking-wider rounded border border-gray-300">
+          <div className="mb-3 p-2 bg-gray-50 rounded-xl border border-gray-300 flex flex-wrap items-center justify-between gap-2 text-xs text-black">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-2 py-0.5 bg-gray-200 text-black font-black text-[10px] uppercase tracking-wider rounded border border-gray-300">
                 {activeReceiptData.paymentMethod || 'Efectivo'}
               </span>
               {activeReceiptData.paymentMethod === 'Efectivo' || !activeReceiptData.paymentMethod ? (
-                <div className="flex items-center gap-2.5 text-gray-700">
+                <div className="flex items-center gap-2 text-gray-700 text-[11px]">
                   <span>Efectivo Recibido: <strong className="font-bold text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
                   <span className="text-gray-400">•</span>
                   <span>Devuelta / Cambio: <strong className="font-bold text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
                 </div>
               ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
-                <div className="flex items-center gap-2.5 text-gray-700">
+                <div className="flex items-center gap-2 text-gray-700 text-[11px]">
                   <span>Cuenta / Banco: <strong className="font-bold text-black">{activeReceiptData.bankName || 'Banco'}</strong></span>
                   {activeReceiptData.referenceNumber && (
                     <>
@@ -5789,7 +5789,7 @@ export default function Financing() {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5 text-gray-700">
+                <div className="flex items-center gap-2 text-gray-700 text-[11px]">
                   {activeReceiptData.referenceNumber && (
                     <span>Cheque No: <strong className="font-mono font-bold text-black">{activeReceiptData.referenceNumber}</strong></span>
                   )}
@@ -5803,70 +5803,70 @@ export default function Financing() {
               )}
             </div>
             {activeReceiptData.paymentNotes && (
-              <div className="text-gray-600 italic text-[11px]">
+              <div className="text-gray-600 italic text-[10px]">
                 Obs: {activeReceiptData.paymentNotes}
               </div>
             )}
           </div>
 
           {/* Table */}
-          <div className="mb-6 overflow-hidden rounded-xl border border-gray-300">
+          <div className="mb-3 overflow-hidden rounded-xl border border-gray-300">
             <table className="w-full text-left text-xs">
-              <thead className="bg-gray-100 text-black uppercase tracking-wider text-[10px] font-black">
+              <thead className="bg-gray-100 text-black uppercase tracking-wider text-[9.5px] font-black">
                 <tr>
-                  <th className="py-2.5 px-4">Concepto / Cuota</th>
-                  <th className="py-2.5 px-4 text-center">Vencimiento Programado</th>
-                  <th className="py-2.5 px-4 text-right">Capital</th>
-                  <th className="py-2.5 px-4 text-right">Interés</th>
-                  <th className="py-2.5 px-4 text-right">Mora</th>
-                  <th className="py-2.5 px-4 text-right">Monto Pagado</th>
+                  <th className="py-2 px-3">Concepto / Cuota</th>
+                  <th className="py-2 px-3 text-center">Vencimiento Programado</th>
+                  <th className="py-2 px-3 text-right">Capital</th>
+                  <th className="py-2 px-3 text-right">Interés</th>
+                  <th className="py-2 px-3 text-right">Mora</th>
+                  <th className="py-2 px-3 text-right">Monto Pagado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300 text-xs">
                 {activeReceiptData.paymentType === 'inicial' ? (
                   <tr>
-                    <td className="py-3 px-4 font-bold text-black">Pago de Inicial / Enganche</td>
-                    <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">Inicial Contrato</td>
-                    <td className="py-3 px-4 text-right font-medium text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                    <td className="py-3 px-4 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-2 px-3 font-bold text-black">Pago de Inicial / Enganche</td>
+                    <td className="py-2 px-3 text-center font-mono font-bold text-gray-700">Inicial Contrato</td>
+                    <td className="py-2 px-3 text-right font-medium text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                    <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                    <td className="py-2 px-3 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                   </tr>
                 ) : activeReceiptData.paymentType === 'abono' ? (
                   <tr>
-                    <td className="py-3 px-4 font-bold text-black">Abono Directo al Capital Principal</td>
-                    <td className="py-3 px-4 text-center font-mono font-bold text-gray-700">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
-                    <td className="py-3 px-4 text-right font-medium text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                    <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                    <td className="py-3 px-4 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-2 px-3 font-bold text-black">Abono Directo al Capital Principal</td>
+                    <td className="py-2 px-3 text-center font-mono font-bold text-gray-700">{activeReceiptData.scheduledDueDate || 'Amortización Directa'}</td>
+                    <td className="py-2 px-3 text-right font-medium text-black">${activeReceiptData.abonoAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                    <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                    <td className="py-2 px-3 text-right font-black text-black">${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                   </tr>
                 ) : (
                   <>
                     {activeReceiptData.paidInstallments.map((inst: MappedInstallment) => (
                       <tr key={inst.id}>
-                        <td className="py-3 px-4 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length || selectedFinancing?.months || selectedFinancing?.installmentsCount || inst.id}</td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-black">{inst.dueDate}</td>
-                        <td className="py-3 px-4 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td className="py-3 px-4 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td className="py-3 px-4 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td className="py-3 px-4 text-right font-black text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-2 px-3 font-bold text-black">Cuota No. {inst.id} de {currentInstallments.length || selectedFinancing?.months || selectedFinancing?.installmentsCount || inst.id}</td>
+                        <td className="py-2 px-3 text-center font-mono font-bold text-black">{inst.dueDate}</td>
+                        <td className="py-2 px-3 text-right font-medium text-black">${inst.capital.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-2 px-3 text-right font-medium text-black">${inst.interest.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-2 px-3 text-right font-medium text-black">${inst.penalty.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td className="py-2 px-3 text-right font-black text-black">${inst.total.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                       </tr>
                     ))}
                     {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
                       <tr className="bg-gray-100">
-                        <td className="py-3 px-4 font-bold text-black">
+                        <td className="py-2 px-3 font-bold text-black">
                           Abono a Siguiente Cuota (Sobrante)
                         </td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-black">
+                        <td className="py-2 px-3 text-center font-mono font-bold text-black">
                           {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Siguiente Cuota'}
                         </td>
-                        <td className="py-3 px-4 text-right font-medium text-black">
+                        <td className="py-2 px-3 text-right font-medium text-black">
                           ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </td>
-                        <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                        <td className="py-3 px-4 text-right text-gray-500">$0.00</td>
-                        <td className="py-3 px-4 text-right font-black text-black">
+                        <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                        <td className="py-2 px-3 text-right text-gray-500">$0.00</td>
+                        <td className="py-2 px-3 text-right font-black text-black">
                           ${activeReceiptData.surplusAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
                         </td>
                       </tr>
@@ -5878,34 +5878,34 @@ export default function Financing() {
           </div>
 
           {/* Totals & QR Code */}
-          <div className="flex justify-between items-center mb-10 gap-6">
-            <div className="flex items-center gap-4 w-3/5">
-              <div className="p-2 bg-white rounded-xl border border-gray-300 shrink-0 flex flex-col items-center">
-                <QRCode value={activeReceiptData.qrUrl} size={84} level="M" />
+          <div className="flex justify-between items-center mb-5 gap-4">
+            <div className="flex items-center gap-3 w-3/5">
+              <div className="p-1.5 bg-white rounded-xl border border-gray-300 shrink-0 flex flex-col items-center">
+                <QRCode value={activeReceiptData.qrUrl} size={72} level="M" />
                 <span className="text-[8px] font-bold text-gray-500 mt-1 uppercase tracking-tight">Validación DGII</span>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Nota Informativa</p>
-                <p className="text-[11px] text-gray-700 leading-tight font-medium">
+                <p className="text-[9.5px] font-black uppercase tracking-wider text-gray-500 mb-0.5">Nota Informativa</p>
+                <p className="text-[10px] text-gray-700 leading-tight font-medium">
                   Este recibo es un comprobante oficial de pago válido para amortizaciones y saldos del financiamiento contratado en Brianna Heavy Equipment.
                 </p>
               </div>
             </div>
 
-            <div className="w-2/5 p-4 rounded-xl border border-gray-300 space-y-2">
+            <div className="w-2/5 p-3 rounded-xl border border-gray-300 space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Monto Total Recibido:</span>
-                <span className="font-black text-black text-base">
+                <span className="font-black text-black text-sm sm:text-base">
                   ${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
                 </span>
               </div>
-              <div className="pt-2 border-t border-gray-300 flex justify-between items-center text-xs">
+              <div className="pt-1.5 border-t border-gray-300 flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Nuevo Balance Pendiente:</span>
-                <span className="font-black text-black text-sm">
+                <span className="font-black text-black text-xs sm:text-sm">
                   ${activeReceiptData.newBalance.toLocaleString('en-US', {minimumFractionDigits: 2})}
                 </span>
               </div>
-              <div className="pt-2 border-t border-gray-300 flex justify-between items-center text-xs">
+              <div className="pt-1.5 border-t border-gray-300 flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Próxima Fecha de Pago:</span>
                 <span className="font-black text-black text-xs font-mono">
                   {activeReceiptData.newBalance <= 0 
@@ -5917,18 +5917,18 @@ export default function Financing() {
           </div>
 
           {/* Signatures */}
-          <div className="grid grid-cols-2 gap-12 mt-12 pt-6 border-t border-dashed border-gray-400">
+          <div className="grid grid-cols-2 gap-8 mt-5 pt-3 border-t border-dashed border-gray-400">
             <div className="text-center">
-              <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
-              <p className="text-[10px] font-black text-black uppercase tracking-wider">Caja / Firma Autorizada</p>
-              <p className="text-xs font-black text-black mt-1">{activeReceiptData.cashierName || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado'}</p>
-              <p className="text-[9px] font-medium text-gray-700">{activeReceiptData.registerName || FINANCING_REGISTER} (Cajera / Cajero)</p>
+              <div className="border-b border-black w-3/4 mx-auto mb-1.5"></div>
+              <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Caja / Firma Autorizada</p>
+              <p className="text-xs font-black text-black mt-0.5">{activeReceiptData.cashierName || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado'}</p>
+              <p className="text-[8.5px] font-medium text-gray-700">{activeReceiptData.registerName || FINANCING_REGISTER} (Cajera / Cajero)</p>
             </div>
             <div className="text-center">
-              <div className="border-b border-black w-3/4 mx-auto mb-2"></div>
-              <p className="text-[10px] font-black text-black uppercase tracking-wider">Firma del Cliente</p>
-              <p className="text-xs font-black text-black mt-1">{activeReceiptData.customerName}</p>
-              <p className="text-[9px] font-medium text-gray-700">{activeReceiptData.customerCode || 'Cliente Titular'}</p>
+              <div className="border-b border-black w-3/4 mx-auto mb-1.5"></div>
+              <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Firma del Cliente</p>
+              <p className="text-xs font-black text-black mt-0.5">{activeReceiptData.customerName}</p>
+              <p className="text-[8.5px] font-medium text-gray-700">{activeReceiptData.customerCode || 'Cliente Titular'}</p>
             </div>
           </div>
         </div>,
