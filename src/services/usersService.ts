@@ -110,7 +110,7 @@ const initialLocalUsers: UserProfile[] = [
   {
     id: '2',
     full_name: 'Rosa Iris Penalo',
-    role: 'Administrador',
+    role: 'Repuestos',
     status: 'Activo',
     email: 'rpenalo@briannaheavy.com',
     password: 'admin',
@@ -119,7 +119,7 @@ const initialLocalUsers: UserProfile[] = [
   {
     id: '3',
     full_name: 'Franquelina Echavarria',
-    role: 'Administrador',
+    role: 'Oficina',
     status: 'Activo',
     email: 'fechavarria@briannaheavy.com',
     password: '123456',

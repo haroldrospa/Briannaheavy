@@ -18,8 +18,7 @@ import {
   CheckIcon, 
   ClockIcon,
   LockClosedIcon,
-  DocumentTextIcon,
-  ShieldCheckIcon
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -100,22 +99,31 @@ export default function CashClosureModal({
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>(() => {
     try {
       const local = getLocalStorageUsers();
-      return local.filter(u => u.role === 'Administrador' && u.status === 'Activo');
+      return local.filter(u => u.role === 'Administrador' && (u.status || 'Activo').toLowerCase() === 'activo');
     } catch {
       return [];
     }
   });
 
   const adminNames = useMemo(() => {
-    const list = adminUsers.map(u => u.full_name).filter(Boolean);
-    const defaults = ['Jennifer', 'Harold Rosado', 'Rosa Iris Penalo', 'Franquelina Echavarria'];
-    defaults.forEach(d => {
-      if (!list.some(n => n.toLowerCase() === d.toLowerCase())) {
-        list.push(d);
-      }
-    });
+    // Solo usuarios cuyo rol real sea Administrador y estén activos
+    const list = adminUsers
+      .filter(u => u.role === 'Administrador' && (u.status || 'Activo').toLowerCase() === 'activo')
+      .map(u => u.full_name)
+      .filter(Boolean);
+
+    // Asegurar que Jennifer siempre esté incluida por defecto
+    if (!list.some(n => n.toLowerCase().includes('jennifer'))) {
+      list.unshift('Jennifer');
+    }
+    // Asegurar que Harold Rosado esté incluido como administrador master
+    if (!list.some(n => n.toLowerCase().includes('harold rosado'))) {
+      list.push('Harold Rosado');
+    }
+
+    const unique = Array.from(new Set(list));
     // Ordenar poniendo a Jennifer siempre de primera
-    return list.sort((a, b) => {
+    return unique.sort((a, b) => {
       if (a.toLowerCase().includes('jennifer')) return -1;
       if (b.toLowerCase().includes('jennifer')) return 1;
       return a.localeCompare(b);
@@ -1346,35 +1354,20 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
                   )}
 
-                  {/* Selector de Supervisor(a) Administrador */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
-                        <ShieldCheckIcon className="w-4.5 h-4.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block">
-                          Supervisor(a) del Cierre
-                        </span>
-                        <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 block truncate">
-                          Administrador(a) Responsable
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 w-full sm:w-56">
-                      <select
-                        value={supervisorName}
-                        onChange={(e) => setSupervisorName(e.target.value)}
-                        className="w-full h-8.5 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:border-zinc-400 dark:focus:border-zinc-500 transition-all cursor-pointer shadow-xs"
-                      >
-                        {adminNames.map(name => (
-                          <option key={name} value={name}>
-                            {name} {name.toLowerCase().includes('jennifer') ? '⭐ (Preseleccionada)' : '(Admin)'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  {/* Selector simple de Supervisor(a) */}
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                    <span className="font-semibold text-zinc-600 dark:text-zinc-400">Supervisor(a):</span>
+                    <select
+                      value={supervisorName}
+                      onChange={(e) => setSupervisorName(e.target.value)}
+                      className="px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none cursor-pointer focus:border-zinc-400 dark:focus:border-zinc-500 shadow-xs"
+                    >
+                      {adminNames.map(name => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                 </div>
