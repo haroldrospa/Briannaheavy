@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   PlusIcon, BanknotesIcon, CalculatorIcon, XMarkIcon, ArrowLeftIcon, CheckCircleIcon, 
@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon, ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -210,7 +210,42 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
   if (!dbF || dbF.length === 0) return [];
   const localInventory = getLocalStorageInventory();
 
-  return dbF.map((f, idx) => {
+  // Deduplicar financiamientos por id / rawId para evitar tarjetas duplicadas en la interfaz
+  const seenIds = new Set<string>();
+  const uniqueDbF = dbF.filter((f, idx) => {
+    const key = String(f.rawId || f.id || idx);
+    if (!key || seenIds.has(key)) return false;
+    seenIds.add(key);
+    return true;
+  });
+
+  return uniqueDbF.map((f, idx) => {
+    // 1. Obtener todos los recibos registrados para este financiamiento
+    const finReceipts = getReceiptsForFinancing(f.rawId || f.id, f.id);
+    const paidInstallmentMap = new Map<number, { paidDate?: string; paidAmount?: number; receiptNumber?: string; receiptId?: string }>();
+    let totalReceiptAbonoCapital = 0;
+
+    finReceipts.forEach(rc => {
+      if (rc.paymentType === 'abono') {
+        totalReceiptAbonoCapital += Number(rc.abonoAmount || rc.totalPaid || 0);
+      } else if (rc.paidInstallments && Array.isArray(rc.paidInstallments)) {
+        rc.paidInstallments.forEach((pi: any, pIdx: number) => {
+          const num = Number(pi.id ?? pi.installment_number ?? pi.installmentNumber ?? (pIdx + 1));
+          if (num > 0) {
+            paidInstallmentMap.set(num, {
+              paidDate: rc.paymentDate || rc.date || rc.createdAt,
+              paidAmount: Number(pi.total || pi.amount || rc.totalPaid || 0),
+              receiptNumber: rc.receiptNumber,
+              receiptId: rc.id,
+            });
+          }
+        });
+        if (rc.surplusAmount && Number(rc.surplusAmount) > 0) {
+          totalReceiptAbonoCapital += Number(rc.surplusAmount);
+        }
+      }
+    });
+
     let installments: any[] = [];
     if (f.installments && Array.isArray(f.installments) && f.installments.length > 0) {
       const sortedInsts = [...f.installments].sort((a: any, b: any) => {
@@ -219,15 +254,17 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
         return numA - numB;
       });
       installments = sortedInsts.map((inst: any, iIdx: number) => {
-        const isPaid = inst.status === 'Pagado' || inst.isPaid || (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) >= Number(inst.amount));
-        const dueDate = inst.due_date ? String(inst.due_date).split('T')[0] : `2026-08-${String(iIdx + 1).padStart(2, '0')}`;
+        const instNum = Number(inst.installment_number) || Number(inst.id) || (iIdx + 1);
+        const receiptPayment = paidInstallmentMap.get(instNum);
+        const isPaid = inst.status === 'Pagado' || inst.isPaid || !!receiptPayment || (Number(inst.paid_amount) > 0 && Number(inst.paid_amount) >= Number(inst.amount));
+        const dueDate = inst.due_date ? String(inst.due_date).split('T')[0] : (inst.dueDate || `2026-08-${String(iIdx + 1).padStart(2, '0')}`);
         const evalResult = getInstallmentMoraAndStatus(dueDate, isPaid, 15);
-        const cap = Number(inst.principal_amount) || 0;
-        const int = Number(inst.interest_amount) || 0;
+        const cap = Number(inst.principal_amount) || Number(inst.capital) || 0;
+        const int = Number(inst.interest_amount) || Number(inst.interest) || 0;
         const pen = evalResult.penalty;
 
         return {
-          id: inst.installment_number || iIdx + 1,
+          id: instNum,
           dbId: inst.id,
           dueDate,
           capital: cap,
@@ -236,8 +273,8 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
           total: (cap + int) + pen,
           status: isPaid ? 'Pagado' : evalResult.status,
           isPaid,
-          paidAmount: Number(inst.paid_amount) || 0,
-          paidDate: inst.paid_date || inst.paidDate,
+          paidAmount: receiptPayment?.paidAmount ?? (Number(inst.paid_amount) || (isPaid ? (cap + int) : 0)),
+          paidDate: receiptPayment?.paidDate ?? (inst.paid_date || inst.paidDate),
           daysOverdue: evalResult.daysOverdue,
           inGracePeriod: evalResult.inGracePeriod,
         };
@@ -247,15 +284,42 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
       const rate = Number(f.interest_rate) || 16;
       const months = Number(f.installments_count) || 24;
       const start = f.start_date || new Date().toISOString().split('T')[0];
-      installments = generateAmortizationSchedule(finAmount, rate, months, start);
+      const genInsts = generateAmortizationSchedule(finAmount, rate, months, start);
+      installments = genInsts.map((inst: any) => {
+        const receiptPayment = paidInstallmentMap.get(inst.id);
+        const isPaid = !!receiptPayment;
+        const evalResult = getInstallmentMoraAndStatus(inst.dueDate, isPaid, 15);
+        return {
+          ...inst,
+          isPaid,
+          status: isPaid ? 'Pagado' : evalResult.status,
+          paidAmount: receiptPayment?.paidAmount ?? 0,
+          paidDate: receiptPayment?.paidDate,
+          daysOverdue: evalResult.daysOverdue,
+          inGracePeriod: evalResult.inGracePeriod,
+        };
+      });
     }
 
+    const initialFinanced = Number(f.financed_amount) || Number(f.total_amount ? (Number(f.total_amount) - Number(f.down_payment || 0)) : 0) || Number(f.total_amount) || 0;
+    let totalCapAmortized = 0;
+    installments.forEach(inst => {
+      if (inst.isPaid) {
+        totalCapAmortized += Number(inst.capital || 0);
+      }
+    });
+    totalCapAmortized += totalReceiptAbonoCapital;
+
+    const computedRemaining = (finReceipts.length > 0 || installments.some(i => i.isPaid))
+      ? Math.max(0, Math.round((initialFinanced - totalCapAmortized) * 100) / 100)
+      : (Number(f.financed_amount) || Number(f.total_amount) || 0);
+
     const hasOverdue = installments.some(i => i.status === 'Atrasado' && !i.isPaid);
-    const allPaid = installments.length > 0 && installments.every(i => i.isPaid);
+    const allPaid = (installments.length > 0 && installments.every(i => i.isPaid)) || (computedRemaining <= 0 && finReceipts.length > 0);
     const computedStatus = allPaid ? 'Pagado' : (hasOverdue ? 'En mora' : 'Al día');
 
     const firstUnpaid = installments.find(i => !i.isPaid);
-    const nextPay = firstUnpaid ? firstUnpaid.dueDate : (f.start_date || new Date().toISOString().split('T')[0]);
+    const nextPay = allPaid ? 'Totalmente Saldado' : (firstUnpaid ? firstUnpaid.dueDate : (f.start_date || new Date().toISOString().split('T')[0]));
 
     // Buscar en inventario local para rellenar datos faltantes del equipo
     const matchedItem = f.item_id 
@@ -307,8 +371,9 @@ const mapFinancingsToState = (dbF: any[]): any[] => {
       item_mileage_hours: itemMileageHours,
       itemType,
       item_type: itemType,
-      amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
-      financed_amount: Number(f.financed_amount) || Number(f.total_amount) || 0,
+      amount: computedRemaining,
+      financed_amount: initialFinanced,
+      originalFinancedAmount: initialFinanced,
       totalValue: Number(f.total_amount) || 0,
       total_amount: Number(f.total_amount) || 0,
       downPayment: Number(f.down_payment) || 0,
@@ -421,6 +486,8 @@ export default function Financing() {
   };
 
   const [isNewFormOpen, setIsNewFormOpen] = useState(false);
+  const [isSavingFinancing, setIsSavingFinancing] = useState(false);
+  const isSubmittingFinancingRef = useRef(false);
   const [customersList, setCustomersList] = useState<Customer[]>(() => getLocalStorageCustomers());
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>(() => getLocalStorageInventory());
 
@@ -458,6 +525,7 @@ export default function Financing() {
       setIsShiftActive(isShiftOpen(FINANCING_REGISTER));
     };
     const handleOpenShiftRequested = (e: any) => {
+      if (isAdmin) return;
       if (!e.detail?.register || e.detail.register === FINANCING_REGISTER || e.detail.register === 'todas') {
         setIsOpenShiftModalOpen(true);
       }
@@ -596,7 +664,7 @@ export default function Financing() {
         : r.paymentType === 'abono'
         ? 'Abono Directo a Capital'
         : (r.paidInstallments && r.paidInstallments.length > 0
-            ? `Pago Cuota ${r.paidInstallments.map(i => `#${i.id}`).join(', ')}`
+            ? `Pago Cuota ${r.paidInstallments.map((i: any, idx: number) => `#${i.id ?? i.installment_number ?? (idx + 1)}`).join(', ')}`
             : 'Pago de Cuota');
 
       list.push({
@@ -1076,14 +1144,14 @@ export default function Financing() {
 
     // Buscar el recibo asociado a esta cuota
     let targetReceipt = financingReceipts.find(r =>
-      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(inst.id))
+      r.paidInstallments && r.paidInstallments.some((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1)) === Number(inst.id))
     );
 
     if (!targetReceipt) {
       const finId = String(selectedFinancing.rawId || selectedFinancing.id);
       targetReceipt = allFinancingReceipts.find(r =>
-        String(r.financingId) === finId &&
-        r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(inst.id))
+        (String(r.financingId) === finId || String(r.financingId) === String(selectedFinancing.id) || String(r.financingId) === String(selectedFinancing.rawId)) &&
+        r.paidInstallments && r.paidInstallments.some((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1)) === Number(inst.id))
       );
     }
 
@@ -1098,7 +1166,7 @@ export default function Financing() {
       totalAmount: totalAmt,
       description: `Cuota #${instNum}`,
       installmentNumbers: targetReceipt?.paidInstallments && targetReceipt.paidInstallments.length > 0
-        ? targetReceipt.paidInstallments.map(pi => Number(pi.id))
+        ? targetReceipt.paidInstallments.map((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1))).filter(n => !isNaN(n) && n > 0)
         : [instNum],
     });
     setDeletePaymentMasterKey('');
@@ -1109,7 +1177,7 @@ export default function Financing() {
   const handleRequestDeleteReceipt = (rc: FinancingPaymentReceipt, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const instNums = rc.paidInstallments && rc.paidInstallments.length > 0
-      ? rc.paidInstallments.map(pi => Number(pi.id))
+      ? rc.paidInstallments.map((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1))).filter(n => !isNaN(n) && n > 0)
       : [];
 
     const cuotasDesc = rc.paymentType === 'abono'
@@ -1284,6 +1352,7 @@ export default function Financing() {
 
   const handleSaveFinancing = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingFinancingRef.current) return;
     if (!editingFinancing && !requireOpenShift('Debes abrir un turno de caja antes de registrar un nuevo financiamiento.')) {
       return;
     }
@@ -1291,6 +1360,9 @@ export default function Financing() {
       setFormValidationNotice(true);
       return;
     }
+
+    isSubmittingFinancingRef.current = true;
+    setIsSavingFinancing(true);
 
     const finalTotal = modalValTotal;
     const finalInicial = modalInicial;
@@ -1429,7 +1501,15 @@ export default function Financing() {
         const created = await createFinancing(financingPayload, installmentsToCreate);
         const mapped = mapFinancingsToState([created]);
         if (mapped.length > 0) {
-          setFinancingsList(prev => [mapped[0], ...prev]);
+          const newFin = mapped[0];
+          const newFinId = String(newFin.rawId || newFin.id);
+          setFinancingsList(prev => {
+            const exists = prev.some(f => String(f.rawId || f.id) === newFinId);
+            if (exists) {
+              return prev.map(f => String(f.rawId || f.id) === newFinId ? newFin : f);
+            }
+            return [newFin, ...prev];
+          });
         }
 
         showAlert({
@@ -1470,6 +1550,9 @@ export default function Financing() {
       setSelectedItemId(undefined);
     } catch (err) {
       console.error('Error saving financing:', err);
+    } finally {
+      isSubmittingFinancingRef.current = false;
+      setIsSavingFinancing(false);
     }
   };
   const [selectedFinancing, setSelectedFinancing] = useState<any>(null);
@@ -1485,7 +1568,9 @@ export default function Financing() {
   const [paymentType, setPaymentType] = useState<'cuotas' | 'abono' | 'recibos'>('cuotas');
   const [abonoAmount, setAbonoAmount] = useState<string>('');
   const [customCuotasPayAmount, setCustomCuotasPayAmount] = useState<string>('');
-  const [applyCashAsSurplus, setApplyCashAsSurplus] = useState<boolean>(true);
+  const [surplusDestination, setSurplusDestination] = useState<'capital' | 'cuota_completa' | 'devuelta'>('capital');
+  const applyCashAsSurplus = surplusDestination !== 'devuelta';
+  const setApplyCashAsSurplus = (val: boolean) => setSurplusDestination(val ? 'capital' : 'devuelta');
   
   // Receipts State & History
   const [financingReceipts, setFinancingReceipts] = useState<FinancingPaymentReceipt[]>([]);
@@ -1576,7 +1661,7 @@ export default function Financing() {
   const handleOpenReceiptForInstallment = (instId: number) => {
     if (!selectedFinancing) return;
     const found = financingReceipts.find(r =>
-      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(instId))
+      r.paidInstallments && r.paidInstallments.some((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1)) === Number(instId))
     );
     if (found) {
       handleOpenReceipt(found);
@@ -1585,7 +1670,7 @@ export default function Financing() {
     const recs = getOrReconstructReceiptsForFinancing(selectedFinancing);
     setFinancingReceipts(recs);
     const retry = recs.find(r =>
-      r.paidInstallments && r.paidInstallments.some(pi => Number(pi.id) === Number(instId))
+      r.paidInstallments && r.paidInstallments.some((pi: any, idx: number) => Number(pi.id ?? pi.installment_number ?? (idx + 1)) === Number(instId))
     );
     if (retry) {
       handleOpenReceipt(retry);
@@ -1690,13 +1775,26 @@ export default function Financing() {
         })
       : [];
 
-    return rawList.map((inst: any): MappedInstallment => {
-      const isPaid = inst.isPaid || inst.status === 'Pagado';
+    const paidReceiptMap = new Map<number, any>();
+    financingReceipts.forEach(rc => {
+      if (rc.paidInstallments && Array.isArray(rc.paidInstallments)) {
+        rc.paidInstallments.forEach((pi: any, pIdx: number) => {
+          const num = Number(pi.id ?? pi.installment_number ?? pi.installmentNumber ?? (pIdx + 1));
+          if (num > 0) paidReceiptMap.set(num, rc);
+        });
+      }
+    });
+
+    return rawList.map((inst: any, idx: number): MappedInstallment => {
+      const instNum = Number(inst.id || inst.installment_number || (idx + 1));
+      const receiptPayment = paidReceiptMap.get(instNum);
+      const isPaid = inst.isPaid || inst.status === 'Pagado' || !!receiptPayment;
       const evalResult = getInstallmentMoraAndStatus(inst.dueDate, isPaid, graceDays);
 
       if (isPaid) {
         return {
           ...inst,
+          id: instNum,
           status: 'Pagado',
           penalty: 0,
           total: inst.capital + inst.interest,
@@ -1705,7 +1803,10 @@ export default function Financing() {
           isInterestWaived: false,
           isPenaltyWaived: false,
           originalInterest: inst.interest,
-          originalPenalty: 0
+          originalPenalty: 0,
+          isPaid: true,
+          paidDate: receiptPayment?.paymentDate || receiptPayment?.date || inst.paidDate,
+          paidAmount: receiptPayment ? Number(receiptPayment.totalPaid) : (inst.paidAmount || (inst.capital + inst.interest)),
         };
       }
       
@@ -1717,6 +1818,7 @@ export default function Financing() {
       
       return {
         ...inst,
+        id: instNum,
         status: evalResult.status,
         penalty: displayPenalty,
         total: inst.capital + displayInterest + displayPenalty,
@@ -1728,7 +1830,40 @@ export default function Financing() {
         originalPenalty: evalResult.penalty
       };
     });
-  }, [selectedFinancing, graceDays, waivedRowInterests, waivedRowPenalties]);
+  }, [selectedFinancing, graceDays, waivedRowInterests, waivedRowPenalties, financingReceipts]);
+
+  const modalDisplayBalance = useMemo(() => {
+    if (!selectedFinancing) return 0;
+    if (currentInstallments.length > 0) {
+      const unpaidCapital = currentInstallments
+        .filter(i => i.status !== 'Pagado' && !i.isPaid)
+        .reduce((sum, i) => sum + (Number(i.capital) || 0), 0);
+      return Math.max(0, Math.round(unpaidCapital * 100) / 100);
+    }
+    return Number(selectedFinancing.amount) || 0;
+  }, [selectedFinancing, currentInstallments]);
+
+  const modalDisplayStatus = useMemo(() => {
+    if (!selectedFinancing) return 'Al día';
+    if (currentInstallments.length > 0) {
+      const allPaid = currentInstallments.every(i => i.status === 'Pagado' || i.isPaid);
+      if (allPaid || modalDisplayBalance <= 0) return 'Pagado';
+      const hasOverdue = currentInstallments.some(i => i.status === 'Atrasado' && !i.isPaid);
+      return hasOverdue ? 'En mora' : 'Al día';
+    }
+    return selectedFinancing.status || 'Al día';
+  }, [selectedFinancing, currentInstallments, modalDisplayBalance]);
+
+  const modalDisplayNextPayment = useMemo(() => {
+    if (!selectedFinancing) return 'N/A';
+    if (currentInstallments.length > 0) {
+      const allPaid = currentInstallments.every(i => i.status === 'Pagado' || i.isPaid);
+      if (allPaid || modalDisplayBalance <= 0) return 'Totalmente Saldado';
+      const firstUnpaid = currentInstallments.find(i => i.status !== 'Pagado' && !i.isPaid);
+      if (firstUnpaid) return firstUnpaid.dueDate;
+    }
+    return selectedFinancing.nextPayment || 'N/A';
+  }, [selectedFinancing, currentInstallments, modalDisplayBalance]);
 
   const displayedInstallments: MappedInstallment[] = currentInstallments.filter((inst: MappedInstallment) => {
     if (filterStatus === 'Todos') return true;
@@ -1749,19 +1884,21 @@ export default function Financing() {
   const numTransfer = paymentMethod === 'Transferencia' ? parseCurrencyInput(transferAmount) : 0;
   const numCheque = paymentMethod === 'Cheque' ? parseCurrencyInput(chequeAmount) : 0;
 
+  const isSurplusActive = surplusDestination !== 'devuelta';
+
   const surplusFromCustom = paymentType === 'cuotas' && numCustomCuotas > totalSelectedAmount
     ? Math.round((numCustomCuotas - totalSelectedAmount) * 100) / 100
     : 0;
 
-  const surplusFromCash = paymentType === 'cuotas' && numCustomCuotas === 0 && paymentMethod === 'Efectivo' && applyCashAsSurplus && numCash > totalSelectedAmount
+  const surplusFromCash = paymentType === 'cuotas' && numCustomCuotas === 0 && paymentMethod === 'Efectivo' && isSurplusActive && numCash > totalSelectedAmount
     ? Math.round((numCash - totalSelectedAmount) * 100) / 100
     : 0;
 
-  const surplusFromTransfer = paymentType === 'cuotas' && paymentMethod === 'Transferencia' && numTransfer > totalSelectedAmount
+  const surplusFromTransfer = paymentType === 'cuotas' && paymentMethod === 'Transferencia' && isSurplusActive && numTransfer > totalSelectedAmount
     ? Math.round((numTransfer - totalSelectedAmount) * 100) / 100
     : 0;
 
-  const surplusFromCheque = paymentType === 'cuotas' && paymentMethod === 'Cheque' && numCheque > totalSelectedAmount
+  const surplusFromCheque = paymentType === 'cuotas' && paymentMethod === 'Cheque' && isSurplusActive && numCheque > totalSelectedAmount
     ? Math.round((numCheque - totalSelectedAmount) * 100) / 100
     : 0;
 
@@ -1776,10 +1913,10 @@ export default function Financing() {
   const effectivePayAmount = paymentType === 'abono'
     ? (paymentMethod === 'Transferencia' && numTransfer > 0 ? numTransfer : (paymentMethod === 'Cheque' && numCheque > 0 ? numCheque : numAbono))
     : (paymentMethod === 'Transferencia' && numTransfer > 0
-        ? numTransfer
+        ? (isSurplusActive ? numTransfer : totalSelectedAmount)
         : paymentMethod === 'Cheque' && numCheque > 0
-          ? numCheque
-          : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && applyCashAsSurplus ? surplusFromCash : 0))));
+          ? (isSurplusActive ? numCheque : totalSelectedAmount)
+          : (numCustomCuotas > 0 ? numCustomCuotas : (totalSelectedAmount + (paymentMethod === 'Efectivo' && isSurplusActive ? surplusFromCash : 0))));
 
 
   // Strict Sequential Installment Toggle (FIFO Rule - Prevents skipping unpaid installments)
@@ -1928,15 +2065,55 @@ export default function Financing() {
           continue;
         }
 
-        // 2. Si sobra dinero, se abona a la(s) siguiente(s) cuota(s) consecutivas (no solo al capital)
-        if (!inst.isPaid && inst.status !== 'Pagado' && remainingToApply > 0) {
+        // 2. Si sobra dinero tras pagar las cuotas seleccionadas y no es devuelta
+        if (!inst.isPaid && inst.status !== 'Pagado' && remainingToApply > 0 && surplusDestination !== 'devuelta') {
           const instPenalty = Number(inst.penalty) || 0;
           const instInterest = Number(inst.interest ?? inst.interest_amount) || 0;
           const instCapital = Number(inst.capital ?? inst.principal_amount) || 0;
           const instTotal = Number(inst.total ?? inst.amount) || (instPenalty + instInterest + instCapital);
           const instDbId = inst.dbId || (inst.id && String(inst.id).length > 20 ? inst.id : undefined);
 
-          // Caso A: El sobrante cubre la cuota completa
+          // Modalidad 1: Abono Directo al Capital
+          if (surplusDestination === 'capital') {
+            const appliedCap = Math.min(instCapital, remainingToApply);
+            remainingToApply = Math.max(0, Math.round((remainingToApply - appliedCap) * 100) / 100);
+            totalCapAmortized += appliedCap;
+
+            const newCapital = Math.max(0, Math.round((instCapital - appliedCap) * 100) / 100);
+            const isZeroCap = newCapital <= 0;
+            const newTotal = Math.max(0, Math.round((instPenalty + instInterest + newCapital) * 100) / 100);
+            const newPaidAmount = (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + appliedCap;
+
+            surplusPartiallyPaidInst = {
+              inst,
+              applied: appliedCap,
+              remaining: newTotal,
+            };
+
+            if (instDbId) {
+              updateInstallmentInDb(instDbId, {
+                principal_amount: newCapital,
+                amount: newTotal,
+                paid_amount: newPaidAmount,
+                status: isZeroCap ? 'Pagado' : 'Pendiente',
+              });
+            }
+
+            updatedInsts.push({
+              ...inst,
+              capital: newCapital,
+              principal_amount: newCapital,
+              total: newTotal,
+              amount: newTotal,
+              paidAmount: newPaidAmount,
+              paid_amount: newPaidAmount,
+              isPaid: isZeroCap,
+              status: isZeroCap ? 'Pagado' : inst.status,
+            });
+            continue;
+          }
+
+          // Modalidad 2: Cuota Completa (si cubre la cuota completa la salda; si no, el remanente va 100% al capital)
           if (remainingToApply >= instTotal) {
             remainingToApply = Math.round((remainingToApply - instTotal) * 100) / 100;
             totalCapAmortized += instCapital;
@@ -1965,36 +2142,24 @@ export default function Financing() {
             continue;
           }
 
-          // Caso B: El sobrante abona parcialmente a esta cuota
-          const appliedToThisCuota = remainingToApply;
+          // Remanente que no cubre la cuota completa: se abona 100% DIRECTO AL CAPITAL de esta cuota
+          const appliedCap = Math.min(instCapital, remainingToApply);
+          totalCapAmortized += appliedCap;
           remainingToApply = 0;
 
-          // Se cubre en orden financiero: Mora -> Interés -> Capital
-          const appliedPenalty = Math.min(instPenalty, appliedToThisCuota);
-          const remAfterPenalty = appliedToThisCuota - appliedPenalty;
-
-          const appliedInterest = Math.min(instInterest, remAfterPenalty);
-          const remAfterInterest = remAfterPenalty - appliedInterest;
-
-          const appliedCapital = Math.min(instCapital, remAfterInterest);
-          totalCapAmortized += appliedCapital;
-
-          const newPenalty = Math.max(0, Math.round((instPenalty - appliedPenalty) * 100) / 100);
-          const newInterest = Math.max(0, Math.round((instInterest - appliedInterest) * 100) / 100);
-          const newCapital = Math.max(0, Math.round((instCapital - appliedCapital) * 100) / 100);
-          const newTotal = Math.max(0, Math.round((newPenalty + newInterest + newCapital) * 100) / 100);
-          const newPaidAmount = (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + appliedToThisCuota;
+          const newCapital = Math.max(0, Math.round((instCapital - appliedCap) * 100) / 100);
+          const newTotal = Math.max(0, Math.round((instPenalty + instInterest + newCapital) * 100) / 100);
+          const newPaidAmount = (Number(inst.paidAmount) || Number(inst.paid_amount) || 0) + appliedCap;
 
           surplusPartiallyPaidInst = {
             inst,
-            applied: appliedToThisCuota,
+            applied: appliedCap,
             remaining: newTotal,
           };
 
           if (instDbId) {
             updateInstallmentInDb(instDbId, {
               principal_amount: newCapital,
-              interest_amount: newInterest,
               amount: newTotal,
               paid_amount: newPaidAmount,
               status: 'Pendiente',
@@ -2005,9 +2170,6 @@ export default function Financing() {
             ...inst,
             capital: newCapital,
             principal_amount: newCapital,
-            interest: newInterest,
-            interest_amount: newInterest,
-            penalty: newPenalty,
             total: newTotal,
             amount: newTotal,
             paidAmount: newPaidAmount,
@@ -2022,7 +2184,7 @@ export default function Financing() {
       }
 
       // Si aún quedó sobrante residual tras saldar todas las cuotas, amortiza al balance
-      if (remainingToApply > 0) {
+      if (remainingToApply > 0 && surplusDestination !== 'devuelta') {
         totalCapAmortized += remainingToApply;
         remainingToApply = 0;
       }
@@ -2042,15 +2204,17 @@ export default function Financing() {
         : (paymentMethod === 'Cheque' ? (bankName || 'Cheque') : undefined);
 
       let surplusNote = '';
-      if (surplus > 0) {
-        if (surplusFullyPaidInsts.length > 0 && surplusPartiallyPaidInst) {
-          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} cubrió Cuota(s) #${surplusFullyPaidInsts.map(i => i.id).join(', #')} y abonó RD$ ${surplusPartiallyPaidInst.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })} a Cuota #${surplusPartiallyPaidInst.inst.id} (restante: RD$ ${surplusPartiallyPaidInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
+      if (surplus > 0 && surplusDestination !== 'devuelta') {
+        if (surplusDestination === 'capital') {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado directamente al Capital`;
+        } else if (surplusFullyPaidInsts.length > 0 && surplusPartiallyPaidInst) {
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} cubrió Cuota(s) #${surplusFullyPaidInsts.map(i => i.id).join(', #')} y abonó RD$ ${surplusPartiallyPaidInst.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })} al capital de Cuota #${surplusPartiallyPaidInst.inst.id}`;
         } else if (surplusFullyPaidInsts.length > 0) {
           surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} cubrió Cuota(s) #${surplusFullyPaidInsts.map(i => i.id).join(', #')} en su totalidad`;
         } else if (surplusPartiallyPaidInst) {
-          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a Cuota #${surplusPartiallyPaidInst.inst.id} (restante a pagar: RD$ ${surplusPartiallyPaidInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado directamente al capital de Cuota #${surplusPartiallyPaidInst.inst.id}`;
         } else {
-          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado a cuota(s) siguiente(s)`;
+          surplusNote = `Sobrante de RD$ ${surplus.toLocaleString('en-US', { minimumFractionDigits: 2 })} abonado al capital`;
         }
       } else if (partialSelectedInst) {
         surplusNote = `Abono parcial a Cuota #${partialSelectedInst.inst.id}: RD$ ${partialSelectedInst.applied.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicados (restante a pagar: RD$ ${partialSelectedInst.remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
@@ -2326,26 +2490,32 @@ export default function Financing() {
           });
         }
       }
-    } else if (paymentType === 'cuotas' && simulatedSurplus > 0) {
+    } else if (paymentType === 'cuotas' && simulatedSurplus > 0 && surplusDestination !== 'devuelta') {
       const unpaidRemaining = currentInstallments
         .filter(i => !selectedInstallmentIds.includes(i.id) && i.status !== 'Pagado')
         .sort((a, b) => a.id - b.id);
 
       let remSurp = simulatedSurplus;
-      for (const inst of unpaidRemaining) {
-        if (remSurp <= 0) break;
-        const instTot = inst.total;
-        if (remSurp >= instTot) {
-          remSurp = Math.round((remSurp - instTot) * 100) / 100;
-          simulatedCapPaid += inst.capital;
-          simulatedPaidList.push(inst);
-        } else {
-          // Abono parcial a la cuota: Mora -> Interés -> Capital
-          const remAfterPen = Math.max(0, remSurp - inst.penalty);
-          const remAfterInt = Math.max(0, remAfterPen - inst.interest);
-          const appliedCap = Math.min(inst.capital, remAfterInt);
+      if (surplusDestination === 'capital') {
+        for (const inst of unpaidRemaining) {
+          if (remSurp <= 0) break;
+          const appliedCap = Math.min(inst.capital, remSurp);
           simulatedCapPaid += appliedCap;
-          remSurp = 0;
+          remSurp = Math.max(0, Math.round((remSurp - appliedCap) * 100) / 100);
+        }
+      } else {
+        for (const inst of unpaidRemaining) {
+          if (remSurp <= 0) break;
+          const instTot = inst.total;
+          if (remSurp >= instTot) {
+            remSurp = Math.round((remSurp - instTot) * 100) / 100;
+            simulatedCapPaid += inst.capital;
+            simulatedPaidList.push(inst);
+          } else {
+            const appliedCap = Math.min(inst.capital, remSurp);
+            simulatedCapPaid += appliedCap;
+            remSurp = 0;
+          }
         }
       }
       simulatedSurplus = remSurp;
@@ -2420,7 +2590,7 @@ export default function Financing() {
       referenceNumber: referenceNumber?.trim() || undefined,
       paymentNotes: paymentNotes.trim() || undefined,
     };
-  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, customCuotasPayAmount, applyCashAsSurplus, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, transferAmount, chequeAmount, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
+  }, [viewingReceipt, lastReceipt, selectedInsts, currentInstallments, paymentType, numAbono, totalSelectedAmount, effectivePayAmount, surplusAmount, customCuotasPayAmount, applyCashAsSurplus, surplusDestination, selectedFinancing, totalSelectedCapital, paymentMethod, cashReceived, transferAmount, chequeAmount, bankAccounts, selectedBankId, bankName, referenceNumber, paymentNotes, selectedInstallmentIds, paymentDate]);
 
   // Calculator State
   const [amountStr, setAmountStr] = useState('100,000');
@@ -2536,7 +2706,7 @@ export default function Financing() {
           </button>
 
           {/* Cierre de Caja / Abrir Turno */}
-          {isShiftActive ? (
+          {isShiftActive || isAdmin ? (
             <button 
               type="button"
               onClick={() => setIsCashClosureOpen(true)}
@@ -3219,17 +3389,28 @@ export default function Financing() {
             <div className="pt-3 border-t border-gray-100 dark:border-zinc-800 flex justify-end items-center gap-2.5">
               <button
                 type="button"
+                disabled={isSavingFinancing}
                 onClick={() => setIsNewFormOpen(false)}
-                className="py-2.5 px-5 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                className="py-2.5 px-5 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="py-2.5 px-6 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl font-black text-xs transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2"
+                disabled={isSavingFinancing}
+                className="py-2.5 px-6 bg-[#ED1C24] hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-black text-xs transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2"
               >
-                <CheckIcon className="w-4 h-4 stroke-[3]" />
-                <span>{editingFinancing ? 'Guardar Cambios' : 'Guardar y Crear Financiamiento'}</span>
+                {isSavingFinancing ? (
+                  <>
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon className="w-4 h-4 stroke-[3]" />
+                    <span>{editingFinancing ? 'Guardar Cambios' : 'Guardar y Crear Financiamiento'}</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -4217,7 +4398,7 @@ export default function Financing() {
                               {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
                                 <tr className="bg-emerald-50/70 dark:bg-emerald-950/30">
                                   <td className="py-3.5 px-4 font-bold text-emerald-800 dark:text-emerald-300 print:text-black">
-                                    Abono a Siguiente Cuota (Sobrante)
+                                    {surplusDestination === 'cuota_completa' ? 'Abono / Cuota Completa (Sobrante)' : 'Abono Directo al Capital (Sobrante)'}
                                   </td>
                                   <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-700 dark:text-emerald-400 print:text-black">
                                     {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Siguiente Cuota'}
@@ -4471,7 +4652,7 @@ export default function Financing() {
 
                       <div className="bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Próximo Vencimiento</p>
-                        <p className="font-black text-gray-900 dark:text-white text-base">{selectedFinancing.nextPayment}</p>
+                        <p className="font-black text-gray-900 dark:text-white text-base">{modalDisplayNextPayment}</p>
                         <button 
                           onClick={(e) => { e.stopPropagation(); window.open(generateReminderWhatsAppLink(selectedFinancing, currentInstallments), '_blank'); }}
                           className="mt-1 text-[11px] font-bold text-[#25D366] hover:underline flex items-center gap-1 cursor-pointer"
@@ -4485,12 +4666,13 @@ export default function Financing() {
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Balance Restante</span>
                           <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-full ${
-                            selectedFinancing.status === 'Al día' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                            modalDisplayStatus === 'Al día' ? 'bg-emerald-500/20 text-emerald-400' : 
+                            modalDisplayStatus === 'Pagado' ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'
                           }`}>
-                            {selectedFinancing.status}
+                            {modalDisplayStatus}
                           </span>
                         </div>
-                        <p className="font-black text-2xl tracking-tight text-white mt-1">RD$ {selectedFinancing.amount.toLocaleString('es-DO', {minimumFractionDigits: 2})}</p>
+                        <p className="font-black text-2xl tracking-tight text-white mt-1">RD$ {modalDisplayBalance.toLocaleString('es-DO', {minimumFractionDigits: 2})}</p>
                       </div>
                     </div>
 
@@ -4669,7 +4851,10 @@ export default function Financing() {
                                     const cuotasDesc = rc.paymentType === 'abono'
                                       ? 'Abono directo a capital'
                                       : rc.paidInstallments && rc.paidInstallments.length > 0
-                                        ? `Cuota(s) #${rc.paidInstallments.map(i => i.id).join(', #')}`
+                                        ? `Cuota(s) #${rc.paidInstallments.map((i: any, idx: number) => {
+                                            const num = i.id ?? i.installment_number ?? i.installmentNumber ?? (idx + 1);
+                                            return String(num).trim();
+                                          }).filter(Boolean).join(', #') || 's'}`
                                         : 'Pago de cuotas';
                                     const formattedDate = rc.date || 'N/A';
 
@@ -4778,7 +4963,7 @@ export default function Financing() {
                                         1/2 Cuota (${halfCuota.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})
                                       </button>
                                     )}
-                                    {[5000, 10000, 25000, 50000, 100000].filter(amt => amt < selectedFinancing.amount).map((amt) => (
+                                    {[5000, 10000, 25000, 50000, 100000].filter(amt => amt < modalDisplayBalance).map((amt) => (
                                       <button
                                         key={amt}
                                         type="button"
@@ -4788,13 +4973,13 @@ export default function Financing() {
                                         ${amt.toLocaleString()}
                                       </button>
                                     ))}
-                                    {selectedFinancing.amount > 0 && (
+                                    {modalDisplayBalance > 0 && (
                                       <button
                                         type="button"
-                                        onClick={() => setAbonoAmount(formatCurrencyInput(selectedFinancing.amount))}
+                                        onClick={() => setAbonoAmount(formatCurrencyInput(modalDisplayBalance))}
                                         className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-100 transition-colors cursor-pointer"
                                       >
-                                        Saldar Total (${selectedFinancing.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                                        Saldar Total (${modalDisplayBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })})
                                       </button>
                                     )}
                                     {abonoAmount && (
@@ -4816,7 +5001,7 @@ export default function Financing() {
                             <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-xl flex items-center justify-between text-xs">
                               <span className="font-bold text-emerald-800 dark:text-emerald-300">Nuevo balance estimado:</span>
                               <span className="font-black text-emerald-700 dark:text-emerald-400 text-base">
-                                ${Math.max(0, selectedFinancing.amount - numAbono).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                                ${Math.max(0, modalDisplayBalance - numAbono).toLocaleString('en-US', {minimumFractionDigits: 2})}
                               </span>
                             </div>
                           )}
@@ -5289,36 +5474,60 @@ export default function Financing() {
 
                             {/* Opciones cuando el efectivo supera el total */}
                             {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && (
-                              <div className="p-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-lg space-y-1 text-xs">
-                                <p className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">
-                                  Excedente: <strong className="text-emerald-600 dark:text-emerald-400">RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>:
-                                </p>
-                                <div className="grid grid-cols-2 gap-1.5">
+                              <div className="p-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                                    Excedente / Sobrante:
+                                  </span>
+                                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">
+                                    RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </strong>
+                                </div>
+                                <div className="grid grid-cols-3 gap-1.5">
                                   <button
                                     type="button"
-                                    onClick={() => setApplyCashAsSurplus(true)}
-                                    className={`py-1 px-2 rounded text-[10px] font-bold text-left flex items-center gap-1 border transition-all cursor-pointer ${
-                                      applyCashAsSurplus
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-400'
-                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
+                                    onClick={() => setSurplusDestination('capital')}
+                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                      surplusDestination === 'capital'
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-500 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500 font-extrabold shadow-2xs'
+                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
                                     }`}
                                   >
                                     <SparklesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                    <span>Abonar a sig. cuota</span>
+                                    <span>Abonar a Capital</span>
                                   </button>
+
                                   <button
                                     type="button"
-                                    onClick={() => setApplyCashAsSurplus(false)}
-                                    className={`py-1 px-2 rounded text-[10px] font-bold text-left flex items-center gap-1 border transition-all cursor-pointer ${
-                                      !applyCashAsSurplus
-                                        ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-400 text-amber-800 dark:text-amber-200 ring-1 ring-amber-400'
-                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400'
+                                    onClick={() => setSurplusDestination('cuota_completa')}
+                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                      surplusDestination === 'cuota_completa'
+                                        ? 'bg-blue-50 dark:bg-blue-950/70 border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500 font-extrabold shadow-2xs'
+                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    <CheckCircleIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span>Cuota Completa</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setSurplusDestination('devuelta')}
+                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                      surplusDestination === 'devuelta'
+                                        ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-500 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500 font-extrabold shadow-2xs'
+                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
                                     }`}
                                   >
                                     <BanknotesIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                                     <span>Entregar Devuelta</span>
                                   </button>
                                 </div>
+                                <p className="text-[10px] text-gray-500 dark:text-zinc-400 italic">
+                                  {surplusDestination === 'capital' && '✨ El sobrante se amortizará 100% directo a capital (reduce la deuda sin intereses).'}
+                                  {surplusDestination === 'cuota_completa' && '📋 Se saldará la siguiente cuota si el monto la cubre; el remanente se abonará al capital.'}
+                                  {surplusDestination === 'devuelta' && '💵 Se entregará el excedente como cambio en efectivo al cliente.'}
+                                </p>
                               </div>
                             )}
 
@@ -5332,7 +5541,7 @@ export default function Financing() {
                                   return (
                                     <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
                                       <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                                        RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} aplicado a sig. cuota
+                                        RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {surplusDestination === 'capital' ? 'se abonará directo al capital' : 'se aplicará a cuota completa / capital'}
                                       </span>
                                       <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
                                     </div>
@@ -5426,9 +5635,22 @@ export default function Financing() {
                                   <span className="font-bold text-emerald-800 dark:text-emerald-300">
                                     Excedente: RD$ {(parseCurrencyInput(transferAmount) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                   </span>
-                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                    Se abonará a sig. cuota
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSurplusDestination('capital')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'capital' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'}`}
+                                    >
+                                      ✨ Al Capital
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSurplusDestination('cuota_completa')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'cuota_completa' ? 'bg-blue-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'}`}
+                                    >
+                                      📋 Cuota Completa
+                                    </button>
+                                  </div>
                                 </div>
                               )}
 
@@ -5538,6 +5760,31 @@ export default function Financing() {
                                   </button>
                                 )}
                               </div>
+
+                              {/* Excedente o Pago Parcial informativo para cheque */}
+                              {paymentType === 'cuotas' && parseCurrencyInput(chequeAmount) > totalSelectedAmount && (
+                                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                  <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                                    Excedente: RD$ {(parseCurrencyInput(chequeAmount) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSurplusDestination('capital')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'capital' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'}`}
+                                    >
+                                      ✨ Al Capital
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSurplusDestination('cuota_completa')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'cuota_completa' ? 'bg-blue-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'}`}
+                                    >
+                                      📋 Cuota Completa
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                             <div>
                               <label className="block text-[10px] font-bold text-gray-700 dark:text-zinc-300 mb-0.5">
@@ -6228,7 +6475,7 @@ export default function Financing() {
                     {activeReceiptData.paymentType === 'cuotas' && !!activeReceiptData.surplusAmount && activeReceiptData.surplusAmount > 0 && (
                       <tr className="bg-gray-100">
                         <td className="py-2 px-3 font-bold text-black">
-                          Abono a Siguiente Cuota (Sobrante)
+                          {surplusDestination === 'cuota_completa' ? 'Abono / Cuota Completa (Sobrante)' : 'Abono Directo al Capital (Sobrante)'}
                         </td>
                         <td className="py-2 px-3 text-center font-mono font-bold text-black">
                           {activeReceiptData.nextPaymentDate && activeReceiptData.nextPaymentDate !== 'Totalmente Saldado' ? activeReceiptData.nextPaymentDate : 'Siguiente Cuota'}
@@ -6331,7 +6578,7 @@ export default function Financing() {
             isOpen={isCashClosureOpen} 
             onClose={(didCloseShift) => {
               setIsCashClosureOpen(false);
-              if (didCloseShift) {
+              if (didCloseShift && !isAdmin) {
                 setIsOpenShiftModalOpen(true);
               }
             }} 

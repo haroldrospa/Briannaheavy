@@ -1732,7 +1732,9 @@ export default function POS() {
       setIsShiftActive(isShiftOpen(activeRegister));
     };
     const handleOpenShiftRequested = () => {
-      setIsOpenShiftModalOpen(true);
+      if (getActiveRole() !== 'Administrador') {
+        setIsOpenShiftModalOpen(true);
+      }
     };
 
     window.addEventListener('brianna_role_updated', handleUserUpdate);
@@ -2254,7 +2256,8 @@ export default function POS() {
 
   const openCheckout = useCallback(() => {
     if (cart.length === 0) return;
-    if (!isShiftActive) {
+    const role = getActiveRole();
+    if (role !== 'Administrador' && !isShiftActive) {
       showAlert({
         title: 'Turno de Caja Cerrado',
         description: 'Debes abrir el turno e ingresar el fondo inicial de caja para poder facturar.',
@@ -3756,7 +3759,9 @@ export default function POS() {
               setIsCashClosureOpen(false);
               if (didCloseShift) {
                 setSessionSales([]);
-                setIsOpenShiftModalOpen(true);
+                if (getActiveRole() !== 'Administrador') {
+                  setIsOpenShiftModalOpen(true);
+                }
               }
             }}
           />

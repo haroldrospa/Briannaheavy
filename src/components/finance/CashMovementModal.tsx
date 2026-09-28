@@ -12,11 +12,13 @@ import {
   DocumentTextIcon,
   PlusIcon,
   TrashIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
-import { getActiveShift, filterMovementsByShift } from '../../services/shiftsService';
+import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
+import { getActiveRole } from '../../utils/rolePermissions';
 import logo from '../../assets/logo.png';
 
 interface CashMovementModalProps {
@@ -52,6 +54,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const activeRegisterName = defaultRegister || (typeof window !== 'undefined' ? localStorage.getItem('brianna_active_register') : '') || 'Caja 1 - Repuestos';
   const activeShift = useMemo(() => getActiveShift(activeRegisterName), [activeRegisterName, isOpen]);
 
+  const currentRole = getActiveRole();
+  const isAdmin = currentRole === 'Administrador';
+  const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
+  const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
+
+  // Por defecto si es administrador, ver solo sus propios movimientos ('mine')
+  // pero con la opción de ver todos ('all')
+  const [userScope, setUserScope] = useState<'mine' | 'all'>('mine');
+
   const loadMovements = async () => {
     try {
       const data = await fetchCashMovements(true);
@@ -63,6 +74,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
   useEffect(() => {
     if (isOpen) {
+      setUserScope('mine'); // Por defecto siempre 'mine' al abrir el modal
       const accounts = getCompanyBankAccounts();
       setBankAccounts(accounts);
       if (accounts.length > 0 && !selectedBankId) {
@@ -89,9 +101,23 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     };
   }, [isOpen, selectedBankId, selectedCardId, initialTab]);
 
-  const sessionMovements = useMemo(() => {
+  // 1. Todos los movimientos del turno y caja actual
+  const allSessionMovements = useMemo(() => {
     return filterMovementsByShift(movements, 'shift', activeShift, activeRegisterName, 'todos');
   }, [movements, activeShift, activeRegisterName]);
+
+  // 2. Movimientos filtrados según el alcance (por defecto solo míos si es admin o si el usuario no es admin)
+  const sessionMovements = useMemo(() => {
+    if (!isAdmin || userScope === 'mine') {
+      return allSessionMovements.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail));
+    }
+    return allSessionMovements;
+  }, [allSessionMovements, userScope, isAdmin, currentUserName, currentUserEmail]);
+
+  // Total de movimientos propios en esta sesión
+  const mySessionMovementsCount = useMemo(() => {
+    return allSessionMovements.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail)).length;
+  }, [allSessionMovements, currentUserName, currentUserEmail]);
 
   const filteredSessionMovements = useMemo(() => {
     if (historyFilterType === 'Ingreso') return sessionMovements.filter(m => m.type === 'Ingreso');
@@ -682,6 +708,42 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </button>
               </div>
 
+              {/* Selector de alcance para Administrador: Mis movimientos (por defecto) vs Ver todos */}
+              {isAdmin && (
+                <div className="flex items-center justify-between p-2 px-3 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <UserIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400 shrink-0" />
+                    <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 truncate">
+                      Vista de administrador:
+                    </span>
+                  </div>
+                  <div className="flex bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setUserScope('mine')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        userScope === 'mine'
+                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                      }`}
+                    >
+                      Mis movimientos ({mySessionMovementsCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserScope('all')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        userScope === 'all'
+                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                      }`}
+                    >
+                      Ver todos ({allSessionMovements.length})
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Filtros simples de 3 opciones */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold">
@@ -710,7 +772,20 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
               <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
                 {filteredSessionMovements.length === 0 ? (
                   <div className="py-12 text-center text-gray-400 dark:text-zinc-500">
-                    <p className="text-xs font-bold">No hay movimientos registrados en esta sesión.</p>
+                    <p className="text-xs font-bold">
+                      {isAdmin && userScope === 'mine'
+                        ? 'No tienes movimientos registrados en esta sesión.'
+                        : 'No hay movimientos registrados en esta sesión.'}
+                    </p>
+                    {isAdmin && userScope === 'mine' && allSessionMovements.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setUserScope('all')}
+                        className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                      >
+                        Ver los {allSessionMovements.length} movimientos de la sesión
+                      </button>
+                    )}
                   </div>
                 ) : (
                   filteredSessionMovements.map((mov) => {
@@ -730,8 +805,26 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                               {mov.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : mov.payment_method}
                               {mov.bank_account_name ? ` • ${mov.bank_account_name}` : ''}
                               {mov.reference ? ` • Ref: ${mov.reference}` : ''}
-                              {' • '}
-                              {new Date(mov.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              {mov.created_at ? (
+                                <>
+                                  {' • '}
+                                  <span className="font-semibold text-gray-700 dark:text-zinc-300">
+                                    {new Date(mov.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                  </span>
+                                  {' • '}
+                                  <span>
+                                    {new Date(mov.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                  </span>
+                                </>
+                              ) : null}
+                              {mov.created_by && (
+                                <>
+                                  {' • '}
+                                  <span className="font-bold text-gray-700 dark:text-zinc-300">
+                                    Por: {mov.created_by}
+                                  </span>
+                                </>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -983,7 +1076,9 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 REPORTE DE INGRESOS Y EGRESOS DE LA SESIÓN
               </h2>
               <p className="text-xs text-gray-600">
-                Movimientos de la Sesión Activa
+                {isAdmin && userScope === 'mine'
+                  ? `Movimientos registrados por: ${currentUserName}`
+                  : 'Todos los movimientos de la sesión'}
               </p>
             </div>
 
@@ -1016,7 +1111,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             <table className="w-full border-collapse border border-gray-300 text-xs mb-8">
               <thead>
                 <tr className="bg-gray-100 border-b border-gray-300">
-                  <th className="border border-gray-300 p-2 text-left text-[10px] font-black uppercase">Hora</th>
+                  <th className="border border-gray-300 p-2 text-left text-[10px] font-black uppercase">Fecha / Hora</th>
                   <th className="border border-gray-300 p-2 text-left text-[10px] font-black uppercase">Tipo</th>
                   <th className="border border-gray-300 p-2 text-left text-[10px] font-black uppercase">Método / Banco</th>
                   <th className="border border-gray-300 p-2 text-left text-[10px] font-black uppercase">Concepto / Ref</th>
@@ -1028,7 +1123,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 {sessionMovements.map((m, idx) => (
                   <tr key={m.id || idx} className="border-b border-gray-200">
                     <td className="border border-gray-300 p-2 font-mono text-[10px]">
-                      {new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      <div className="font-bold text-gray-900">{m.created_at ? new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</div>
+                      <div className="text-[9px] text-gray-500">{m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}</div>
                     </td>
                     <td className="border border-gray-300 p-2 font-black uppercase text-[10px]">
                       <span className={m.type === 'Ingreso' ? 'text-emerald-700' : 'text-red-700'}>

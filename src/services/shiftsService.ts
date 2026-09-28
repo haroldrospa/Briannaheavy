@@ -117,19 +117,27 @@ export const setLastClosureTime = (registerName: string, timeIso = new Date().to
 export const DEFAULT_SHIFT_FUND = 13000;
 
 export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift => {
+  const currentRole = getActiveRole();
+  const isAdmin = currentRole === 'Administrador';
   const shiftKey = getShiftStorageKey(registerName);
   try {
     const raw = localStorage.getItem(shiftKey);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.is_open) {
-        if (!parsed.initial_fund || parsed.initial_fund <= 0) {
-          parsed.initial_fund = DEFAULT_SHIFT_FUND;
-          try {
-            localStorage.setItem(shiftKey, JSON.stringify(parsed));
-          } catch {}
+      if (parsed) {
+        if (isAdmin) {
+          parsed.is_open = true;
+          return parsed;
         }
-        return parsed;
+        if (parsed.is_open) {
+          if (!parsed.initial_fund || parsed.initial_fund <= 0) {
+            parsed.initial_fund = DEFAULT_SHIFT_FUND;
+            try {
+              localStorage.setItem(shiftKey, JSON.stringify(parsed));
+            } catch {}
+          }
+          return parsed;
+        }
       }
     }
   } catch (e) {
@@ -141,12 +149,19 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     const legacyRaw = localStorage.getItem('brianna_active_shift');
     if (legacyRaw) {
       const parsed = JSON.parse(legacyRaw);
-      if (parsed && parsed.is_open) {
-        if (!parsed.initial_fund || parsed.initial_fund <= 0) {
-          parsed.initial_fund = DEFAULT_SHIFT_FUND;
+      if (parsed) {
+        if (isAdmin) {
+          parsed.is_open = true;
+          parsed.register_name = registerName;
+          return parsed;
         }
-        parsed.register_name = registerName;
-        return parsed;
+        if (parsed.is_open) {
+          if (!parsed.initial_fund || parsed.initial_fund <= 0) {
+            parsed.initial_fund = DEFAULT_SHIFT_FUND;
+          }
+          parsed.register_name = registerName;
+          return parsed;
+        }
       }
     }
   } catch {}
@@ -169,9 +184,9 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     id: `SHIFT-${registerName.substring(0, 3).toUpperCase()}-${Date.now()}`,
     register_name: registerName,
     opened_at: openedAtStr,
-    initial_fund: localFund > 0 ? localFund : DEFAULT_SHIFT_FUND,
+    initial_fund: localFund > 0 ? localFund : (isAdmin ? 0 : DEFAULT_SHIFT_FUND),
     cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
-    is_open: localFund > 0,
+    is_open: isAdmin ? true : localFund > 0,
   };
 
   try {
@@ -182,6 +197,12 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
 };
 
 export const isShiftOpen = (registerName = 'Caja 1 - Repuestos'): boolean => {
+  // El Administrador nunca necesita abrir turno con fondo inicial para operar la caja
+  const currentRole = getActiveRole();
+  if (currentRole === 'Administrador') {
+    return true;
+  }
+
   const shiftKey = getShiftStorageKey(registerName);
   try {
     const raw = localStorage.getItem(shiftKey);
@@ -196,13 +217,15 @@ export const isShiftOpen = (registerName = 'Caja 1 - Repuestos'): boolean => {
 };
 
 export const openShift = (
-  initialFund: number = DEFAULT_SHIFT_FUND, 
+  initialFund?: number, 
   cashierName = localStorage.getItem('brianna_user_name') || 'Harold Rosado', 
   registerName = 'Caja 1 - Repuestos'
 ): ActiveShift => {
-  const fund = typeof initialFund === 'number' && !isNaN(initialFund) && initialFund > 0 
+  const currentRole = getActiveRole();
+  const isAdmin = currentRole === 'Administrador';
+  const fund = typeof initialFund === 'number' && !isNaN(initialFund)
     ? initialFund 
-    : DEFAULT_SHIFT_FUND;
+    : (isAdmin ? 0 : DEFAULT_SHIFT_FUND);
 
   const newShift: ActiveShift = {
     id: `SHIFT-${registerName.substring(0, 3).toUpperCase()}-${Date.now()}`,
@@ -476,6 +499,48 @@ export const matchesRegister = (targetRegister: string, itemRegister?: string): 
 };
 
 /**
+ * Comprueba si un movimiento de caja pertenece al usuario especificado.
+ */
+export const isMovementOfUser = (
+  movement: CashMovement,
+  userName?: string,
+  userEmail?: string
+): boolean => {
+  const author = (movement.created_by || (movement as any).user_name || '').toLowerCase().trim();
+  if (!author) {
+    return true;
+  }
+
+  const meName = (userName || '').toLowerCase().trim();
+  const meEmail = (userEmail || '').toLowerCase().trim();
+  const prefix = meEmail.includes('@') ? meEmail.split('@')[0].trim() : '';
+
+  // 1. Coincidencia exacta
+  if (meName && author === meName) return true;
+
+  // 2. Si el autor o el usuario incluye al otro completamente
+  if (meName && (author.includes(meName) || meName.includes(author))) return true;
+
+  // 3. Email o prefijo de email
+  if (meEmail && author === meEmail) return true;
+  if (prefix && prefix.length >= 3 && author.includes(prefix)) return true;
+
+  // 4. Comparación por palabras (nombre / apellido)
+  const authorWords = author.split(/\s+/).filter((w: string) => w.length >= 3);
+  const meWords = meName.split(/\s+/).filter((w: string) => w.length >= 3);
+
+  if (authorWords.length > 1 && meWords.length > 1) {
+    const matchingWords = meWords.filter((w: string) => authorWords.includes(w));
+    if (matchingWords.length >= 2) return true;
+    if (meWords[meWords.length - 1] === authorWords[authorWords.length - 1]) return true;
+  } else if (meWords.length > 0 && authorWords.length > 0) {
+    if (meWords.some((w: string) => authorWords.includes(w))) return true;
+  }
+
+  return false;
+};
+
+/**
  * Filtra movimientos de efectivo por Caja y Cajero.
  * Los usuarios que no son Administradores sólo pueden ver sus propios movimientos.
  */
@@ -490,20 +555,20 @@ export const filterMovementsByShift = (
 
   const currentRole = getActiveRole();
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+  const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  // 1. Filtrar por Cajero solo si no es 'todos' y el usuario no es admin
+  // 1. Filtrar por Cajero / Usuario
   let effectiveCashier = selectedCashier;
   if (currentRole !== 'Administrador' && currentUserName && selectedCashier !== 'todos') {
     effectiveCashier = currentUserName;
   }
 
   if (effectiveCashier !== 'todos' && effectiveCashier !== 'todas' && effectiveCashier.trim() !== '') {
-    const cLower = effectiveCashier.toLowerCase().trim();
-    list = list.filter(m => {
-      const user = (m.created_by || (m as any).user_name || '').toLowerCase().trim();
-      if (!user) return true;
-      return user.includes(cLower) || cLower.includes(user) || user.includes('cajer') || user.includes('admin');
-    });
+    if (effectiveCashier === 'current_user' || effectiveCashier === 'mine') {
+      list = list.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail));
+    } else {
+      list = list.filter(m => isMovementOfUser(m, effectiveCashier));
+    }
   }
 
   // 2. Filtrar por Caja (usando equivalencias inteligentes)
@@ -537,3 +602,4 @@ export const filterMovementsByShift = (
 
   return list;
 };
+

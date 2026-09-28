@@ -76,48 +76,49 @@ let inFlightFinancingsPromise: Promise<Financing[]> | null = null;
 
 export const getLocalStorageFinancings = (): Financing[] => {
   const deletedIds = getDeletedFinancingIds();
-  if (inMemoryFinancings !== null) {
-    return inMemoryFinancings
-      .filter(f => !deletedIds.has(String(f.id)))
-      .map(f => ({
-        ...f,
-        installments: f.installments && Array.isArray(f.installments)
-          ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
-          : f.installments
-      }));
-  }
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      const filtered = parsed
-        .filter(f => !deletedIds.has(String(f.id)))
-        .map(f => ({
-          ...f,
-          installments: f.installments && Array.isArray(f.installments)
-            ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
-            : f.installments
-        }));
-      inMemoryFinancings = filtered;
-      return filtered;
+  const source = inMemoryFinancings !== null ? inMemoryFinancings : (() => {
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
-    return [];
-  } catch {
-    return [];
-  }
-};
+  })();
 
-const saveLocalStorageFinancings = (items: Financing[]): void => {
-  const deletedIds = getDeletedFinancingIds();
-  const cleanItems = items
-    .filter(f => !deletedIds.has(String(f.id)))
-    .map(f => ({
+  const seenIds = new Set<string>();
+  const clean: Financing[] = [];
+  for (const f of source) {
+    const key = String(f.rawId || f.id || '');
+    if (!key || deletedIds.has(key) || seenIds.has(key)) continue;
+    seenIds.add(key);
+    clean.push({
       ...f,
       installments: f.installments && Array.isArray(f.installments)
         ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
         : f.installments
-    }));
+    });
+  }
+  inMemoryFinancings = clean;
+  return clean;
+};
+
+const saveLocalStorageFinancings = (items: Financing[]): void => {
+  const deletedIds = getDeletedFinancingIds();
+  const seenIds = new Set<string>();
+  const cleanItems: Financing[] = [];
+  for (const f of items) {
+    const key = String(f.rawId || f.id || '');
+    if (!key || deletedIds.has(key) || seenIds.has(key)) continue;
+    seenIds.add(key);
+    cleanItems.push({
+      ...f,
+      installments: f.installments && Array.isArray(f.installments)
+        ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+        : f.installments
+    });
+  }
   inMemoryFinancings = cleanItems;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cleanItems));
@@ -349,9 +350,24 @@ export const fetchFinancings = async (forceRefresh = false): Promise<Financing[]
                 guarantor_phone: f.guarantor_phone || (matchedLocal as any)?.guarantor_phone || (matchedLocal as any)?.guarantorPhone,
                 guarantor_relation: f.guarantor_relation || (matchedLocal as any)?.guarantor_relation || (matchedLocal as any)?.guarantorRelation,
                 guarantor_address: f.guarantor_address || (matchedLocal as any)?.guarantor_address || (matchedLocal as any)?.guarantorAddress,
-                installments: f.installments && Array.isArray(f.installments)
-                  ? [...f.installments].sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
-                  : (matchedLocal?.installments || f.installments)
+                installments: f.installments && Array.isArray(f.installments) && f.installments.length > 0
+                  ? [...f.installments]
+                      .sort((a, b) => (Number(a.installment_number) || 0) - (Number(b.installment_number) || 0))
+                      .map((dbInst): Installment => {
+                        const localInst = (matchedLocal?.installments || []).find(
+                          (li: any) => String(li.id) === String(dbInst.id) || Number(li.installment_number || li.id) === Number(dbInst.installment_number)
+                        );
+                        const isLocallyPaid = (localInst as any)?.status === 'Pagado' || (localInst as any)?.isPaid;
+                        const finalStatus: 'Pendiente' | 'Pagado' | 'En Mora' = (dbInst.status === 'Pagado' || isLocallyPaid) ? 'Pagado' : ((dbInst.status as any) || 'Pendiente');
+                        return {
+                          ...dbInst,
+                          ...localInst,
+                          status: finalStatus,
+                          paid_amount: Math.max(Number(dbInst.paid_amount || 0), Number((localInst as any)?.paid_amount || (localInst as any)?.paidAmount || 0)),
+                          paid_date: dbInst.paid_date || (localInst as any)?.paid_date || (localInst as any)?.paidDate || undefined,
+                        };
+                      })
+                  : (matchedLocal?.installments || f.installments || [])
               };
             });
           lastFinancingsFetchTime = Date.now();
@@ -393,7 +409,8 @@ export const createFinancing = async (
         item_type: createdInSupabase.item_type || financingData.item_type,
       };
       const current = getLocalStorageFinancings();
-      saveLocalStorageFinancings([fullCreated, ...current.filter(f => f.id !== fullCreated.id)]);
+      const createdId = String(fullCreated.id);
+      saveLocalStorageFinancings([fullCreated, ...current.filter(f => String(f.id) !== createdId && String(f.rawId || '') !== createdId)]);
       return fullCreated;
     }
   }
@@ -700,7 +717,11 @@ export const persistFinancingInstallments = (
 ): void => {
   const current = getLocalStorageFinancings();
   const updatedList = current.map(fin => {
-    if (fin.id === financingId || String(fin.id) === String(financingId) || (updatedFinancing.rawId && fin.id === updatedFinancing.rawId)) {
+    const isMatch = fin.id === financingId || 
+                    String(fin.id) === String(financingId) || 
+                    (fin.rawId && (String(fin.rawId) === String(financingId) || (updatedFinancing?.rawId && String(fin.rawId) === String(updatedFinancing.rawId)))) ||
+                    (updatedFinancing?.id && String(fin.id) === String(updatedFinancing.id));
+    if (isMatch) {
       return {
         ...fin,
         ...updatedFinancing,
@@ -726,29 +747,36 @@ export const persistFinancingInstallments = (
 
     if (Array.isArray(updatedFinancing.installments)) {
       for (const inst of updatedFinancing.installments) {
-        const instDbId = inst.dbId || (inst.id && uuidRegex.test(String(inst.id)) ? inst.id : null);
-        if (instDbId) {
-          const instPayload: any = {};
-          if (inst.capital !== undefined || inst.principal_amount !== undefined) {
-            instPayload.principal_amount = Number(inst.capital ?? inst.principal_amount) || 0;
-          }
-          if (inst.interest !== undefined || inst.interest_amount !== undefined) {
-            instPayload.interest_amount = Number(inst.interest ?? inst.interest_amount) || 0;
-          }
-          if (inst.total !== undefined || inst.amount !== undefined) {
-            instPayload.amount = Number(inst.total ?? inst.amount) || 0;
-          }
-          if (inst.paidAmount !== undefined || inst.paid_amount !== undefined) {
-            instPayload.paid_amount = Number(inst.paidAmount ?? inst.paid_amount) || 0;
-          }
-          if (inst.status !== undefined) {
-            instPayload.status = inst.status === 'Pagado' ? 'Pagado' : 'Pendiente';
-          }
-          if (inst.paidDate !== undefined || inst.paid_date !== undefined) {
-            instPayload.paid_date = inst.paidDate || inst.paid_date || null;
-          }
-          if (Object.keys(instPayload).length > 0) {
+        const instDbId = (inst.dbId && uuidRegex.test(String(inst.dbId)))
+          ? inst.dbId
+          : (inst.id && uuidRegex.test(String(inst.id)) ? inst.id : null);
+        const instPayload: any = {};
+        if (inst.capital !== undefined || inst.principal_amount !== undefined) {
+          instPayload.principal_amount = Number(inst.capital ?? inst.principal_amount) || 0;
+        }
+        if (inst.interest !== undefined || inst.interest_amount !== undefined) {
+          instPayload.interest_amount = Number(inst.interest ?? inst.interest_amount) || 0;
+        }
+        if (inst.total !== undefined || inst.amount !== undefined) {
+          instPayload.amount = Number(inst.total ?? inst.amount) || 0;
+        }
+        if (inst.paidAmount !== undefined || inst.paid_amount !== undefined) {
+          instPayload.paid_amount = Number(inst.paidAmount ?? inst.paid_amount) || 0;
+        }
+        if (inst.status !== undefined) {
+          instPayload.status = inst.status === 'Pagado' ? 'Pagado' : 'Pendiente';
+        }
+        if (inst.paidDate !== undefined || inst.paid_date !== undefined) {
+          instPayload.paid_date = inst.paidDate || inst.paid_date || null;
+        }
+        if (Object.keys(instPayload).length > 0) {
+          if (instDbId) {
             supabase.from('installments').update(instPayload).eq('id', instDbId).then();
+          } else if (targetId) {
+            const instNum = Number(inst.installment_number || inst.id);
+            if (instNum > 0) {
+              supabase.from('installments').update(instPayload).eq('financing_id', targetId).eq('installment_number', instNum).then();
+            }
           }
         }
       }
@@ -842,7 +870,10 @@ export const revertInstallmentPayment = async (
   const today = new Date().toISOString().slice(0, 10);
 
   const updatedList = current.map(fin => {
-    if (fin.id !== financingId && String(fin.id) !== String(financingId)) {
+    const isMatch = fin.id === financingId || 
+                    String(fin.id) === String(financingId) || 
+                    (fin.rawId && String(fin.rawId) === String(financingId));
+    if (!isMatch) {
       return fin;
     }
 

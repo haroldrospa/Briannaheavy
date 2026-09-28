@@ -17,7 +17,8 @@ import {
   PencilSquareIcon, 
   CheckIcon, 
   ClockIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -29,6 +30,7 @@ import {
   updateActiveShiftFund, 
   filterInvoicesByShift, 
   filterMovementsByShift,
+  isMovementOfUser,
   markInvoicesAsClosed,
   setLastClosureTime,
   getLastClosureTime,
@@ -66,6 +68,7 @@ export default function CashClosureModal({
   const currentRole = getActiveRole();
   const isAdmin = currentRole === 'Administrador';
   const loggedInUserName = defaultCashier || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
+  const loggedInUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
   // Multi-Caja Selector State (non-admins cannot select 'todas' consolidado)
   const [selectedRegister, setSelectedRegister] = useState<string>(defaultRegister);
@@ -120,7 +123,7 @@ export default function CashClosureModal({
     const shift = getActiveShift(regToLoad);
     setActiveShift(shift);
 
-    const fund = shift && shift.initial_fund > 0 ? shift.initial_fund : DEFAULT_SHIFT_FUND;
+    const fund = shift && shift.initial_fund !== undefined ? shift.initial_fund : (isAdmin ? 0 : DEFAULT_SHIFT_FUND);
     setInitialFund(fund);
     setTempFund(String(fund));
     setCashierName(loggedInUserName);
@@ -344,16 +347,17 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // Filtrar movimientos de caja por Caja
+  // Filtrar movimientos de caja: en el cierre solo se deben mostrar y calcular los movimientos propios del usuario en sesión
   const scopedMovements = useMemo(() => {
-    return filterMovementsByShift(
+    const list = filterMovementsByShift(
       allMovements, 
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
       'todos'
     );
-  }, [allMovements, filterMode, activeShift, selectedRegister]);
+    return list.filter(m => isMovementOfUser(m, loggedInUserName, loggedInUserEmail));
+  }, [allMovements, filterMode, activeShift, selectedRegister, loggedInUserName, loggedInUserEmail]);
 
   // Calcular ventas y cobros por método de pago para ESA caja/cajero
   const systemSales = useMemo(() => {
@@ -393,13 +397,23 @@ export default function CashClosureModal({
     return { cash, card, transfer, credit };
   }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments]);
 
-  // Calcular totales de movimientos para ESA caja física (solo efectivo)
+  // Calcular totales de movimientos para ESA caja física (solo efectivo de la gaveta)
   const cashMovementsTotals = useMemo(() => {
     let ingresos = 0, egresos = 0;
     scopedMovements.forEach(m => {
-      const pm = (m.payment_method || 'Efectivo').toLowerCase();
-      const isBank = pm.includes('transferencia') || pm.includes('transf');
-      if (isBank) return;
+      const pm = (m.payment_method || '').toLowerCase().trim();
+      const reasonLower = ((m as any).reason || '').toLowerCase();
+      const isNonCash = 
+        pm.includes('transferencia') || 
+        pm.includes('transf') || 
+        pm.includes('tarjeta') || 
+        pm.includes('banco') ||
+        reasonLower.includes('tarjeta') ||
+        reasonLower.includes('banco:') ||
+        Boolean(m.bank_account_id) || 
+        Boolean(m.bank_account_name);
+
+      if (isNonCash) return;
 
       const amt = Number(m.amount) || 0;
       if (m.type === 'Ingreso') ingresos += amt;
@@ -409,6 +423,14 @@ export default function CashClosureModal({
   }, [scopedMovements]);
 
   const grandTotalSales = systemSales.cash + systemSales.card + systemSales.transfer + systemSales.credit;
+  const totalInvoicesAmount = useMemo(() => {
+    return scopedInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+  }, [scopedInvoices]);
+  const extraReceiptsTotal = useMemo(() => {
+    const fin = scopedFinancingReceipts.reduce((sum, r) => sum + (Number(r.totalPaid) || 0), 0);
+    const cred = scopedCreditPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    return fin + cred;
+  }, [scopedFinancingReceipts, scopedCreditPayments]);
   const expectedCashTotal = initialFund + systemSales.cash + cashMovementsTotals.ingresos - cashMovementsTotals.egresos;
 
   // Conteo físico
@@ -624,7 +646,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
                       {selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister}
                     </span>
-                    {!isShiftOpenState && (
+                    {!isShiftOpenState && !isAdmin && (
                       <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40">
                         Turno Cerrado
                       </span>
@@ -634,7 +656,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     <ClockIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <span>{currentDateStr} • {currentTimeStr}</span>
                     <span className="text-zinc-300 dark:text-zinc-700">|</span>
-                    {isShiftOpenState ? (
+                    {isShiftOpenState || isAdmin ? (
                       <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                         Turno: {shiftStartStr} ({totalDocsCount} {totalDocsCount === 1 ? 'venta/cobro' : 'ventas/cobros'})
                       </span>
@@ -649,7 +671,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 self-end sm:self-auto">
-                {!isShiftOpenState && (
+                {!isShiftOpenState && !isAdmin && (
                   <button
                     type="button"
                     onClick={() => {
@@ -845,6 +867,59 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
+
+                  {/* Facturas de Ventas y Total Vendido */}
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                        <DocumentTextIcon className="w-3.5 h-3.5 text-zinc-400" />
+                        Facturas de Ventas ({scopedInvoices.length})
+                      </h3>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">Total Vendido:</span>
+                        <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
+                          RD$ {totalInvoicesAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {scopedInvoices.length === 0 ? (
+                      <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
+                        Sin facturas de venta registradas en este turno
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                        {scopedInvoices.map(inv => (
+                          <div key={inv.id} className="flex items-center justify-between p-2 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                                inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                                inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
+                                inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
+                                'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                              }`}>
+                                {inv.payment_method || 'Efectivo'}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-xs">{inv.invoice_number}</span>
+                                  <span className="text-zinc-500 dark:text-zinc-400 text-[11px] truncate">{inv.customer_name || 'Consumidor Final'}</span>
+                                </div>
+                                {inv.created_at && (
+                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                    {new Date(inv.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {new Date(inv.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-2">
+                              +RD$ {Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right Column: Breakdown & Status (6 Cols) */}
@@ -894,30 +969,56 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400" />
                         Movimientos ({scopedMovements.length})
                       </h3>
-                      <div className="text-[10px] font-mono font-bold flex gap-2">
-                        <span className="text-emerald-600">+${cashMovementsTotals.ingresos.toLocaleString('es-DO')}</span>
-                        <span className="text-rose-500">-${cashMovementsTotals.egresos.toLocaleString('es-DO')}</span>
+                      <div className="text-[10px] font-mono font-bold flex items-center gap-1.5">
+                        <span className="text-zinc-400 font-medium">Efectivo caja:</span>
+                        <span className="text-emerald-600">RD$ +{cashMovementsTotals.ingresos.toLocaleString('es-DO')}</span>
+                        <span className="text-rose-500">RD$ -{cashMovementsTotals.egresos.toLocaleString('es-DO')}</span>
                       </div>
                     </div>
 
                     {scopedMovements.length === 0 ? (
                       <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
-                        Sin movimientos adicionales en esta caja
+                        Sin movimientos propios registrados en este turno
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
                         {scopedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
+                          const pm = (m.payment_method || '').toLowerCase().trim();
+                          const reasonLower = ((m as any).reason || '').toLowerCase();
+                          const isCard = pm.includes('tarjeta') || reasonLower.includes('tarjeta');
+                          const isBank = pm.includes('transferencia') || pm.includes('transf') || reasonLower.includes('banco:') || Boolean(m.bank_account_name);
+                          const isCash = !isCard && !isBank;
+                          const methodLabel = isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo');
                           const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro de Efectivo');
+
                           return (
                             <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${isIngreso ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
-                                  {isIngreso ? '↓ Ingreso' : '↑ Retiro'}
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                                  !isCash
+                                    ? (isCard ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300')
+                                    : isIngreso
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                                }`}>
+                                  {isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro')}
                                 </span>
-                                <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[140px]" title={conceptText}>{conceptText}</span>
+                                <div className="min-w-0">
+                                  <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[150px] sm:max-w-[220px]" title={conceptText}>
+                                    {conceptText}
+                                  </div>
+                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                                    <span>{methodLabel}</span>
+                                    {m.created_at && (
+                                      <> • {new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <span className={`font-bold font-mono shrink-0 ml-2 ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              <span className={`font-bold font-mono shrink-0 ml-2 ${
+                                !isCash ? 'text-zinc-600 dark:text-zinc-400' : isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                              }`}>
                                 {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                               </span>
                             </div>
@@ -927,23 +1028,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     )}
                   </div>
 
-                  {/* Cobros y Ventas Detalladas del Turno */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                        <DocumentArrowDownIcon className="w-3.5 h-3.5 text-zinc-400" />
-                        Cobros & Ventas en Turno ({totalDocsCount})
-                      </h3>
-                      <span className="text-[10px] font-mono font-bold text-emerald-600">
-                        RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-
-                    {totalDocsCount === 0 ? (
-                      <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
-                        Sin cobros ni facturas registradas en este turno
+                  {/* Cobros y Recibos de Financiamiento / Crédito */}
+                  {(scopedFinancingReceipts.length > 0 || scopedCreditPayments.length > 0) && (
+                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                          <DocumentArrowDownIcon className="w-3.5 h-3.5 text-zinc-400" />
+                          Cobros & Recibos ({scopedFinancingReceipts.length + scopedCreditPayments.length})
+                        </h3>
+                        <span className="text-[10px] font-mono font-bold text-emerald-600">
+                          RD$ {extraReceiptsTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
                       </div>
-                    ) : (
+
                       <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
                         {/* Recibos de financiamiento */}
                         {scopedFinancingReceipts.map(rc => (
@@ -980,62 +1077,80 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                             </span>
                           </div>
                         ))}
-
-                        {/* Facturas POS */}
-                        {scopedInvoices.map(inv => (
-                          <div key={inv.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
-                                inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
-                                inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
-                                inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                              }`}>
-                                {inv.payment_method}
-                              </span>
-                              <div className="truncate">
-                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{inv.invoice_number}</span>
-                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{inv.customer_name}</span>
-                              </div>
-                            </div>
-                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-2">
-                              +${Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Status / Reconciliation Badge */}
-                  <div className={`p-3.5 rounded-2xl border ${
-                    variance === 0 
-                      ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300'
-                      : variance > 0
-                      ? 'bg-blue-50/80 border-blue-200/80 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800/60 dark:text-blue-300'
-                      : 'bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        {variance >= 0 ? (
-                          <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
-                        )}
-                        <div>
-                          <span className="text-xs uppercase font-bold tracking-wider block">
-                            {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
-                          </span>
-                          <span className="text-[11px] opacity-75 block font-medium">
-                            {variance === 0 ? 'El efectivo coincide exactamente' : variance > 0 ? 'Hay más dinero del esperado' : 'Falta dinero según el sistema'}
-                          </span>
+                  {physicalCashTotal === 0 && expectedCashTotal > 0 ? (
+                    <div className="p-3.5 rounded-2xl border bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <ClockIcon className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <div>
+                            <span className="text-xs uppercase font-bold tracking-wider block">
+                              Pendiente Conteo Físico
+                            </span>
+                            <span className="text-[11px] opacity-75 block font-medium">
+                              Ingresa los billetes y monedas en la tabla de la izquierda para cuadrar
+                            </span>
+                          </div>
                         </div>
+                        <p className="text-sm font-bold font-mono leading-none text-right">
+                          <span className="text-[10px] block opacity-75 uppercase">Esperado</span>
+                          RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </p>
                       </div>
-                      <p className="text-base font-bold font-mono leading-none">
-                        RD$ {variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                      </p>
                     </div>
-                  </div>
+                  ) : expectedCashTotal < 0 ? (
+                    <div className="p-3.5 rounded-2xl border bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+                          <div>
+                            <span className="text-xs uppercase font-bold tracking-wider block">
+                              Alerta: Efectivo Teórico Negativo
+                            </span>
+                            <span className="text-[11px] opacity-75 block font-medium">
+                              Los retiros registrados superan el fondo inicial de la caja
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-base font-bold font-mono leading-none">
+                          RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`p-3.5 rounded-2xl border ${
+                      variance === 0 
+                        ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300'
+                        : variance > 0
+                        ? 'bg-blue-50/80 border-blue-200/80 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800/60 dark:text-blue-300'
+                        : 'bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          {variance >= 0 ? (
+                            <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+                          )}
+                          <div>
+                            <span className="text-xs uppercase font-bold tracking-wider block">
+                              {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
+                            </span>
+                            <span className="text-[11px] opacity-75 block font-medium">
+                              {variance === 0 ? 'El efectivo coincide exactamente' : variance > 0 ? 'Hay más dinero del esperado' : 'Falta dinero según el sistema'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-base font-bold font-mono leading-none">
+                          RD$ {variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Responsables & Notas */}
                   <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
@@ -1231,17 +1346,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               )}
 
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleCloseAll();
-                    window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
-                  }}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/20"
-                >
-                  <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
-                  <span>Abrir Nuevo Turno</span>
-                </button>
+                {!isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseAll();
+                      window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
+                    }}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/20"
+                  >
+                    <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+                    <span>Abrir Nuevo Turno</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleCloseAll}
@@ -1414,7 +1531,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     <thead>
                       <tr className="bg-gray-100 text-black font-bold uppercase">
                         <th className="p-1 border border-gray-300">Tipo</th>
-                        <th className="p-1 border border-gray-300">Concepto</th>
+                        <th className="p-1 border border-gray-300">Concepto / Fecha</th>
                         <th className="p-1 border border-gray-300 text-right">Monto</th>
                       </tr>
                     </thead>
@@ -1422,7 +1539,14 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       {scopedMovements.map(m => (
                         <tr key={m.id}>
                           <td className="p-1 border border-gray-300 font-bold">{m.type}</td>
-                          <td className="p-1 border border-gray-300 truncate max-w-[90px]">{m.concept}</td>
+                          <td className="p-1 border border-gray-300">
+                            <div className="font-medium truncate max-w-[130px]">{m.concept}</div>
+                            {m.created_at && (
+                              <div className="text-[7.5px] text-gray-500 font-mono">
+                                {new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} {new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-1 border border-gray-300 text-right font-mono font-bold">
                             {m.type === 'Ingreso' ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO')}
                           </td>

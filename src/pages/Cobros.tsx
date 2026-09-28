@@ -20,6 +20,7 @@ import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, t
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen } from '../services/shiftsService';
+import { getActiveRole } from '../utils/rolePermissions';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
 import logo from '../assets/logo.png';
 
@@ -270,6 +271,7 @@ export default function Cobros() {
   const [shiftWarningMessage, setShiftWarningMessage] = useState<string>('');
 
   const requireOpenShift = (actionMessage: string): boolean => {
+    if (getActiveRole() === 'Administrador') return true;
     if (!isShiftActive) {
       setShiftWarningMessage(actionMessage);
       setShowShiftWarningModal(true);
@@ -283,6 +285,7 @@ export default function Cobros() {
       setIsShiftActive(isShiftOpen(COBROS_REGISTER));
     };
     const handleOpenShiftRequested = (e: any) => {
+      if (getActiveRole() === 'Administrador') return;
       if (!e.detail?.register || e.detail.register === COBROS_REGISTER || e.detail.register === 'todas') {
         setIsOpenShiftModalOpen(true);
       }
@@ -594,7 +597,7 @@ export default function Cobros() {
         </div>
 
         <div className="flex items-center gap-2">
-          {isShiftActive ? (
+          {isShiftActive || getActiveRole() === 'Administrador' ? (
             <button
               type="button"
               onClick={() => setIsCashClosureOpen(true)}
@@ -1432,7 +1435,7 @@ export default function Cobros() {
             isOpen={isCashClosureOpen}
             onClose={(didCloseShift) => {
               setIsCashClosureOpen(false);
-              if (didCloseShift) {
+              if (didCloseShift && getActiveRole() !== 'Administrador') {
                 setIsOpenShiftModalOpen(true);
               }
             }}

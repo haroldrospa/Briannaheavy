@@ -144,6 +144,15 @@ export function getStoredReceipts(): FinancingPaymentReceipt[] {
   }
 }
 
+// Flag para indicar si existe la tabla dedicada `financing_receipts` en Supabase.
+// En Brianna Heavy, el almacenamiento persistente oficial y confiable es `system_settings`
+// con clave 'financing_receipts', lo que garantiza funcionamiento sin errores 404 en consola.
+let hasDedicatedTable: boolean = false;
+
+export function enableDedicatedReceiptsTable(enable: boolean = true) {
+  hasDedicatedTable = enable;
+}
+
 /**
  * Persiste el recibo en la base de datos Supabase
  */
@@ -155,15 +164,17 @@ export async function saveReceiptToSupabase(
 
   let success = false;
 
-  // 1. Intentar insertar directamente en la tabla `financing_receipts`
-  try {
-    const dbPayload = toDbRow(receipt);
-    const { error: tableErr } = await supabase.from('financing_receipts').upsert([dbPayload]);
-    if (!tableErr) {
-      success = true;
+  // 1. Opcional: Insertar en la tabla `financing_receipts` si está habilitada
+  if (hasDedicatedTable) {
+    try {
+      const dbPayload = toDbRow(receipt);
+      const { error: tableErr } = await supabase.from('financing_receipts').upsert([dbPayload]);
+      if (!tableErr) {
+        success = true;
+      }
+    } catch {
+      // Ignorar
     }
-  } catch {
-    // Si la tabla no ha sido creada aún en Supabase, el respaldo en system_settings garantiza la persistencia
   }
 
   // 2. Persistir siempre en `system_settings` bajo la clave 'financing_receipts'
@@ -206,11 +217,13 @@ export async function syncAllFinancingReceiptsToSupabase(
       updated_at: new Date().toISOString(),
     });
 
-    // 2. Intentar guardar en la tabla financing_receipts
-    try {
-      const rows = list.map(toDbRow);
-      await supabase.from('financing_receipts').upsert(rows);
-    } catch {}
+    // 2. Opcional: guardar en la tabla financing_receipts si está disponible
+    if (hasDedicatedTable) {
+      try {
+        const rows = list.map(toDbRow);
+        await supabase.from('financing_receipts').upsert(rows);
+      } catch {}
+    }
 
     return true;
   } catch (err) {
@@ -246,21 +259,23 @@ export async function fetchReceiptsFromSupabase(): Promise<FinancingPaymentRecei
   try {
     let remoteReceipts: FinancingPaymentReceipt[] = [];
 
-    // Intento 1: Consultar la tabla dedicada `financing_receipts`
-    try {
-      const { data: tableData, error: tableErr } = await supabase
-        .from('financing_receipts')
-        .select('*')
-        .order('created_at', { ascending: false });
+    // Intento 1: Consultar la tabla dedicada `financing_receipts` si está disponible
+    if (hasDedicatedTable) {
+      try {
+        const { data: tableData, error: tableErr } = await supabase
+          .from('financing_receipts')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (!tableErr && Array.isArray(tableData) && tableData.length > 0) {
-        remoteReceipts = tableData.map(fromDbRow);
+        if (!tableErr && Array.isArray(tableData) && tableData.length > 0) {
+          remoteReceipts = tableData.map(fromDbRow);
+        }
+      } catch {
+        // Ignorar si la tabla no existe
       }
-    } catch {
-      // Ignorar si la tabla no existe
     }
 
-    // Intento 2: Si no hubo datos en la tabla, consultar `system_settings`
+    // Intento 2: Consultar `system_settings` (almacenamiento estándar y persistente)
     if (remoteReceipts.length === 0) {
       try {
         const { data: settingData, error: settingErr } = await supabase
@@ -340,11 +355,15 @@ export function saveReceipt(receipt: FinancingPaymentReceipt, emitEvent = true):
   }
 }
 
-export function getReceiptsForFinancing(financingId: string | number): FinancingPaymentReceipt[] {
+export function getReceiptsForFinancing(financingId: string | number, alternateId?: string | number): FinancingPaymentReceipt[] {
   const targetId = String(financingId);
+  const altId = (alternateId !== undefined && alternateId !== null) ? String(alternateId) : undefined;
   const all = getStoredReceipts();
   return all
-    .filter(r => String(r.financingId) === targetId)
+    .filter(r => {
+      const fId = String(r.financingId);
+      return fId === targetId || (altId !== undefined && fId === altId);
+    })
     .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
 }
 
@@ -356,13 +375,17 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
   if (!financing) return [];
 
   const targetId = String(financing.rawId || financing.id);
-  const existingReceipts = getReceiptsForFinancing(targetId);
+  const altId = financing.rawId ? String(financing.id) : undefined;
+  const existingReceipts = getReceiptsForFinancing(targetId, altId);
 
   // Collect all installment numbers that are already covered by existing receipts
   const coveredInstallmentIds = new Set<number>();
   existingReceipts.forEach(r => {
     if (r.paidInstallments && Array.isArray(r.paidInstallments)) {
-      r.paidInstallments.forEach(pi => coveredInstallmentIds.add(Number(pi.id)));
+      r.paidInstallments.forEach(pi => {
+        const num = Number(pi.id ?? (pi as any).installment_number ?? (pi as any).installmentNumber);
+        if (num > 0) coveredInstallmentIds.add(num);
+      });
     }
   });
 
@@ -517,11 +540,13 @@ export async function deleteFinancingReceipt(receiptIdOrNumber: string): Promise
   // 2. Eliminar de Supabase
   if (isSupabaseConfigured()) {
     try {
-      // Intentar borrado en tabla dedicada
-      await supabase
-        .from('financing_receipts')
-        .delete()
-        .or(`id.eq.${target},receipt_number.eq.${target}`);
+      // Opcional: borrar en tabla dedicada si está habilitada
+      if (hasDedicatedTable) {
+        await supabase
+          .from('financing_receipts')
+          .delete()
+          .or(`id.eq.${target},receipt_number.eq.${target}`);
+      }
 
       // Actualizar backup en system_settings
       await supabase.from('system_settings').upsert({
