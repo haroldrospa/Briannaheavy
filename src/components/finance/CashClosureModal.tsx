@@ -91,6 +91,7 @@ export default function CashClosureModal({
   const [tempFund, setTempFund] = useState('0');
 
   const [counts, setCounts] = useState<Record<number, number>>({});
+  const [countMode, setCountMode] = useState<'shift_only' | 'with_fund'>('shift_only');
   const [cashierName, setCashierName] = useState(() => loggedInUserName);
   const [supervisorName, setSupervisorName] = useState('Carlos Díaz');
   const [notes, setNotes] = useState('');
@@ -114,6 +115,7 @@ export default function CashClosureModal({
     setSelectedCashierFilter(loggedInUserName);
     setCashierName(loggedInUserName);
     setFilterMode('shift');
+    setCountMode('shift_only');
   }, [isOpen, defaultRegister, loggedInUserName]);
 
   useEffect(() => {
@@ -431,7 +433,13 @@ export default function CashClosureModal({
     const cred = scopedCreditPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     return fin + cred;
   }, [scopedFinancingReceipts, scopedCreditPayments]);
-  const expectedCashTotal = initialFund + systemSales.cash + cashMovementsTotals.ingresos - cashMovementsTotals.egresos;
+  // Efectivo neto generado durante el turno (Ventas en efectivo + Entradas extra - Salidas de efectivo)
+  const shiftCashNet = systemSales.cash + cashMovementsTotals.ingresos - cashMovementsTotals.egresos;
+  // Efectivo total en gaveta sumando el fondo inicial
+  const expectedCashTotal = initialFund + shiftCashNet;
+
+  const effectiveCountMode = initialFund > 0 ? countMode : 'shift_only';
+  const targetExpectedCash = effectiveCountMode === 'shift_only' ? shiftCashNet : expectedCashTotal;
 
   // Conteo físico
   const physicalCashTotal = useMemo(() => {
@@ -441,7 +449,19 @@ export default function CashClosureModal({
     }, 0);
   }, [counts]);
 
-  const variance = physicalCashTotal - expectedCashTotal;
+  const isMatchWithFund = initialFund > 0 && Math.abs(physicalCashTotal - expectedCashTotal) < 0.01;
+  const isMatchShiftOnly = Math.abs(physicalCashTotal - shiftCashNet) < 0.01;
+
+  const variance = useMemo(() => {
+    if (physicalCashTotal === 0 && targetExpectedCash !== 0) {
+      return -targetExpectedCash;
+    }
+    // Si coincide exactamente con cualquiera de los dos modos válidos, el cuadre es perfecto (0)
+    if (isMatchShiftOnly && (effectiveCountMode === 'shift_only' || physicalCashTotal > 0)) return 0;
+    if (isMatchWithFund && (effectiveCountMode === 'with_fund' || physicalCashTotal > 0)) return 0;
+
+    return physicalCashTotal - targetExpectedCash;
+  }, [physicalCashTotal, targetExpectedCash, isMatchShiftOnly, isMatchWithFund, effectiveCountMode]);
 
   const handleCountChange = (value: number, qty: string) => {
     const parsed = parseInt(qty, 10);
@@ -470,8 +490,9 @@ export default function CashClosureModal({
   const handleFinalizeClosure = async () => {
     setIsSavingClosure(true);
     try {
+      const finalDiff = Math.abs(variance) < 0.01 ? 0 : variance;
       const status: 'Cuadrado' | 'Sobrante' | 'Faltante' = 
-        variance === 0 ? 'Cuadrado' : variance > 0 ? 'Sobrante' : 'Faltante';
+        finalDiff === 0 ? 'Cuadrado' : finalDiff > 0 ? 'Sobrante' : 'Faltante';
 
       const denomRecord: Record<string, number> = {};
       DENOMINATIONS.forEach(d => {
@@ -479,6 +500,12 @@ export default function CashClosureModal({
       });
 
       const actualRegName = selectedRegister === 'todas' ? 'Caja Consolidada' : selectedRegister;
+      const isShiftCount = (effectiveCountMode === 'shift_only' || isMatchShiftOnly) && !isMatchWithFund;
+      const expectedToSave = isShiftCount ? shiftCashNet : expectedCashTotal;
+
+      const closureNotes = notes 
+        ? `${notes} | [Arqueo: ${isShiftCount && initialFund > 0 ? 'Solo Turno (Fondo de RD$ ' + initialFund.toLocaleString('es-DO') + ' en gaveta)' : 'Gaveta Completa'}]`
+        : (initialFund > 0 ? `[Arqueo: ${isShiftCount ? 'Solo Turno (Fondo de RD$ ' + initialFund.toLocaleString('es-DO') + ' en gaveta)' : 'Gaveta Completa'}]` : undefined);
 
       const closure = await createCashClosure({
         register_name: actualRegName,
@@ -493,13 +520,13 @@ export default function CashClosureModal({
         total_sales: grandTotalSales,
         cash_movements_in: cashMovementsTotals.ingresos,
         cash_movements_out: cashMovementsTotals.egresos,
-        expected_cash: expectedCashTotal,
+        expected_cash: expectedToSave,
         counted_cash: physicalCashTotal,
-        difference: variance,
+        difference: finalDiff,
         status,
         denominations: denomRecord,
         movements: scopedMovements,
-        notes,
+        notes: closureNotes,
       });
 
       setSavedClosure(closure);
@@ -525,10 +552,12 @@ export default function CashClosureModal({
   // Valores consolidados para impresión y reportes (prioriza el cierre guardado o los datos en vivo)
   const printInitialFund = savedClosure?.initial_fund !== undefined ? Number(savedClosure.initial_fund) : initialFund;
   const printTotalSales = savedClosure?.total_sales !== undefined ? Number(savedClosure.total_sales) : grandTotalSales;
-  const printExpectedCash = savedClosure?.expected_cash !== undefined ? Number(savedClosure.expected_cash) : expectedCashTotal;
+  const printShiftCashNet = shiftCashNet;
+  const printTotalDrawer = printInitialFund + printShiftCashNet;
+  const printExpectedCash = savedClosure?.expected_cash !== undefined ? Number(savedClosure.expected_cash) : targetExpectedCash;
   const printPhysicalCash = savedClosure?.counted_cash !== undefined ? Number(savedClosure.counted_cash) : physicalCashTotal;
   const printVariance = savedClosure?.difference !== undefined ? Number(savedClosure.difference) : variance;
-  const printStatus = savedClosure?.status || (printVariance === 0 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
+  const printStatus = savedClosure?.status || (Math.abs(printVariance) < 0.01 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
   const printSalesCash = savedClosure?.system_sales_cash !== undefined ? Number(savedClosure.system_sales_cash) : systemSales.cash;
   const printSalesCard = savedClosure?.system_sales_card !== undefined ? Number(savedClosure.system_sales_card) : systemSales.card;
   const printSalesTransfer = savedClosure?.system_sales_transfer !== undefined ? Number(savedClosure.system_sales_transfer) : systemSales.transfer;
@@ -553,10 +582,14 @@ Fecha: ${currentDateStr} • ${currentTimeStr}
 Caja: ${savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}
 Cajero(a): ${printCashier}
 Supervisor: ${printSupervisor}
-    Facturas / Cobros en Turno: ${totalDocsCount}
+Facturas / Cobros en Turno: ${totalDocsCount}
 
---- RESUMEN FINANCIERO ---
-• Fondo Inicial: RD$ ${printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+--- DESGLOSE DE EFECTIVO (SEPARADO) ---
+• Fondo Inicial (Base en Gaveta): RD$ ${printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Efectivo Recaudado en Turno:   RD$ ${printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Total Teórico en Gaveta:       RD$ ${printTotalDrawer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+
+--- RESUMEN DE VENTAS Y COBROS ---
 • Total Facturado / Cobrado: RD$ ${printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
   - Efectivo: RD$ ${printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
   - Tarjeta: RD$ ${printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -566,8 +599,9 @@ Supervisor: ${printSupervisor}
 • Egresos / Gastos: -RD$ ${cashMovementsTotals.egresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 
 --------------------------------------------------
-• Efectivo Teórico Esperado: RD$ ${printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Efectivo Físico Contado:  RD$ ${printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Modo de Arqueo: ${effectiveCountMode === 'shift_only' && initialFund > 0 ? 'Solo Efectivo del Turno (Fondo en gaveta)' : 'Gaveta Completa con Fondo'}
+• Efectivo Esperado: RD$ ${printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Efectivo Físico Arqueado: RD$ ${printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Diferencia: RD$ ${printVariance.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (${printStatus === 'Cuadrado' ? 'CUADRE PERFECTO' : printStatus === 'Sobrante' ? 'SOBRANTE' : 'FALTANTE'})
 --------------------------------------------------
 Observaciones: ${printNotes || 'Sin observaciones'}
@@ -772,12 +806,15 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       />
                     </div>
                   )}
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block mt-0.5">
+                    Base fija en gaveta
+                  </span>
                 </div>
 
                 {/* Total Facturado / Cobrado */}
                 <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Ventas / Cobros</span>
+                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Ventas / Cobros Totales</span>
                     <span className="text-[10px] font-medium px-1.5 py-0.2 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
                       {totalDocsCount} docs
                     </span>
@@ -785,21 +822,42 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-1 block">
                     RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block mt-0.5">
+                    Efectivo, Tarjeta, Transf, Crédito
+                  </span>
                 </div>
 
-                {/* Efectivo Esperado */}
-                <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
-                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Efectivo Teórico</span>
-                  <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-1 block">
-                    RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                {/* Efectivo del Turno (Neto) - SEPARADO DEL FONDO INICIAL */}
+                <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100/90 dark:border-emerald-800/40">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 block">
+                      Efectivo Turno (Neto)
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded">
+                      A Entregar
+                    </span>
+                  </div>
+                  <span className="text-base font-black text-emerald-950 dark:text-emerald-100 font-mono mt-1 block">
+                    RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-medium block mt-0.5 truncate" title={`Fondo inicial: RD$ ${initialFund.toLocaleString('es-DO')} | Total gaveta: RD$ ${expectedCashTotal.toLocaleString('es-DO')}`}>
+                    {initialFund > 0 ? `Total gaveta: RD$ ${expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : 'Sin fondo inicial'}
                   </span>
                 </div>
 
                 {/* Efectivo Contado */}
                 <div className="bg-zinc-100/80 dark:bg-zinc-800/60 p-3.5 rounded-2xl border border-zinc-200/80 dark:border-zinc-700/60">
-                  <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 block">Efectivo Físico Contado</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 block">Efectivo Contado</span>
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 bg-zinc-200/80 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded font-mono">
+                      {effectiveCountMode === 'shift_only' ? 'Solo Turno' : 'Gaveta'}
+                    </span>
+                  </div>
                   <span className="text-base font-bold text-zinc-900 dark:text-white font-mono mt-1 block">
                     RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium block mt-0.5 truncate">
+                    Esperado: RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -824,6 +882,47 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       </button>
                     </div>
                   </div>
+
+                  {/* Toggle selector: Solo Efectivo del Turno vs Gaveta Completa con Fondo */}
+                  {initialFund > 0 && (
+                    <div className="grid grid-cols-2 p-1 bg-zinc-100/90 dark:bg-zinc-800/80 rounded-xl gap-1 text-xs border border-zinc-200/60 dark:border-zinc-700/60">
+                      <button
+                        type="button"
+                        onClick={() => setCountMode('shift_only')}
+                        className={`py-1.5 px-2.5 rounded-lg transition-all cursor-pointer text-left ${
+                          effectiveCountMode === 'shift_only'
+                            ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px]">Solo Efectivo Turno</span>
+                          {effectiveCountMode === 'shift_only' && <span className="text-[8.5px] px-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded font-bold uppercase">Activo</span>}
+                        </div>
+                        <span className="block text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                          RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCountMode('with_fund')}
+                        className={`py-1.5 px-2.5 rounded-lg transition-all cursor-pointer text-left ${
+                          effectiveCountMode === 'with_fund'
+                            ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
+                            : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px]">Gaveta Completa</span>
+                          {effectiveCountMode === 'with_fund' && <span className="text-[8.5px] px-1 bg-zinc-200 dark:bg-zinc-600 text-zinc-800 dark:text-zinc-200 rounded font-bold uppercase">Activo</span>}
+                        </div>
+                        <span className="block text-[10px] font-mono text-zinc-600 dark:text-zinc-300 font-bold mt-0.5">
+                          RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Screen Interactive Denomination Grid */}
                   <div className="bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 p-2.5">
@@ -862,7 +961,14 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                   {/* Arqueo Footer Total */}
                   <div className="flex justify-between items-center px-4 py-3 bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
-                    <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Total Arqueado en Efectivo</span>
+                    <div>
+                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 block">Total Arqueado en Efectivo</span>
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                        {effectiveCountMode === 'shift_only' && initialFund > 0
+                          ? `Esperado Turno: RD$ ${shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (Fondo separado)`
+                          : `Esperado: RD$ ${targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
                     <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                       RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </span>
@@ -925,6 +1031,42 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 {/* Right Column: Breakdown & Status (6 Cols) */}
                 <div className="lg:col-span-6 space-y-3">
                   
+                  {/* Resumen Separado de Efectivo (Fondo Inicial vs Turno) */}
+                  {initialFund > 0 && (
+                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                          <BanknotesIcon className="w-3.5 h-3.5 text-zinc-400" />
+                          Separación de Efectivo (Gaveta)
+                        </h3>
+                        <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-200/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                          {selectedRegister === 'todas' ? 'Caja General' : selectedRegister.split(' - ')[0]}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between items-center p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
+                          <span className="font-medium text-zinc-600 dark:text-zinc-400">Fondo Inicial (se queda en caja):</span>
+                          <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200">
+                            RD$ {initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/70 dark:border-emerald-900/40">
+                          <span className="font-semibold text-emerald-800 dark:text-emerald-300">Efectivo Generado en Turno (a retirar):</span>
+                          <span className="font-black font-mono text-emerald-700 dark:text-emerald-300">
+                            RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 font-bold text-zinc-900 dark:text-zinc-100">
+                          <span className="text-zinc-700 dark:text-zinc-300">Total Físico Teórico en Gaveta:</span>
+                          <span className="font-mono text-xs">
+                            RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Ventas por Método de Pago */}
                   <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
                     <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
@@ -1082,7 +1224,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   )}
 
                   {/* Status / Reconciliation Badge */}
-                  {physicalCashTotal === 0 && expectedCashTotal > 0 ? (
+                  {physicalCashTotal === 0 && targetExpectedCash > 0 ? (
                     <div className="p-3.5 rounded-2xl border bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
@@ -1092,17 +1234,21 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               Pendiente Conteo Físico
                             </span>
                             <span className="text-[11px] opacity-75 block font-medium">
-                              Ingresa los billetes y monedas en la tabla de la izquierda para cuadrar
+                              {effectiveCountMode === 'shift_only' && initialFund > 0
+                                ? `El fondo de RD$ ${initialFund.toLocaleString('es-DO')} se queda en gaveta. Cuenta el efectivo recaudado.`
+                                : 'Ingresa los billetes y monedas en la tabla de la izquierda para cuadrar'}
                             </span>
                           </div>
                         </div>
                         <p className="text-sm font-bold font-mono leading-none text-right">
-                          <span className="text-[10px] block opacity-75 uppercase">Esperado</span>
-                          RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          <span className="text-[10px] block opacity-75 uppercase">
+                            {effectiveCountMode === 'shift_only' && initialFund > 0 ? 'Esperado Turno' : 'Esperado Total'}
+                          </span>
+                          RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </p>
                       </div>
                     </div>
-                  ) : expectedCashTotal < 0 ? (
+                  ) : targetExpectedCash < 0 ? (
                     <div className="p-3.5 rounded-2xl border bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
@@ -1112,12 +1258,12 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               Alerta: Efectivo Teórico Negativo
                             </span>
                             <span className="text-[11px] opacity-75 block font-medium">
-                              Los retiros registrados superan el fondo inicial de la caja
+                              Los retiros registrados superan el fondo de la caja
                             </span>
                           </div>
                         </div>
                         <p className="text-base font-bold font-mono leading-none">
-                          RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </p>
                       </div>
                     </div>
@@ -1141,7 +1287,15 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
                             </span>
                             <span className="text-[11px] opacity-75 block font-medium">
-                              {variance === 0 ? 'El efectivo coincide exactamente' : variance > 0 ? 'Hay más dinero del esperado' : 'Falta dinero según el sistema'}
+                              {variance === 0 
+                                ? (isMatchWithFund && effectiveCountMode === 'shift_only'
+                                    ? 'Coincide con la gaveta completa (fondo incluido)'
+                                    : effectiveCountMode === 'shift_only' && initialFund > 0
+                                    ? 'Efectivo de turno cuadrado (fondo inicial intacto)'
+                                    : 'El efectivo coincide exactamente')
+                                : variance > 0 
+                                ? 'Hay más dinero del esperado' 
+                                : 'Falta dinero según el sistema'}
                             </span>
                           </div>
                         </div>
@@ -1405,23 +1559,23 @@ Observaciones: ${printNotes || 'Sin observaciones'}
           {/* KPI Financial Reconciliation Summary */}
           <div className="grid grid-cols-4 gap-2 mb-3">
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Fondo Inicial</span>
+              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Fondo Inicial (Gaveta)</span>
               <span className="text-xs font-black font-mono text-black">
                 RD$ {printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Total Facturado</span>
-              <span className="text-xs font-black font-mono text-black">
-                RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Efectivo Turno (Neto)</span>
+              <span className="text-xs font-black font-mono text-emerald-800">
+                RD$ {printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Efectivo Esperado</span>
+              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Total en Gaveta</span>
               <span className="text-xs font-black font-mono text-black">
-                RD$ {printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                RD$ {printTotalDrawer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
