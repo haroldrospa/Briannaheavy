@@ -18,12 +18,14 @@ import {
   CheckIcon, 
   ClockIcon,
   LockClosedIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { createCashClosure, getLocalStorageCashClosures, type CashClosure } from '../../services/cashClosuresService';
 import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
+import { getLocalStorageUsers, fetchUsers, type UserProfile } from '../../services/usersService';
 import { 
   getActiveShift, 
   closeShift, 
@@ -93,7 +95,36 @@ export default function CashClosureModal({
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [countMode, setCountMode] = useState<'shift_only' | 'with_fund'>('shift_only');
   const [cashierName, setCashierName] = useState(() => loggedInUserName);
-  const [supervisorName] = useState('Carlos Díaz');
+
+  // Lista de administradores para supervisor de cierre (Jennifer preseleccionada)
+  const [adminUsers, setAdminUsers] = useState<UserProfile[]>(() => {
+    try {
+      const local = getLocalStorageUsers();
+      return local.filter(u => u.role === 'Administrador' && u.status === 'Activo');
+    } catch {
+      return [];
+    }
+  });
+
+  const adminNames = useMemo(() => {
+    const list = adminUsers.map(u => u.full_name).filter(Boolean);
+    const defaults = ['Jennifer', 'Harold Rosado', 'Rosa Iris Penalo', 'Franquelina Echavarria'];
+    defaults.forEach(d => {
+      if (!list.some(n => n.toLowerCase() === d.toLowerCase())) {
+        list.push(d);
+      }
+    });
+    // Ordenar poniendo a Jennifer siempre de primera
+    return list.sort((a, b) => {
+      if (a.toLowerCase().includes('jennifer')) return -1;
+      if (b.toLowerCase().includes('jennifer')) return 1;
+      return a.localeCompare(b);
+    });
+  }, [adminUsers]);
+
+  const [supervisorName, setSupervisorName] = useState<string>(() => {
+    return 'Jennifer';
+  });
   const [notes, setNotes] = useState('');
 
   // Completion modal & email states
@@ -116,7 +147,9 @@ export default function CashClosureModal({
     setCashierName(loggedInUserName);
     setFilterMode('shift');
     setCountMode('shift_only');
-  }, [isOpen, defaultRegister, loggedInUserName]);
+    const jennifer = adminNames.find(n => n.toLowerCase().includes('jennifer')) || 'Jennifer';
+    setSupervisorName(jennifer);
+  }, [isOpen, defaultRegister, loggedInUserName, adminNames]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -179,6 +212,13 @@ export default function CashClosureModal({
     fetchCashMovements(false).then(movs => {
       if (movs && movs.length > 0) setAllMovements(movs);
     }).catch(e => console.warn('Background movements fetch:', e));
+
+    fetchUsers(false).then(users => {
+      if (users && users.length > 0) {
+        const admins = users.filter(u => u.role === 'Administrador' && u.status === 'Activo');
+        if (admins.length > 0) setAdminUsers(admins);
+      }
+    }).catch(e => console.warn('Background users fetch in closure:', e));
 
     const handleReceiptsRefresh = () => {
       try {
@@ -1306,7 +1346,36 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
                   )}
 
+                  {/* Selector de Supervisor(a) Administrador */}
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0">
+                        <ShieldCheckIcon className="w-4.5 h-4.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block">
+                          Supervisor(a) del Cierre
+                        </span>
+                        <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 block truncate">
+                          Administrador(a) Responsable
+                        </span>
+                      </div>
+                    </div>
 
+                    <div className="shrink-0 w-full sm:w-56">
+                      <select
+                        value={supervisorName}
+                        onChange={(e) => setSupervisorName(e.target.value)}
+                        className="w-full h-8.5 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none focus:border-zinc-400 dark:focus:border-zinc-500 transition-all cursor-pointer shadow-xs"
+                      >
+                        {adminNames.map(name => (
+                          <option key={name} value={name}>
+                            {name} {name.toLowerCase().includes('jennifer') ? '⭐ (Preseleccionada)' : '(Admin)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
                 </div>
               </div>
