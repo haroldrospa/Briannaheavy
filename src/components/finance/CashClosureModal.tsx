@@ -93,7 +93,7 @@ export default function CashClosureModal({
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [countMode, setCountMode] = useState<'shift_only' | 'with_fund'>('shift_only');
   const [cashierName, setCashierName] = useState(() => loggedInUserName);
-  const [supervisorName, setSupervisorName] = useState('Carlos Díaz');
+  const [supervisorName] = useState('Carlos Díaz');
   const [notes, setNotes] = useState('');
 
   // Completion modal & email states
@@ -1306,42 +1306,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
                   )}
 
-                  {/* Responsables & Notas */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
-                    <div className="grid grid-cols-2 gap-2.5 text-xs">
-                      <div>
-                        <label className="block text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Cajero(a) Responsable</label>
-                        <input 
-                          type="text" 
-                          value={cashierName}
-                          readOnly={!isAdmin}
-                          onChange={(e) => isAdmin && setCashierName(e.target.value)}
-                          className={`w-full h-8 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-900 dark:text-white outline-none focus:border-zinc-400 transition-all ${
-                            !isAdmin ? 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 cursor-not-allowed' : ''
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">Supervisor de Turno</label>
-                        <input 
-                          type="text" 
-                          value={supervisorName}
-                          onChange={(e) => setSupervisorName(e.target.value)}
-                          className="w-full h-8 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-900 dark:text-white outline-none focus:border-zinc-400 transition-all"
-                        />
-                      </div>
-                    </div>
 
-                    <div>
-                      <input 
-                        type="text" 
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Observaciones o notas del cierre..."
-                        className="w-full h-8 px-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-medium text-zinc-900 dark:text-white outline-none focus:border-zinc-400 transition-all"
-                      />
-                    </div>
-                  </div>
 
                 </div>
               </div>
