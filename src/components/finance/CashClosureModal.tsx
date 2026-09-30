@@ -75,7 +75,7 @@ export default function CashClosureModal({
   const [selectedRegister, setSelectedRegister] = useState<string>(defaultRegister);
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
-  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => isAdmin ? 'todos' : loggedInUserName);
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => loggedInUserName);
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
   const [allMovements, setAllMovements] = useState<CashMovement[]>(() => getLocalStorageMovements());
@@ -134,6 +134,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
+  const [movementTab, setMovementTab] = useState<'todos' | 'ingreso' | 'egreso'>('todos');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -254,16 +255,16 @@ export default function CashClosureModal({
     };
   }, [isOpen, selectedRegister, isAdmin, loggedInUserName]);
 
-  // Filtrar facturas garantizando unicidad por Caja y Cajero
+  // Filtrar facturas garantizando estricta independencia por Caja y Cajero
   const scopedInvoices = useMemo(() => {
     return filterInvoicesByShift(
       allInvoices, 
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
-      selectedCashierFilter
+      loggedInUserName || selectedCashierFilter
     );
-  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter]);
 
   // Filtrar recibos de financiamientos por Caja, Turno/Fecha y Cajero
   const scopedFinancingReceipts = useMemo(() => {
@@ -278,14 +279,10 @@ export default function CashClosureModal({
 
     let list = allFinancingReceipts;
 
-    // Filtrar por cajero si no es 'todos'
-    let effectiveCashier = selectedCashierFilter;
-    if (!isAdmin && loggedInUserName) {
-      effectiveCashier = loggedInUserName;
-    }
-
-    if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
-      const cLower = effectiveCashier.toLowerCase().trim();
+    // Filtrar por cajero estricto: cada usuario/cajero cierra única y exclusivamente sus propias operaciones
+    const effectiveCashier = (loggedInUserName || selectedCashierFilter || '').trim();
+    if (effectiveCashier && effectiveCashier !== 'todos' && effectiveCashier !== 'todas') {
+      const cLower = effectiveCashier.toLowerCase();
       list = list.filter(r => {
         const c = (r.cashierName || '').toLowerCase().trim();
         return c.includes(cLower) || cLower.includes(c);
@@ -353,10 +350,8 @@ export default function CashClosureModal({
       ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) 
       : Math.max(startOfToday, lastClosureTime);
 
-    let effectiveCashier = selectedCashierFilter;
-    if (!isAdmin && loggedInUserName) {
-      effectiveCashier = loggedInUserName;
-    }
+    // Filtrar cobros de crédito por cajero estricto
+    const effectiveCashier = (loggedInUserName || selectedCashierFilter || '').trim();
 
     allInvoices.forEach(inv => {
       const hist = (inv as any).payments_history;
@@ -373,8 +368,8 @@ export default function CashClosureModal({
 
           if (!matchesTime) return;
 
-          if (effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
-            const cLower = effectiveCashier.toLowerCase().trim();
+          if (effectiveCashier && effectiveCashier !== 'todos' && effectiveCashier !== 'todas') {
+            const cLower = effectiveCashier.toLowerCase();
             const pCashier = (p.cashier || '').toLowerCase().trim();
             if (!pCashier.includes(cLower) && !cLower.includes(pCashier)) return;
           }
@@ -392,7 +387,7 @@ export default function CashClosureModal({
       }
     });
     return payments;
-  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, isAdmin, loggedInUserName]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName]);
 
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
@@ -404,10 +399,13 @@ export default function CashClosureModal({
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
-      'todos'
+      loggedInUserName || selectedCashierFilter
     );
     return list.filter(m => isMovementOfUser(m, loggedInUserName, loggedInUserEmail));
-  }, [allMovements, filterMode, activeShift, selectedRegister, loggedInUserName, loggedInUserEmail]);
+  }, [allMovements, filterMode, activeShift, selectedRegister, loggedInUserName, loggedInUserEmail, selectedCashierFilter]);
+
+  const scopedIngresos = useMemo(() => scopedMovements.filter(m => m.type === 'Ingreso'), [scopedMovements]);
+  const scopedEgresos = useMemo(() => scopedMovements.filter(m => m.type === 'Egreso'), [scopedMovements]);
 
   // Calcular ventas y cobros por método de pago para ESA caja/cajero
   const systemSales = useMemo(() => {
@@ -614,6 +612,79 @@ export default function CashClosureModal({
   const printCashier = savedClosure?.cashier_name || cashierName;
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
+  const printMovements = useMemo(() => {
+    return (savedClosure?.movements && savedClosure.movements.length > 0) ? savedClosure.movements : scopedMovements;
+  }, [savedClosure, scopedMovements]);
+
+  const printIngresos = useMemo(() => {
+    return printMovements.filter(m => m.type === 'Ingreso');
+  }, [printMovements]);
+
+  const printEgresos = useMemo(() => {
+    return printMovements.filter(m => m.type === 'Egreso');
+  }, [printMovements]);
+
+  const printTotalIngresos = useMemo(() => {
+    if (savedClosure?.cash_movements_in !== undefined && Number(savedClosure.cash_movements_in) > 0) {
+      return Number(savedClosure.cash_movements_in);
+    }
+    return printIngresos.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [savedClosure, printIngresos]);
+
+  const printTotalEgresos = useMemo(() => {
+    if (savedClosure?.cash_movements_out !== undefined && Number(savedClosure.cash_movements_out) > 0) {
+      return Number(savedClosure.cash_movements_out);
+    }
+    return printEgresos.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [savedClosure, printEgresos]);
+
+  const isMovementTransfer = (m: CashMovement) => {
+    const pm = (m.payment_method || '').toLowerCase().trim();
+    const reasonLower = ((m as any).reason || '').toLowerCase();
+    const conceptLower = (m.concept || '').toLowerCase();
+    return (
+      pm.includes('transferencia') || 
+      pm.includes('transf') || 
+      pm.includes('banco') ||
+      reasonLower.includes('banco:') ||
+      conceptLower.includes('transferencia') ||
+      Boolean(m.bank_account_id) || 
+      Boolean(m.bank_account_name)
+    );
+  };
+
+  const printIngresosCash = useMemo(() => {
+    return printIngresos.filter(m => !isMovementTransfer(m));
+  }, [printIngresos]);
+
+  const printIngresosTransfer = useMemo(() => {
+    return printIngresos.filter(m => isMovementTransfer(m));
+  }, [printIngresos]);
+
+  const printEgresosCash = useMemo(() => {
+    return printEgresos.filter(m => !isMovementTransfer(m));
+  }, [printEgresos]);
+
+  const printEgresosTransfer = useMemo(() => {
+    return printEgresos.filter(m => isMovementTransfer(m));
+  }, [printEgresos]);
+
+  const printIngresosCashTotal = useMemo(() => {
+    return printIngresosCash.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [printIngresosCash]);
+
+  const printIngresosTransferTotal = useMemo(() => {
+    return printIngresosTransfer.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [printIngresosTransfer]);
+
+  const printEgresosCashTotal = useMemo(() => {
+    return printEgresosCash.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [printEgresosCash]);
+
+  const printEgresosTransferTotal = useMemo(() => {
+    return printEgresosTransfer.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  }, [printEgresosTransfer]);
+
   const getPrintDenominationQty = (val: number): number => {
     if (savedClosure?.denominations) {
       return Number(savedClosure.denominations[String(val)] ?? savedClosure.denominations[val] ?? 0);
@@ -632,7 +703,7 @@ Cajero(a): ${printCashier}
 Supervisor: ${printSupervisor}
 Facturas / Cobros en Turno: ${totalDocsCount}
 
---- DESGLOSE DE EFECTIVO (SEPARADO) ---
+--- DESGLOSE DE EFECTIVO ---
 • Fondo Inicial (Base en Gaveta): RD$ ${printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Efectivo Recaudado en Turno:   RD$ ${printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Total Teórico en Gaveta:       RD$ ${printTotalDrawer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -643,8 +714,20 @@ Facturas / Cobros en Turno: ${totalDocsCount}
   - Tarjeta: RD$ ${printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
   - Transferencia: RD$ ${printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
   - Crédito: RD$ ${printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Ingresos Extras: +RD$ ${cashMovementsTotals.ingresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-• Egresos / Gastos: -RD$ ${cashMovementsTotals.egresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+
+--- MOVIMIENTOS EXTRA (EFECTIVO & TRANSFERENCIA) ---
+• Egresos efectivo: -RD$ ${printEgresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Egreso Transferencia: -RD$ ${printEgresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Ingreso extra efectivo: +RD$ ${printIngresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• Ingreso extra Transferencia: +RD$ ${printIngresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+
+--- DETALLE INGRESOS EXTRAS (${printIngresos.length}) ---
+• Total Ingresos: +RD$ ${printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+${printIngresos.length > 0 ? printIngresos.map(m => `  + ${m.concept || 'Ingreso'}: RD$ ${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`).join('\n') : '  (Sin ingresos)'}
+
+--- DETALLE EGRESOS / GASTOS (${printEgresos.length}) ---
+• Total Egresos: -RD$ ${printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+${printEgresos.length > 0 ? printEgresos.map(m => `  - ${m.concept || 'Egreso'}: RD$ ${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`).join('\n') : '  (Sin egresos)'}
 
 --------------------------------------------------
 • Modo de Arqueo: ${effectiveCountMode === 'shift_only' && initialFund > 0 ? 'Solo Efectivo del Turno (Fondo en gaveta)' : 'Gaveta Completa con Fondo'}
@@ -1153,26 +1236,74 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </div>
 
                   {/* Movimientos de Caja */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                        <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400" />
-                        Movimientos ({scopedMovements.length})
-                      </h3>
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                          <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400" />
+                          Movimientos ({scopedMovements.length})
+                        </h3>
+
+                        {/* Selector / Tabs */}
+                        <div className="flex items-center bg-zinc-200/70 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setMovementTab('todos')}
+                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                              movementTab === 'todos' 
+                                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs' 
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            Todos ({scopedMovements.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementTab('ingreso')}
+                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              movementTab === 'ingreso' 
+                                ? 'bg-emerald-600 text-white shadow-xs' 
+                                : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/30'
+                            }`}
+                          >
+                            <span>↓ Ingresos ({scopedIngresos.length})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementTab('egreso')}
+                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              movementTab === 'egreso' 
+                                ? 'bg-rose-600 text-white shadow-xs' 
+                                : 'text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/30'
+                            }`}
+                          >
+                            <span>↑ Egresos ({scopedEgresos.length})</span>
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="text-[10px] font-mono font-bold flex items-center gap-1.5">
-                        <span className="text-zinc-400 font-medium">Efectivo caja:</span>
-                        <span className="text-emerald-600">RD$ +{cashMovementsTotals.ingresos.toLocaleString('es-DO')}</span>
-                        <span className="text-rose-500">RD$ -{cashMovementsTotals.egresos.toLocaleString('es-DO')}</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
+                          +RD$ {cashMovementsTotals.ingresos.toLocaleString('es-DO')}
+                        </span>
+                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40">
+                          -RD$ {cashMovementsTotals.egresos.toLocaleString('es-DO')}
+                        </span>
                       </div>
                     </div>
 
                     {scopedMovements.length === 0 ? (
-                      <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
+                      <div className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
                         Sin movimientos propios registrados en este turno
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                        {scopedMovements.map(m => {
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                        {(movementTab === 'todos'
+                          ? scopedMovements
+                          : movementTab === 'ingreso'
+                          ? scopedIngresos
+                          : scopedEgresos
+                        ).map(m => {
                           const isIngreso = m.type === 'Ingreso';
                           const pm = (m.payment_method || '').toLowerCase().trim();
                           const reasonLower = ((m as any).reason || '').toLowerCase();
@@ -1183,7 +1314,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro de Efectivo');
 
                           return (
-                            <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
                                   !isCash
@@ -1195,7 +1326,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                   {isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro')}
                                 </span>
                                 <div className="min-w-0">
-                                  <div className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[150px] sm:max-w-[220px]" title={conceptText}>
+                                  <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={conceptText}>
                                     {conceptText}
                                   </div>
                                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
@@ -1206,7 +1337,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                   </div>
                                 </div>
                               </div>
-                              <span className={`font-bold font-mono shrink-0 ml-2 ${
+                              <span className={`font-black font-mono shrink-0 ml-2 ${
                                 !isCash ? 'text-zinc-600 dark:text-zinc-400' : isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                               }`}>
                                 {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -1614,21 +1745,21 @@ Observaciones: ${printNotes || 'Sin observaciones'}
             </div>
           </div>
 
-          {/* Grid: Denomination Details (Left) & Sales / Movements (Right) */}
-          <div className="grid grid-cols-12 gap-3 mb-3">
+          {/* Fila Superior: Desglose Físico (Izq) & Ventas + Cuadre Final (Der) */}
+          <div className="grid grid-cols-12 gap-3 mb-2.5 items-start">
             
             {/* Left: Physical Denomination Count Table */}
-            <div className="col-span-7">
+            <div className="col-span-6">
               <h3 className="text-[9.5px] font-black uppercase tracking-wider mb-1 text-black border-b border-gray-300 pb-0.5">
                 Desglose Físico por Denominación
               </h3>
-              <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
+              <table className="w-full text-left text-[8.5px] border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100 text-black font-bold uppercase">
-                    <th className="p-1 border border-gray-300">Denominación</th>
-                    <th className="p-1 border border-gray-300 text-center">Tipo</th>
-                    <th className="p-1 border border-gray-300 text-center">Cant.</th>
-                    <th className="p-1 border border-gray-300 text-right">Subtotal</th>
+                    <th className="p-0.5 px-1 border border-gray-300">Denominación</th>
+                    <th className="p-0.5 px-1 border border-gray-300 text-center">Tipo</th>
+                    <th className="p-0.5 px-1 border border-gray-300 text-center">Cant.</th>
+                    <th className="p-0.5 px-1 border border-gray-300 text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1637,18 +1768,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     const subtotal = qty * den.value;
                     return (
                       <tr key={den.value} className="odd:bg-gray-50/50">
-                        <td className="p-1 border border-gray-300 font-bold">{den.label}</td>
-                        <td className="p-1 border border-gray-300 text-center text-gray-600">{den.type}</td>
-                        <td className="p-1 border border-gray-300 text-center font-bold">{qty}</td>
-                        <td className="p-1 border border-gray-300 text-right font-mono font-bold">
+                        <td className="p-0.5 px-1 border border-gray-300 font-bold">{den.label}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-center text-gray-600">{den.type}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">{qty}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                           RD$ {subtotal.toLocaleString('es-DO')}
                         </td>
                       </tr>
                     );
                   })}
                   <tr className="bg-gray-100 font-black">
-                    <td colSpan={3} className="p-1 border border-gray-300 uppercase">Total Arqueado</td>
-                    <td className="p-1 border border-gray-300 text-right font-mono">
+                    <td colSpan={3} className="p-0.5 px-1 border border-gray-300 uppercase">Total Arqueado</td>
+                    <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
                       RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -1656,43 +1787,43 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               </table>
             </div>
 
-            {/* Right: Sales by Method & Cash Movements */}
-            <div className="col-span-5 space-y-2.5">
+            {/* Right: Sales by Method & Cuadre Balance */}
+            <div className="col-span-6 space-y-2">
               
               {/* Ventas por Método */}
               <div>
                 <h3 className="text-[9.5px] font-black uppercase tracking-wider mb-1 text-black border-b border-gray-300 pb-0.5">
                   Ventas por Método de Pago
                 </h3>
-                <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
+                <table className="w-full text-left text-[8.5px] border-collapse border border-gray-300">
                   <tbody>
                     <tr>
-                      <td className="p-1 border border-gray-300 font-bold">Efectivo</td>
-                      <td className="p-1 border border-gray-300 text-right font-mono font-bold">
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Efectivo</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-1 border border-gray-300 font-bold">Tarjeta</td>
-                      <td className="p-1 border border-gray-300 text-right font-mono font-bold">
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Tarjeta</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-1 border border-gray-300 font-bold">Transferencia</td>
-                      <td className="p-1 border border-gray-300 text-right font-mono font-bold">
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Transferencia</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-1 border border-gray-300 font-bold">Crédito</td>
-                      <td className="p-1 border border-gray-300 text-right font-mono font-bold">
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Crédito</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr className="bg-gray-100 font-black">
-                      <td className="p-1 border border-gray-300 uppercase">Total Facturado</td>
-                      <td className="p-1 border border-gray-300 text-right font-mono">
+                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
                         RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -1700,57 +1831,197 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 </table>
               </div>
 
-              {/* Movimientos de Caja */}
-              <div>
-                <h3 className="text-[9.5px] font-black uppercase tracking-wider mb-1 text-black border-b border-gray-300 pb-0.5">
-                  Movimientos Extra ({scopedMovements.length})
-                </h3>
-                {scopedMovements.length === 0 ? (
-                  <p className="text-[8.5px] text-gray-500 italic p-1">Sin entradas ni salidas adicionales</p>
-                ) : (
-                  <table className="w-full text-left text-[8.5px] border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-100 text-black font-bold uppercase">
-                        <th className="p-1 border border-gray-300">Tipo</th>
-                        <th className="p-1 border border-gray-300">Concepto / Fecha</th>
-                        <th className="p-1 border border-gray-300 text-right">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scopedMovements.map(m => (
-                        <tr key={m.id}>
-                          <td className="p-1 border border-gray-300 font-bold">{m.type}</td>
-                          <td className="p-1 border border-gray-300">
-                            <div className="font-medium truncate max-w-[130px]">{m.concept}</div>
-                            {m.created_at && (
-                              <div className="text-[7.5px] text-gray-500 font-mono">
-                                {new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} {new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-1 border border-gray-300 text-right font-mono font-bold">
-                            {m.type === 'Ingreso' ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+              {/* Desglose de Movimientos: Efectivo y Transferencia */}
+              <div className="p-1.5 border border-gray-300 rounded bg-gray-50/70 text-[8px] space-y-0.5 font-mono">
+                <div className="flex justify-between text-rose-800">
+                  <span>- Egresos efectivo:</span>
+                  <span className="font-bold">-RD$ {printEgresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-amber-800">
+                  <span>- Egreso Transferencia:</span>
+                  <span className="font-bold">-RD$ {printEgresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-emerald-800">
+                  <span>+ Ingreso extra efectivo:</span>
+                  <span className="font-bold">+RD$ {printIngresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-blue-800">
+                  <span>+ Ingreso extra Transferencia:</span>
+                  <span className="font-bold">+RD$ {printIngresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-black font-black border-t border-gray-300 pt-0.5">
+                  <span>= Efectivo Neto Turno:</span>
+                  <span>RD$ {printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
               </div>
 
               {/* Cuadre / Balance Final */}
-              <div className="p-2 border border-black rounded bg-gray-100">
+              <div className={`p-2 border rounded ${
+                printStatus === 'Cuadrado'
+                  ? 'border-emerald-600 bg-emerald-50/60 text-emerald-950'
+                  : printStatus === 'Sobrante'
+                  ? 'border-blue-600 bg-blue-50/60 text-blue-950'
+                  : 'border-rose-600 bg-rose-50/60 text-rose-950'
+              }`}>
                 <div className="flex justify-between items-center text-[10px]">
-                  <span className="font-black uppercase">
-                    {printStatus === 'Cuadrado' ? '✓ Cuadre Perfecto' : printStatus === 'Sobrante' ? '▲ Sobrante' : '▼ Faltante'}
+                  <span className="font-black uppercase tracking-wide">
+                    {printStatus === 'Cuadrado' ? '✓ Cuadre Perfecto' : printStatus === 'Sobrante' ? '▲ Sobrante en Caja' : '▼ Faltante en Caja'}
                   </span>
                   <span className="font-black font-mono text-xs">
                     RD$ {printVariance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
+                <div className="text-[7.5px] font-mono text-gray-600 mt-0.5 flex justify-between">
+                  <span>Contado: RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span>Esperado: RD$ {printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
               </div>
 
             </div>
+          </div>
+
+          {/* Sección Dedicada: Movimientos Separados de Ingresos y Egresos */}
+          <div className="mb-2.5">
+            <div className="flex items-center justify-between border-b-2 border-black pb-0.5 mb-1.5">
+              <h3 className="text-[9.5px] font-black uppercase tracking-wider text-black">
+                Movimientos Extra de Caja ({printMovements.length})
+              </h3>
+              <div className="text-[8.5px] font-mono font-bold flex items-center gap-3">
+                <span className="text-emerald-800">Ingresos: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                <span className="text-rose-800">Egresos: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                <span className="text-black bg-gray-100 px-1.5 py-0.5 rounded border border-gray-300">
+                  Neto: RD$ {(printTotalIngresos - printTotalEgresos).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            {printMovements.length === 0 ? (
+              <div className="p-2 border border-gray-200 rounded text-center text-[8.5px] text-gray-500 italic bg-gray-50">
+                Sin entradas ni salidas adicionales registradas en este turno
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 items-start">
+                
+                {/* Columna Izquierda: Ingresos */}
+                <div className="border border-emerald-300 rounded overflow-hidden">
+                  <div className="bg-emerald-100/70 border-b border-emerald-300 px-2 py-1 flex items-center justify-between">
+                    <span className="font-black text-[9px] text-emerald-950 uppercase flex items-center gap-1">
+                      <span>↓ Ingresos Extra ({printIngresos.length})</span>
+                    </span>
+                    <span className="font-mono font-black text-[9px] text-emerald-900">
+                      +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {printIngresos.length === 0 ? (
+                    <p className="text-[8px] text-gray-400 italic p-2 text-center bg-white">
+                      Sin ingresos adicionales en este turno
+                    </p>
+                  ) : (
+                    <table className="w-full text-left text-[8px] border-collapse bg-white">
+                      <thead>
+                        <tr className="bg-emerald-50/50 text-emerald-950 font-bold uppercase border-b border-emerald-200">
+                          <th className="p-0.5 px-1">Concepto</th>
+                          <th className="p-0.5 px-1 text-center w-20">Fecha/Hora</th>
+                          <th className="p-0.5 px-1 text-right w-20">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printIngresos.map(m => (
+                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0 odd:bg-white even:bg-emerald-50/20">
+                            <td className="p-0.5 px-1 leading-tight">
+                              <div className="font-semibold text-gray-900 break-words">{m.concept || 'Ingreso de Fondos'}</div>
+                              {m.payment_method && m.payment_method !== 'Efectivo' && (
+                                <span className="text-[7px] text-gray-500 font-mono">[{m.payment_method}]</span>
+                              )}
+                            </td>
+                            <td className="p-0.5 px-1 text-center text-gray-500 font-mono text-[7px] whitespace-nowrap">
+                              {m.created_at ? (
+                                <>
+                                  <div>{new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })}</div>
+                                  <div>{new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
+                                </>
+                              ) : '-'}
+                            </td>
+                            <td className="p-0.5 px-1 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                              +${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-emerald-100/50 border-t border-emerald-300 font-black text-[8px]">
+                          <td colSpan={2} className="p-1 uppercase text-emerald-950">Subtotal Ingresos</td>
+                          <td className="p-1 text-right font-mono text-emerald-900">
+                            +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+                </div>
+
+                {/* Columna Derecha: Egresos / Gastos */}
+                <div className="border border-rose-300 rounded overflow-hidden">
+                  <div className="bg-rose-100/70 border-b border-rose-300 px-2 py-1 flex items-center justify-between">
+                    <span className="font-black text-[9px] text-rose-950 uppercase flex items-center gap-1">
+                      <span>↑ Egresos / Gastos ({printEgresos.length})</span>
+                    </span>
+                    <span className="font-mono font-black text-[9px] text-rose-900">
+                      -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {printEgresos.length === 0 ? (
+                    <p className="text-[8px] text-gray-400 italic p-2 text-center bg-white">
+                      Sin egresos ni retiros en este turno
+                    </p>
+                  ) : (
+                    <table className="w-full text-left text-[8px] border-collapse bg-white">
+                      <thead>
+                        <tr className="bg-rose-50/50 text-rose-950 font-bold uppercase border-b border-rose-200">
+                          <th className="p-0.5 px-1">Concepto</th>
+                          <th className="p-0.5 px-1 text-center w-20">Fecha/Hora</th>
+                          <th className="p-0.5 px-1 text-right w-20">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printEgresos.map(m => (
+                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0 odd:bg-white even:bg-rose-50/20">
+                            <td className="p-0.5 px-1 leading-tight">
+                              <div className="font-semibold text-gray-900 break-words">{m.concept || 'Retiro / Gasto de Caja'}</div>
+                              {m.payment_method && m.payment_method !== 'Efectivo' && (
+                                <span className="text-[7px] text-gray-500 font-mono">[{m.payment_method}]</span>
+                              )}
+                            </td>
+                            <td className="p-0.5 px-1 text-center text-gray-500 font-mono text-[7px] whitespace-nowrap">
+                              {m.created_at ? (
+                                <>
+                                  <div>{new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })}</div>
+                                  <div>{new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
+                                </>
+                              ) : '-'}
+                            </td>
+                            <td className="p-0.5 px-1 text-right font-mono font-black text-rose-700 whitespace-nowrap">
+                              -${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-rose-100/50 border-t border-rose-300 font-black text-[8px]">
+                          <td colSpan={2} className="p-1 uppercase text-rose-950">Subtotal Egresos</td>
+                          <td className="p-1 text-right font-mono text-rose-900">
+                            -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+                </div>
+
+              </div>
+            )}
           </div>
 
           {/* Observations */}

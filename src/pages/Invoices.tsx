@@ -27,6 +27,84 @@ import { fetchReceiptsFromSupabase, getStoredReceipts, saveReceipt, deleteFinanc
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import { matchesCashierUser } from '../services/shiftsService';
 
+export function parseInvoiceTimestamp(dateStr?: string | number | null): number {
+  if (!dateStr) return 0;
+  if (typeof dateStr === 'number') return dateStr;
+  const s = String(dateStr).trim();
+  if (!s) return 0;
+
+  // DD/MM/YYYY or DD-MM-YYYY (with optional HH:mm:ss)
+  const ddmmyyyy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (ddmmyyyy) {
+    const day = parseInt(ddmmyyyy[1], 10);
+    const month = parseInt(ddmmyyyy[2], 10) - 1;
+    const year = parseInt(ddmmyyyy[3], 10);
+    const hour = ddmmyyyy[4] ? parseInt(ddmmyyyy[4], 10) : 12;
+    const min = ddmmyyyy[5] ? parseInt(ddmmyyyy[5], 10) : 0;
+    const sec = ddmmyyyy[6] ? parseInt(ddmmyyyy[6], 10) : 0;
+    const d = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+
+  // Spanish text dates e.g. "25 de septiembre de 2026"
+  const spanishMonths: Record<string, number> = {
+    enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+    julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
+  };
+  const spMatch = s.match(/^(\d{1,2})\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  if (spMatch) {
+    const day = parseInt(spMatch[1], 10);
+    const mStr = spMatch[2].toLowerCase();
+    const month = spanishMonths[mStr];
+    const year = parseInt(spMatch[3], 10);
+    if (month !== undefined) {
+      return new Date(year, month, day, 12, 0, 0).getTime();
+    }
+  }
+
+  const parsed = new Date(s).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+export function extractInvoiceSeqNumber(numStr?: string): number {
+  if (!numStr) return 0;
+  const s = String(numStr).trim();
+  const recMatch = s.match(/REC-\d+-(\d+)/i) || s.match(/REC-(\d+)/i);
+  if (recMatch) return parseInt(recMatch[1], 10) || 0;
+  const finMatch = s.match(/FIN-(\d+)/i);
+  if (finMatch) return parseInt(finMatch[1], 10) || 0;
+  const digits = s.replace(/\D/g, '');
+  if (digits) return parseInt(digits, 10) || 0;
+  return 0;
+}
+
+export function sortUnifiedInvoices(list: Invoice[]): Invoice[] {
+  return [...list].sort((a, b) => {
+    const tA = parseInvoiceTimestamp(a.created_at);
+    const tB = parseInvoiceTimestamp(b.created_at);
+    if (tB !== tA) {
+      return tB - tA;
+    }
+    const seqA = extractInvoiceSeqNumber(a.invoice_number);
+    const seqB = extractInvoiceSeqNumber(b.invoice_number);
+    if (seqB !== seqA) {
+      return seqB - seqA;
+    }
+    return String(b.invoice_number || '').localeCompare(String(a.invoice_number || ''));
+  });
+}
+
+export function formatInvoiceDateTime(dateStr?: string | number | null): { date: string; time: string } {
+  if (!dateStr) return { date: 'N/A', time: '' };
+  const ts = parseInvoiceTimestamp(dateStr);
+  if (!ts) return { date: 'N/A', time: '' };
+  const d = new Date(ts);
+  const dateFormatted = d.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const hasTime = typeof dateStr === 'string' && (dateStr.includes('T') || dateStr.includes(':'));
+  const timeFormatted = hasTime ? d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+  return { date: dateFormatted, time: timeFormatted };
+}
+
 export function buildUnifiedInvoices(
   rawInvoices: Invoice[] = [],
   rawFinancings: Financing[] = [],
@@ -41,8 +119,8 @@ export function buildUnifiedInvoices(
   // 2. Financiamientos (Contratos de venta de vehículos / maquinaria pesada)
   if (rawFinancings && rawFinancings.length > 0) {
     const sortedFins = [...rawFinancings].sort((a, b) => {
-      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      const tA = parseInvoiceTimestamp(a.created_at);
+      const tB = parseInvoiceTimestamp(b.created_at);
       return tA - tB;
     });
 
@@ -107,7 +185,7 @@ export function buildUnifiedInvoices(
           cashier_name: r.cashierName || 'Caja Cobros & Financiamientos',
           register_name: r.registerName || 'Caja Cobros & Financiamientos',
           status: 'Cobro / Pagado',
-          created_at: r.createdAt || (r.paymentDate ? `${r.paymentDate}T12:00:00.000Z` : new Date().toISOString()),
+          created_at: r.createdAt || (r.paymentDate ? `${r.paymentDate}T12:00:00.000Z` : (r.date ? r.date : new Date().toISOString())),
           is_electronic: false,
           billing_mode: 'internal',
           items: [
@@ -122,14 +200,8 @@ export function buildUnifiedInvoices(
       });
   }
 
-  // Ordenar cronológicamente descendente (más recientes primero)
-  result.sort((a, b) => {
-    const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return tB - tA;
-  });
-
-  return result;
+  // Ordenar cronológicamente descendente de la fecha más reciente a la más antigua
+  return sortUnifiedInvoices(result);
 }
 
 const containerVariants = {
@@ -176,7 +248,7 @@ export default function Invoices() {
   };
 
   useEffect(() => {
-    loadData(false);
+    loadData(true);
 
     const handleRoleUpdate = () => {
       setCurrentRole(getActiveRole());
@@ -281,36 +353,40 @@ export default function Invoices() {
     loadData(true);
   };
 
-  const filteredInvoices = invoices.filter(inv => {
-    if (isQuotationInvoice(inv)) return false;
+  const filteredInvoices = useMemo(() => {
+    const list = invoices.filter(inv => {
+      if (isQuotationInvoice(inv)) return false;
 
-    // Cada usuario solo puede ver las ventas que él mismo facturó si está en 'mis_facturas'
-    if (salesScope === 'mis_facturas' || !isAdmin) {
-      const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
-      const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
-      if (!matchesCashierUser(inv.cashier_name, currentUserName, currentUserEmail)) {
-        return false;
+      // Cada usuario solo puede ver las ventas que él mismo facturó si está en 'mis_facturas'
+      if (salesScope === 'mis_facturas' || !isAdmin) {
+        const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+        const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
+        if (!matchesCashierUser(inv.cashier_name, currentUserName, currentUserEmail)) {
+          return false;
+        }
       }
-    }
 
-    const matchesSearch = 
-      inv.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.ncf && inv.ncf.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (inv.items && inv.items.some(it => it.description.toLowerCase().includes(searchTerm.toLowerCase())));
+      const matchesSearch = 
+        inv.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (inv.ncf && inv.ncf.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (inv.items && inv.items.some(it => it.description.toLowerCase().includes(searchTerm.toLowerCase())));
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    const isElectronic = inv.is_electronic || (inv.ncf_type && inv.ncf_type.startsWith('E')) || inv.billing_mode === 'electronic';
-    const isFinancing = inv.invoice_number?.startsWith('FIN-') || inv.ncf_type === 'FIN';
-    const isReceipt = inv.invoice_number?.startsWith('REC-') || inv.ncf_type === 'REC';
+      const isElectronic = inv.is_electronic || (inv.ncf_type && inv.ncf_type.startsWith('E')) || inv.billing_mode === 'electronic';
+      const isFinancing = inv.invoice_number?.startsWith('FIN-') || inv.ncf_type === 'FIN';
+      const isReceipt = inv.invoice_number?.startsWith('REC-') || inv.ncf_type === 'REC';
 
-    if (filterMode === 'electronic') return isElectronic;
-    if (filterMode === 'internal') return !isElectronic && !isFinancing && !isReceipt;
-    if (filterMode === 'financing') return isFinancing;
-    if (filterMode === 'receipts') return isReceipt;
-    return true;
-  });
+      if (filterMode === 'electronic') return isElectronic;
+      if (filterMode === 'internal') return !isElectronic && !isFinancing && !isReceipt;
+      if (filterMode === 'financing') return isFinancing;
+      if (filterMode === 'receipts') return isReceipt;
+      return true;
+    });
+
+    return sortUnifiedInvoices(list);
+  }, [invoices, salesScope, isAdmin, searchTerm, filterMode]);
 
   const [displayLimit, setDisplayLimit] = useState(50);
 
@@ -539,7 +615,10 @@ export default function Invoices() {
                           {invoice.customer_rnc || 'Consumidor Final'}
                         </p>
                         <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
-                          {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'} • <span className="uppercase font-semibold">{invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15}d)` : (invoice.payment_method || 'Efectivo')}</span>
+                          {(() => {
+                            const dt = formatInvoiceDateTime(invoice.created_at);
+                            return `${dt.date}${dt.time ? ` • ${dt.time}` : ''}`;
+                          })()} • <span className="uppercase font-semibold">{invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15}d)` : (invoice.payment_method || 'Efectivo')}</span>
                         </p>
                       </div>
 
@@ -661,9 +740,19 @@ export default function Invoices() {
                           </div>
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="text-xs font-medium text-gray-800 dark:text-zinc-200">
-                            {invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}
-                          </div>
+                          {(() => {
+                            const dt = formatInvoiceDateTime(invoice.created_at);
+                            return (
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800 dark:text-zinc-200">
+                                <span>{dt.date}</span>
+                                {dt.time && (
+                                  <span className="text-[11px] font-normal text-gray-400 dark:text-zinc-500 font-mono">
+                                    • {dt.time}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <div className="text-[11px] text-gray-400 dark:text-zinc-500 uppercase font-medium mt-0.5 max-w-[200px] truncate" title={invoice.payment_method}>
                             {invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15} Días)` : (invoice.payment_method || 'Efectivo')}
                           </div>

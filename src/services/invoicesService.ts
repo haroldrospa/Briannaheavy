@@ -144,14 +144,12 @@ export const applyRealtimeInvoiceChange = (
   }
 };
 
-const parseInternalSeqNum = (inv: { invoice_number?: string; ncf?: string; is_electronic?: boolean; billing_mode?: string }): number | null => {
-  if (inv.is_electronic || inv.billing_mode === 'electronic') return null;
+const parseInternalSeqNum = (inv: { invoice_number?: string }): number | null => {
   const num = String(inv.invoice_number || '').trim();
-  const ncf = String(inv.ncf || '').trim();
-  if (num.startsWith('E') || num.startsWith('B') || num.startsWith('CT-') || ncf.startsWith('E') || ncf.startsWith('B') || ncf.startsWith('CT-')) {
+  if (num.startsWith('CT-') || num.startsWith('FIN-') || num.startsWith('REC-')) {
     return null;
   }
-  const clean = num.replace(/^(INT|FAC-INT)-?/i, '').replace(/\D/g, '');
+  const clean = num.replace(/^(INT|FAC-INT|FAC-E|FAC)-?/i, '').replace(/\D/g, '');
   if (!clean) return null;
   const parsed = parseInt(clean, 10);
   if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {

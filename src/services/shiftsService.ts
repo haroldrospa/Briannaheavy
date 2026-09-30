@@ -362,7 +362,10 @@ export const matchesCashierUser = (
 ): boolean => {
   if (!userName && !userEmail) return true;
   const cashier = (invoiceCashier || '').toLowerCase().trim();
-  if (!cashier) return true;
+  if (!cashier) {
+    const meName = (userName || '').toLowerCase().trim();
+    return meName.includes('harold') || meName.includes('admin');
+  }
 
   const meName = (userName || '').toLowerCase().trim();
   const meEmail = (userEmail || '').toLowerCase().trim();
@@ -507,8 +510,10 @@ export const isMovementOfUser = (
   userEmail?: string
 ): boolean => {
   const author = (movement.created_by || (movement as any).user_name || '').toLowerCase().trim();
+  if (!userName && !userEmail) return true;
   if (!author) {
-    return true;
+    const meName = (userName || '').toLowerCase().trim();
+    return meName.includes('harold') || meName.includes('admin');
   }
 
   const meName = (userName || '').toLowerCase().trim();
