@@ -6,7 +6,8 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon, ArrowPathIcon
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon, ArrowPathIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
@@ -43,6 +44,13 @@ import { fetchCashMovements, type CashMovement } from '../services/cashMovements
 import { verifyAdminMasterKey } from '../utils/scheduleStorage';
 import { getNextReceiptNumber, peekCurrentReceiptNumber } from '../utils/sequenceStorage';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
+import { 
+  getExchangeRate, 
+  saveExchangeRate, 
+  dopToUsd, 
+  formatUsd, 
+  EXCHANGE_RATE_EVENT 
+} from '../utils/exchangeRate';
 import logo from '../assets/logo.png';
 import QRCode from '../components/ui/QRCode';
 import { useAlert } from '../contexts/ConfirmContext';
@@ -78,6 +86,11 @@ export interface PaymentReceiptData {
   bankName?: string;
   referenceNumber?: string;
   paymentNotes?: string;
+  paidCurrency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+  amountReceivedUsd?: number;
+  changeGivenUsd?: number;
+  totalPaidUsd?: number;
 }
 
 export interface MappedInstallment {
@@ -1586,6 +1599,64 @@ export default function Financing() {
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
+  // USD Currency State
+  const [financingPaidCurrency, setFinancingPaidCurrency] = useState<'DOP' | 'USD'>('DOP');
+  const [financingExchangeRate, setFinancingExchangeRate] = useState<number>(getExchangeRate);
+  const [cashReceivedUsd, setCashReceivedUsd] = useState<string>('');
+
+  // Quick exchange rate admin adjustment modal
+  const [isFinancingRateModalOpen, setIsFinancingRateModalOpen] = useState(false);
+  const [tempFinancingRateInput, setTempFinancingRateInput] = useState(String(getExchangeRate()));
+  const [financingRatePinInput, setFinancingRatePinInput] = useState('');
+  const [financingRatePinError, setFinancingRatePinError] = useState('');
+  const [financingRateToast, setFinancingRateToast] = useState('');
+
+  const handleSaveFinancingRate = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFinancingRatePinError('');
+    const parsed = parseFloat(tempFinancingRateInput);
+    if (isNaN(parsed) || parsed <= 0) {
+      setFinancingRatePinError('Ingrese una tasa válida mayor a 0');
+      return;
+    }
+    const role = getActiveRole();
+    const isAdmin = role === 'Administrador';
+    if (!isAdmin) {
+      if (!financingRatePinInput.trim()) {
+        setFinancingRatePinError('Ingrese la Clave Maestra de Administrador');
+        return;
+      }
+      if (!verifyAdminMasterKey(financingRatePinInput.trim())) {
+        setFinancingRatePinError('Clave Maestra incorrecta');
+        return;
+      }
+    }
+    const res = saveExchangeRate(parsed, undefined, financingRatePinInput.trim() || undefined);
+    if (res.success) {
+      setFinancingExchangeRate(parsed);
+      setFinancingRateToast('Tasa de cambio actualizada correctamente.');
+      setTimeout(() => setFinancingRateToast(''), 3000);
+      setIsFinancingRateModalOpen(false);
+      setFinancingRatePinInput('');
+    } else {
+      setFinancingRatePinError(res.message);
+    }
+  };
+
+  useEffect(() => {
+    const handleRateChanged = (e: any) => {
+      const r = e.detail?.rate || getExchangeRate();
+      setFinancingExchangeRate(r);
+      setTempFinancingRateInput(String(r));
+    };
+    window.addEventListener(EXCHANGE_RATE_EVENT, handleRateChanged);
+    window.addEventListener('storage', handleRateChanged);
+    return () => {
+      window.removeEventListener(EXCHANGE_RATE_EVENT, handleRateChanged);
+      window.removeEventListener('storage', handleRateChanged);
+    };
+  }, []);
+
   // Sincronizar cuentas bancarias si cambian en Configuración o Bancos
   useEffect(() => {
     const handleAccountsChanged = (e: any) => {
@@ -2273,6 +2344,11 @@ export default function Financing() {
         paymentNotes: finalNotes,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${totalPaid}`,
         createdAt: paidIsoDate,
+        paidCurrency: financingPaidCurrency,
+        exchangeRate: financingExchangeRate,
+        amountReceivedUsd: financingPaidCurrency === 'USD' ? (parseFloat(cashReceivedUsd) || (totalPaid / (financingExchangeRate || 60))) : undefined,
+        changeGivenUsd: financingPaidCurrency === 'USD' ? Math.max(0, (parseFloat(cashReceivedUsd) || (totalPaid / (financingExchangeRate || 60))) - (totalPaid / (financingExchangeRate || 60))) : undefined,
+        totalPaidUsd: financingPaidCurrency === 'USD' ? (totalPaid / (financingExchangeRate || 60)) : undefined,
       };
 
       saveReceipt(newReceipt);
@@ -2297,6 +2373,8 @@ export default function Financing() {
       setCustomCuotasPayAmount('');
       setApplyCashAsSurplus(true);
       setCashReceived('');
+      setCashReceivedUsd('');
+      setFinancingPaidCurrency('DOP');
       setTransferAmount('');
       setChequeAmount('');
       setReferenceNumber('');
@@ -2361,6 +2439,11 @@ export default function Financing() {
         paymentNotes: paymentNotes.trim() || undefined,
         qrUrl: `https://dgii.gov.do/consultaValidez?ncf=${recNumber}&rnc=131488417&monto=${paidAbono}`,
         createdAt: paidIsoDate,
+        paidCurrency: financingPaidCurrency,
+        exchangeRate: financingExchangeRate,
+        amountReceivedUsd: financingPaidCurrency === 'USD' ? (parseFloat(cashReceivedUsd) || (paidAbono / (financingExchangeRate || 60))) : undefined,
+        changeGivenUsd: financingPaidCurrency === 'USD' ? Math.max(0, (parseFloat(cashReceivedUsd) || (paidAbono / (financingExchangeRate || 60))) - (paidAbono / (financingExchangeRate || 60))) : undefined,
+        totalPaidUsd: financingPaidCurrency === 'USD' ? (paidAbono / (financingExchangeRate || 60)) : undefined,
       };
 
       saveReceipt(newReceipt);
@@ -2404,6 +2487,8 @@ export default function Financing() {
       setFinancingsList(prev => prev.map(f => (f.rawId === updatedFin.rawId || f.id === updatedFin.id) ? updatedFin : f));
       setAbonoAmount('');
       setCashReceived('');
+      setCashReceivedUsd('');
+      setFinancingPaidCurrency('DOP');
       setTransferAmount('');
       setChequeAmount('');
       setReferenceNumber('');
@@ -3991,6 +4076,9 @@ export default function Financing() {
                       <span className="text-sm font-black text-gray-900 dark:text-white font-mono">
                         RD$ {item.amount.toLocaleString()}
                       </span>
+                      <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono block">
+                        ≈ {formatUsd(dopToUsd(item.amount, financingExchangeRate))}
+                      </span>
                     </div>
 
                     <div className="text-right">
@@ -4114,7 +4202,12 @@ export default function Financing() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">RD$ {item.amount.toLocaleString()}</td>
+                      <td className="px-6 py-5 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white">
+                        <div>RD$ {item.amount.toLocaleString()}</div>
+                        <div className="text-[11px] font-mono font-normal text-gray-400 dark:text-zinc-500">
+                          ≈ {formatUsd(dopToUsd(item.amount, financingExchangeRate))}
+                        </div>
+                      </td>
                       <td className="px-6 py-5 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         <div>{item.nextPayment}</div>
                         {isDueWithinDays(item.nextPayment, 1) && (
@@ -4316,9 +4409,24 @@ export default function Financing() {
                         </span>
                         {activeReceiptData.paymentMethod === 'Efectivo' || !activeReceiptData.paymentMethod ? (
                           <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
-                            <span>Efectivo Recibido: <strong className="font-bold text-gray-900 dark:text-white print:text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
-                            <span className="text-gray-300 dark:text-zinc-600">•</span>
-                            <span>Devuelta / Cambio: <strong className="font-bold text-emerald-600 dark:text-emerald-400 print:text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                            {activeReceiptData.paidCurrency === 'USD' ? (
+                              <>
+                                <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                                  PAGO EN DÓLARES (USD)
+                                </span>
+                                <span>Recibido USD: <strong className="font-bold text-gray-900 dark:text-white print:text-black">${(activeReceiptData.amountReceivedUsd ?? 0).toFixed(2)} USD</strong></span>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span>Devuelta USD: <strong className="font-bold text-emerald-600 dark:text-emerald-400 print:text-black">${(activeReceiptData.changeGivenUsd ?? 0).toFixed(2)} USD</strong></span>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span className="text-[11px] font-mono">Tasa: 1 USD = RD$ {(activeReceiptData.exchangeRate ?? 60).toFixed(2)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Efectivo Recibido: <strong className="font-bold text-gray-900 dark:text-white print:text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                                <span className="text-gray-300 dark:text-zinc-600">•</span>
+                                <span>Devuelta / Cambio: <strong className="font-bold text-emerald-600 dark:text-emerald-400 print:text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                              </>
+                            )}
                           </div>
                         ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
                           <div className="flex items-center gap-2.5 text-gray-600 dark:text-zinc-300 print:text-black">
@@ -4437,9 +4545,16 @@ export default function Financing() {
                       <div className="w-2/5 bg-gray-50 dark:bg-[#222222] p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2 print:bg-transparent print:border-gray-300 print:p-3">
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-bold text-gray-500 print:text-gray-700">Monto Total Recibido:</span>
-                          <span className="font-black text-emerald-600 dark:text-emerald-400 text-base print:text-black">
-                            ${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                          </span>
+                          <div className="text-right">
+                            <span className="font-black text-emerald-600 dark:text-emerald-400 text-base print:text-black">
+                              RD$ {activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                            </span>
+                            {activeReceiptData.paidCurrency === 'USD' && (
+                              <p className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                ≈ ${(activeReceiptData.totalPaidUsd ?? (activeReceiptData.totalPaid / (activeReceiptData.exchangeRate || 60))).toFixed(2)} USD (Tasa: {activeReceiptData.exchangeRate?.toFixed(2)})
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <div className="pt-2 border-t border-gray-200 dark:border-zinc-700 flex justify-between items-center text-xs">
                           <span className="font-bold text-gray-500 print:text-gray-700">Nuevo Balance Pendiente:</span>
@@ -5105,7 +5220,14 @@ export default function Financing() {
                                           )}
                                         </div>
                                       </td>
-                                      <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">${inst.total.toLocaleString('en-US', {minimumFractionDigits:2})}</td>
+                                      <td className="px-3 py-2.5 text-right">
+                                        <div className="font-black text-gray-900 dark:text-white">
+                                          ${inst.total.toLocaleString('en-US', {minimumFractionDigits:2})}
+                                        </div>
+                                        <div className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
+                                          ≈ {formatUsd(dopToUsd(inst.total, financingExchangeRate))}
+                                        </div>
+                                      </td>
                                       <td className="px-3 py-2.5 text-center">
                                         <div className="flex flex-col items-center gap-1">
                                           <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${inst.status === 'Pagado' ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400' : inst.status === 'Atrasado' ? 'text-red-700 bg-red-100 dark:bg-red-950/50 dark:text-red-400' : 'text-gray-600 bg-gray-100 dark:bg-zinc-800 dark:text-zinc-300'}`}>
@@ -5347,13 +5469,18 @@ export default function Financing() {
                             <span className="font-black text-gray-900 dark:text-white uppercase tracking-wider text-xs">
                               {paymentType === 'abono' ? 'Total a Abonar' : 'Total a Cobrar'}
                             </span>
-                            <span className={`font-black text-xl font-mono ${
-                              paymentType === 'abono'
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-[#ED1C24] dark:text-red-400'
-                            }`}>
-                              RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                            </span>
+                            <div className="flex flex-col items-end">
+                              <span className={`font-black text-xl font-mono ${
+                                paymentType === 'abono'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-[#ED1C24] dark:text-red-400'
+                              }`}>
+                                RD$ {effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                              </span>
+                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                ≈ $ {(effectivePayAmount / (financingExchangeRate || 60)).toFixed(2)} USD
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -5387,6 +5514,74 @@ export default function Financing() {
                     {/* Columna Derecha (7 columnas): Método de pago + Detalles + Notas + Botón */}
                     <div className="lg:col-span-7 bg-[#f4f3f1] dark:bg-[#222222] p-4 sm:p-5 rounded-2xl space-y-3.5 border border-gray-200/60 dark:border-zinc-800/80 flex flex-col justify-between">
                       <div className="space-y-3">
+                        {/* Selector de Moneda de Pago (RD$ / USD) */}
+                        <div className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-black uppercase text-gray-500 dark:text-zinc-400">
+                              Moneda de Pago
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-mono font-bold text-gray-500">
+                                Tasa: <strong>1 USD = RD$ {financingExchangeRate.toFixed(2)}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTempFinancingRateInput(String(financingExchangeRate));
+                                  setFinancingRatePinInput('');
+                                  setFinancingRatePinError('');
+                                  setIsFinancingRateModalOpen(true);
+                                }}
+                                className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-md text-[10px] font-bold text-gray-700 dark:text-zinc-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Ajustar Tasa Oficial de Cambio"
+                              >
+                                {getActiveRole() === 'Administrador' ? (
+                                  <CurrencyDollarIcon className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <LockClosedIcon className="w-3.5 h-3.5 text-amber-500" />
+                                )}
+                                <span>Ajustar Tasa</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFinancingPaidCurrency('DOP')}
+                              className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                                financingPaidCurrency === 'DOP'
+                                  ? 'bg-[#ED1C24] text-white border-[#ED1C24] shadow-xs'
+                                  : 'bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-gray-300'
+                              }`}
+                            >
+                              <span>🇩🇴 Pesos (RD$)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFinancingPaidCurrency('USD');
+                                if (!cashReceivedUsd) {
+                                  const reqUsd = (effectivePayAmount / (financingExchangeRate || 60)).toFixed(2);
+                                  setCashReceivedUsd(reqUsd);
+                                }
+                              }}
+                              className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border transition-all cursor-pointer ${
+                                financingPaidCurrency === 'USD'
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200 dark:border-zinc-700 hover:border-gray-300'
+                              }`}
+                            >
+                              <span>🇺🇸 Dólares (USD)</span>
+                            </button>
+                          </div>
+                          {financingRateToast && (
+                            <p className="text-[10px] font-bold text-emerald-600 animate-in fade-in">
+                              ✓ {financingRateToast}
+                            </p>
+                          )}
+                        </div>
+
                         {/* Selector de Método de Pago */}
                         <div>
                           <label className="block text-[11px] font-black uppercase text-gray-500 dark:text-zinc-400 mb-1.5">
@@ -5418,155 +5613,266 @@ export default function Financing() {
                         {/* Campos según Método */}
                         {paymentMethod === 'Efectivo' && (
                           <div className="bg-white dark:bg-zinc-900 p-3 rounded-xl border border-gray-200 dark:border-zinc-800 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
-                                Efectivo Recibido (Paga con):
-                              </label>
-                              <span className="text-[10px] font-bold text-gray-400 font-mono">
-                                Total: ${effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                            <div className="relative">
-                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-gray-400 text-xs">
-                                RD$
-                              </span>
-                              <input
-                                type="text"
-                                value={cashReceived}
-                                onChange={(e) => setCashReceived(formatCurrencyInput(e.target.value))}
-                                placeholder={effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                className="w-full pl-11 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-[#ED1C24]"
-                              />
-                            </div>
-
-                            {/* Botones de sugerencia rápida */}
-                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                              <button
-                                type="button"
-                                onClick={() => setCashReceived(effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }))}
-                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
-                              >
-                                Monto Exacto
-                              </button>
-                              {[500, 1000, 2000, 5000].map((addAmt) => (
-                                <button
-                                  key={addAmt}
-                                  type="button"
-                                  onClick={() => {
-                                    const current = parseCurrencyInput(cashReceived) || effectivePayAmount;
-                                    setCashReceived(formatCurrencyInput(current + addAmt));
-                                  }}
-                                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-                                >
-                                  +${addAmt.toLocaleString()}
-                                </button>
-                              ))}
-                              {cashReceived && (
-                                <button
-                                  type="button"
-                                  onClick={() => setCashReceived('')}
-                                  className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                                >
-                                  Limpiar
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Opciones cuando el efectivo supera el total */}
-                            {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && (
-                              <div className="p-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl space-y-2 text-xs">
+                            {financingPaidCurrency === 'USD' ? (
+                              <>
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">
-                                    Excedente / Sobrante:
+                                  <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
+                                    Dólares Recibidos en Efectivo ($ USD):
+                                  </label>
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                    Requerido: ${(effectivePayAmount / (financingExchangeRate || 60)).toFixed(2)} USD
                                   </span>
-                                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">
-                                    RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                  </strong>
                                 </div>
-                                <div className="grid grid-cols-3 gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSurplusDestination('capital')}
-                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                      surplusDestination === 'capital'
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-500 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500 font-extrabold shadow-2xs'
-                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
-                                    }`}
-                                  >
-                                    <SparklesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                    <span>Abonar a Capital</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => setSurplusDestination('cuota_completa')}
-                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                      surplusDestination === 'cuota_completa'
-                                        ? 'bg-blue-50 dark:bg-blue-950/70 border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500 font-extrabold shadow-2xs'
-                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
-                                    }`}
-                                  >
-                                    <CheckCircleIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                    <span>Cuota Completa</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => setSurplusDestination('devuelta')}
-                                    className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
-                                      surplusDestination === 'devuelta'
-                                        ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-500 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500 font-extrabold shadow-2xs'
-                                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
-                                    }`}
-                                  >
-                                    <BanknotesIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                    <span>Entregar Devuelta</span>
-                                  </button>
+                                <div className="relative">
+                                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-emerald-600 text-sm">
+                                    $
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={cashReceivedUsd}
+                                    onChange={(e) => setCashReceivedUsd(e.target.value)}
+                                    placeholder={(effectivePayAmount / (financingExchangeRate || 60)).toFixed(2)}
+                                    className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                  />
                                 </div>
-                                <p className="text-[10px] text-gray-500 dark:text-zinc-400 italic">
-                                  {surplusDestination === 'capital' && '✨ El sobrante se amortizará 100% directo a capital (reduce la deuda sin intereses).'}
-                                  {surplusDestination === 'cuota_completa' && '📋 Se saldará la siguiente cuota si el monto la cubre; el remanente se abonará al capital.'}
-                                  {surplusDestination === 'devuelta' && '💵 Se entregará el excedente como cambio en efectivo al cliente.'}
-                                </p>
-                              </div>
-                            )}
 
-                            {/* Devuelta calculada */}
-                            {(() => {
-                              const numC = parseCurrencyInput(cashReceived);
-                              if (!cashReceived || numC === 0) return null;
-                              if (numC >= effectivePayAmount) {
-                                const change = numC - effectivePayAmount;
-                                if (change === 0 && surplusAmount > 0) {
-                                  return (
-                                    <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
-                                      <span className="font-bold text-emerald-700 dark:text-emerald-300">
-                                        RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {surplusDestination === 'capital' ? 'se abonará directo al capital' : 'se aplicará a cuota completa / capital'}
+                                {/* Conversión a pesos en tiempo real */}
+                                {parseFloat(cashReceivedUsd) > 0 && (
+                                  <div className="text-[11px] font-bold text-gray-500 dark:text-zinc-400 flex items-center justify-between bg-gray-50 dark:bg-zinc-800/60 px-2.5 py-1 rounded-lg">
+                                    <span>Equivalente en Pesos:</span>
+                                    <span className="font-mono font-black text-gray-900 dark:text-white">
+                                      RD$ {(parseFloat(cashReceivedUsd) * financingExchangeRate).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Botones rápidos en USD */}
+                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCashReceivedUsd((effectivePayAmount / (financingExchangeRate || 60)).toFixed(2))}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                  >
+                                    Monto Exacto
+                                  </button>
+                                  {[10, 20, 50, 100, 200].map((addUsd) => (
+                                    <button
+                                      key={addUsd}
+                                      type="button"
+                                      onClick={() => {
+                                        const current = parseFloat(cashReceivedUsd) || (effectivePayAmount / (financingExchangeRate || 60));
+                                        setCashReceivedUsd((current + addUsd).toFixed(2));
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer font-mono"
+                                    >
+                                      +${addUsd}
+                                    </button>
+                                  ))}
+                                  {cashReceivedUsd && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCashReceivedUsd('')}
+                                      className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                    >
+                                      Limpiar
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Devuelta en USD y DOP */}
+                                {(() => {
+                                  const reqUsd = effectivePayAmount / (financingExchangeRate || 60);
+                                  const numUsd = parseFloat(cashReceivedUsd) || 0;
+                                  if (!cashReceivedUsd || numUsd <= 0) return null;
+                                  if (numUsd >= reqUsd) {
+                                    const chgUsd = numUsd - reqUsd;
+                                    const chgDop = chgUsd * financingExchangeRate;
+                                    return (
+                                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg space-y-1 text-xs">
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-bold text-emerald-800 dark:text-emerald-300">Devuelta / Cambio en USD:</span>
+                                          <span className="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                                            ${chgUsd.toFixed(2)} USD
+                                          </span>
+                                        </div>
+                                        {chgUsd > 0 && (
+                                          <div className="flex items-center justify-between text-[11px] text-gray-600 dark:text-zinc-400">
+                                            <span>O en Pesos (RD$):</span>
+                                            <span className="font-mono font-bold text-gray-800 dark:text-zinc-200">
+                                              RD$ {chgDop.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  } else {
+                                    const missingUsd = reqUsd - numUsd;
+                                    return (
+                                      <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-center justify-between text-xs">
+                                        <span className="font-bold text-amber-700 dark:text-amber-300">
+                                          Faltan ${missingUsd.toFixed(2)} USD (≈ RD$ {(missingUsd * financingExchangeRate).toLocaleString('es-DO', { minimumFractionDigits: 2 })})
+                                        </span>
+                                        <ExclamationTriangleIcon className="h-4 w-4 text-amber-600 shrink-0" />
+                                      </div>
+                                    );
+                                  }
+                                })()}
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[11px] font-black uppercase text-gray-700 dark:text-zinc-300">
+                                    Efectivo Recibido (Paga con):
+                                  </label>
+                                  <span className="text-[10px] font-bold text-gray-400 font-mono">
+                                    Total: ${effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-black text-gray-400 text-xs">
+                                    RD$
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={cashReceived}
+                                    onChange={(e) => setCashReceived(formatCurrencyInput(e.target.value))}
+                                    placeholder={effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    className="w-full pl-11 pr-3 py-1.5 rounded-lg border border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base focus:outline-none focus:border-[#ED1C24]"
+                                  />
+                                </div>
+
+                                {/* Botones de sugerencia rápida */}
+                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCashReceived(effectivePayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }))}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-50 dark:bg-red-950/40 text-[#ED1C24] border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition-colors cursor-pointer"
+                                  >
+                                    Monto Exacto
+                                  </button>
+                                  {[500, 1000, 2000, 5000].map((addAmt) => (
+                                    <button
+                                      key={addAmt}
+                                      type="button"
+                                      onClick={() => {
+                                        const current = parseCurrencyInput(cashReceived) || effectivePayAmount;
+                                        setCashReceived(formatCurrencyInput(current + addAmt));
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                                    >
+                                      +${addAmt.toLocaleString()}
+                                    </button>
+                                  ))}
+                                  {cashReceived && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCashReceived('')}
+                                      className="px-2 py-0.5 text-[10px] font-bold rounded text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                    >
+                                      Limpiar
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Opciones cuando el efectivo supera el total */}
+                                {paymentType === 'cuotas' && parseCurrencyInput(cashReceived) > totalSelectedAmount && (
+                                  <div className="p-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl space-y-2 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[11px] font-bold text-gray-700 dark:text-zinc-300">
+                                        Excedente / Sobrante:
                                       </span>
-                                      <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                                      <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-xs">
+                                        RD$ {(parseCurrencyInput(cashReceived) - totalSelectedAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </strong>
                                     </div>
-                                  );
-                                }
-                                return (
-                                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
-                                    <span className="font-bold text-emerald-800 dark:text-emerald-300">Devuelta / Cambio:</span>
-                                    <span className="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                                      RD$ {change.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </span>
+                                    <div className="grid grid-cols-3 gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSurplusDestination('capital')}
+                                        className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                          surplusDestination === 'capital'
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-500 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500 font-extrabold shadow-2xs'
+                                            : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
+                                        }`}
+                                      >
+                                        <SparklesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span>Abonar a Capital</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => setSurplusDestination('cuota_completa')}
+                                        className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                          surplusDestination === 'cuota_completa'
+                                            ? 'bg-blue-50 dark:bg-blue-950/70 border-blue-500 text-blue-800 dark:text-blue-200 ring-1 ring-blue-500 font-extrabold shadow-2xs'
+                                            : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
+                                        }`}
+                                      >
+                                        <CheckCircleIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                        <span>Cuota Completa</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => setSurplusDestination('devuelta')}
+                                        className={`py-2 px-1.5 rounded-lg text-[10px] font-bold text-center flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
+                                          surplusDestination === 'devuelta'
+                                            ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-500 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500 font-extrabold shadow-2xs'
+                                            : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
+                                        }`}
+                                      >
+                                        <BanknotesIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                        <span>Entregar Devuelta</span>
+                                      </button>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 italic">
+                                      {surplusDestination === 'capital' && '✨ El sobrante se amortizará 100% directo a capital (reduce la deuda sin intereses).'}
+                                      {surplusDestination === 'cuota_completa' && '📋 Se saldará la siguiente cuota si el monto la cubre; el remanente se abonará al capital.'}
+                                      {surplusDestination === 'devuelta' && '💵 Se entregará el excedente como cambio en efectivo al cliente.'}
+                                    </p>
                                   </div>
-                                );
-                              } else {
-                                const missing = effectivePayAmount - numC;
-                                return (
-                                  <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-center justify-between text-xs">
-                                    <span className="font-bold text-amber-700 dark:text-amber-300">
-                                      Faltan RD$ {missing.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </span>
-                                    <ExclamationTriangleIcon className="h-4 w-4 text-amber-600 shrink-0" />
-                                  </div>
-                                );
-                              }
-                            })()}
+                                )}
+
+                                {/* Devuelta calculada */}
+                                {(() => {
+                                  const numC = parseCurrencyInput(cashReceived);
+                                  if (!cashReceived || numC === 0) return null;
+                                  if (numC >= effectivePayAmount) {
+                                    const change = numC - effectivePayAmount;
+                                    if (change === 0 && surplusAmount > 0) {
+                                      return (
+                                        <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                          <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                                            RD$ {surplusAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {surplusDestination === 'capital' ? 'se abonará directo al capital' : 'se aplicará a cuota completa / capital'}
+                                          </span>
+                                          <CheckCircleIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg flex items-center justify-between text-xs">
+                                        <span className="font-bold text-emerald-800 dark:text-emerald-300">Devuelta / Cambio:</span>
+                                        <span className="text-base font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                                          RD$ {change.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                    );
+                                  } else {
+                                    const missing = effectivePayAmount - numC;
+                                    return (
+                                      <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg flex items-center justify-between text-xs">
+                                        <span className="font-bold text-amber-700 dark:text-amber-300">
+                                          Faltan RD$ {missing.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <ExclamationTriangleIcon className="h-4 w-4 text-amber-600 shrink-0" />
+                                      </div>
+                                    );
+                                  }
+                                })()}
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -5830,13 +6136,24 @@ export default function Financing() {
 
                       {/* Botón Confirmar y Procesar Pago */}
                       {(() => {
+                        const isUsd = financingPaidCurrency === 'USD';
+                        const reqUsd = effectivePayAmount / (financingExchangeRate || 60);
+                        const numCashUsd = parseFloat(cashReceivedUsd) || 0;
                         const numCash = parseCurrencyInput(cashReceived);
-                        const isCashInsufficient = paymentMethod === 'Efectivo' && cashReceived.trim() !== '' && numCash < effectivePayAmount;
+                        const isCashInsufficient = paymentMethod === 'Efectivo' && (
+                          isUsd
+                            ? (cashReceivedUsd.trim() !== '' && numCashUsd < reqUsd)
+                            : (cashReceived.trim() !== '' && numCash < effectivePayAmount)
+                        );
                         const numTrans = parseCurrencyInput(transferAmount);
                         const isTransferInvalid = paymentMethod === 'Transferencia' && transferAmount.trim() !== '' && numTrans <= 0;
                         const numChq = parseCurrencyInput(chequeAmount);
                         const isChequeInvalid = paymentMethod === 'Cheque' && chequeAmount.trim() !== '' && numChq <= 0;
                         const isInsufficient = isCashInsufficient || isTransferInvalid || isChequeInvalid || effectivePayAmount <= 0;
+
+                        const displayPayStr = isUsd
+                          ? `$ ${reqUsd.toFixed(2)} USD (RD$ ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                          : `RD$ ${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
 
                         return (
                           <div className="pt-2">
@@ -5853,18 +6170,18 @@ export default function Financing() {
                             >
                               <CheckCircleIcon className="h-5 w-5" />
                               {isCashInsufficient
-                                ? 'Efectivo Recibido Insuficiente'
+                                ? (isUsd ? 'Efectivo USD Recibido Insuficiente' : 'Efectivo Recibido Insuficiente')
                                 : isTransferInvalid
                                 ? 'Monto de Transferencia Inválido'
                                 : isChequeInvalid
                                 ? 'Monto de Cheque Inválido'
                                 : paymentType === 'abono'
-                                  ? `Confirmar y Procesar Abono ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  ? `Confirmar y Procesar Abono (${displayPayStr})`
                                   : surplusAmount > 0
-                                  ? `Confirmar Pago + Sobrante ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
+                                  ? `Confirmar Pago + Sobrante (${displayPayStr})`
                                   : (effectivePayAmount < totalSelectedAmount && effectivePayAmount > 0)
-                                  ? `Confirmar Abono Parcial ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`
-                                  : `Confirmar y Procesar Pago ($${effectivePayAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})`}
+                                  ? `Confirmar Abono Parcial (${displayPayStr})`
+                                  : `Confirmar y Procesar Pago (${displayPayStr})`}
                             </button>
                           </div>
                         );
@@ -6393,9 +6710,22 @@ export default function Financing() {
               </span>
               {activeReceiptData.paymentMethod === 'Efectivo' || !activeReceiptData.paymentMethod ? (
                 <div className="flex items-center gap-2 text-gray-700 text-[11px]">
-                  <span>Efectivo Recibido: <strong className="font-bold text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
-                  <span className="text-gray-400">•</span>
-                  <span>Devuelta / Cambio: <strong className="font-bold text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  {activeReceiptData.paidCurrency === 'USD' ? (
+                    <>
+                      <span className="font-bold text-black bg-gray-200 px-1.5 py-0.5 rounded text-[10px]">USD</span>
+                      <span>Recibido USD: <strong className="font-bold text-black">${(activeReceiptData.amountReceivedUsd ?? 0).toFixed(2)} USD</strong></span>
+                      <span className="text-gray-400">•</span>
+                      <span>Devuelta USD: <strong className="font-bold text-black">${(activeReceiptData.changeGivenUsd ?? 0).toFixed(2)} USD</strong></span>
+                      <span className="text-gray-400">•</span>
+                      <span className="font-mono text-[10px]">Tasa: 1 USD = RD$ {(activeReceiptData.exchangeRate ?? 60).toFixed(2)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Efectivo Recibido: <strong className="font-bold text-black">${(activeReceiptData.amountReceived ?? activeReceiptData.totalPaid).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                      <span className="text-gray-400">•</span>
+                      <span>Devuelta / Cambio: <strong className="font-bold text-black">${(activeReceiptData.changeGiven ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                    </>
+                  )}
                 </div>
               ) : activeReceiptData.paymentMethod === 'Transferencia' ? (
                 <div className="flex items-center gap-2 text-gray-700 text-[11px]">
@@ -6514,9 +6844,16 @@ export default function Financing() {
             <div className="w-2/5 p-3 rounded-xl border border-gray-300 space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Monto Total Recibido:</span>
-                <span className="font-black text-black text-sm sm:text-base">
-                  ${activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
-                </span>
+                <div className="text-right">
+                  <span className="font-black text-black text-sm sm:text-base">
+                    RD$ {activeReceiptData.totalPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                  </span>
+                  {activeReceiptData.paidCurrency === 'USD' && (
+                    <p className="text-[10px] font-mono font-bold text-black">
+                      ≈ ${(activeReceiptData.totalPaidUsd ?? (activeReceiptData.totalPaid / (activeReceiptData.exchangeRate || 60))).toFixed(2)} USD (Tasa: {activeReceiptData.exchangeRate?.toFixed(2)})
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="pt-1.5 border-t border-gray-300 flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Nuevo Balance Pendiente:</span>
@@ -6988,6 +7325,102 @@ export default function Financing() {
                 />
               </div>
             </motion.div>
+          </div>
+        )}
+
+        {/* Modal de Ajuste Rápido de Tasa Oficial de Cambio (Financiamiento) */}
+        {isFinancingRateModalOpen && (
+          <div className="fixed inset-0 z-[70] bg-black/65 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white dark:bg-[#16171d] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-200/80 dark:border-zinc-800 p-5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <CurrencyDollarIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-gray-900 dark:text-white">Ajustar Tasa Oficial USD</h4>
+                    <p className="text-[10px] text-gray-400">Modificación exclusiva de Administrador</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFinancingRateModalOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveFinancingRate} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Nueva Tasa Oficial (RD$ por 1 USD):
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-xs font-mono font-black text-gray-400 select-none">RD$</span>
+                    <input
+                      autoFocus
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={tempFinancingRateInput}
+                      onChange={(e) => setTempFinancingRateInput(e.target.value)}
+                      placeholder="60.00"
+                      className="w-full pl-11 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base border border-gray-300 dark:border-zinc-700 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {getActiveRole() !== 'Administrador' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
+                      <LockClosedIcon className="w-3.5 h-3.5" />
+                      <span>Clave Maestra de Administrador requerida:</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={financingRatePinInput}
+                      onChange={(e) => {
+                        setFinancingRatePinInput(e.target.value);
+                        setFinancingRatePinError('');
+                      }}
+                      placeholder="Ingrese clave maestra..."
+                      className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-sm border border-gray-300 dark:border-zinc-700 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                )}
+
+                {financingRatePinError && (
+                  <p className="text-[11px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{financingRatePinError}</span>
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsFinancingRateModalOpen(false)}
+                    className="py-2 px-3 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                  >
+                    Guardar Tasa
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {financingRateToast && (
+          <div className="fixed bottom-6 right-6 z-[80] bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2">
+            <CheckCircleIcon className="w-4 h-4" />
+            <span>{financingRateToast}</span>
           </div>
         )}
       </AnimatePresence>

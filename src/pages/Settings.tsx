@@ -56,10 +56,17 @@ import {
   loadRolePermissions, 
   DEFAULT_ROLE_PERMISSIONS, 
   MODULE_LIST,
+  getActiveRole,
   type RolePermissionsMap, 
   type UserRole, 
   type PermissionAction 
 } from '../utils/rolePermissions';
+import {
+  getExchangeRateConfig,
+  saveExchangeRate,
+  EXCHANGE_RATE_EVENT,
+  type ExchangeRateConfig
+} from '../utils/exchangeRate';
 import { 
   syncSequencesWithSupabase, 
   syncScheduleWithSupabase, 
@@ -180,6 +187,34 @@ export default function Settings() {
 
   const [defaultFontSize, setDefaultFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
   const [showPrintSizeToast, setShowPrintSizeToast] = useState(false);
+
+  // Tasa de Cambio (USD / DOP) State & Rol
+  const [activeRole, setActiveRoleState] = useState<UserRole>(getActiveRole);
+  const [exchangeConfig, setExchangeConfig] = useState<ExchangeRateConfig>(getExchangeRateConfig);
+  const [exchangeRateInput, setExchangeRateInput] = useState<string>(() => String(getExchangeRateConfig().rate));
+  const [exchangeToast, setExchangeToast] = useState<{ show: boolean; success: boolean; message: string }>({ show: false, success: true, message: '' });
+  const [isExchangePinModalOpen, setIsExchangePinModalOpen] = useState(false);
+  const [exchangePinInput, setExchangePinInput] = useState('');
+  const [exchangePinError, setExchangePinError] = useState('');
+  const [isExchangeUnlockedByPin, setIsExchangeUnlockedByPin] = useState(false);
+
+  useEffect(() => {
+    const handleRoleUpdate = () => {
+      setActiveRoleState(getActiveRole());
+    };
+    const handleExchangeRateUpdate = (e: any) => {
+      const cfg = e.detail || getExchangeRateConfig();
+      setExchangeConfig(cfg);
+      setExchangeRateInput(String(cfg.rate));
+    };
+
+    window.addEventListener('brianna_role_updated', handleRoleUpdate);
+    window.addEventListener(EXCHANGE_RATE_EVENT, handleExchangeRateUpdate);
+    return () => {
+      window.removeEventListener('brianna_role_updated', handleRoleUpdate);
+      window.removeEventListener(EXCHANGE_RATE_EVENT, handleExchangeRateUpdate);
+    };
+  }, []);
 
   const [invoiceConfig, setInvoiceConfig] = useState<InvoiceCustomConfig>(getInvoiceCustomConfig);
   const [showInvoiceToast, setShowInvoiceToast] = useState(false);
@@ -440,6 +475,34 @@ export default function Settings() {
       setPinError('');
     } else {
       setPinError('Código de seguridad incorrecto. Verifique e intente nuevamente.');
+    }
+  };
+
+  const isExchangeAdmin = activeRole === 'Administrador' || isExchangeUnlockedByPin;
+
+  const handleSaveExchangeRate = () => {
+    const rateVal = parseFloat(exchangeRateInput);
+    if (isNaN(rateVal) || rateVal <= 0) {
+      setExchangeToast({ show: true, success: false, message: 'Ingresa un valor numérico válido mayor a cero.' });
+      setTimeout(() => setExchangeToast(prev => ({ ...prev, show: false })), 4000);
+      return;
+    }
+
+    const res = saveExchangeRate(rateVal, undefined, isExchangeUnlockedByPin ? exchangePinInput : undefined);
+    setExchangeToast({ show: true, success: res.success, message: res.message });
+    setTimeout(() => setExchangeToast(prev => ({ ...prev, show: false })), 4000);
+  };
+
+  const handleVerifyExchangePin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyAdminMasterKey(exchangePinInput.trim())) {
+      setIsExchangeUnlockedByPin(true);
+      setIsExchangePinModalOpen(false);
+      setExchangePinError('');
+      setExchangeToast({ show: true, success: true, message: 'Edición de tasa desbloqueada con Clave Maestra de Administrador.' });
+      setTimeout(() => setExchangeToast(prev => ({ ...prev, show: false })), 4000);
+    } else {
+      setExchangePinError('Clave de autorización incorrecta.');
     }
   };
 
@@ -1785,6 +1848,149 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {/* ─── TASA OFICIAL DE CAMBIO (USD / DOP) CON CONTROL EXCLUSIVO DE ADMINISTRADOR ─── */}
+                <div className="bg-[#f8f9fa] dark:bg-[#16171d] rounded-2xl border border-gray-200/80 dark:border-zinc-800 p-4 sm:p-5 space-y-4 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200/60 dark:border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <BanknotesIcon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm sm:text-base font-black text-gray-900 dark:text-white">
+                            Tasa Oficial de Cambio (USD / DOP)
+                          </h4>
+                          {isExchangeAdmin ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                              <ShieldCheckIcon className="w-3 h-3" />
+                              Admin Autorizado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                              <LockClosedIcon className="w-3 h-3" />
+                              Solo Administrador
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-0.5">
+                          Tasa oficial de conversión para cobros en dólares en el POS y cuotas de Financiamientos.
+                        </p>
+                      </div>
+                    </div>
+
+                    {isExchangeAdmin ? (
+                      <button
+                        type="button"
+                        onClick={handleSaveExchangeRate}
+                        className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0 active:scale-[0.98]"
+                      >
+                        <CheckCircleIcon className="w-4 h-4" />
+                        <span>Guardar Tasa de Cambio</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExchangePinInput('');
+                          setExchangePinError('');
+                          setIsExchangePinModalOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0 active:scale-[0.98]"
+                      >
+                        <KeyIcon className="w-4 h-4" />
+                        <span>Desbloquear con Clave Maestra</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {exchangeToast.show && (
+                    <div className={`p-3 rounded-xl flex items-center gap-2 text-xs font-bold animate-in fade-in ${
+                      exchangeToast.success
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+                    }`}>
+                      {exchangeToast.success ? (
+                        <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <ExclamationTriangleIcon className="w-4 h-4 text-red-600 shrink-0" />
+                      )}
+                      <span>{exchangeToast.message}</span>
+                    </div>
+                  )}
+
+                  {!isExchangeAdmin && (
+                    <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start gap-2.5 text-amber-800 dark:text-amber-300 text-xs">
+                      <LockClosedIcon className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold">Modificación restringida exclusivamente al Administrador:</p>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                          Solo los usuarios con rol de <strong>Administrador</strong> pueden modificar la tasa oficial de cambio de divisas del sistema. Si eres un supervisor con clave maestra, puedes autorizar la edición haciendo clic en el botón superior.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    {/* Input de la Tasa */}
+                    <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 space-y-1.5">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                        1 Dólar (USD) equivale a:
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 font-mono font-black text-gray-500 text-sm select-none">
+                          RD$
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          disabled={!isExchangeAdmin}
+                          value={exchangeRateInput}
+                          onChange={(e) => setExchangeRateInput(e.target.value)}
+                          placeholder="60.00"
+                          className={`w-full pl-12 pr-3 py-2 rounded-lg font-mono font-black text-base transition-all ${
+                            isExchangeAdmin 
+                              ? 'bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white border border-gray-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500' 
+                              : 'bg-gray-100 dark:bg-zinc-800/50 text-gray-400 dark:text-zinc-500 border border-gray-200 dark:border-zinc-800 cursor-not-allowed'
+                          }`}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 dark:text-zinc-500">
+                        {isExchangeAdmin ? 'Ingresa la tasa oficial del día en pesos dominicanos.' : 'Campo bloqueado para cajeros y personal de oficina.'}
+                      </p>
+                    </div>
+
+                    {/* Previsualización Rápida de Conversiones */}
+                    <div className="md:col-span-2 bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-gray-200/80 dark:border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                          Previsualización de conversión en tiempo real
+                        </span>
+                        {exchangeConfig.lastUpdated && (
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            Actualizado: {new Date(exchangeConfig.lastUpdated).toLocaleDateString('es-DO')} • {exchangeConfig.updatedBy || 'Administrador'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        {[20, 50, 100].map((usdVal) => {
+                          const rateVal = parseFloat(exchangeRateInput) || exchangeConfig.rate;
+                          const dopVal = usdVal * rateVal;
+                          return (
+                            <div key={usdVal} className="p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-gray-100 dark:border-zinc-800 text-center">
+                              <span className="text-[10px] font-bold text-gray-400 block">$ {usdVal} USD</span>
+                              <span className="text-xs sm:text-sm font-mono font-black text-gray-900 dark:text-white mt-0.5 block truncate">
+                                RD$ {dopVal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Configuración de Tamaño de Letra en Facturas Térmicas */}
                 <div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400 mb-2 flex items-center gap-1.5">
@@ -2794,6 +3000,84 @@ export default function Settings() {
                       className="w-full bg-gradient-to-r from-[#ED1C24] to-[#C1121F] text-white font-bold py-3 rounded-xl hover:from-[#d61920] hover:to-[#a50f1a] text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer"
                     >
                       Autorizar Acceso
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PIN Security Modal for Exchange Rate */}
+      <AnimatePresence>
+        {isExchangePinModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/65 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 15 }}
+              className="bg-white dark:bg-[#15161c] rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-gray-200/80 dark:border-zinc-800"
+            >
+              <div className="p-7 text-center">
+                <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40 mb-4 shadow-sm">
+                  <KeyIcon className="h-8 w-8 stroke-[2]" />
+                </div>
+                
+                <h3 className="text-xl font-black text-gray-900 dark:text-white">
+                  Autorización de Administrador Requerida
+                </h3>
+                
+                <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 mt-1.5 px-4">
+                  Ingrese la Clave Maestra de Administrador para desbloquear la modificación de la tasa oficial de cambio de divisas.
+                </p>
+
+                <form onSubmit={handleVerifyExchangePin} className="mt-6 space-y-4">
+                  <div className="space-y-2">
+                    <input
+                      autoFocus
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={exchangePinInput}
+                      onChange={(e) => {
+                        setExchangePinInput(e.target.value);
+                        setExchangePinError('');
+                      }}
+                      placeholder="• • • • • •"
+                      className="block w-full text-center py-3.5 px-4 text-2xl font-black font-mono tracking-[0.35em] bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-white border border-gray-200 dark:border-zinc-700 rounded-2xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+                    />
+
+                    {exchangePinError && (
+                      <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-1.5 animate-in fade-in">
+                        <ExclamationTriangleIcon className="w-4 h-4 shrink-0" />
+                        <span>{exchangePinError}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsExchangePinModalOpen(false);
+                        setExchangePinInput('');
+                        setExchangePinError('');
+                      }}
+                      className="w-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-bold py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-zinc-700 text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-amber-600 to-amber-700 text-white font-bold py-3 rounded-xl hover:from-amber-700 hover:to-amber-800 text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                    >
+                      Autorizar Desbloqueo
                     </button>
                   </div>
                 </form>

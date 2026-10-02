@@ -22,6 +22,7 @@ import {
   DocumentTextIcon,
   DocumentDuplicateIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   UserPlusIcon,
   CheckIcon,
   ArrowPathIcon,
@@ -37,7 +38,9 @@ import {
   Squares2X2Icon,
   ListBulletIcon,
   SquaresPlusIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  CurrencyDollarIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import QuotationsModal from '../components/pos/QuotationsModal';
 import { 
@@ -56,6 +59,12 @@ import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { getActiveRole, hasPermission } from '../utils/rolePermissions';
+import { verifyAdminMasterKey } from '../utils/scheduleStorage';
+import { 
+  getExchangeRate, 
+  saveExchangeRate, 
+  EXCHANGE_RATE_EVENT 
+} from '../utils/exchangeRate';
 import { useTheme } from '../contexts/ThemeContext';
 import { createInvoice, fetchInvoices, getLocalStorageInvoices, syncAndGetNextInvoiceSequence, type Invoice } from '../services/invoicesService';
 import { fetchInventory, getLocalStorageInventory, updateInventoryItem } from '../services/inventoryService';
@@ -1090,6 +1099,10 @@ const CheckoutModal = memo(({
     bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
+    paidCurrency?: 'DOP' | 'USD';
+    exchangeRate?: number;
+    amountReceivedUsd?: string;
+    changeUsd?: number;
   }) => Promise<void>;
   isTransmitting: boolean;
 }) => {
@@ -1104,9 +1117,48 @@ const CheckoutModal = memo(({
   const [selectedBankId, setSelectedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
+  // Currency & Exchange Rate State
+  const [paidCurrency, setPaidCurrency] = useState<'DOP' | 'USD'>('DOP');
+  const [currentExchangeRate, setCurrentExchangeRate] = useState<number>(getExchangeRate);
+  const [amountReceivedUsd, setAmountReceivedUsd] = useState<string>(() => {
+    const rate = getExchangeRate() || 60;
+    return (total / rate).toFixed(2);
+  });
+
+  // Modal de Ajuste de Tasa de Cambio (Admin)
+  const [isRateModalOpen, setIsRateModalOpen] = useState(false);
+  const [tempRateInput, setTempRateInput] = useState(String(getExchangeRate()));
+  const [ratePinInput, setRatePinInput] = useState('');
+  const [ratePinError, setRatePinError] = useState('');
+  const [rateToast, setRateToast] = useState('');
+  const [isRateBannerMinimized, setIsRateBannerMinimized] = useState<boolean>(() => {
+    return localStorage.getItem('brianna_rate_banner_minimized') !== 'false';
+  });
+
+  useEffect(() => {
+    const handleAccountsChanged = (e: any) => {
+      if (e.detail) setBankAccounts(e.detail);
+      else setBankAccounts(getCompanyBankAccounts());
+    };
+    const handleRateChanged = (e: any) => {
+      const r = e.detail?.rate || getExchangeRate();
+      setCurrentExchangeRate(r);
+      setTempRateInput(String(r));
+    };
+
+    window.addEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+    window.addEventListener(EXCHANGE_RATE_EVENT, handleRateChanged);
+    return () => {
+      window.removeEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
+      window.removeEventListener(EXCHANGE_RATE_EVENT, handleRateChanged);
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       setAmountReceived(total.toFixed(2));
+      const rate = currentExchangeRate || 60;
+      setAmountReceivedUsd((total / rate).toFixed(2));
       const accs = getCompanyBankAccounts();
       setBankAccounts(accs);
       if (accs.length > 0 && !selectedBankId) {
@@ -1114,16 +1166,7 @@ const CheckoutModal = memo(({
       }
       setCreditDays(15);
     }
-  }, [isOpen, total]);
-
-  useEffect(() => {
-    const handleAccountsChanged = (e: any) => {
-      if (e.detail) setBankAccounts(e.detail);
-      else setBankAccounts(getCompanyBankAccounts());
-    };
-    window.addEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
-    return () => window.removeEventListener('brianna_bank_accounts_changed', handleAccountsChanged);
-  }, []);
+  }, [isOpen, total, currentExchangeRate]);
 
   const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
 
@@ -1146,12 +1189,21 @@ const CheckoutModal = memo(({
     return d.toISOString().slice(0, 10);
   }, [effectiveCreditDays]);
 
-  // Derived Payment Math
+  // Derived Payment Math (DOP)
   const numReceived = parseFloat(amountReceived) || 0;
   const change = (paymentMethod === 'Efectivo' && numReceived > total) ? (numReceived - total) : 0;
+
+  // Derived Payment Math (USD)
+  const totalUsd = Math.round((total / currentExchangeRate) * 100) / 100;
+  const numReceivedUsd = parseFloat(amountReceivedUsd) || 0;
+  const equivalentDop = Math.round(numReceivedUsd * currentExchangeRate * 100) / 100;
+  const changeUsd = (paymentMethod === 'Efectivo' && numReceivedUsd > totalUsd) ? (numReceivedUsd - totalUsd) : 0;
+  const changeDopFromUsd = Math.round(changeUsd * currentExchangeRate * 100) / 100;
   
   const isPaymentValid = isCotizacion ? true : (
-    (paymentMethod === 'Efectivo' ? numReceived >= total : true) &&
+    (paymentMethod === 'Efectivo' 
+      ? (paidCurrency === 'USD' ? numReceivedUsd >= totalUsd : numReceived >= total) 
+      : true) &&
     (paymentMethod === 'Transferencia' ? transferReference.trim().length > 0 : true) &&
     (paymentMethod === 'Crédito' ? !!selectedClient : true)
   );
@@ -1164,6 +1216,46 @@ const CheckoutModal = memo(({
   const clientMissing = needsClient && !selectedClient;
   const canEmit = isPaymentValid && !isTransmitting && !clientMissing;
 
+  const handleOpenRateModal = () => {
+    setTempRateInput(String(currentExchangeRate));
+    setRatePinInput('');
+    setRatePinError('');
+    setIsRateModalOpen(true);
+  };
+
+  const handleSaveRateQuick = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = parseFloat(tempRateInput);
+    if (isNaN(parsed) || parsed <= 0) {
+      setRatePinError('Ingrese una tasa válida mayor a cero.');
+      return;
+    }
+
+    const isAdmin = getActiveRole() === 'Administrador';
+    if (!isAdmin) {
+      if (!ratePinInput.trim()) {
+        setRatePinError('Ingrese la Clave Maestra de Administrador.');
+        return;
+      }
+      if (!verifyAdminMasterKey(ratePinInput.trim())) {
+        setRatePinError('Clave Maestra incorrecta.');
+        return;
+      }
+    }
+
+    const res = saveExchangeRate(parsed, undefined, ratePinInput.trim() || undefined);
+    if (res.success) {
+      setCurrentExchangeRate(parsed);
+      setRateToast('Tasa de cambio actualizada correctamente.');
+      setTimeout(() => setRateToast(''), 3000);
+      setIsRateModalOpen(false);
+      setRatePinInput('');
+      setRatePinError('');
+    } else {
+      setRatePinError(res.message);
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1175,12 +1267,16 @@ const CheckoutModal = memo(({
       electronicDocType,
       internalDocType,
       paymentMethod: isCotizacion ? 'Efectivo' : paymentMethod,
-      amountReceived: isCotizacion ? total.toFixed(2) : amountReceived,
+      amountReceived: isCotizacion ? total.toFixed(2) : (paidCurrency === 'USD' ? equivalentDop.toFixed(2) : amountReceived),
       transferReference: isCotizacion ? '' : transferReference,
       bankAccountId: paymentMethod === 'Transferencia' ? chosenBank?.id : undefined,
       bankAccountName: paymentMethod === 'Transferencia' ? chosenBank?.bankName : undefined,
       creditDays: paymentMethod === 'Crédito' ? effectiveCreditDays : undefined,
       dueDate: paymentMethod === 'Crédito' ? isoDueDate : undefined,
+      paidCurrency,
+      exchangeRate: currentExchangeRate,
+      amountReceivedUsd: paidCurrency === 'USD' ? amountReceivedUsd : undefined,
+      changeUsd: paidCurrency === 'USD' ? changeUsd : undefined,
     });
   };
 
@@ -1216,6 +1312,98 @@ const CheckoutModal = memo(({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
+          {/* TASA OFICIAL & CONVERSIÓN EN DÓLARES (MINIMIZADO POR DEFECTO) */}
+          {isRateBannerMinimized ? (
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl px-2.5 py-1.5 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <CurrencyDollarIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="flex items-center gap-1.5 text-xs truncate">
+                  <span className="font-bold text-emerald-950 dark:text-emerald-200">
+                    1 USD = RD$ {currentExchangeRate.toFixed(2)}
+                  </span>
+                  <span className="text-gray-300 dark:text-zinc-600">•</span>
+                  <span className="font-mono text-emerald-700 dark:text-emerald-400 font-bold">
+                    ≈ ${totalUsd.toFixed(2)} USD
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0 ml-2">
+                <button
+                  type="button"
+                  onClick={handleOpenRateModal}
+                  className="px-2 py-0.5 bg-white dark:bg-zinc-800 hover:bg-emerald-100 dark:hover:bg-zinc-700 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Ajustar tasa de cambio oficial"
+                >
+                  <PencilSquareIcon className="w-3 h-3" />
+                  <span>Ajustar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRateBannerMinimized(false);
+                    localStorage.setItem('brianna_rate_banner_minimized', 'false');
+                  }}
+                  className="p-1 text-gray-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-100/50 dark:hover:bg-zinc-800 rounded-md cursor-pointer transition-colors"
+                  title="Expandir información de tasa"
+                >
+                  <ChevronDownIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <CurrencyDollarIcon className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-emerald-950 dark:text-emerald-200 text-xs">
+                      Tasa: 1 USD = RD$ {currentExchangeRate.toFixed(2)}
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-200/70 dark:bg-emerald-800/60 text-emerald-900 dark:text-emerald-200 font-mono">
+                      Oficial
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium block truncate">
+                    Total a Cobrar: <strong className="font-mono font-black text-emerald-950 dark:text-white">$ {totalUsd.toFixed(2)} USD</strong> (RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2 })})
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                <button
+                  type="button"
+                  onClick={handleOpenRateModal}
+                  className="px-2.5 py-1.5 bg-white dark:bg-zinc-800 hover:bg-emerald-100 dark:hover:bg-zinc-700 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs shrink-0"
+                  title="Ajustar tasa de cambio oficial"
+                >
+                  <PencilSquareIcon className="w-3.5 h-3.5" />
+                  <span>Ajustar Tasa</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRateBannerMinimized(true);
+                    localStorage.setItem('brianna_rate_banner_minimized', 'true');
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-100/50 dark:hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors"
+                  title="Minimizar panel de tasa"
+                >
+                  <ChevronUpIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {rateToast && (
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{rateToast}</span>
+            </div>
+          )}
+
           {/* 1. TIPO DE FACTURACIÓN */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -1372,7 +1560,39 @@ const CheckoutModal = memo(({
           {/* 3. MÉTODO DE PAGO (Omitido en Cotización) */}
           {!isCotizacion && (
             <>
-              {/* 3. MÉTODO DE PAGO */}
+              {/* Moneda de Pago Selector */}
+              <div className="flex items-center justify-between bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 p-1 rounded-xl">
+                <span className="text-[10px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-wider pl-1.5">
+                  Moneda de Pago:
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaidCurrency('DOP')}
+                    className={`py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      paidCurrency === 'DOP'
+                        ? 'bg-white dark:bg-zinc-800 text-[#ED1C24] dark:text-red-400 shadow-2xs font-black'
+                        : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    RD$ (Pesos)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaidCurrency('USD')}
+                    className={`py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      paidCurrency === 'USD'
+                        ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-2xs font-black'
+                        : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <CurrencyDollarIcon className="w-3.5 h-3.5" />
+                    <span>USD (Dólares)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Método de Pago Botones */}
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
                   3. Método de Pago
@@ -1405,15 +1625,15 @@ const CheckoutModal = memo(({
                 </div>
               </div>
 
-              {/* 4. Efectivo: Amount & Quick Presets & Devuelta Grande y Céntrica */}
-              {paymentMethod === 'Efectivo' && (
+              {/* 4. Efectivo: Amount & Quick Presets & Devuelta */}
+              {paymentMethod === 'Efectivo' && paidCurrency === 'DOP' && (
                 <div className="space-y-2 pt-0.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                      Monto Recibido
+                      Monto Recibido (Pesos)
                     </span>
                     <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                      Total a pagar: <strong className="font-mono text-gray-900 dark:text-white">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                      Total: <strong className="font-mono text-gray-900 dark:text-white">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </span>
                   </div>
 
@@ -1471,6 +1691,93 @@ const CheckoutModal = memo(({
                       <span className="font-bold text-red-600 dark:text-red-400">Faltante por cobrar</span>
                       <span className="font-mono font-black text-red-600 dark:text-red-400 text-sm">
                         RD$ {(total - numReceived).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. Efectivo en Dólares (USD) */}
+              {paymentMethod === 'Efectivo' && paidCurrency === 'USD' && (
+                <div className="space-y-2 pt-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                      Dólares Recibidos (USD)
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
+                      Total: <strong className="font-mono text-emerald-600 dark:text-emerald-400">$ {totalUsd.toFixed(2)} USD</strong> (RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2 })})
+                    </span>
+                  </div>
+
+                  <div className="relative flex items-center bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl px-3.5 py-2.5 focus-within:ring-2 focus-within:ring-emerald-500/30">
+                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono select-none mr-2">
+                      US$
+                    </span>
+                    <input
+                      autoFocus
+                      type="number"
+                      step="any"
+                      value={amountReceivedUsd}
+                      onChange={e => setAmountReceivedUsd(e.target.value)}
+                      onFocus={e => e.target.select()}
+                      className="w-full bg-transparent text-lg font-black font-mono text-gray-900 dark:text-white outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder={totalUsd.toFixed(2)}
+                    />
+                  </div>
+
+                  {numReceivedUsd > 0 && (
+                    <div className="flex items-center justify-between px-2 text-[11px] text-gray-500 font-mono">
+                      <span>Equivalente recibido en Pesos:</span>
+                      <strong className="text-gray-900 dark:text-white">RD$ {equivalentDop.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </div>
+                  )}
+
+                  {/* Quick Cash Presets in USD */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setAmountReceivedUsd(totalUsd.toFixed(2))}
+                      className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer whitespace-nowrap"
+                    >
+                      Exacto ($ {totalUsd.toFixed(2)})
+                    </button>
+                    {([Math.ceil(totalUsd / 10) * 10, Math.ceil(totalUsd / 20) * 20, Math.ceil(totalUsd / 50) * 50, Math.ceil(totalUsd / 100) * 100])
+                      .filter((val, idx, arr) => val > totalUsd && arr.indexOf(val) === idx)
+                      .slice(0, 3)
+                      .map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setAmountReceivedUsd(String(val))}
+                          className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer whitespace-nowrap font-mono"
+                        >
+                          ${val} USD
+                        </button>
+                      ))}
+                  </div>
+
+                  {/* Devuelta / Cambio en USD y RD$ */}
+                  {numReceivedUsd > totalUsd && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-emerald-800 dark:text-emerald-300">Devuelta en Dólares:</span>
+                        <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-sm">
+                          $ {changeUsd.toFixed(2)} USD
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-200/60 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400">
+                        <span>O entregar en Pesos (RD$):</span>
+                        <span className="font-mono font-bold">
+                          RD$ {changeDopFromUsd.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {numReceivedUsd > 0 && numReceivedUsd < totalUsd && (
+                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-xl text-xs">
+                      <span className="font-bold text-red-600 dark:text-red-400">Faltante por cobrar</span>
+                      <span className="font-mono font-black text-red-600 dark:text-red-400 text-sm">
+                        $ {(totalUsd - numReceivedUsd).toFixed(2)} USD (RD$ {((totalUsd - numReceivedUsd) * currentExchangeRate).toLocaleString('es-DO', { minimumFractionDigits: 2 })})
                       </span>
                     </div>
                   )}
@@ -1672,6 +1979,95 @@ const CheckoutModal = memo(({
             </button>
           </div>
         </form>
+
+        {/* Modal de Ajuste Rápido de Tasa Oficial de Cambio */}
+        {isRateModalOpen && (
+          <div className="fixed inset-0 z-[60] bg-black/65 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white dark:bg-[#16171d] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-200/80 dark:border-zinc-800 p-5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <CurrencyDollarIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-gray-900 dark:text-white">Ajustar Tasa Oficial USD</h4>
+                    <p className="text-[10px] text-gray-400">Modificación exclusiva de Administrador</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRateModalOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-900 dark:hover:text-white cursor-pointer"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveRateQuick} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Nueva Tasa Oficial (RD$ por 1 USD):
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-xs font-mono font-black text-gray-400 select-none">RD$</span>
+                    <input
+                      autoFocus
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={tempRateInput}
+                      onChange={(e) => setTempRateInput(e.target.value)}
+                      placeholder="60.00"
+                      className="w-full pl-11 pr-3 py-2 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono font-black text-base border border-gray-300 dark:border-zinc-700 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {getActiveRole() !== 'Administrador' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
+                      <LockClosedIcon className="w-3.5 h-3.5" />
+                      <span>Clave Maestra de Administrador requerida:</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={ratePinInput}
+                      onChange={(e) => {
+                        setRatePinInput(e.target.value);
+                        setRatePinError('');
+                      }}
+                      placeholder="Ingrese clave maestra..."
+                      className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-sm border border-gray-300 dark:border-zinc-700 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                )}
+
+                {ratePinError && (
+                  <p className="text-[11px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <ExclamationTriangleIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{ratePinError}</span>
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsRateModalOpen(false)}
+                    className="py-2 px-3 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                  >
+                    Guardar Tasa
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1720,6 +2116,7 @@ export default function POS() {
   const [activeQuotationsCount, setActiveQuotationsCount] = useState<number>(() => getActiveQuotationsCount());
   const [activeQuotationId, setActiveQuotationId] = useState<string | null>(null);
   const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(activeRegister));
+  const [posExchangeRate, setPosExchangeRate] = useState<number>(getExchangeRate);
 
   useEffect(() => {
     const handleUserUpdate = () => {
@@ -1736,18 +2133,25 @@ export default function POS() {
         setIsOpenShiftModalOpen(true);
       }
     };
+    const handleExchangeRateUpdate = (e: any) => {
+      setPosExchangeRate(e.detail?.rate || getExchangeRate());
+    };
 
     window.addEventListener('brianna_role_updated', handleUserUpdate);
     window.addEventListener('brianna_user_updated', handleUserUpdate);
     window.addEventListener('brianna_quotations_updated', handleQuotationsUpdate);
     window.addEventListener('brianna_shift_updated', handleShiftUpdate);
     window.addEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+    window.addEventListener(EXCHANGE_RATE_EVENT, handleExchangeRateUpdate);
+    window.addEventListener('storage', handleExchangeRateUpdate);
     return () => {
       window.removeEventListener('brianna_role_updated', handleUserUpdate);
       window.removeEventListener('brianna_user_updated', handleUserUpdate);
       window.removeEventListener('brianna_quotations_updated', handleQuotationsUpdate);
       window.removeEventListener('brianna_shift_updated', handleShiftUpdate);
       window.removeEventListener('brianna_open_shift_requested', handleOpenShiftRequested);
+      window.removeEventListener(EXCHANGE_RATE_EVENT, handleExchangeRateUpdate);
+      window.removeEventListener('storage', handleExchangeRateUpdate);
     };
   }, [activeRegister]);
 
@@ -2081,6 +2485,11 @@ export default function POS() {
     bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
+    paidCurrency?: 'DOP' | 'USD';
+    exchangeRate?: number;
+    receivedAmountUsd?: number;
+    changeAmountUsd?: number;
+    totalUsd?: number;
   }>({});
   const [lastCompletedSale, setLastCompletedSale] = useState<{
     invoiceNumber: string;
@@ -2104,7 +2513,12 @@ export default function POS() {
       bankAccountId?: string;
       bankAccountName?: string;
       creditDays?: number; 
-      dueDate?: string 
+      dueDate?: string;
+      paidCurrency?: 'DOP' | 'USD';
+      exchangeRate?: number;
+      receivedAmountUsd?: number;
+      changeAmountUsd?: number;
+      totalUsd?: number;
     };
     lastEcfData: ElectronicInvoiceResponse | null;
     date: Date;
@@ -2280,6 +2694,10 @@ export default function POS() {
     bankAccountName?: string;
     creditDays?: number;
     dueDate?: string;
+    paidCurrency?: 'DOP' | 'USD';
+    exchangeRate?: number;
+    amountReceivedUsd?: string;
+    changeUsd?: number;
   }) => {
     if (isTransmitting) return;
 
@@ -2294,7 +2712,11 @@ export default function POS() {
       bankAccountId,
       bankAccountName,
       creditDays, 
-      dueDate 
+      dueDate,
+      paidCurrency = 'DOP',
+      exchangeRate = getExchangeRate(),
+      amountReceivedUsd,
+      changeUsd
     } = saleParams;
     setBillingMode(billingMode);
     setElectronicDocType(electronicDocType);
@@ -2303,6 +2725,9 @@ export default function POS() {
 
     const numRec = parseFloat(amountReceived) || total;
     const chg = (paymentMethod === 'Efectivo' && numRec > total) ? (numRec - total) : 0;
+    const numRecUsd = amountReceivedUsd ? parseFloat(amountReceivedUsd) : undefined;
+    const totalUsdVal = total / (exchangeRate || 60);
+
     setLastPaymentInfo({
       receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
       changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
@@ -2311,6 +2736,11 @@ export default function POS() {
       bankAccountName: bankAccountName || undefined,
       creditDays: paymentMethod === 'Crédito' ? creditDays : undefined,
       dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
+      paidCurrency,
+      exchangeRate,
+      receivedAmountUsd: numRecUsd,
+      changeAmountUsd: changeUsd,
+      totalUsd: totalUsdVal,
     });
 
     try {
@@ -2466,6 +2896,11 @@ export default function POS() {
           bankAccountName: bankAccountName || undefined,
           creditDays: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
           dueDate: paymentMethod === 'Crédito' ? dueDate : undefined,
+          paidCurrency,
+          exchangeRate,
+          receivedAmountUsd: numRecUsd,
+          changeAmountUsd: changeUsd,
+          totalUsd: totalUsdVal,
         },
         lastEcfData: ecfRes || (internalDocType === 'CT' ? {
           success: true,
@@ -3464,14 +3899,27 @@ export default function POS() {
                 <span className="font-black text-gray-900 dark:text-white font-mono">RD$ {tax.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
-            <div className="flex justify-between items-baseline pt-3 sm:pt-4 border-t border-gray-200 dark:border-zinc-700">
+            <div className="flex justify-between items-center pt-3 sm:pt-4 border-t border-gray-200 dark:border-zinc-700">
               <div className="flex flex-col">
                 <span className="text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-wider">Total Factura</span>
                 <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium">Impuestos incluidos</span>
               </div>
-              <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${total > 0 ? 'text-[#ED1C24]' : 'text-gray-900 dark:text-white'}`}>
-                RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
+              <div className="flex flex-col items-end">
+                <div className={`flex items-baseline whitespace-nowrap ${total > 0 ? 'text-[#ED1C24]' : 'text-gray-900 dark:text-white'}`}>
+                  <span className="text-xs sm:text-sm font-black font-mono mr-1.5 opacity-80 select-none">RD$</span>
+                  <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight">
+                    {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {total > 0 && (
+                  <div className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70 shadow-2xs">
+                    <CurrencyDollarIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                    <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                      {(total / (posExchangeRate || 60)).toFixed(2)} <span className="text-[10px] font-bold opacity-80">USD</span>
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
@@ -3505,7 +3953,10 @@ export default function POS() {
               </div>
               <div>
                 <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider block">Total Factura</span>
-                <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-[10px] font-bold text-emerald-400 dark:text-emerald-600 font-mono">≈ ${(total / (posExchangeRate || 60)).toFixed(2)} USD</span>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -3644,6 +4095,13 @@ export default function POS() {
                 <div className="text-sm font-bold text-gray-800 dark:text-zinc-200 text-center">
                   Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod === 'Crédito' ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)` : (lastCompletedSale?.paymentMethod || paymentMethod)}
                 </div>
+                {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' && (
+                  <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 flex-wrap justify-center">
+                    <span>💵 Pagado en USD:</span>
+                    <span>${(lastCompletedSale.lastPaymentInfo.totalUsd || ((lastCompletedSale?.total ?? total) / (lastCompletedSale.lastPaymentInfo.exchangeRate || 60))).toFixed(2)} USD</span>
+                    <span className="text-[10px] text-gray-500 font-normal">(Tasa: RD$ {lastCompletedSale.lastPaymentInfo.exchangeRate?.toFixed(2)})</span>
+                  </div>
+                )}
                 {lastCompletedSale?.paymentMethod === 'Crédito' && lastCompletedSale?.dueDate && (
                   <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
                     📅 Vence el: {lastCompletedSale.dueDate}
@@ -3840,6 +4298,11 @@ export default function POS() {
           qrCodeUrl={lastCompletedSale?.lastEcfData?.qrCodeUrl || lastEcfData?.qrCodeUrl}
           fontSize={receiptFontSize}
           isPrintOnly={true}
+          paidCurrency={lastCompletedSale?.lastPaymentInfo?.paidCurrency ?? lastPaymentInfo?.paidCurrency}
+          exchangeRate={lastCompletedSale?.lastPaymentInfo?.exchangeRate ?? lastPaymentInfo?.exchangeRate}
+          receivedAmountUsd={lastCompletedSale?.lastPaymentInfo?.receivedAmountUsd ?? lastPaymentInfo?.receivedAmountUsd}
+          changeAmountUsd={lastCompletedSale?.lastPaymentInfo?.changeAmountUsd ?? lastPaymentInfo?.changeAmountUsd}
+          totalUsd={lastCompletedSale?.lastPaymentInfo?.totalUsd ?? lastPaymentInfo?.totalUsd}
         />,
         document.body
       )}
@@ -3894,6 +4357,11 @@ export default function POS() {
           qrCodeUrl={lastCompletedSale?.lastEcfData?.qrCodeUrl || lastEcfData?.qrCodeUrl}
           trackId={lastCompletedSale?.lastEcfData?.trackId || lastEcfData?.trackId}
           isPrintOnly={true}
+          paidCurrency={lastCompletedSale?.lastPaymentInfo?.paidCurrency ?? lastPaymentInfo?.paidCurrency}
+          exchangeRate={lastCompletedSale?.lastPaymentInfo?.exchangeRate ?? lastPaymentInfo?.exchangeRate}
+          receivedAmountUsd={lastCompletedSale?.lastPaymentInfo?.receivedAmountUsd ?? lastPaymentInfo?.receivedAmountUsd}
+          changeAmountUsd={lastCompletedSale?.lastPaymentInfo?.changeAmountUsd ?? lastPaymentInfo?.changeAmountUsd}
+          totalUsd={lastCompletedSale?.lastPaymentInfo?.totalUsd ?? lastPaymentInfo?.totalUsd}
         />,
         document.body
       )}

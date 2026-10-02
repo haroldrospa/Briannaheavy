@@ -41,10 +41,19 @@ export interface ModernReceiptProps {
   paperWidth?: ReceiptPaperWidth;
   className?: string;
   isPrintOnly?: boolean;
+  paidCurrency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+  receivedAmountUsd?: number;
+  changeAmountUsd?: number;
+  totalUsd?: number;
 }
 
 const formatRD = (amount: number = 0): string => {
   return `RD$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const formatUSD = (amount: number = 0): string => {
+  return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 };
 
 export default function ModernReceipt({
@@ -73,6 +82,11 @@ export default function ModernReceipt({
   paperWidth,
   className = '',
   isPrintOnly = false,
+  paidCurrency = 'DOP',
+  exchangeRate,
+  receivedAmountUsd,
+  changeAmountUsd,
+  totalUsd,
 }: ModernReceiptProps) {
   const activeConfig: InvoiceCustomConfig = {
     ...getInvoiceCustomConfig(),
@@ -259,31 +273,75 @@ export default function ModernReceipt({
 
         {/* Clean Highlighted Total Block without dark background */}
         <div 
-          className="bg-white border-2 border-black rounded-xl px-3 py-2.5 flex justify-between items-center"
+          className="bg-white border-2 border-black rounded-xl px-3 py-2.5 flex flex-col gap-1"
         >
-          <span className="font-black uppercase tracking-wider text-black" style={{ fontSize: '0.85em' }}>
-            {isCotizacion ? 'TOTAL COTIZACIÓN' : 'TOTAL FACTURA'}
-          </span>
-          <span className="font-mono font-black tracking-tight text-black" style={{ fontSize: '1.25em' }}>
-            {formatRD(total)}
-          </span>
+          <div className="flex justify-between items-center">
+            <span className="font-black uppercase tracking-wider text-black" style={{ fontSize: '0.85em' }}>
+              {isCotizacion ? 'TOTAL COTIZACIÓN' : 'TOTAL FACTURA'}
+            </span>
+            <span className="font-mono font-black tracking-tight text-black" style={{ fontSize: '1.25em' }}>
+              {formatRD(total)}
+            </span>
+          </div>
+
+          {(paidCurrency === 'USD' || (exchangeRate && exchangeRate > 0)) && (
+            <div className="flex justify-between items-center pt-1 border-t border-zinc-200 text-zinc-600 font-mono" style={{ fontSize: '0.8em' }}>
+              <span>Equiv. USD (Tasa {exchangeRate ? `RD$ ${exchangeRate.toFixed(2)}` : ''}):</span>
+              <strong className="text-black font-black">
+                {formatUSD(totalUsd !== undefined ? totalUsd : (exchangeRate ? total / exchangeRate : 0))}
+              </strong>
+            </div>
+          )}
         </div>
 
         {!isCotizacion && paymentMethod === 'Efectivo' && receivedAmount !== undefined && receivedAmount > 0 && (
-          <div className="bg-white rounded-xl p-2 border border-zinc-300 space-y-0.5 text-zinc-700" style={{ fontSize: '0.8em' }}>
-            <div className="flex justify-between">
-              <span>Efectivo Recibido:</span>
-              <span className="font-mono font-bold text-black">{formatRD(receivedAmount)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-black">
-              <span>Cambio / Devuelta:</span>
-              <span className="font-mono font-black">{formatRD(changeAmount || 0)}</span>
-            </div>
+          <div className="bg-white rounded-xl p-2 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.8em' }}>
+            {paidCurrency === 'USD' ? (
+              <>
+                <div className="flex justify-between">
+                  <span>Moneda de Pago:</span>
+                  <span className="font-black text-black">Dólares (USD)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Dólares Recibidos:</span>
+                  <span className="font-mono font-bold text-black">{formatUSD(receivedAmountUsd || 0)}</span>
+                </div>
+                <div className="flex justify-between text-zinc-500 text-[0.9em]">
+                  <span>Equivalente en Pesos:</span>
+                  <span className="font-mono">{formatRD(receivedAmount)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-black pt-0.5 border-t border-zinc-200">
+                  <span>Devuelta / Cambio:</span>
+                  <span className="font-mono font-black">
+                    {changeAmountUsd !== undefined && changeAmountUsd > 0 
+                      ? `${formatUSD(changeAmountUsd)} (${formatRD(changeAmount || 0)})`
+                      : formatRD(changeAmount || 0)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span>Efectivo Recibido:</span>
+                  <span className="font-mono font-bold text-black">{formatRD(receivedAmount)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-black">
+                  <span>Cambio / Devuelta:</span>
+                  <span className="font-mono font-black">{formatRD(changeAmount || 0)}</span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {paymentMethod === 'Transferencia' && (bankAccountName || transferReference) && (
+        {paymentMethod === 'Transferencia' && (bankAccountName || transferReference || paidCurrency === 'USD') && (
           <div className="bg-white rounded-xl p-2 border border-zinc-300 flex flex-col gap-1 text-zinc-700" style={{ fontSize: '0.8em' }}>
+            {paidCurrency === 'USD' && (
+              <div className="flex justify-between">
+                <span>Moneda de Pago:</span>
+                <span className="font-black text-black">Dólares (USD)</span>
+              </div>
+            )}
             {bankAccountName && (
               <div className="flex justify-between">
                 <span>Banco Destino:</span>

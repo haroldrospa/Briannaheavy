@@ -40,6 +40,11 @@ export interface FinancingPaymentReceipt {
   paymentNotes?: string;
   qrUrl: string;
   createdAt: string;
+  paidCurrency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+  amountReceivedUsd?: number;
+  changeGivenUsd?: number;
+  totalPaidUsd?: number;
 }
 
 const STORAGE_KEY = 'brianna_financing_receipts';

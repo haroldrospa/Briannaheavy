@@ -54,6 +54,18 @@ export const syncPermissionsWithSupabase = async (permissions: RolePermissionsMa
   await saveRemoteSetting('role_permissions', permissions);
 };
 
+export const syncExchangeRateWithSupabase = async (config: any): Promise<void> => {
+  try {
+    localStorage.setItem('brianna_currency_exchange_rate', JSON.stringify(config));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_exchange_rate_updated', { detail: config }));
+    }
+    await saveRemoteSetting('currency_exchange_rate', config);
+  } catch (e) {
+    console.warn('Error syncing exchange rate with Supabase:', e);
+  }
+};
+
 /**
  * Trae todas las configuraciones globales desde la tabla `system_settings` en una sola consulta
  * y actualiza los almacenamientos y eventos para que toda la aplicación refleje los datos de la BD.
@@ -172,6 +184,15 @@ export const fetchAllSystemSettings = async (): Promise<Record<string, any>> => 
           localStorage.setItem('brianna_financing_receipts', JSON.stringify(merged));
           if (typeof window !== 'undefined' && hasNew) {
             window.dispatchEvent(new Event('brianna_receipts_updated'));
+          }
+        } catch {}
+      }
+
+      if (row.key === 'currency_exchange_rate' && row.value) {
+        try {
+          localStorage.setItem('brianna_currency_exchange_rate', JSON.stringify(row.value));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_exchange_rate_updated', { detail: row.value }));
           }
         } catch {}
       }

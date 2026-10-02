@@ -35,6 +35,11 @@ export interface LetterInvoiceProps {
   trackId?: string;
   className?: string;
   isPrintOnly?: boolean;
+  paidCurrency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+  receivedAmountUsd?: number;
+  changeAmountUsd?: number;
+  totalUsd?: number;
 }
 
 const formatRD = (amount: number = 0): string => {
@@ -67,6 +72,11 @@ export default function LetterInvoice({
   trackId,
   className = '',
   isPrintOnly = false,
+  paidCurrency = 'DOP',
+  exchangeRate,
+  receivedAmountUsd,
+  changeAmountUsd,
+  totalUsd,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
   const isCotizacion = (ncf && ncf.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
@@ -240,18 +250,58 @@ export default function LetterInvoice({
               <span className="font-mono font-bold">{transferReference}</span>
             </p>
           )}
-          {!isCotizacion && receivedAmount !== undefined && (
-            <p className="text-zinc-700">
-              <strong className="text-zinc-900 font-semibold">Efectivo Recibido:</strong>{' '}
-              <span className="font-mono">{formatRD(receivedAmount)}</span>
-            </p>
-          )}
-          {!isCotizacion && changeAmount !== undefined && changeAmount > 0 && (
-            <p className="text-zinc-700">
-              <strong className="text-zinc-900 font-semibold">Cambio Devuelto:</strong>{' '}
-              <span className="font-mono">{formatRD(changeAmount)}</span>
-            </p>
-          )}
+          {!isCotizacion && (paidCurrency === 'USD' ? (
+            <>
+              <p className="text-zinc-700">
+                <strong className="text-zinc-900 font-semibold">Moneda de Pago:</strong>{' '}
+                <span className="font-bold text-emerald-700">Dólares Estadounidenses (USD)</span>
+              </p>
+              {exchangeRate && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Tasa de Cambio:</strong>{' '}
+                  <span className="font-mono font-semibold">1 USD = RD$ {exchangeRate.toFixed(2)}</span>
+                </p>
+              )}
+              {totalUsd !== undefined && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Total en USD:</strong>{' '}
+                  <span className="font-mono font-bold text-emerald-800">$ {totalUsd.toFixed(2)} USD</span>
+                </p>
+              )}
+              {receivedAmountUsd !== undefined && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Efectivo Recibido (USD):</strong>{' '}
+                  <span className="font-mono font-bold">$ {receivedAmountUsd.toFixed(2)} USD</span>
+                </p>
+              )}
+              {changeAmountUsd !== undefined && changeAmountUsd > 0 && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Cambio Devuelto:</strong>{' '}
+                  <span className="font-mono font-bold text-emerald-700">$ {changeAmountUsd.toFixed(2)} USD</span>
+                  {exchangeRate && (
+                    <span className="text-xs text-zinc-500 font-mono ml-1">
+                      (≈ {formatRD(changeAmountUsd * exchangeRate)})
+                    </span>
+                  )}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {receivedAmount !== undefined && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Efectivo Recibido:</strong>{' '}
+                  <span className="font-mono">{formatRD(receivedAmount)}</span>
+                </p>
+              )}
+              {changeAmount !== undefined && changeAmount > 0 && (
+                <p className="text-zinc-700">
+                  <strong className="text-zinc-900 font-semibold">Cambio Devuelto:</strong>{' '}
+                  <span className="font-mono">{formatRD(changeAmount)}</span>
+                </p>
+              )}
+            </>
+          ))}
           {isCotizacion && (
             <p className="text-zinc-700 font-medium pt-1">
               <strong>Estado:</strong> Presupuesto Informativo
@@ -383,9 +433,14 @@ export default function LetterInvoice({
               <span className="text-lg font-black font-mono tracking-tight text-white">
                 {formatRD(total)}
               </span>
+              {paidCurrency === 'USD' && totalUsd !== undefined && (
+                <span className="text-xs font-bold text-emerald-400 font-mono block mt-0.5">
+                  ≈ $ {totalUsd.toFixed(2)} USD
+                </span>
+              )}
             </div>
             <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
-              DOP
+              {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
             </span>
           </div>
         </div>
