@@ -71,17 +71,17 @@ export const saveExchangeRate = (
   }
 
   const role = getActiveRole();
-  const isAdmin = role === 'Administrador';
+  const isAuthorized = role === 'Administrador' || role === 'Oficina';
   const isPinValid = masterPinOverride ? verifyAdminMasterKey(masterPinOverride.trim()) : false;
 
-  if (!isAdmin && !isPinValid) {
+  if (!isAuthorized && !isPinValid) {
     return { 
       success: false, 
-      message: 'Acceso denegado: Solo el Administrador puede modificar la tasa oficial de cambio.' 
+      message: 'Acceso denegado: Solo el Administrador o personal de Oficina pueden modificar la tasa oficial de cambio.' 
     };
   }
 
-  const effectiveUser = updatedBy || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Administrador';
+  const effectiveUser = updatedBy || (typeof window !== 'undefined' ? (localStorage.getItem('brianna_user_name') || (role === 'Oficina' ? 'Oficina' : 'Administrador')) : '') || 'Oficina';
 
   const config: ExchangeRateConfig = {
     rate: parsedRate,

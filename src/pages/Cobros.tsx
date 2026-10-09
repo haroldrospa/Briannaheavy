@@ -22,6 +22,7 @@ import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen } from '../services/shiftsService';
 import { getActiveRole } from '../utils/rolePermissions';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
+import { getExchangeRate, EXCHANGE_RATE_EVENT } from '../utils/exchangeRate';
 import logo from '../assets/logo.png';
 
 const COBROS_REGISTER = 'Caja Cobros & Repuestos';
@@ -49,6 +50,9 @@ export interface ReceivableItem {
     method: string;
     reference?: string;
     cashier?: string;
+    currency?: 'DOP' | 'USD';
+    amountUsd?: number;
+    exchangeRate?: number;
   }>;
 }
 
@@ -117,11 +121,28 @@ export default function Cobros() {
   // Payment Modal State
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableItem | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentCurrency, setPaymentCurrency] = useState<'DOP' | 'USD'>('DOP');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [paymentAmountUsd, setPaymentAmountUsd] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Cheque' | 'Tarjeta'>('Efectivo');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   
+  // Official Exchange Rate State
+  const [exchangeRate, setExchangeRate] = useState<number>(() => getExchangeRate());
+
+  useEffect(() => {
+    const handleRateChange = (e: any) => {
+      if (e?.detail?.rate) {
+        setExchangeRate(Number(e.detail.rate));
+      } else {
+        setExchangeRate(getExchangeRate());
+      }
+    };
+    window.addEventListener(EXCHANGE_RATE_EVENT, handleRateChange);
+    return () => window.removeEventListener(EXCHANGE_RATE_EVENT, handleRateChange);
+  }, []);
+
   // Edit Receivable Modal State
   const [editingReceivable, setEditingReceivable] = useState<ReceivableItem | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -150,6 +171,9 @@ export default function Cobros() {
     ncf: string;
     date: string;
     amountPaid: number;
+    amountPaidUsd?: number;
+    paidCurrency?: 'DOP' | 'USD';
+    exchangeRate?: number;
     previousBalance: number;
     newBalance: number;
     method: string;
@@ -211,6 +235,9 @@ export default function Cobros() {
       method: string;
       reference?: string;
       cashier?: string;
+      currency?: 'DOP' | 'USD';
+      amountUsd?: number;
+      exchangeRate?: number;
     }> = [];
 
     associatedCustomerInvoices.forEach(inv => {
@@ -225,6 +252,9 @@ export default function Cobros() {
             method: p.method,
             reference: p.reference,
             cashier: p.cashier,
+            currency: p.currency,
+            amountUsd: p.amountUsd,
+            exchangeRate: p.exchangeRate
           });
         });
       }
@@ -359,8 +389,11 @@ export default function Cobros() {
     if (!requireOpenShift('Debes abrir un turno de caja antes de registrar un cobro de facturas a crédito.')) {
       return;
     }
+    const currentRate = getExchangeRate();
     setSelectedReceivable(item);
+    setPaymentCurrency('DOP');
     setPaymentAmount(item.balance.toFixed(2));
+    setPaymentAmountUsd((item.balance / (currentRate || 60)).toFixed(2));
     setPaymentMethod('Efectivo');
     setPaymentReference('');
     setIsPaymentModalOpen(true);
@@ -374,8 +407,21 @@ export default function Cobros() {
       return;
     }
 
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) return;
+    let amount = 0;
+    let amountUsd: number | undefined = undefined;
+
+    if (paymentCurrency === 'USD') {
+      const parsedUsd = parseFloat(paymentAmountUsd);
+      if (isNaN(parsedUsd) || parsedUsd <= 0) return;
+      amountUsd = parsedUsd;
+      const rateToUse = exchangeRate > 0 ? exchangeRate : 60;
+      const rawDop = Math.round((parsedUsd * rateToUse) * 100) / 100;
+      amount = Math.min(selectedReceivable.balance, rawDop);
+    } else {
+      const parsedDop = parseFloat(paymentAmount);
+      if (isNaN(parsedDop) || parsedDop <= 0) return;
+      amount = parsedDop;
+    }
 
     const previousBalance = selectedReceivable.balance;
     const newBalance = Math.max(0, previousBalance - amount);
@@ -392,13 +438,18 @@ export default function Cobros() {
       ? `${new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0).toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })} a las ${timeStr}`
       : now.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+    const fullMethodLabel = paymentCurrency === 'USD' ? `${paymentMethod} (USD)` : paymentMethod;
+
     const newPaymentRecord = {
       id: `pay_${Date.now()}`,
       date: paidIsoDate,
       amount,
-      method: paymentMethod,
+      method: fullMethodLabel,
       reference: paymentReference || undefined,
-      cashier: cashierName
+      cashier: cashierName,
+      currency: paymentCurrency,
+      amountUsd,
+      exchangeRate: paymentCurrency === 'USD' ? (exchangeRate || 60) : undefined
     };
 
     const updatedHistory = [...(selectedReceivable.paymentsHistory || []), newPaymentRecord];
@@ -442,9 +493,12 @@ export default function Cobros() {
       ncf: selectedReceivable.ncf,
       date: formattedPaymentDate,
       amountPaid: amount,
+      amountPaidUsd,
+      paidCurrency: paymentCurrency,
+      exchangeRate: paymentCurrency === 'USD' ? (exchangeRate || 60) : undefined,
       previousBalance,
       newBalance,
-      method: paymentMethod,
+      method: fullMethodLabel,
       reference: paymentReference,
       cashier: cashierName
     });
@@ -761,9 +815,9 @@ export default function Cobros() {
                             e.stopPropagation();
                             handleOpenPayment(item);
                           }}
-                          className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs cursor-pointer"
+                          className="px-3 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs cursor-pointer"
                         >
-                          Abonar
+                          Pagar / Abonar
                         </button>
                       ) : (
                         <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">✓ Pagado</span>
@@ -864,7 +918,7 @@ export default function Cobros() {
                               }}
                               className="px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer inline-flex items-center gap-1"
                             >
-                              <span>Abonar</span>
+                              <span>Pagar / Abonar</span>
                             </button>
                           ) : (
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs">✓ Saldado</span>
@@ -914,40 +968,160 @@ export default function Cobros() {
             </div>
 
             <form onSubmit={handleRecordPayment} className="space-y-4">
-              {/* Balance Card */}
-              <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-gray-400 block">Balance Pendiente</span>
-                  <span className="text-xl font-black font-mono text-[#ED1C24]">
-                    RD$ {selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPaymentAmount(selectedReceivable.balance.toFixed(2))}
-                  className="px-2.5 py-1 text-[11px] font-black bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-lg hover:border-[#ED1C24] cursor-pointer"
-                >
-                  Pagar Todo
-                </button>
-              </div>
-
-              {/* Monto */}
+              {/* Selector de Moneda */}
               <div>
                 <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
-                  Monto a Abonar / Cobrar (RD$)
+                  Moneda de Cobro
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max={selectedReceivable.balance}
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  required
-                  placeholder="0.00"
-                  className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
-                />
+                <div className="grid grid-cols-2 gap-2 p-1 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentCurrency('DOP');
+                      setPaymentAmount(selectedReceivable.balance.toFixed(2));
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      paymentCurrency === 'DOP'
+                        ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200 dark:border-zinc-700'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>🇩🇴 RD$ (Pesos)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentCurrency('USD');
+                      const rate = exchangeRate > 0 ? exchangeRate : 60;
+                      setPaymentAmountUsd((selectedReceivable.balance / rate).toFixed(2));
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      paymentCurrency === 'USD'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>🇺🇸 USD (Dólares)</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Balance Card */}
+              {paymentCurrency === 'DOP' ? (
+                <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-400 block">Balance Pendiente</span>
+                    <span className="text-xl font-black font-mono text-[#ED1C24]">
+                      RD$ {selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-medium block mt-0.5">
+                      ≈ ${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD (Tasa: {exchangeRate.toFixed(2)})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(selectedReceivable.balance.toFixed(2))}
+                    className="px-2.5 py-1 text-[11px] font-black bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-lg hover:border-[#ED1C24] cursor-pointer"
+                  >
+                    Pagar Todo
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 dark:text-emerald-400">
+                        Balance Pendiente en USD
+                      </span>
+                      <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[9px] font-mono font-bold rounded">
+                        Tasa: RD$ {exchangeRate.toFixed(2)}
+                      </span>
+                    </div>
+                    <span className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                      $ {(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-medium block mt-0.5">
+                      Equivalente: RD$ {selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rate = exchangeRate > 0 ? exchangeRate : 60;
+                      setPaymentAmountUsd((selectedReceivable.balance / rate).toFixed(2));
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-black bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 cursor-pointer"
+                  >
+                    Pagar Todo USD
+                  </button>
+                </div>
+              )}
+
+              {/* Monto */}
+              {paymentCurrency === 'DOP' ? (
+                <div>
+                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                    Monto a Abonar / Cobrar (RD$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={selectedReceivable.balance}
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    required
+                    placeholder="0.00"
+                    className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight">
+                      Monto a Cobrar / Abonar en Dólares ($ USD)
+                    </label>
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                      Total: ${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center font-black text-emerald-600 text-base">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={paymentAmountUsd}
+                      onChange={(e) => setPaymentAmountUsd(e.target.value)}
+                      required
+                      placeholder="0.00"
+                      className="block w-full pl-8 pr-3.5 py-2.5 bg-emerald-50/30 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-emerald-300 dark:border-emerald-800/60 focus:ring-2 focus:ring-emerald-500 transition-all"
+                    />
+                  </div>
+
+                  {parseFloat(paymentAmountUsd) > 0 && (
+                    <div className="mt-2 p-2.5 bg-gray-50 dark:bg-zinc-800/60 rounded-xl border border-gray-200 dark:border-zinc-700 text-xs space-y-1">
+                      <div className="flex items-center justify-between font-bold text-gray-700 dark:text-zinc-300">
+                        <span>Abono Aplicado a la Factura:</span>
+                        <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
+                          RD$ {Math.min(selectedReceivable.balance, parseFloat(paymentAmountUsd) * (exchangeRate || 60)).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      {parseFloat(paymentAmountUsd) * (exchangeRate || 60) > selectedReceivable.balance + 0.01 && (
+                        <div className="flex items-center justify-between text-[11px] font-bold text-amber-600 dark:text-amber-400 border-t border-gray-200/60 dark:border-zinc-700 pt-1">
+                          <span>Devuelta al Cliente:</span>
+                          <span className="font-mono font-black">
+                            ${(parseFloat(paymentAmountUsd) - (selectedReceivable.balance / (exchangeRate || 60))).toFixed(2)} USD
+                            {' '}(RD$ {((parseFloat(paymentAmountUsd) * (exchangeRate || 60)) - selectedReceivable.balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })})
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Fecha en que se Realizó el Pago */}
               <div>
@@ -1061,9 +1235,16 @@ export default function Cobros() {
               </div>
               <div className="flex justify-between border-t border-gray-200 dark:border-zinc-700 pt-2 font-bold">
                 <span className="text-emerald-600 dark:text-emerald-400">Monto Cobrado:</span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">
-                  RD$ {lastPaymentReceipt.amountPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                </span>
+                <div className="text-right">
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black block">
+                    RD$ {lastPaymentReceipt.amountPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                  {lastPaymentReceipt.paidCurrency === 'USD' && lastPaymentReceipt.amountPaidUsd && (
+                    <span className="text-[10.5px] font-mono text-emerald-700 dark:text-emerald-300 block font-bold">
+                      ${lastPaymentReceipt.amountPaidUsd.toFixed(2)} USD (Tasa: {lastPaymentReceipt.exchangeRate?.toFixed(2)})
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>Nuevo Saldo:</span>
@@ -1556,15 +1737,6 @@ export default function Cobros() {
                 <div className="flex items-center gap-2 self-end sm:self-center">
                   <button
                     type="button"
-                    onClick={handlePrintStatement}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs transition-all cursor-pointer"
-                    title="Imprimir Estado de Cuenta Oficial del Cliente"
-                  >
-                    <PrinterIcon className="w-4 h-4" />
-                    <span>Imprimir Estado de Cuenta</span>
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setIsDetailModalOpen(false)}
                     className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   >
@@ -1715,8 +1887,13 @@ export default function Cobros() {
                                   </td>
                                   <td className="px-4 py-2.5 font-mono text-gray-500">{p.reference || 'N/A'}</td>
                                   <td className="px-4 py-2.5 text-gray-500">{p.cashier || 'Cajero POS'}</td>
-                                  <td className="px-4 py-2.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
-                                    RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  <td className="px-4 py-2.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                    <span className="font-black block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                                    {p.amountUsd && (
+                                      <span className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 block font-bold">
+                                        ${Number(p.amountUsd).toFixed(2)} USD
+                                      </span>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
@@ -1891,8 +2068,13 @@ export default function Cobros() {
                                     </td>
                                     <td className="px-4 py-2 font-mono text-gray-500 text-[11px]">{p.reference || 'N/A'}</td>
                                     <td className="px-4 py-2 text-gray-500">{p.cashier || 'Caja'}</td>
-                                    <td className="px-4 py-2 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
-                                      RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                    <td className="px-4 py-2 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                      <span className="font-black block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                                      {p.amountUsd && (
+                                        <span className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 block font-bold">
+                                          ${Number(p.amountUsd).toFixed(2)} USD
+                                        </span>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -1917,38 +2099,40 @@ export default function Cobros() {
                     <PrinterIcon className="w-4 h-4" />
                     <span>Imprimir Estado de Cuenta</span>
                   </button>
-                  {activeDetailTab === 'details' ? (
-                    <button
-                      type="button"
-                      onClick={() => setActiveDetailTab('statement')}
-                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-full text-xs font-bold transition-all cursor-pointer"
-                    >
-                      Ver Estado de Cuenta Consolidado
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setActiveDetailTab('details')}
-                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-full text-xs font-bold transition-all cursor-pointer"
-                    >
-                      Volver a Detalle de Factura
-                    </button>
-                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
-                  {selectedDetailItem.balance > 0 && (
+                  {selectedDetailItem.balance > 0 ? (
                     <button
                       type="button"
                       onClick={() => {
                         setIsDetailModalOpen(false);
                         handleOpenPayment(selectedDetailItem);
                       }}
-                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
                     >
                       <CurrencyDollarIcon className="w-4 h-4" />
-                      <span>Registrar Abono a esta Factura</span>
+                      <span>Pagar o Abonar</span>
                     </button>
+                  ) : associatedCustomerInvoices.some(inv => inv.balance > 0) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const invToPay = associatedCustomerInvoices.find(inv => inv.balance > 0);
+                        if (invToPay) {
+                          setIsDetailModalOpen(false);
+                          handleOpenPayment(invToPay);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <CurrencyDollarIcon className="w-4 h-4" />
+                      <span>Pagar o Abonar</span>
+                    </button>
+                  ) : (
+                    <span className="px-3.5 py-2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-black inline-flex items-center gap-1.5">
+                      ✓ Factura Saldada
+                    </span>
                   )}
                   <button
                     type="button"

@@ -55,7 +55,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     Bancos: { ver: true, crear: true, editar: true, eliminar: false },
     Reportes: { ver: true, crear: true, editar: true, eliminar: false },
     Usuarios: { ver: false, crear: false, editar: false, eliminar: false },
-    Configuración: { ver: false, crear: false, editar: false, eliminar: false },
+    Configuración: { ver: true, crear: false, editar: true, eliminar: false },
   },
   Repuestos: {
     Dashboard: { ver: false, crear: false, editar: false, eliminar: false },

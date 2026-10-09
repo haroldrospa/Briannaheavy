@@ -478,7 +478,7 @@ export default function Settings() {
     }
   };
 
-  const isExchangeAdmin = activeRole === 'Administrador' || isExchangeUnlockedByPin;
+  const isExchangeAdmin = activeRole === 'Administrador' || activeRole === 'Oficina' || isExchangeUnlockedByPin;
 
   const handleSaveExchangeRate = () => {
     const rateVal = parseFloat(exchangeRateInput);
@@ -1863,12 +1863,12 @@ export default function Settings() {
                           {isExchangeAdmin ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                               <ShieldCheckIcon className="w-3 h-3" />
-                              Admin Autorizado
+                              {activeRole === 'Oficina' ? 'Oficina Autorizada' : 'Admin Autorizado'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
                               <LockClosedIcon className="w-3 h-3" />
-                              Solo Administrador
+                              Solo Admin u Oficina
                             </span>
                           )}
                         </div>
@@ -1922,9 +1922,9 @@ export default function Settings() {
                     <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl flex items-start gap-2.5 text-amber-800 dark:text-amber-300 text-xs">
                       <LockClosedIcon className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
                       <div className="space-y-0.5">
-                        <p className="font-bold">Modificación restringida exclusivamente al Administrador:</p>
+                        <p className="font-bold">Modificación restringida a Administrador y Oficina:</p>
                         <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                          Solo los usuarios con rol de <strong>Administrador</strong> pueden modificar la tasa oficial de cambio de divisas del sistema. Si eres un supervisor con clave maestra, puedes autorizar la edición haciendo clic en el botón superior.
+                          Solo los usuarios con rol de <strong>Administrador</strong> o <strong>Oficina</strong> pueden modificar la tasa oficial de cambio de divisas del sistema. Si eres un cajero o dependiente con autorización especial, puedes autorizar la edición haciendo clic en el botón superior.
                         </p>
                       </div>
                     </div>
@@ -1956,7 +1956,7 @@ export default function Settings() {
                         />
                       </div>
                       <p className="text-[10px] text-gray-400 dark:text-zinc-500">
-                        {isExchangeAdmin ? 'Ingresa la tasa oficial del día en pesos dominicanos.' : 'Campo bloqueado para cajeros y personal de oficina.'}
+                        {isExchangeAdmin ? 'Ingresa la tasa oficial del día en pesos dominicanos.' : 'Campo bloqueado para cajeros y personal de repuestos.'}
                       </p>
                     </div>
 

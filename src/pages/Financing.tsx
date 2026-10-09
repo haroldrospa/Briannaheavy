@@ -1620,8 +1620,8 @@ export default function Financing() {
       return;
     }
     const role = getActiveRole();
-    const isAdmin = role === 'Administrador';
-    if (!isAdmin) {
+    const isAuthorized = role === 'Administrador' || role === 'Oficina';
+    if (!isAuthorized) {
       if (!financingRatePinInput.trim()) {
         setFinancingRatePinError('Ingrese la Clave Maestra de Administrador');
         return;
@@ -7339,7 +7339,7 @@ export default function Financing() {
                   </div>
                   <div>
                     <h4 className="text-sm font-black text-gray-900 dark:text-white">Ajustar Tasa Oficial USD</h4>
-                    <p className="text-[10px] text-gray-400">Modificación exclusiva de Administrador</p>
+                    <p className="text-[10px] text-gray-400">Modificación autorizada (Admin y Oficina)</p>
                   </div>
                 </div>
                 <button
@@ -7371,7 +7371,7 @@ export default function Financing() {
                   </div>
                 </div>
 
-                {getActiveRole() !== 'Administrador' && (
+                {getActiveRole() !== 'Administrador' && getActiveRole() !== 'Oficina' && (
                   <div>
                     <label className="block text-[11px] font-bold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
                       <LockClosedIcon className="w-3.5 h-3.5" />
