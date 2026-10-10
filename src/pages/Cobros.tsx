@@ -493,7 +493,7 @@ export default function Cobros() {
       ncf: selectedReceivable.ncf,
       date: formattedPaymentDate,
       amountPaid: amount,
-      amountPaidUsd,
+      amountPaidUsd: amountUsd,
       paidCurrency: paymentCurrency,
       exchangeRate: paymentCurrency === 'USD' ? (exchangeRate || 60) : undefined,
       previousBalance,
