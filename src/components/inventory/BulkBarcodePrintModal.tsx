@@ -28,18 +28,16 @@ export default function BulkBarcodePrintModal({
   onClose,
   onClearSelection 
 }: BulkBarcodePrintModalProps) {
-  if (!isOpen || !initialItems || initialItems.length === 0) return null;
-
   const config = getInvoiceCustomConfig();
   const companyName = config.companyName || 'BRIANNA HEAVY';
 
   // Local list of items so user can remove items from current batch
-  const [selectedItems, setSelectedItems] = useState<any[]>(initialItems);
+  const [selectedItems, setSelectedItems] = useState<any[]>(() => initialItems || []);
 
   // Initialize quantities dictionary with current stock (min 1)
   const [quantities, setQuantities] = useState<Record<string, number>>(() => {
     const initialMap: Record<string, number> = {};
-    initialItems.forEach(item => {
+    (initialItems || []).forEach(item => {
       const stockNum = parseInt(String(item.stock), 10);
       initialMap[String(item.id)] = stockNum > 0 ? stockNum : 1;
     });
@@ -142,6 +140,8 @@ export default function BulkBarcodePrintModal({
   };
 
   const currentPreviewItem = selectedItems[previewIndex] || selectedItems[0];
+
+  if (!isOpen || !initialItems || initialItems.length === 0) return null;
 
   return (
     <>

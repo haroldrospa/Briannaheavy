@@ -12,10 +12,8 @@ export interface BarcodePrintModalProps {
 }
 
 export default function BarcodePrintModal({ isOpen, item, onClose }: BarcodePrintModalProps) {
-  if (!isOpen || !item) return null;
-
   const config = getInvoiceCustomConfig();
-  const initialStock = Math.max(1, parseInt(String(item.stock), 10) || 1);
+  const initialStock = Math.max(1, parseInt(String(item?.stock || 1), 10) || 1);
 
   const [quantity, setQuantity] = useState<number>(initialStock);
   const [sizePreset, setSizePreset] = useState<LabelSizePreset>('standard');
@@ -57,6 +55,8 @@ export default function BarcodePrintModal({ isOpen, item, onClose }: BarcodePrin
   // Generate label items array for rendering
   const labelsCount = Math.max(1, Math.min(200, quantity || 1));
   const labelsArray = Array.from({ length: labelsCount });
+
+  if (!isOpen || !item) return null;
 
   return (
     <>
