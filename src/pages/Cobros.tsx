@@ -9,7 +9,6 @@ import {
   BanknotesIcon,
   BuildingStorefrontIcon,
   LockClosedIcon,
-  CalendarIcon,
   PencilSquareIcon,
   TrashIcon,
   EyeIcon,
@@ -948,20 +947,22 @@ export default function Cobros() {
       {/* Modal para Registrar Abono / Pago */}
       {isPaymentModalOpen && selectedReceivable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setIsPaymentModalOpen(false)} />
-          <div className="relative w-full max-w-md bg-white dark:bg-[#16171d] rounded-3xl p-6 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800 mb-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setIsPaymentModalOpen(false)} />
+          <div className="relative w-full max-w-md bg-white dark:bg-[#16171d] rounded-2xl p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 z-10 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100 dark:border-zinc-800/80 mb-4">
               <div>
-                <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-                  <CurrencyDollarIcon className="w-5 h-5 text-[#ED1C24]" />
-                  Cobro de Factura a Crédito
+                <h3 className="text-base font-bold text-gray-900 dark:text-zinc-100">
+                  Cobrar Factura a Crédito
                 </h3>
-                <p className="text-[11px] text-gray-400 font-medium">{selectedReceivable.customer} • {selectedReceivable.invoice}</p>
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                  {selectedReceivable.customer} • <span className="font-mono">{selectedReceivable.invoice}</span>
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="p-1 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               >
                 <XMarkIcon className="w-5 h-5" />
               </button>
@@ -970,23 +971,23 @@ export default function Cobros() {
             <form onSubmit={handleRecordPayment} className="space-y-4">
               {/* Selector de Moneda */}
               <div>
-                <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
+                <label className="block text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                   Moneda de Cobro
                 </label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80">
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 dark:bg-zinc-800/60 rounded-xl border border-gray-200/50 dark:border-zinc-700/40">
                   <button
                     type="button"
                     onClick={() => {
                       setPaymentCurrency('DOP');
                       setPaymentAmount(selectedReceivable.balance.toFixed(2));
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center cursor-pointer ${
                       paymentCurrency === 'DOP'
-                        ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200 dark:border-zinc-700'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                        ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
+                        : 'text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                     }`}
                   >
-                    <span>🇩🇴 RD$ (Pesos)</span>
+                    RD$ (Pesos)
                   </button>
                   <button
                     type="button"
@@ -995,146 +996,117 @@ export default function Cobros() {
                       const rate = exchangeRate > 0 ? exchangeRate : 60;
                       setPaymentAmountUsd((selectedReceivable.balance / rate).toFixed(2));
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center cursor-pointer ${
                       paymentCurrency === 'USD'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                        ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
+                        : 'text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                     }`}
                   >
-                    <span>🇺🇸 USD (Dólares)</span>
+                    USD (Dólares)
                   </button>
                 </div>
               </div>
 
-              {/* Balance Card */}
-              {paymentCurrency === 'DOP' ? (
-                <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-400 block">Balance Pendiente</span>
-                    <span className="text-xl font-black font-mono text-[#ED1C24]">
-                      RD$ {selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              {/* Balance Card Minimalista */}
+              <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-700/60 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400">
+                      Balance pendiente
                     </span>
-                    <span className="text-[10px] text-gray-500 font-medium block mt-0.5">
-                      ≈ ${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD (Tasa: {exchangeRate.toFixed(2)})
+                    <span className="px-1.5 py-0.5 bg-gray-200/60 dark:bg-zinc-700/50 text-[10px] font-mono text-gray-600 dark:text-zinc-300 rounded">
+                      Tasa: RD$ {exchangeRate.toFixed(2)}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentAmount(selectedReceivable.balance.toFixed(2))}
-                    className="px-2.5 py-1 text-[11px] font-black bg-white dark:bg-zinc-900 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-lg hover:border-[#ED1C24] cursor-pointer"
-                  >
-                    Pagar Todo
-                  </button>
+                  <div className="text-xl font-bold font-mono text-gray-900 dark:text-white">
+                    {paymentCurrency === 'DOP'
+                      ? `RD$ ${selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+                      : `$ ${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD`
+                    }
+                  </div>
+                  <span className="text-[11px] text-gray-400 dark:text-zinc-500 block mt-0.5">
+                    {paymentCurrency === 'DOP'
+                      ? `Equivalente: $${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD`
+                      : `Equivalente: RD$ ${selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+                    }
+                  </span>
                 </div>
-              ) : (
-                <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 dark:text-emerald-400">
-                        Balance Pendiente en USD
-                      </span>
-                      <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[9px] font-mono font-bold rounded">
-                        Tasa: RD$ {exchangeRate.toFixed(2)}
-                      </span>
-                    </div>
-                    <span className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-                      $ {(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD
-                    </span>
-                    <span className="text-[10px] text-gray-500 font-medium block mt-0.5">
-                      Equivalente: RD$ {selectedReceivable.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (paymentCurrency === 'DOP') {
+                      setPaymentAmount(selectedReceivable.balance.toFixed(2));
+                    } else {
                       const rate = exchangeRate > 0 ? exchangeRate : 60;
                       setPaymentAmountUsd((selectedReceivable.balance / rate).toFixed(2));
-                    }}
-                    className="px-2.5 py-1 text-[11px] font-black bg-white dark:bg-zinc-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-50 cursor-pointer"
-                  >
-                    Pagar Todo USD
-                  </button>
-                </div>
-              )}
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  Pagar total
+                </button>
+              </div>
 
-              {/* Monto */}
-              {paymentCurrency === 'DOP' ? (
-                <div>
-                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
-                    Monto a Abonar / Cobrar (RD$)
-                  </label>
+              {/* Monto a Cobrar */}
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Monto a cobrar {paymentCurrency === 'DOP' ? '(RD$)' : 'en USD ($)'}
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-semibold text-gray-400 dark:text-zinc-500">
+                    {paymentCurrency === 'DOP' ? 'RD$' : '$'}
+                  </span>
                   <input
                     type="number"
                     step="0.01"
                     min="0.01"
-                    max={selectedReceivable.balance}
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    value={paymentCurrency === 'DOP' ? paymentAmount : paymentAmountUsd}
+                    onChange={(e) => {
+                      if (paymentCurrency === 'DOP') {
+                        setPaymentAmount(e.target.value);
+                      } else {
+                        setPaymentAmountUsd(e.target.value);
+                      }
+                    }}
                     required
                     placeholder="0.00"
-                    className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                    className="block w-full pl-12 pr-4 py-2.5 bg-white dark:bg-zinc-800/80 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-bold font-mono border border-gray-200 dark:border-zinc-700 focus:border-gray-900 dark:focus:border-zinc-400 focus:outline-none transition-all"
                   />
                 </div>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight">
-                      Monto a Cobrar / Abonar en Dólares ($ USD)
-                    </label>
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                      Total: ${(selectedReceivable.balance / (exchangeRate || 60)).toFixed(2)} USD
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center font-black text-emerald-600 text-base">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={paymentAmountUsd}
-                      onChange={(e) => setPaymentAmountUsd(e.target.value)}
-                      required
-                      placeholder="0.00"
-                      className="block w-full pl-8 pr-3.5 py-2.5 bg-emerald-50/30 dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-base font-black font-mono border border-emerald-300 dark:border-emerald-800/60 focus:ring-2 focus:ring-emerald-500 transition-all"
-                    />
-                  </div>
 
-                  {parseFloat(paymentAmountUsd) > 0 && (
-                    <div className="mt-2 p-2.5 bg-gray-50 dark:bg-zinc-800/60 rounded-xl border border-gray-200 dark:border-zinc-700 text-xs space-y-1">
-                      <div className="flex items-center justify-between font-bold text-gray-700 dark:text-zinc-300">
-                        <span>Abono Aplicado a la Factura:</span>
-                        <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
-                          RD$ {Math.min(selectedReceivable.balance, parseFloat(paymentAmountUsd) * (exchangeRate || 60)).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {/* Desglose limpio si paga en USD */}
+                {paymentCurrency === 'USD' && parseFloat(paymentAmountUsd) > 0 && (
+                  <div className="mt-2 p-2.5 bg-gray-50 dark:bg-zinc-800/50 rounded-xl border border-gray-200/60 dark:border-zinc-700/60 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-gray-600 dark:text-zinc-400">
+                      <span>Abono aplicado:</span>
+                      <span className="font-mono font-semibold text-gray-900 dark:text-zinc-200">
+                        RD$ {Math.min(selectedReceivable.balance, parseFloat(paymentAmountUsd) * (exchangeRate || 60)).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {parseFloat(paymentAmountUsd) * (exchangeRate || 60) > selectedReceivable.balance + 0.01 && (
+                      <div className="flex items-center justify-between text-gray-600 dark:text-zinc-400 border-t border-gray-100 dark:border-zinc-700/60 pt-1">
+                        <span>Devuelta al cliente:</span>
+                        <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                          ${(parseFloat(paymentAmountUsd) - (selectedReceivable.balance / (exchangeRate || 60))).toFixed(2)} USD
+                          {' '}<span className="text-gray-400 dark:text-zinc-500 font-normal">(RD$ {((parseFloat(paymentAmountUsd) * (exchangeRate || 60)) - selectedReceivable.balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })})</span>
                         </span>
                       </div>
-                      {parseFloat(paymentAmountUsd) * (exchangeRate || 60) > selectedReceivable.balance + 0.01 && (
-                        <div className="flex items-center justify-between text-[11px] font-bold text-amber-600 dark:text-amber-400 border-t border-gray-200/60 dark:border-zinc-700 pt-1">
-                          <span>Devuelta al Cliente:</span>
-                          <span className="font-mono font-black">
-                            ${(parseFloat(paymentAmountUsd) - (selectedReceivable.balance / (exchangeRate || 60))).toFixed(2)} USD
-                            {' '}(RD$ {((parseFloat(paymentAmountUsd) * (exchangeRate || 60)) - selectedReceivable.balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })})
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
 
-              {/* Fecha en que se Realizó el Pago */}
+              {/* Fecha de Pago */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight flex items-center gap-1.5">
-                    <CalendarIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
-                    <span>Fecha en que se Realizó el Pago</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                    Fecha del pago
                   </label>
                   {paymentDate !== new Date().toISOString().slice(0, 10) && (
                     <button
                       type="button"
                       onClick={() => setPaymentDate(new Date().toISOString().slice(0, 10))}
-                      className="text-[10px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
+                      className="text-[11px] font-medium text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer"
                     >
                       Hoy
                     </button>
@@ -1144,14 +1116,14 @@ export default function Cobros() {
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className="block w-full px-3.5 py-2.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all cursor-pointer"
+                  className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800/80 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-medium border border-gray-200 dark:border-zinc-700 focus:border-gray-900 dark:focus:border-zinc-400 focus:outline-none transition-all cursor-pointer"
                 />
               </div>
 
               {/* Método de Pago */}
               <div>
-                <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
-                  Método de Pago
+                <label className="block text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+                  Método de pago
                 </label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {(['Efectivo', 'Transferencia', 'Cheque', 'Tarjeta'] as const).map((m) => (
@@ -1159,10 +1131,10 @@ export default function Cobros() {
                       key={m}
                       type="button"
                       onClick={() => setPaymentMethod(m)}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`py-2 px-1 text-center rounded-xl text-xs font-medium transition-all cursor-pointer ${
                         paymentMethod === m
-                          ? 'bg-[#ED1C24] text-white font-black shadow-xs'
-                          : 'bg-[#f4f3f1] dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 font-semibold shadow-xs'
+                          : 'bg-gray-100 dark:bg-zinc-800/70 text-gray-600 dark:text-zinc-400 hover:bg-gray-200 dark:hover:bg-zinc-700'
                       }`}
                     >
                       {m}
@@ -1173,8 +1145,8 @@ export default function Cobros() {
 
               {paymentMethod !== 'Efectivo' && (
                 <div>
-                  <label className="block text-[11px] font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight mb-1">
-                    No. de Referencia / Comprobante
+                  <label className="block text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
+                    No. de referencia o comprobante
                   </label>
                   <input
                     type="text"
@@ -1182,25 +1154,25 @@ export default function Cobros() {
                     value={paymentReference}
                     onChange={(e) => setPaymentReference(e.target.value)}
                     required={paymentMethod === 'Transferencia' || paymentMethod === 'Cheque'}
-                    className="block w-full px-3 py-2 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-gray-200 dark:border-zinc-700 focus:ring-2 focus:ring-[#ED1C24] transition-all"
+                    className="block w-full px-3.5 py-2 bg-white dark:bg-zinc-800/80 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-medium border border-gray-200 dark:border-zinc-700 focus:border-gray-900 dark:focus:border-zinc-400 focus:outline-none transition-all"
                   />
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100 dark:border-zinc-800">
+              <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-gray-100 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-full bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-black shadow-md shadow-red-900/20 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer"
                 >
-                  Confirmar Cobro
+                  Confirmar cobro
                 </button>
               </div>
             </form>
@@ -1212,43 +1184,43 @@ export default function Cobros() {
       {isReceiptModalOpen && lastPaymentReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setIsReceiptModalOpen(false)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-[#16171d] rounded-3xl p-6 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 text-center animate-in fade-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 mx-auto flex items-center justify-center mb-3">
-              <CheckCircleIcon className="w-7 h-7" />
+          <div className="relative w-full max-w-sm bg-white dark:bg-[#16171d] rounded-2xl p-6 shadow-2xl border border-gray-100 dark:border-zinc-800 z-10 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-11 h-11 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center mb-3 border border-emerald-200/50 dark:border-emerald-800/40">
+              <CheckCircleIcon className="w-6 h-6" />
             </div>
 
-            <h3 className="text-lg font-black text-gray-900 dark:text-white">¡Abono Registrado!</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Comprobante de Pago Generado Exitosamente</p>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">Pago registrado</h3>
+            <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">Comprobante de pago generado exitosamente</p>
 
-            <div className="p-4 bg-[#f4f3f1] dark:bg-zinc-800/80 rounded-2xl my-4 text-left space-y-2 text-xs">
+            <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl my-4 text-left space-y-2 text-xs border border-gray-200/60 dark:border-zinc-800">
               <div className="flex justify-between">
-                <span className="text-gray-400">Recibo:</span>
-                <span className="font-mono font-black text-gray-900 dark:text-white">{lastPaymentReceipt.receiptNumber}</span>
+                <span className="text-gray-400 dark:text-zinc-500">Recibo:</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-white">{lastPaymentReceipt.receiptNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Cliente:</span>
-                <span className="font-bold text-gray-900 dark:text-white truncate max-w-[180px]">{lastPaymentReceipt.customer}</span>
+                <span className="text-gray-400 dark:text-zinc-500">Cliente:</span>
+                <span className="font-medium text-gray-900 dark:text-white truncate max-w-[180px]">{lastPaymentReceipt.customer}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Factura:</span>
-                <span className="font-mono font-bold text-gray-900 dark:text-white">{lastPaymentReceipt.invoice}</span>
+                <span className="text-gray-400 dark:text-zinc-500">Factura:</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-white">{lastPaymentReceipt.invoice}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-200 dark:border-zinc-700 pt-2 font-bold">
-                <span className="text-emerald-600 dark:text-emerald-400">Monto Cobrado:</span>
+              <div className="flex justify-between border-t border-gray-200/60 dark:border-zinc-700/60 pt-2 font-medium">
+                <span className="text-gray-700 dark:text-zinc-300">Monto cobrado:</span>
                 <div className="text-right">
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black block">
+                  <span className="font-mono text-gray-900 dark:text-white font-bold block">
                     RD$ {lastPaymentReceipt.amountPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                   {lastPaymentReceipt.paidCurrency === 'USD' && lastPaymentReceipt.amountPaidUsd && (
-                    <span className="text-[10.5px] font-mono text-emerald-700 dark:text-emerald-300 block font-bold">
+                    <span className="text-[11px] font-mono text-gray-500 dark:text-zinc-400 block">
                       ${lastPaymentReceipt.amountPaidUsd.toFixed(2)} USD (Tasa: {lastPaymentReceipt.exchangeRate?.toFixed(2)})
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Nuevo Saldo:</span>
-                <span className="font-mono font-black text-[#ED1C24]">
+              <div className="flex justify-between text-gray-500 dark:text-zinc-400">
+                <span>Nuevo saldo:</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">
                   RD$ {lastPaymentReceipt.newBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -1260,15 +1232,15 @@ export default function Cobros() {
                 onClick={() => {
                   window.print();
                 }}
-                className="flex-1 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                className="flex-1 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
               >
                 <PrinterIcon className="w-4 h-4" />
-                <span>Imprimir Recibo</span>
+                <span>Imprimir recibo</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsReceiptModalOpen(false)}
-                className="flex-1 py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black cursor-pointer shadow-sm"
+                className="flex-1 py-2 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors"
               >
                 Listo
               </button>
@@ -1702,33 +1674,33 @@ export default function Cobros() {
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-4xl bg-white dark:bg-[#16171d] rounded-3xl p-5 sm:p-7 shadow-2xl border border-gray-200 dark:border-zinc-800 z-10 max-h-[92vh] flex flex-col overflow-hidden"
+              className="relative w-full max-w-4xl bg-white dark:bg-[#16171d] rounded-2xl p-5 sm:p-7 shadow-2xl border border-gray-100 dark:border-zinc-800 z-10 max-h-[92vh] flex flex-col overflow-hidden"
             >
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-gray-100 dark:border-zinc-800 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-2xl bg-red-50 dark:bg-red-950/50 text-[#ED1C24] border border-red-200/50 dark:border-red-900/40 shrink-0">
-                    <DocumentTextIcon className="w-6 h-6 stroke-[2.2]" />
+                  <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 shrink-0">
+                    <DocumentTextIcon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
                         {selectedDetailItem.customer}
                       </h3>
-                      <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full ${
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border ${
                         selectedDetailItem.status === 'Saldado'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/40'
                           : selectedDetailItem.status === 'Atrasado'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/40'
                           : selectedDetailItem.status === 'Con Abono'
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/40'
+                          : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/40'
                       }`}>
                         {selectedDetailItem.status}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-                      RNC / Cédula: <span className="font-mono font-bold text-gray-700 dark:text-zinc-200">{selectedDetailItem.rnc || 'Consumidor Final'}</span>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                      RNC / Cédula: <span className="font-mono text-gray-700 dark:text-zinc-300 font-medium">{selectedDetailItem.rnc || 'Consumidor Final'}</span>
                       {selectedDetailItem.phone && <span> • Tel: {selectedDetailItem.phone}</span>}
                     </p>
                   </div>
@@ -1738,7 +1710,7 @@ export default function Cobros() {
                   <button
                     type="button"
                     onClick={() => setIsDetailModalOpen(false)}
-                    className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   >
                     <XMarkIcon className="w-5 h-5" />
                   </button>
@@ -1746,120 +1718,120 @@ export default function Cobros() {
               </div>
 
               {/* Tab Selector */}
-              <div className="flex items-center gap-2 pt-3 pb-2 shrink-0 border-b border-gray-100 dark:border-zinc-800">
+              <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-zinc-800/60 rounded-xl mt-3 shrink-0 border border-gray-200/50 dark:border-zinc-700/40">
                 <button
                   type="button"
                   onClick={() => setActiveDetailTab('details')}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeDetailTab === 'details'
-                      ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs font-black'
-                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
+                      : 'text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   }`}
                 >
-                  📋 Detalle de la Factura ({selectedDetailItem.invoice})
+                  Detalle de la factura ({selectedDetailItem.invoice})
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveDetailTab('statement')}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeDetailTab === 'statement'
-                      ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs font-black'
-                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
+                      : 'text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   }`}
                 >
-                  📄 Estado de Cuenta del Cliente ({associatedCustomerInvoices.length} {associatedCustomerInvoices.length === 1 ? 'Factura' : 'Facturas'})
+                  Estado de cuenta ({associatedCustomerInvoices.length} {associatedCustomerInvoices.length === 1 ? 'factura' : 'facturas'})
                 </button>
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 overflow-y-auto space-y-4 pt-3 pr-1 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto space-y-4 pt-3.5 pr-1 scrollbar-thin">
                 {activeDetailTab === 'details' ? (
                   <>
                     {/* Financial Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                      <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                           Total Factura
                         </span>
-                        <span className="text-xl font-black font-mono text-gray-900 dark:text-white">
+                        <span className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-1 block">
                           RD$ {selectedDetailItem.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] text-gray-500 block mt-0.5 font-medium">Monto original a crédito</span>
+                        <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Monto original</span>
                       </div>
 
-                      <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                      <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                           Total Pagado / Abonado
                         </span>
-                        <span className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                        <span className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-1 block">
                           RD$ {selectedDetailItem.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70 block mt-0.5 font-medium">Abonos recibidos</span>
+                        <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Abonos aplicados</span>
                       </div>
 
-                      <div className="p-3.5 bg-red-50/50 dark:bg-red-950/20 rounded-2xl border border-red-200/60 dark:border-red-900/40">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-[#ED1C24] block">
+                      <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                           Saldo Pendiente
                         </span>
-                        <span className="text-xl font-black font-mono text-[#ED1C24]">
+                        <span className={`text-xl font-bold font-mono mt-1 block ${selectedDetailItem.balance > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
                           RD$ {selectedDetailItem.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] text-red-600/70 dark:text-red-400/70 block mt-0.5 font-medium">
+                        <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">
                           {selectedDetailItem.balance <= 0 ? 'Totalmente saldada' : 'Pendiente de cobro'}
                         </span>
                       </div>
                     </div>
 
                     {/* Invoice & Due Date Box */}
-                    <div className="bg-[#f4f3f1] dark:bg-zinc-800/40 p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-gray-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-gray-200/70 dark:border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                       <div>
-                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Comprobante Fiscal</span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Comprobante Fiscal</span>
                         <p className="font-mono font-bold text-gray-900 dark:text-white text-sm">{selectedDetailItem.invoice}</p>
-                        <p className="font-mono text-[11px] text-[#ED1C24] font-black">{selectedDetailItem.ncf}</p>
+                        <p className="font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{selectedDetailItem.ncf}</p>
                       </div>
 
                       <div>
-                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Plazo & Emisión</span>
-                        <p className="font-bold text-gray-900 dark:text-white">Emisión: {selectedDetailItem.issueDate}</p>
-                        <p className="text-gray-500 font-medium">Plazo: {selectedDetailItem.creditDays} días</p>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Plazo & Emisión</span>
+                        <p className="font-medium text-gray-900 dark:text-white">Emisión: {selectedDetailItem.issueDate}</p>
+                        <p className="text-gray-500 dark:text-zinc-400">Plazo: {selectedDetailItem.creditDays} días</p>
                       </div>
 
                       <div>
-                        <span className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 block mb-0.5">Vencimiento</span>
-                        <p className="font-bold text-gray-900 dark:text-white font-mono">{selectedDetailItem.dueDate}</p>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Vencimiento</span>
+                        <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedDetailItem.dueDate}</p>
                         {selectedDetailItem.balance > 0 ? (
                           new Date() > new Date(selectedDetailItem.dueDate) ? (
-                            <span className="text-[10px] font-bold text-red-600 block">
-                              ⚠️ Vencida hace {Math.max(1, Math.floor((new Date().getTime() - new Date(selectedDetailItem.dueDate).getTime()) / (1000 * 60 * 60 * 24)))} días
+                            <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 block mt-0.5">
+                              Vencida hace {Math.max(1, Math.floor((new Date().getTime() - new Date(selectedDetailItem.dueDate).getTime()) / (1000 * 60 * 60 * 24)))} días
                             </span>
                           ) : (
-                            <span className="text-[10px] font-bold text-emerald-600 block">
-                              ✓ Vigente (restan {Math.max(0, Math.ceil((new Date(selectedDetailItem.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días)
+                            <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                              Vigente ({Math.max(0, Math.ceil((new Date(selectedDetailItem.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días restantes)
                             </span>
                           )
                         ) : (
-                          <span className="text-[10px] font-bold text-emerald-600 block">✓ Factura Saldada</span>
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-zinc-400 block mt-0.5">Factura saldada</span>
                         )}
                       </div>
                     </div>
 
                     {/* Items Description */}
-                    <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-800">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500 block mb-1">
-                        Repuestos / Artículos Facturados
+                    <div className="bg-white dark:bg-zinc-900 p-3.5 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                      <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">
+                        Artículos / Repuestos Facturados
                       </span>
-                      <p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-zinc-200">
+                      <p className="text-xs sm:text-sm font-medium text-gray-800 dark:text-zinc-200">
                         {selectedDetailItem.items}
                       </p>
                     </div>
 
                     {/* Payments History of this Invoice */}
-                    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/70 dark:border-zinc-800 overflow-hidden">
                       <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                        <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
-                          Historial de Abonos a esta Factura
+                        <span className="text-xs font-semibold text-gray-700 dark:text-zinc-300">
+                          Historial de Abonos
                         </span>
-                        <span className="text-[11px] font-bold text-gray-400">
+                        <span className="text-xs text-gray-400">
                           {selectedDetailItem.paymentsHistory?.length || 0} {selectedDetailItem.paymentsHistory?.length === 1 ? 'pago' : 'pagos'}
                         </span>
                       </div>
@@ -1867,7 +1839,7 @@ export default function Cobros() {
                       {selectedDetailItem.paymentsHistory && selectedDetailItem.paymentsHistory.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs">
-                            <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                            <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                               <tr>
                                 <th className="px-4 py-2.5">Fecha</th>
                                 <th className="px-4 py-2.5">Método</th>
@@ -1879,18 +1851,18 @@ export default function Cobros() {
                             <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
                               {selectedDetailItem.paymentsHistory.map((p, idx) => (
                                 <tr key={p.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
-                                  <td className="px-4 py-2.5 font-medium">{p.date}</td>
+                                  <td className="px-4 py-2.5 font-medium text-gray-600 dark:text-zinc-300">{p.date}</td>
                                   <td className="px-4 py-2.5">
-                                    <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[10px] font-bold">
+                                    <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[11px] text-gray-700 dark:text-zinc-300 font-medium">
                                       {p.method}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5 font-mono text-gray-500">{p.reference || 'N/A'}</td>
                                   <td className="px-4 py-2.5 text-gray-500">{p.cashier || 'Cajero POS'}</td>
-                                  <td className="px-4 py-2.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                                    <span className="font-black block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                                  <td className="px-4 py-2.5 text-right font-mono text-gray-900 dark:text-white">
+                                    <span className="font-semibold block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                                     {p.amountUsd && (
-                                      <span className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 block font-bold">
+                                      <span className="text-[10px] text-gray-500 dark:text-zinc-400 block">
                                         ${Number(p.amountUsd).toFixed(2)} USD
                                       </span>
                                     )}
@@ -1913,65 +1885,65 @@ export default function Cobros() {
                     <div className="space-y-4">
                       {/* Customer Global KPI Cards */}
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                        <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
-                          <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                        <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                          <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                             Facturas a Crédito
                           </span>
-                          <span className="text-xl font-black text-gray-900 dark:text-white">
+                          <span className="text-xl font-bold text-gray-900 dark:text-white mt-1 block">
                             {customerTotals.count}
                           </span>
-                          <span className="text-[10px] text-gray-500 block mt-0.5">
+                          <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">
                             {customerTotals.totalPendingInvoices} pendientes • {customerTotals.totalPaidInvoices} saldadas
                           </span>
                         </div>
 
-                        <div className="p-3.5 bg-[#f4f3f1] dark:bg-zinc-800/60 rounded-2xl border border-gray-200/80 dark:border-zinc-700/60">
-                          <span className="text-[10px] uppercase font-black tracking-wider text-gray-400 dark:text-zinc-500 block">
+                        <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                          <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                             Total Facturado
                           </span>
-                          <span className="text-lg font-black font-mono text-gray-900 dark:text-white">
+                          <span className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-1 block">
                             RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
-                          <span className="text-[10px] text-gray-500 block mt-0.5">Acumulado del cliente</span>
+                          <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Acumulado</span>
                         </div>
 
-                        <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40">
-                          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                        <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                          <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                             Total Abonado
                           </span>
-                          <span className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400">
+                          <span className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-1 block">
                             RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
-                          <span className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70 block mt-0.5">Cobrado exitosamente</span>
+                          <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Cobrado</span>
                         </div>
 
-                        <div className="p-3.5 bg-red-50/50 dark:bg-red-950/20 rounded-2xl border border-red-200/60 dark:border-red-900/40">
-                          <span className="text-[10px] uppercase font-black tracking-wider text-[#ED1C24] block">
+                        <div className="p-3.5 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                          <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                             Balance Total Adeudado
                           </span>
-                          <span className="text-lg font-black font-mono text-[#ED1C24]">
+                          <span className="text-lg font-bold font-mono text-gray-900 dark:text-white mt-1 block">
                             RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
-                          <span className="text-[10px] text-red-600/70 dark:text-red-400/70 block mt-0.5 font-bold">
+                          <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">
                             {customerTotals.totalBalance <= 0 ? 'Sin deudas pendientes' : 'Por cobrar'}
                           </span>
                         </div>
                       </div>
 
                       {/* All Customer Invoices Table */}
-                      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                      <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/70 dark:border-zinc-800 overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                          <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
-                            Todas las Facturas a Crédito del Cliente ({associatedCustomerInvoices.length})
+                          <span className="text-xs font-semibold text-gray-700 dark:text-zinc-300">
+                            Todas las Facturas del Cliente ({associatedCustomerInvoices.length})
                           </span>
-                          <span className="text-[10px] font-bold text-gray-400">
+                          <span className="text-xs text-gray-400">
                             Corte: {new Date().toLocaleDateString('es-DO')}
                           </span>
                         </div>
 
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs">
-                            <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                            <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                               <tr>
                                 <th className="px-3.5 py-2.5">Factura</th>
                                 <th className="px-3.5 py-2.5">e-NCF</th>
@@ -1987,27 +1959,27 @@ export default function Cobros() {
                               {associatedCustomerInvoices.map((inv) => (
                                 <tr key={inv.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
                                   <td className="px-3.5 py-2.5 font-mono font-bold text-gray-900 dark:text-white">{inv.invoice}</td>
-                                  <td className="px-3.5 py-2.5 font-mono text-[10px] text-[#ED1C24] font-bold">{inv.ncf}</td>
+                                  <td className="px-3.5 py-2.5 font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{inv.ncf}</td>
                                   <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400">{inv.issueDate}</td>
                                   <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400 font-mono">{inv.dueDate}</td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">
+                                  <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
                                     RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
                                     RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono font-black text-[#ED1C24]">
+                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">
                                     RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                   </td>
                                   <td className="px-3.5 py-2.5 text-center">
-                                    <span className={`px-2 py-0.5 text-[9px] font-black rounded-full ${
+                                    <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-md border ${
                                       inv.status === 'Saldado'
-                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/40'
                                         : inv.status === 'Atrasado'
-                                        ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/40'
                                         : inv.status === 'Con Abono'
-                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/40'
+                                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/40'
                                     }`}>
                                       {inv.status}
                                     </span>
@@ -2015,18 +1987,18 @@ export default function Cobros() {
                                 </tr>
                               ))}
                             </tbody>
-                            <tfoot className="bg-[#f4f3f1] dark:bg-zinc-800 font-black text-xs border-t-2 border-gray-200 dark:border-zinc-700">
+                            <tfoot className="bg-gray-50 dark:bg-zinc-800/60 font-semibold text-xs border-t border-gray-200 dark:border-zinc-700">
                               <tr>
-                                <td colSpan={4} className="px-3.5 py-3 uppercase tracking-wider text-gray-900 dark:text-white">
+                                <td colSpan={4} className="px-3.5 py-3 text-gray-700 dark:text-zinc-300">
                                   Totales Consolidados
                                 </td>
                                 <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
                                   RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </td>
-                                <td className="px-3.5 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
                                   RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </td>
-                                <td className="px-3.5 py-3 text-right font-mono text-[#ED1C24]">
+                                <td className="px-3.5 py-3 text-right font-mono font-bold text-gray-900 dark:text-white">
                                   RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </td>
                                 <td></td>
@@ -2038,15 +2010,15 @@ export default function Cobros() {
 
                       {/* Customer Payments Consolidated */}
                       {customerAllPayments.length > 0 && (
-                        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden">
+                        <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/70 dark:border-zinc-800 overflow-hidden">
                           <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800">
-                            <span className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-zinc-300">
-                              Historial Consolidado de Abonos del Cliente ({customerAllPayments.length})
+                            <span className="text-xs font-semibold text-gray-700 dark:text-zinc-300">
+                              Historial Consolidado de Abonos ({customerAllPayments.length})
                             </span>
                           </div>
                           <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
-                              <thead className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                              <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                                 <tr>
                                   <th className="px-4 py-2.5">Fecha</th>
                                   <th className="px-4 py-2.5">Factura Aplicada</th>
@@ -2059,19 +2031,19 @@ export default function Cobros() {
                               <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
                                 {customerAllPayments.map((p, pIdx) => (
                                   <tr key={p.id || pIdx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
-                                    <td className="px-4 py-2 font-medium">{p.date}</td>
-                                    <td className="px-4 py-2 font-mono font-bold text-gray-800 dark:text-zinc-200">{p.invoice}</td>
+                                    <td className="px-4 py-2 font-medium text-gray-600 dark:text-zinc-300">{p.date}</td>
+                                    <td className="px-4 py-2 font-mono font-semibold text-gray-800 dark:text-zinc-200">{p.invoice}</td>
                                     <td className="px-4 py-2">
-                                      <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[10px] font-bold">
+                                      <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-zinc-800 text-[11px] text-gray-700 dark:text-zinc-300 font-medium">
                                         {p.method}
                                       </span>
                                     </td>
                                     <td className="px-4 py-2 font-mono text-gray-500 text-[11px]">{p.reference || 'N/A'}</td>
                                     <td className="px-4 py-2 text-gray-500">{p.cashier || 'Caja'}</td>
-                                    <td className="px-4 py-2 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                                      <span className="font-black block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                                    <td className="px-4 py-2 text-right font-mono text-gray-900 dark:text-white">
+                                      <span className="font-semibold block">RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                                       {p.amountUsd && (
-                                        <span className="text-[10px] text-emerald-700/70 dark:text-emerald-300/70 block font-bold">
+                                        <span className="text-[10px] text-gray-500 dark:text-zinc-400 block">
                                           ${Number(p.amountUsd).toFixed(2)} USD
                                         </span>
                                       )}
@@ -2089,19 +2061,19 @@ export default function Cobros() {
               </div>
 
               {/* Bottom Action Footer */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-zinc-800 shrink-0">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3.5 border-t border-gray-100 dark:border-zinc-800 shrink-0">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handlePrintStatement}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
                   >
                     <PrinterIcon className="w-4 h-4" />
-                    <span>Imprimir Estado de Cuenta</span>
+                    <span>Imprimir estado de cuenta</span>
                   </button>
                 </div>
 
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-2.5">
                   {selectedDetailItem.balance > 0 ? (
                     <button
                       type="button"
@@ -2109,10 +2081,10 @@ export default function Cobros() {
                         setIsDetailModalOpen(false);
                         handleOpenPayment(selectedDetailItem);
                       }}
-                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
                     >
                       <CurrencyDollarIcon className="w-4 h-4" />
-                      <span>Pagar o Abonar</span>
+                      <span>Cobrar o abonar</span>
                     </button>
                   ) : associatedCustomerInvoices.some(inv => inv.balance > 0) ? (
                     <button
@@ -2124,20 +2096,20 @@ export default function Cobros() {
                           handleOpenPayment(invToPay);
                         }
                       }}
-                      className="px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-black shadow-md shadow-emerald-900/20 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
                     >
                       <CurrencyDollarIcon className="w-4 h-4" />
-                      <span>Pagar o Abonar</span>
+                      <span>Cobrar o abonar</span>
                     </button>
                   ) : (
-                    <span className="px-3.5 py-2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-black inline-flex items-center gap-1.5">
-                      ✓ Factura Saldada
+                    <span className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 text-xs font-medium inline-flex items-center gap-1.5">
+                      Factura saldada
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setIsDetailModalOpen(false)}
-                    className="px-4 py-2.5 rounded-full text-xs font-bold text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-xs font-medium text-gray-600 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                   >
                     Cerrar
                   </button>
