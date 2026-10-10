@@ -134,7 +134,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'todos' | 'ingreso' | 'egreso'>('todos');
+  const [movementTab, setMovementTab] = useState<'todos' | 'ventas' | 'ingreso' | 'egreso'>('todos');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -404,8 +404,183 @@ export default function CashClosureModal({
     return list.filter(m => isMovementOfUser(m, loggedInUserName, loggedInUserEmail));
   }, [allMovements, filterMode, activeShift, selectedRegister, loggedInUserName, loggedInUserEmail, selectedCashierFilter]);
 
-  const scopedIngresos = useMemo(() => scopedMovements.filter(m => m.type === 'Ingreso'), [scopedMovements]);
-  const scopedEgresos = useMemo(() => scopedMovements.filter(m => m.type === 'Egreso'), [scopedMovements]);
+
+  // Lista unificada que combina todas las Ventas (POS), Recibos de Financiamientos, Cobros a Crédito y Movimientos Manuales
+  const unifiedShiftMovements = useMemo(() => {
+    const list: Array<{
+      id: string;
+      type: 'Ingreso' | 'Egreso';
+      category: 'venta' | 'financiamiento' | 'cobro' | 'ingreso_manual' | 'egreso_manual';
+      categoryLabel: string;
+      concept: string;
+      customer?: string;
+      amount: number;
+      paymentMethod: string;
+      createdAt: string;
+      reference?: string;
+      isCash: boolean;
+      isCard: boolean;
+      isBank: boolean;
+      isCredit: boolean;
+      badgeText: string;
+      badgeColorClass: string;
+    }> = [];
+
+    // 1. Facturas directas (POS)
+    scopedInvoices.forEach(inv => {
+      const pm = (inv.payment_method || 'Efectivo').trim();
+      const pmLower = pm.toLowerCase();
+      const isCard = pmLower.includes('tarjeta');
+      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+      const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
+      const isCash = !isCard && !isBank && !isCredit;
+
+      list.push({
+        id: `inv-${inv.id || inv.invoice_number}`,
+        type: 'Ingreso',
+        category: 'venta',
+        categoryLabel: 'Venta',
+        concept: `Fac. #${inv.invoice_number || 'N/A'}${inv.customer_name ? ` • ${inv.customer_name}` : ''}`,
+        customer: inv.customer_name || 'Consumidor Final',
+        amount: Number(inv.total_amount) || 0,
+        paymentMethod: pm,
+        createdAt: inv.created_at || new Date().toISOString(),
+        reference: inv.ncf || inv.invoice_number,
+        isCash,
+        isCard,
+        isBank,
+        isCredit,
+        badgeText: '🛒 Venta',
+        badgeColorClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+      });
+    });
+
+    // 2. Recibos de financiamiento (Cuotas e Iniciales)
+    scopedFinancingReceipts.forEach(rc => {
+      const pm = (rc.paymentMethod || 'Efectivo').trim();
+      const pmLower = pm.toLowerCase();
+      const isCard = pmLower.includes('tarjeta');
+      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+      const isCredit = false;
+      const isCash = !isCard && !isBank;
+
+      list.push({
+        id: `fin-${rc.id || rc.receiptNumber}`,
+        type: 'Ingreso',
+        category: 'financiamiento',
+        categoryLabel: 'Financiamiento',
+        concept: `Abono Cuota • Rec. #${rc.receiptNumber || 'N/A'}${rc.customerName ? ` • ${rc.customerName}` : ''}`,
+        customer: rc.customerName || 'Cliente',
+        amount: Number(rc.totalPaid) || 0,
+        paymentMethod: pm,
+        createdAt: rc.createdAt || rc.date || new Date().toISOString(),
+        reference: rc.receiptNumber,
+        isCash,
+        isCard,
+        isBank,
+        isCredit,
+        badgeText: '📑 Financ.',
+        badgeColorClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+      });
+    });
+
+    // 3. Cobros de facturas a crédito
+    scopedCreditPayments.forEach(p => {
+      const pm = (p.method || 'Efectivo').trim();
+      const pmLower = pm.toLowerCase();
+      const isCard = pmLower.includes('tarjeta');
+      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+      const isCredit = false;
+      const isCash = !isCard && !isBank;
+
+      list.push({
+        id: `cpay-${p.id}`,
+        type: 'Ingreso',
+        category: 'cobro',
+        categoryLabel: 'Cobro Crédito',
+        concept: `Cobro Factura • #${p.invoiceNumber || 'N/A'}${p.customer ? ` • ${p.customer}` : ''}`,
+        customer: p.customer || 'Cliente',
+        amount: Number(p.amount) || 0,
+        paymentMethod: pm,
+        createdAt: p.date || new Date().toISOString(),
+        reference: p.invoiceNumber,
+        isCash,
+        isCard,
+        isBank,
+        isCredit,
+        badgeText: '💰 Cobro',
+        badgeColorClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
+      });
+    });
+
+    // 4. Movimientos manuales de caja (ingresos y egresos)
+    scopedMovements.forEach(m => {
+      const isIngreso = m.type === 'Ingreso';
+      const pm = (m.payment_method || 'Efectivo').trim();
+      const pmLower = pm.toLowerCase();
+      const reasonLower = ((m as any).reason || '').toLowerCase();
+      const isCard = pmLower.includes('tarjeta') || reasonLower.includes('tarjeta');
+      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco') || reasonLower.includes('banco:') || Boolean(m.bank_account_name);
+      const isCredit = false;
+      const isCash = !isCard && !isBank;
+
+      const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+
+      list.push({
+        id: `mov-${m.id}`,
+        type: m.type,
+        category: isIngreso ? 'ingreso_manual' : 'egreso_manual',
+        categoryLabel: isIngreso ? 'Ingreso Manual' : 'Egreso / Retiro',
+        concept: conceptText,
+        customer: (m as any).customer || '',
+        amount: Number(m.amount) || 0,
+        paymentMethod: pm,
+        createdAt: m.created_at || new Date().toISOString(),
+        reference: m.reference,
+        isCash,
+        isCard,
+        isBank,
+        isCredit,
+        badgeText: isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro'),
+        badgeColorClass: !isCash
+          ? (isCard ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300')
+          : isIngreso
+          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+          : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+      });
+    });
+
+    // Ordenar cronológicamente descendente (más recientes primero)
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments, scopedMovements]);
+
+  const unifiedVentas = useMemo(() => 
+    unifiedShiftMovements.filter(m => m.category === 'venta' || m.category === 'financiamiento' || m.category === 'cobro'),
+    [unifiedShiftMovements]
+  );
+  const unifiedIngresos = useMemo(() => 
+    unifiedShiftMovements.filter(m => m.type === 'Ingreso'),
+    [unifiedShiftMovements]
+  );
+  const unifiedEgresos = useMemo(() => 
+    unifiedShiftMovements.filter(m => m.type === 'Egreso'),
+    [unifiedShiftMovements]
+  );
+
+  const displayedMovements = useMemo(() => {
+    if (movementTab === 'ventas') return unifiedVentas;
+    if (movementTab === 'ingreso') return unifiedIngresos;
+    if (movementTab === 'egreso') return unifiedEgresos;
+    return unifiedShiftMovements;
+  }, [movementTab, unifiedShiftMovements, unifiedVentas, unifiedIngresos, unifiedEgresos]);
+
+  const totalInflowsAmount = useMemo(() => {
+    return unifiedIngresos.reduce((sum, m) => sum + m.amount, 0);
+  }, [unifiedIngresos]);
+
+  const totalOutflowsAmount = useMemo(() => {
+    return unifiedEgresos.reduce((sum, m) => sum + m.amount, 0);
+  }, [unifiedEgresos]);
 
   // Calcular ventas y cobros por método de pago para ESA caja/cajero
   const systemSales = useMemo(() => {
@@ -1235,13 +1410,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
                   </div>
 
-                  {/* Movimientos de Caja */}
+                  {/* Movimientos de Caja y Ventas del Turno */}
                   <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
                           <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400" />
-                          Movimientos ({scopedMovements.length})
+                          Movimientos ({unifiedShiftMovements.length})
                         </h3>
 
                         {/* Selector / Tabs */}
@@ -1255,7 +1430,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                             }`}
                           >
-                            Todos ({scopedMovements.length})
+                            Todos ({unifiedShiftMovements.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementTab('ventas')}
+                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                              movementTab === 'ventas' 
+                                ? 'bg-blue-600 text-white shadow-xs' 
+                                : 'text-blue-700 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/30'
+                            }`}
+                          >
+                            <span>🛒 Ventas ({unifiedVentas.length})</span>
                           </button>
                           <button
                             type="button"
@@ -1266,7 +1452,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/30'
                             }`}
                           >
-                            <span>↓ Ingresos ({scopedIngresos.length})</span>
+                            <span>↓ Ingresos ({unifiedIngresos.length})</span>
                           </button>
                           <button
                             type="button"
@@ -1277,68 +1463,61 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 : 'text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/30'
                             }`}
                           >
-                            <span>↑ Egresos ({scopedEgresos.length})</span>
+                            <span>↑ Egresos ({unifiedEgresos.length})</span>
                           </button>
                         </div>
                       </div>
 
                       <div className="text-[10px] font-mono font-bold flex items-center gap-1.5">
-                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
-                          +RD$ {cashMovementsTotals.ingresos.toLocaleString('es-DO')}
+                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40" title="Total entradas del turno (Ventas, Cobros e Ingresos)">
+                          +RD$ {totalInflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40">
-                          -RD$ {cashMovementsTotals.egresos.toLocaleString('es-DO')}
+                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40" title="Total salidas del turno (Gastos y Egresos)">
+                          -RD$ {totalOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
 
-                    {scopedMovements.length === 0 ? (
+                    {displayedMovements.length === 0 ? (
                       <div className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
-                        Sin movimientos propios registrados en este turno
+                        {movementTab === 'ventas'
+                          ? 'Sin ventas registradas en este turno'
+                          : movementTab === 'ingreso'
+                          ? 'Sin ingresos registrados en este turno'
+                          : movementTab === 'egreso'
+                          ? 'Sin egresos registrados en este turno'
+                          : 'Sin ventas ni movimientos registrados en este turno'}
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                        {(movementTab === 'todos'
-                          ? scopedMovements
-                          : movementTab === 'ingreso'
-                          ? scopedIngresos
-                          : scopedEgresos
-                        ).map(m => {
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                        {displayedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
-                          const pm = (m.payment_method || '').toLowerCase().trim();
-                          const reasonLower = ((m as any).reason || '').toLowerCase();
-                          const isCard = pm.includes('tarjeta') || reasonLower.includes('tarjeta');
-                          const isBank = pm.includes('transferencia') || pm.includes('transf') || reasonLower.includes('banco:') || Boolean(m.bank_account_name);
-                          const isCash = !isCard && !isBank;
-                          const methodLabel = isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo');
-                          const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro de Efectivo');
 
                           return (
                             <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
-                                  !isCash
-                                    ? (isCard ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300')
-                                    : isIngreso
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                    : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                                }`}>
-                                  {isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro')}
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${m.badgeColorClass}`}>
+                                  {m.badgeText}
                                 </span>
                                 <div className="min-w-0">
-                                  <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={conceptText}>
-                                    {conceptText}
+                                  <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={m.concept}>
+                                    {m.concept}
                                   </div>
-                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                                    <span>{methodLabel}</span>
-                                    {m.created_at && (
-                                      <> • {new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</>
+                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono flex items-center gap-1.5">
+                                    <span className="font-medium text-zinc-600 dark:text-zinc-400">{m.paymentMethod}</span>
+                                    {m.reference && (
+                                      <span>• Ref: {m.reference}</span>
+                                    )}
+                                    {m.createdAt && (
+                                      <span>
+                                        • {new Date(m.createdAt).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })} • {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                      </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
                               <span className={`font-black font-mono shrink-0 ml-2 ${
-                                !isCash ? 'text-zinc-600 dark:text-zinc-400' : isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                               }`}>
                                 {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                               </span>
