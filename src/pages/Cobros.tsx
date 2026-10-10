@@ -262,17 +262,9 @@ export default function Cobros() {
     return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [associatedCustomerInvoices]);
 
-  const handlePrintStatementLetter = () => {
+  const handlePrintStatement = () => {
     document.body.classList.remove('print-ticket-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-ticket-mode');
-    document.body.classList.add('print-statement-mode', 'print-statement-letter-mode');
-    setTimeout(() => {
-      window.print();
-    }, 100);
-  };
-
-  const handlePrintStatementTicket = () => {
-    document.body.classList.remove('print-letter-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-mode', 'print-statement-letter-mode');
-    document.body.classList.add('print-ticket-mode', 'print-statement-ticket-mode');
+    document.body.classList.add('print-statement-mode', 'print-letter-mode');
     setTimeout(() => {
       window.print();
     }, 100);
@@ -283,10 +275,9 @@ export default function Cobros() {
       setTimeout(() => {
         document.body.classList.remove(
           'print-statement-mode',
-          'print-statement-letter-mode',
+          'print-letter-mode',
           'print-statement-ticket-mode',
-          'print-ticket-mode',
-          'print-letter-mode'
+          'print-ticket-mode'
         );
       }, 500);
     };
@@ -2069,21 +2060,12 @@ export default function Cobros() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={handlePrintStatementTicket}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
-                    title="Imprimir ticket térmico en impresora de recibos o 4BARCODE"
+                    onClick={handlePrintStatement}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    title="Imprimir estado de cuenta oficial en formato Carta"
                   >
                     <PrinterIcon className="w-4 h-4" />
-                    <span>Ticket (Térmica 80mm)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePrintStatementLetter}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
-                    title="Guardar o imprimir reporte formal en tamaño Carta / PDF"
-                  >
-                    <DocumentTextIcon className="w-4 h-4" />
-                    <span>Carta (PDF)</span>
+                    <span>Imprimir Estado de Cuenta (Carta)</span>
                   </button>
                 </div>
 
@@ -2134,12 +2116,20 @@ export default function Cobros() {
         )}
       </AnimatePresence>
 
-      {/* Portal de Impresión 1: Formato Carta Oficial / PDF */}
+      {/* Portal de Impresión: Formato Carta Oficial / PDF */}
       {selectedDetailItem && typeof document !== 'undefined' && createPortal(
         <div 
           className="printable-customer-statement font-sans text-black bg-white"
           style={{ width: '210mm', minWidth: '210mm', maxWidth: '210mm', margin: '0 auto', boxSizing: 'border-box' }}
         >
+          <style>{`
+            @media print {
+              @page {
+                size: letter portrait !important;
+                margin: 8mm 10mm !important;
+              }
+            }
+          `}</style>
           {/* Header Membrete */}
           <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-3">
             <div className="flex items-center gap-3 shrink-0">
@@ -2310,77 +2300,6 @@ export default function Cobros() {
               <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Firma de Recibido Conforme</p>
               <p className="text-[8.5px] text-gray-600">{selectedDetailItem.customer}</p>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Portal de Impresión 2: Formato Ticket Térmico 80mm / 4BARCODE */}
-      {selectedDetailItem && typeof document !== 'undefined' && createPortal(
-        <div 
-          className="printable-customer-statement-ticket font-mono text-black bg-white"
-          style={{ width: '80mm', maxWidth: '80mm', margin: '0 auto', boxSizing: 'border-box' }}
-        >
-          {/* Header */}
-          <div className="text-center pb-2 border-b border-dashed border-black">
-            <img src={logo} alt="Brianna Heavy" className="h-10 mx-auto object-contain mb-1" />
-            <h2 className="text-xs font-bold uppercase">BRIANNA HEAVY, SRL</h2>
-            <p className="text-[10px]">RNC: 131-48841-7</p>
-            <p className="text-[10px]">Tel: (809) 555-0199</p>
-            <p className="text-[10px] font-bold mt-1.5 uppercase">ESTADO DE CUENTA DE CLIENTE</p>
-          </div>
-
-          {/* Datos del Cliente */}
-          <div className="py-2 border-b border-dashed border-black text-[11px] space-y-0.5">
-            <p className="truncate"><strong>CLIENTE:</strong> {selectedDetailItem.customer}</p>
-            <p><strong>RNC/CED:</strong> {selectedDetailItem.rnc || 'Consumidor Final'}</p>
-            {selectedDetailItem.phone && <p><strong>TEL:</strong> {selectedDetailItem.phone}</p>}
-            <p><strong>FECHA:</strong> {new Date().toLocaleDateString('es-DO')} {new Date().toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</p>
-          </div>
-
-          {/* Resumen Financiero */}
-          <div className="py-2 border-b border-dashed border-black text-[11px] space-y-1">
-            <div className="flex justify-between">
-              <span>TOTAL FACTURADO:</span>
-              <span className="font-bold">RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>TOTAL ABONADO:</span>
-              <span className="font-bold">RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between font-bold border-t border-black pt-1 text-xs">
-              <span>BALANCE PENDIENTE:</span>
-              <span>RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-            </div>
-          </div>
-
-          {/* Facturas con Balance */}
-          <div className="py-2 border-b border-dashed border-black text-[10px]">
-            <p className="font-bold mb-1 text-[11px]">FACTURAS DEL CLIENTE ({associatedCustomerInvoices.length}):</p>
-            <div className="space-y-1.5">
-              {associatedCustomerInvoices.map((inv) => (
-                <div key={inv.id} className="border-b border-dotted border-gray-400 pb-1">
-                  <div className="flex justify-between font-bold">
-                    <span>FAC: {inv.invoice}</span>
-                    <span>[{inv.status}]</span>
-                  </div>
-                  <div className="text-[9px] text-gray-700">
-                    NCF: {inv.ncf} | Vence: {inv.dueDate}
-                  </div>
-                  <div className="flex justify-between text-[10px]">
-                    <span>Tot: RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                    <span className="font-bold">Pend: RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Firmas y Footer */}
-          <div className="pt-4 text-center text-[10px] space-y-3">
-            <div className="border-b border-black w-3/4 mx-auto pt-6"></div>
-            <p className="text-[9px] uppercase font-bold">Firma de Recibido Conforme</p>
-            <p className="text-[8px] text-gray-500 pt-1">Brianna Heavy, SRL • Santiago, R.D.</p>
           </div>
         </div>,
         document.body
