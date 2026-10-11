@@ -59,9 +59,9 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  // Por defecto si es administrador, ver solo sus propios movimientos ('mine')
-  // pero con la opción de ver todos ('all')
-  const [userScope, setUserScope] = useState<'mine' | 'all'>('mine');
+  // Por defecto, mostrar todos los movimientos a todos los usuarios ('all')
+  // con la opción de filtrar por 'Mis movimientos' ('mine')
+  const [userScope, setUserScope] = useState<'mine' | 'all'>('all');
 
   const loadMovements = async () => {
     try {
@@ -74,7 +74,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
   useEffect(() => {
     if (isOpen) {
-      setUserScope('mine'); // Por defecto siempre 'mine' al abrir el modal
+      setUserScope('all'); // Por defecto siempre mostrar todos los movimientos a todos los usuarios
       const accounts = getCompanyBankAccounts();
       setBankAccounts(accounts);
       if (accounts.length > 0 && !selectedBankId) {
@@ -106,13 +106,13 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     return filterMovementsByShift(movements, 'shift', activeShift, activeRegisterName, 'todos');
   }, [movements, activeShift, activeRegisterName]);
 
-  // 2. Movimientos filtrados según el alcance (por defecto solo míos si es admin o si el usuario no es admin)
+  // 2. Movimientos filtrados según el alcance (por defecto todos, o solo míos si se selecciona 'mine')
   const sessionMovements = useMemo(() => {
-    if (!isAdmin || userScope === 'mine') {
+    if (userScope === 'mine') {
       return allSessionMovements.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail));
     }
     return allSessionMovements;
-  }, [allSessionMovements, userScope, isAdmin, currentUserName, currentUserEmail]);
+  }, [allSessionMovements, userScope, currentUserName, currentUserEmail]);
 
   // Total de movimientos propios en esta sesión
   const mySessionMovementsCount = useMemo(() => {
@@ -708,41 +708,39 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </button>
               </div>
 
-              {/* Selector de alcance para Administrador: Mis movimientos (por defecto) vs Ver todos */}
-              {isAdmin && (
-                <div className="flex items-center justify-between p-2 px-3 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <UserIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400 shrink-0" />
-                    <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 truncate">
-                      Vista de administrador:
-                    </span>
-                  </div>
-                  <div className="flex bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setUserScope('mine')}
-                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                        userScope === 'mine'
-                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
-                      }`}
-                    >
-                      Mis movimientos ({mySessionMovementsCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUserScope('all')}
-                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                        userScope === 'all'
-                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
-                      }`}
-                    >
-                      Ver todos ({allSessionMovements.length})
-                    </button>
-                  </div>
+              {/* Selector de alcance: Ver todos los movimientos (por defecto) vs Mis movimientos */}
+              <div className="flex items-center justify-between p-2 px-3 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <UserIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400 shrink-0" />
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 truncate">
+                    Mostrar movimientos:
+                  </span>
                 </div>
-              )}
+                <div className="flex bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setUserScope('all')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      userScope === 'all'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                    }`}
+                  >
+                    Ver todos ({allSessionMovements.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUserScope('mine')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      userScope === 'mine'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                    }`}
+                  >
+                    Mis movimientos ({mySessionMovementsCount})
+                  </button>
+                </div>
+              </div>
 
               {/* Filtros simples de 3 opciones */}
               <div className="flex items-center justify-between gap-2">
@@ -773,17 +771,17 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 {filteredSessionMovements.length === 0 ? (
                   <div className="py-12 text-center text-gray-400 dark:text-zinc-500">
                     <p className="text-xs font-bold">
-                      {isAdmin && userScope === 'mine'
-                        ? 'No tienes movimientos registrados en esta sesión.'
+                      {userScope === 'mine'
+                        ? 'No tienes movimientos propios registrados en esta sesión.'
                         : 'No hay movimientos registrados en esta sesión.'}
                     </p>
-                    {isAdmin && userScope === 'mine' && allSessionMovements.length > 0 && (
+                    {userScope === 'mine' && allSessionMovements.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setUserScope('all')}
                         className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                       >
-                        Ver los {allSessionMovements.length} movimientos de la sesión
+                        Ver todos los movimientos de la sesión ({allSessionMovements.length})
                       </button>
                     )}
                   </div>

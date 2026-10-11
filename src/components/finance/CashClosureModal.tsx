@@ -392,17 +392,22 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // Filtrar movimientos de caja: en el cierre solo se deben mostrar y calcular los movimientos propios del usuario en sesión
-  const scopedMovements = useMemo(() => {
-    const list = filterMovementsByShift(
+  // 1. TODOS los movimientos de la caja/turno (para mostrar a todos los usuarios con total visibilidad)
+  const allShiftMovements = useMemo(() => {
+    return filterMovementsByShift(
       allMovements, 
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
-      loggedInUserName || selectedCashierFilter
+      'todos'
     );
-    return list.filter(m => isMovementOfUser(m, loggedInUserName, loggedInUserEmail));
-  }, [allMovements, filterMode, activeShift, selectedRegister, loggedInUserName, loggedInUserEmail, selectedCashierFilter]);
+  }, [allMovements, filterMode, activeShift, selectedRegister]);
+
+  // 2. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
+  const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
+  const scopedMovements = useMemo(() => {
+    return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
+  }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
 
   // Lista unificada que combina todas las Ventas (POS), Recibos de Financiamientos, Cobros a Crédito y Movimientos Manuales
@@ -422,6 +427,8 @@ export default function CashClosureModal({
       isCard: boolean;
       isBank: boolean;
       isCredit: boolean;
+      isMine?: boolean;
+      author?: string;
       badgeText: string;
       badgeColorClass: string;
     }> = [];
@@ -513,8 +520,9 @@ export default function CashClosureModal({
       });
     });
 
-    // 4. Movimientos manuales de caja (ingresos y egresos)
-    scopedMovements.forEach(m => {
+    // 4. Movimientos manuales de caja (ingresos y egresos): se muestran TODOS los movimientos del turno a todos los usuarios,
+    // pero distinguiendo cuáles pertenecen al cuadre del cajero en sesión y cuáles a otros usuarios
+    allShiftMovements.forEach(m => {
       const isIngreso = m.type === 'Ingreso';
       const pm = (m.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
@@ -524,7 +532,11 @@ export default function CashClosureModal({
       const isCredit = false;
       const isCash = !isCard && !isBank;
 
+      const isMine = isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail);
+      const author = m.created_by || (m as any).user_name || '';
+
       const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+      const baseBadge = isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro');
 
       list.push({
         id: `mov-${m.id}`,
@@ -541,8 +553,12 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro'),
-        badgeColorClass: !isCash
+        isMine,
+        author,
+        badgeText: isMine ? baseBadge : `${baseBadge} • ${author || 'Otro'}`,
+        badgeColorClass: !isMine
+          ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
+          : !isCash
           ? (isCard ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300')
           : isIngreso
           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
@@ -552,7 +568,7 @@ export default function CashClosureModal({
 
     // Ordenar cronológicamente descendente (más recientes primero)
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments, scopedMovements]);
+  }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments, allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
   const unifiedVentas = useMemo(() => 
     unifiedShiftMovements.filter(m => m.category === 'venta' || m.category === 'financiamiento' || m.category === 'cobro'),
@@ -573,6 +589,19 @@ export default function CashClosureModal({
     if (movementTab === 'egreso') return unifiedEgresos;
     return unifiedShiftMovements;
   }, [movementTab, unifiedShiftMovements, unifiedVentas, unifiedIngresos, unifiedEgresos]);
+
+  // Totales de entradas y salidas que suman estrictamente al cuadre actual (excluyendo movimientos de otros usuarios)
+  const quadreInflowsAmount = useMemo(() => {
+    return unifiedIngresos
+      .filter(m => m.isMine !== false)
+      .reduce((sum, m) => sum + m.amount, 0);
+  }, [unifiedIngresos]);
+
+  const quadreOutflowsAmount = useMemo(() => {
+    return unifiedEgresos
+      .filter(m => m.isMine !== false)
+      .reduce((sum, m) => sum + m.amount, 0);
+  }, [unifiedEgresos]);
 
   const totalInflowsAmount = useMemo(() => {
     return unifiedIngresos.reduce((sum, m) => sum + m.amount, 0);
@@ -1468,12 +1497,15 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         </div>
                       </div>
 
-                      <div className="text-[10px] font-mono font-bold flex items-center gap-1.5">
-                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40" title="Total entradas del turno (Ventas, Cobros e Ingresos)">
-                          +RD$ {totalInflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      <div 
+                        className="text-[10px] font-mono font-bold flex items-center gap-1.5" 
+                        title={`Suma de este cuadre: +RD$ ${quadreInflowsAmount.toLocaleString('es-DO')} / -RD$ ${quadreOutflowsAmount.toLocaleString('es-DO')} | Total general visible: +RD$ ${totalInflowsAmount.toLocaleString('es-DO')} / -RD$ ${totalOutflowsAmount.toLocaleString('es-DO')}`}
+                      >
+                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
+                          +RD$ {quadreInflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40" title="Total salidas del turno (Gastos y Egresos)">
-                          -RD$ {totalOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40">
+                          -RD$ {quadreOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -1492,9 +1524,14 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                         {displayedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
+                          const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
 
                           return (
-                            <div key={m.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+                            <div key={m.id} className={`flex items-center justify-between p-1.5 px-2.5 rounded-xl border text-xs transition-colors ${
+                              isExternalMovement 
+                                ? 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/40' 
+                                : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700'
+                            }`}>
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${m.badgeColorClass}`}>
                                   {m.badgeText}
@@ -1503,7 +1540,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                   <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={m.concept}>
                                     {m.concept}
                                   </div>
-                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono flex items-center gap-1.5">
+                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono flex items-center gap-1.5 flex-wrap">
                                     <span className="font-medium text-zinc-600 dark:text-zinc-400">{m.paymentMethod}</span>
                                     {m.reference && (
                                       <span>• Ref: {m.reference}</span>
@@ -1513,14 +1550,26 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                         • {new Date(m.createdAt).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })} • {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                       </span>
                                     )}
+                                    {isExternalMovement && (
+                                      <span className="text-amber-700 dark:text-amber-400 font-semibold text-[9px] bg-amber-100/70 dark:bg-amber-950/60 px-1.5 py-0.2 rounded">
+                                        No suma a este cuadre (Por: {m.author || 'Otro usuario'})
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
-                              <span className={`font-black font-mono shrink-0 ml-2 ${
-                                isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                              }`}>
-                                {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                              </span>
+                              <div className="text-right shrink-0 ml-2">
+                                <span className={`font-black font-mono ${
+                                  isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                } ${isExternalMovement ? 'opacity-70' : ''}`}>
+                                  {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                </span>
+                                {isExternalMovement && (
+                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                    Informativo
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}

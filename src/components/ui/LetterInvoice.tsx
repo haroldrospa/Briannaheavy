@@ -9,6 +9,19 @@ export interface LetterInvoiceItem {
   total_price: number;
 }
 
+export interface LetterInvoicePayment {
+  id?: string;
+  receiptNumber?: string;
+  date: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  cashier?: string;
+  currency?: 'DOP' | 'USD';
+  amountUsd?: number;
+  exchangeRate?: number;
+}
+
 export interface LetterInvoiceProps {
   ncf: string;
   invoiceType?: string;
@@ -30,6 +43,21 @@ export interface LetterInvoiceProps {
   subtotal: number;
   taxAmount: number;
   total: number;
+  paidAmount?: number;
+  balance?: number;
+  lastPayment?: {
+    receiptNumber?: string;
+    amount: number;
+    amountUsd?: number;
+    currency?: 'DOP' | 'USD';
+    date?: string;
+    method?: string;
+    reference?: string;
+    cashier?: string;
+    newBalance?: number;
+    previousBalance?: number;
+  };
+  paymentsHistory?: LetterInvoicePayment[];
   securityCode?: string;
   qrCodeUrl?: string;
   trackId?: string;
@@ -67,6 +95,10 @@ export default function LetterInvoice({
   subtotal,
   taxAmount,
   total,
+  paidAmount,
+  balance,
+  lastPayment,
+  paymentsHistory,
   securityCode = '34F595',
   qrCodeUrl,
   trackId,
@@ -116,6 +148,22 @@ export default function LetterInvoice({
         backgroundColor: '#ffffff',
       }}
     >
+      <style>{`
+        @media print {
+          @page {
+            size: letter portrait !important;
+            margin: 8mm 10mm !important;
+          }
+          body.print-letter-mode .letter-invoice-sheet {
+            display: block !important;
+            box-shadow: none !important;
+            margin: 0 auto !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            page-break-after: avoid !important;
+          }
+        }
+      `}</style>
       {/* 1. Header institucional */}
       <div className="flex justify-between items-start border-b-2 border-zinc-800 pb-6 mb-6">
         <div className="space-y-2 max-w-[55%]">
@@ -308,6 +356,25 @@ export default function LetterInvoice({
             </p>
           )}
         </div>
+        {lastPayment && (
+          <div className="col-span-2 pt-2.5 mt-1 border-t border-zinc-200 flex flex-wrap justify-between items-center bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
+            <div>
+              <span className="font-black text-emerald-900 block text-[11px] uppercase tracking-wider">
+                Comprobante de Abono / Pago {lastPayment.receiptNumber ? `(Recibo #${lastPayment.receiptNumber})` : ''}
+              </span>
+              <span className="text-[11px] text-zinc-600">
+                Fecha: <strong className="text-zinc-800">{lastPayment.date || formattedDate}</strong> • Método: <strong className="text-zinc-800">{lastPayment.method || 'Efectivo'}</strong>
+                {lastPayment.reference ? ` • Ref: ${lastPayment.reference}` : ''}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-[9px] font-bold text-zinc-500 uppercase block">Monto Abonado</span>
+              <span className="font-mono font-black text-emerald-700 text-sm">
+                {formatRD(lastPayment.amount)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. Tabla de Artículos y Detalles */}
@@ -358,6 +425,42 @@ export default function LetterInvoice({
           </tbody>
         </table>
       </div>
+
+      {/* 3.1 Historial de Abonos si existen */}
+      {paymentsHistory && paymentsHistory.length > 0 && (
+        <div className="mb-6 border border-zinc-200 rounded-2xl overflow-hidden text-xs">
+          <div className="bg-zinc-100 px-3.5 py-2 border-b border-zinc-200 font-black text-zinc-800 text-[11px] uppercase tracking-wider flex justify-between items-center">
+            <span>Historial de Abonos / Pagos Aplicados ({paymentsHistory.length})</span>
+            <span className="font-mono text-zinc-700 font-bold">
+              Total Abonado: {formatRD(paymentsHistory.reduce((acc, p) => acc + (p.amount || 0), 0))}
+            </span>
+          </div>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-zinc-50 text-[10px] font-bold text-zinc-600 uppercase border-b border-zinc-200">
+                <th className="py-1.5 px-3">Fecha</th>
+                <th className="py-1.5 px-3">Método</th>
+                <th className="py-1.5 px-3">Referencia</th>
+                <th className="py-1.5 px-3">Cajero</th>
+                <th className="py-1.5 px-3 text-right">Monto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 text-[11px]">
+              {paymentsHistory.map((p, idx) => (
+                <tr key={idx} className="hover:bg-zinc-50/50">
+                  <td className="py-1.5 px-3 font-medium text-zinc-700">{p.date}</td>
+                  <td className="py-1.5 px-3 font-medium text-zinc-900">{p.method}</td>
+                  <td className="py-1.5 px-3 font-mono text-zinc-600">{p.reference || '—'}</td>
+                  <td className="py-1.5 px-3 text-zinc-600">{p.cashier || 'Cajero'}</td>
+                  <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
+                    {formatRD(p.amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 4. Resumen & Bloque Informativo (Sin QR para Cotizaciones) */}
       <div className="grid grid-cols-12 gap-6 items-start border-t-2 border-zinc-900 pt-6 mb-6">
@@ -423,12 +526,28 @@ export default function LetterInvoice({
                 <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
               </div>
             )}
+            {paidAmount !== undefined && (
+              <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
+                <span>Total Abonado / Pagado:</span>
+                <span className="font-mono text-emerald-700 font-black">{formatRD(paidAmount)}</span>
+              </div>
+            )}
+            {balance !== undefined && (
+              <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
+                <span>Saldo Pendiente:</span>
+                <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatRD(Math.max(0, balance))}
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className="p-3.5 bg-zinc-950 text-white rounded-2xl flex justify-between items-center shadow-md">
+          <div className={`p-3.5 rounded-2xl flex justify-between items-center shadow-md ${
+            balance !== undefined && balance <= 0.01 ? 'bg-emerald-950 text-white' : 'bg-zinc-950 text-white'
+          }`}>
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
-                {isCotizacion ? 'Total Cotizado' : 'Total a Pagar'}
+                {isCotizacion ? 'Total Cotizado' : (balance !== undefined ? 'Monto Total Factura' : 'Total a Pagar')}
               </span>
               <span className="text-lg font-black font-mono tracking-tight text-white">
                 {formatRD(total)}
@@ -439,9 +558,18 @@ export default function LetterInvoice({
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
-              {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
-            </span>
+            <div className="text-right">
+              <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
+                {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
+              </span>
+              {balance !== undefined && (
+                <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${
+                  balance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'
+                }`}>
+                  {balance <= 0.01 ? '✓ SALDADA' : 'PENDIENTE'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

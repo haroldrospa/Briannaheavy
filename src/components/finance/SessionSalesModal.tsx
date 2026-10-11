@@ -51,7 +51,7 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const loadMovements = async () => {
     const movs = await fetchCashMovements(true);
     if (movs) {
-      const filtered = filterMovementsByShift(movs, 'today');
+      const filtered = filterMovementsByShift(movs, 'today', undefined, undefined, 'todos');
       setCashMovements(filtered.length > 0 ? filtered : movs);
     }
   };
@@ -348,7 +348,12 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                           {mov.type}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-medium text-zinc-800 dark:text-zinc-200">{mov.concept}</td>
+                      <td className="py-2.5 px-3 font-medium text-zinc-800 dark:text-zinc-200">
+                        <div>{mov.concept}</div>
+                        {mov.created_by && (
+                          <div className="text-[10px] text-zinc-400 font-mono">Por: {mov.created_by}</div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-3 text-zinc-500 dark:text-zinc-400 font-mono text-[11px]">{timeStr}</td>
                       <td className={`py-2.5 px-3 text-right font-bold font-mono ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {isIngreso ? '+' : '-'}RD$ {fmt(Number(mov.amount))}

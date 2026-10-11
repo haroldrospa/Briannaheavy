@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, type Invoice } from '../services/invoicesService';
+import LetterInvoice from '../components/ui/LetterInvoice';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen } from '../services/shiftsService';
@@ -180,6 +181,7 @@ export default function Cobros() {
     cashier: string;
   } | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [invoiceToPrintLetter, setInvoiceToPrintLetter] = useState<any | null>(null);
 
   // Detail & Account Statement Modal State
   const [selectedDetailItem, setSelectedDetailItem] = useState<ReceivableItem | null>(null);
@@ -261,6 +263,63 @@ export default function Cobros() {
 
     return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [associatedCustomerInvoices]);
+
+  const handleTriggerPrintLetter = () => {
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-barcode-mode',
+      'print-closure-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-letter-mode');
+    setTimeout(() => {
+      window.print();
+    }, 120);
+  };
+
+  const handlePrintReceivableInvoiceLetter = (item: ReceivableItem) => {
+    const storedInvoices = getLocalStorageInvoices();
+    const matchedInv = storedInvoices.find(inv => inv.id === item.invoice_id || inv.invoice_number === item.invoice);
+    const lastPay = item.paymentsHistory && item.paymentsHistory.length > 0 
+      ? item.paymentsHistory[item.paymentsHistory.length - 1] 
+      : undefined;
+
+    const invoiceForPrint = {
+      ...(matchedInv || {}),
+      id: item.invoice_id,
+      invoice_number: item.invoice,
+      ncf: item.ncf || matchedInv?.ncf || '',
+      customer_name: item.customer,
+      customer_rnc: item.rnc,
+      customer_phone: item.phone || (matchedInv as any)?.customer_phone || '',
+      total_amount: item.totalAmount,
+      paid_amount: item.paidAmount,
+      balance: item.balance,
+      payments_history: item.paymentsHistory,
+      lastPayment: lastPay ? {
+        amount: lastPay.amount,
+        amountUsd: lastPay.amountUsd,
+        currency: lastPay.currency,
+        date: lastPay.date,
+        method: lastPay.method,
+        reference: lastPay.reference,
+        cashier: lastPay.cashier
+      } : undefined,
+      items: (matchedInv?.items && matchedInv.items.length > 0) ? matchedInv.items : [
+        {
+          description: item.items || 'Repuestos & Servicios de Maquinaria Pesada',
+          quantity: 1,
+          unit_price: item.totalAmount,
+          total_price: item.totalAmount
+        }
+      ]
+    };
+
+    setInvoiceToPrintLetter(invoiceForPrint);
+    handleTriggerPrintLetter();
+  };
 
   const handlePrintStatement = () => {
     document.body.classList.remove('print-ticket-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-ticket-mode');
@@ -479,7 +538,7 @@ export default function Cobros() {
 
     // Prepare Receipt Voucher
     const receiptNumber = getNextReceiptNumber();
-    setLastPaymentReceipt({
+    const paymentReceiptData = {
       receiptNumber,
       customer: selectedReceivable.customer,
       rnc: selectedReceivable.rnc,
@@ -495,6 +554,45 @@ export default function Cobros() {
       method: fullMethodLabel,
       reference: paymentReference,
       cashier: cashierName
+    };
+    setLastPaymentReceipt(paymentReceiptData);
+
+    // Prepare Updated Letter Invoice for Instant Printing
+    const storedInvoices = getLocalStorageInvoices();
+    const matchedInv = storedInvoices.find(inv => inv.id === selectedReceivable.invoice_id || inv.invoice_number === selectedReceivable.invoice);
+    
+    setInvoiceToPrintLetter({
+      ...(matchedInv || {}),
+      id: selectedReceivable.invoice_id,
+      invoice_number: selectedReceivable.invoice,
+      ncf: selectedReceivable.ncf || matchedInv?.ncf || '',
+      customer_name: selectedReceivable.customer,
+      customer_rnc: selectedReceivable.rnc,
+      customer_phone: selectedReceivable.phone || (matchedInv as any)?.customer_phone || '',
+      total_amount: selectedReceivable.totalAmount,
+      paid_amount: (selectedReceivable.paidAmount || 0) + amount,
+      balance: newBalance,
+      payments_history: updatedHistory,
+      lastPayment: {
+        receiptNumber,
+        amount,
+        amountUsd,
+        currency: paymentCurrency,
+        date: formattedPaymentDate,
+        method: fullMethodLabel,
+        reference: paymentReference,
+        cashier: cashierName,
+        newBalance,
+        previousBalance
+      },
+      items: (matchedInv?.items && matchedInv.items.length > 0) ? matchedInv.items : [
+        {
+          description: selectedReceivable.items || 'Repuestos & Servicios de Maquinaria Pesada',
+          quantity: 1,
+          unit_price: selectedReceivable.totalAmount,
+          total_price: selectedReceivable.totalAmount
+        }
+      ]
     });
 
     setPaymentDate(new Date().toISOString().slice(0, 10));
@@ -802,6 +900,17 @@ export default function Cobros() {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintReceivableInvoiceLetter(item);
+                        }}
+                        className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        title="Imprimir Factura (Formato Carta)"
+                      >
+                        <PrinterIcon className="w-4 h-4" />
+                      </button>
                       {item.balance > 0 ? (
                         <button
                           type="button"
@@ -902,6 +1011,17 @@ export default function Cobros() {
                             title="Ver información y estado de cuenta"
                           >
                             <EyeIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePrintReceivableInvoiceLetter(item);
+                            }}
+                            className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            title="Imprimir Factura (Formato Carta)"
+                          >
+                            <PrinterIcon className="w-4 h-4" />
                           </button>
                           {item.balance > 0 ? (
                             <button
@@ -1221,23 +1341,21 @@ export default function Cobros() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 mt-4">
               <button
                 type="button"
-                onClick={() => {
-                  window.print();
-                }}
-                className="flex-1 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                onClick={() => handleTriggerPrintLetter()}
+                className="w-full py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-red-900/20 transition-all active:scale-[0.98]"
               >
-                <PrinterIcon className="w-4 h-4" />
-                <span>Imprimir recibo</span>
+                <PrinterIcon className="w-4 h-4 stroke-[2.2]" />
+                <span>Imprimir Factura con Abono (Carta)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsReceiptModalOpen(false)}
-                className="flex-1 py-2 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+                className="w-full py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
               >
-                Listo
+                Listo / Cerrar
               </button>
             </div>
           </div>
@@ -2060,6 +2178,15 @@ export default function Cobros() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => handlePrintReceivableInvoiceLetter(selectedDetailItem)}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    title="Imprimir esta factura en formato Carta con historial de abonos"
+                  >
+                    <PrinterIcon className="w-4 h-4" />
+                    <span>Imprimir Factura (Carta)</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={handlePrintStatement}
                     className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                     title="Imprimir estado de cuenta oficial en formato Carta"
@@ -2302,6 +2429,47 @@ export default function Cobros() {
             </div>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Portal Oficial de Factura Formato Carta para Cuentas por Cobrar */}
+      {invoiceToPrintLetter && typeof document !== 'undefined' && createPortal(
+        <LetterInvoice
+          ncf={invoiceToPrintLetter.ncf || invoiceToPrintLetter.invoice_number}
+          invoiceType={invoiceToPrintLetter.ncf_type || (invoiceToPrintLetter.is_electronic ? 'E32' : 'INTERNO')}
+          isElectronic={Boolean(invoiceToPrintLetter.is_electronic || (invoiceToPrintLetter.ncf && invoiceToPrintLetter.ncf.startsWith('E')))}
+          date={invoiceToPrintLetter.created_at || invoiceToPrintLetter.issueDate || new Date()}
+          customerName={invoiceToPrintLetter.customer_name || invoiceToPrintLetter.customer}
+          customerRnc={invoiceToPrintLetter.customer_rnc || invoiceToPrintLetter.rnc || ''}
+          customerPhone={invoiceToPrintLetter.customer_phone || invoiceToPrintLetter.phone || ''}
+          customerAddress={invoiceToPrintLetter.customer_address || ''}
+          paymentMethod={invoiceToPrintLetter.payment_method || 'Crédito'}
+          creditDays={invoiceToPrintLetter.credit_days || invoiceToPrintLetter.creditDays || 15}
+          dueDate={invoiceToPrintLetter.due_date || invoiceToPrintLetter.dueDate}
+          cashierName={invoiceToPrintLetter.cashier_name || 'Cajero Cobros'}
+          items={invoiceToPrintLetter.items?.map((it: any) => ({
+            description: it.description,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            total_price: it.total_price
+          })) || [{
+            description: invoiceToPrintLetter.rawItems || 'Repuestos & Servicios de Maquinaria Pesada',
+            quantity: 1,
+            unit_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount,
+            total_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount
+          }]}
+          subtotal={invoiceToPrintLetter.subtotal || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18)}
+          taxAmount={invoiceToPrintLetter.tax_amount || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) - ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18))}
+          total={invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount}
+          paidAmount={invoiceToPrintLetter.paid_amount ?? invoiceToPrintLetter.paidAmount}
+          balance={invoiceToPrintLetter.balance}
+          lastPayment={invoiceToPrintLetter.lastPayment}
+          paymentsHistory={invoiceToPrintLetter.payments_history || invoiceToPrintLetter.paymentsHistory}
+          securityCode={invoiceToPrintLetter.ecf_security_code || '34F595'}
+          qrCodeUrl={invoiceToPrintLetter.ecf_qr_url}
+          trackId={invoiceToPrintLetter.ecf_track_id}
+          isPrintOnly={true}
+        />,
         document.body
       )}
     </div>
