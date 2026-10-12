@@ -394,9 +394,6 @@ export default function Cobros() {
     handlePrintReceivableInvoice(item, 'letter');
   };
 
-  const handlePrintReceivableInvoiceTicket = (item: ReceivableItem) => {
-    handlePrintReceivableInvoice(item, 'ticket');
-  };
 
   const handlePrintStatement = () => {
     document.body.classList.remove('print-ticket-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-ticket-mode');
@@ -1030,17 +1027,7 @@ export default function Cobros() {
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePrintReceivableInvoiceTicket(item);
-                        }}
-                        className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-                        title="Imprimir Ticket Térmico (80mm)"
-                      >
-                        <DocumentTextIcon className="w-4 h-4" />
-                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1153,17 +1140,7 @@ export default function Cobros() {
                           >
                             <EyeIcon className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePrintReceivableInvoiceTicket(item);
-                            }}
-                            className="p-1 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-                            title="Imprimir Ticket Térmico (80mm)"
-                          >
-                            <DocumentTextIcon className="w-3.5 h-3.5" />
-                          </button>
+
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1494,24 +1471,15 @@ export default function Cobros() {
             </div>
 
             <div className="flex flex-col gap-2 mt-4">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleTriggerPrintTicket()}
-                  className="py-2.5 bg-gray-900 hover:bg-black dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
-                  title="Imprimir ticket térmico en impresora de 80mm"
-                >
-                  <PrinterIcon className="w-4 h-4 stroke-[2.2]" />
-                  <span>Ticket (80mm)</span>
-                </button>
+              <div className="flex flex-col gap-2">
                 <button
                   type="button"
                   onClick={() => handleTriggerPrintLetter()}
-                  className="py-2.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-red-900/20 transition-all active:scale-[0.98]"
+                  className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-red-900/20 transition-all active:scale-[0.98]"
                   title="Imprimir factura completa en formato Carta oficial DGII"
                 >
                   <PrinterIcon className="w-4 h-4 stroke-[2.2]" />
-                  <span>Factura (Carta)</span>
+                  <span>Imprimir Factura (Carta)</span>
                 </button>
               </div>
               <button
@@ -2340,15 +2308,7 @@ export default function Cobros() {
               {/* Bottom Action Footer */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3.5 border-t border-gray-100 dark:border-zinc-800 shrink-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePrintReceivableInvoiceTicket(selectedDetailItem)}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gray-900 hover:bg-black dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                    title="Imprimir esta factura en formato Ticket térmico de 80mm"
-                  >
-                    <PrinterIcon className="w-4 h-4" />
-                    <span>Ticket (80mm)</span>
-                  </button>
+
                   <button
                     type="button"
                     onClick={() => handlePrintReceivableInvoiceLetter(selectedDetailItem)}

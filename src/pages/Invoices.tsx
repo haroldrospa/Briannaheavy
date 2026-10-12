@@ -1159,20 +1159,7 @@ export default function Invoices() {
                   >
                     Cerrar
                   </button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      document.body.classList.add('print-ticket-mode');
-                      document.body.classList.remove('print-letter-mode');
-                      setTimeout(() => {
-                        window.print();
-                      }, 50);
-                    }}
-                    className="px-4 py-2.5 rounded-xl bg-gray-200 dark:bg-zinc-700 hover:bg-gray-300 dark:hover:bg-zinc-600 text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                  >
-                    <PrinterIcon className="w-4 h-4" />
-                    <span>Imprimir Ticket</span>
-                  </button>
+
                   <button 
                     type="button" 
                     onClick={() => {

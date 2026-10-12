@@ -18,7 +18,6 @@ import {
   XMarkIcon,
   CheckCircleIcon,
   PrinterIcon,
-  DocumentArrowDownIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
   ChevronDownIcon,
@@ -2525,15 +2524,7 @@ export default function POS() {
     date: Date;
   } | null>(null);
 
-  const printTicket = useCallback(() => {
-    document.body.classList.add('print-ticket-mode');
-    document.body.classList.remove('print-letter-mode');
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        window.print();
-      }, 120);
-    });
-  }, []);
+
 
   const printLetter = useCallback(() => {
     document.body.classList.add('print-letter-mode');
@@ -4156,22 +4147,14 @@ export default function POS() {
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="flex flex-col gap-2 mb-3">
                   <button
                     type="button"
                     onClick={printLetter}
-                    className="flex items-center justify-center gap-1.5 py-3 px-3 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
-                  >
-                    <DocumentArrowDownIcon className="h-4 w-4" />
-                    <span>Factura (PDF / Carta)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={printTicket}
-                    className="flex items-center justify-center gap-1.5 py-3 px-3 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-[0.98] text-gray-800 dark:text-zinc-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
                   >
                     <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Ticket Térmico</span>
+                    <span>Imprimir Factura (Carta)</span>
                   </button>
                 </div>
               )}
