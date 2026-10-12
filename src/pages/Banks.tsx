@@ -11,7 +11,8 @@ import {
   ArrowPathIcon,
   PlusIcon,
   TrashIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ArrowsRightLeftIcon
 } from '@heroicons/react/24/outline';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { 
@@ -22,9 +23,11 @@ import {
   type BankTransaction 
 } from '../services/bankService';
 import CashMovementModal from '../components/finance/CashMovementModal';
+import BankReconciliationTab from '../components/banks/BankReconciliationTab';
 import logo from '../assets/logo.png';
 
 export default function Banks() {
+  const [activeMainTab, setActiveMainTab] = useState<'movements' | 'reconciliation'>('movements');
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -200,13 +203,55 @@ export default function Banks() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* 1. Header Minimalista con el Diseño de la App */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
-        <div>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400 font-medium">
-            Historial consolidado de movimientos bancarios, depósitos, transferencias y movimientos en efectivo.
-          </p>
-        </div>
+      {/* Selector de Pestañas Principales */}
+      <div className="flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-3 print:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('movements')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeMainTab === 'movements'
+              ? 'bg-[#ED1C24] text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <BuildingLibraryIcon className="w-4 h-4" />
+          <span>Movimientos y Cuentas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('reconciliation')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            activeMainTab === 'reconciliation'
+              ? 'bg-[#ED1C24] text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <ArrowsRightLeftIcon className="w-4 h-4" />
+          <span>Conciliación Bancaria</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+            activeMainTab === 'reconciliation' ? 'bg-white/25 text-white' : 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+          }`}>
+            Nuevo
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'reconciliation' ? (
+        <BankReconciliationTab
+          bankAccounts={bankAccounts}
+          transactions={transactions}
+          onTransactionsUpdated={loadData}
+        />
+      ) : (
+        <>
+          {/* 1. Header Minimalista con el Diseño de la App */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+            <div>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-zinc-400 font-medium">
+                Historial consolidado de movimientos bancarios, depósitos, transferencias y movimientos en efectivo.
+              </p>
+            </div>
 
         <div className="flex items-center gap-2">
           <button
@@ -827,6 +872,8 @@ export default function Banks() {
           )}
         </div>
       </div>
+    </>
+  )}
 
       {/* Modal de Confirmación de Eliminación */}
       {transactionToDelete && (
