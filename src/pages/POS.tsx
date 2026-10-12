@@ -54,9 +54,8 @@ import OpenShiftModal from '../components/finance/OpenShiftModal';
 import SessionSalesModal from '../components/finance/SessionSalesModal';
 import type { SessionSale } from '../components/finance/SessionSalesModal';
 import QRCode from '../components/ui/QRCode';
-import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
-import { getReceiptFontSize, type ReceiptFontSize, getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
+import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { getActiveRole, hasPermission } from '../utils/rolePermissions';
 import { verifyAdminMasterKey } from '../utils/scheduleStorage';
 import { 
@@ -2473,7 +2472,6 @@ export default function POS() {
   // States
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [currentNCF, setCurrentNCF] = useState<string>('');
-  const [receiptFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
   
   // Single Payment Logic
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
@@ -4242,54 +4240,6 @@ export default function POS() {
         )}
       </AnimatePresence>
 
-      {/* High-Definition 80mm / 58mm Modern Minimalist Thermal Receipt Portal (Mounted only when printing/success) */}
-      {isSuccessModalOpen && !isCashClosureOpen && createPortal(
-        <ModernReceipt
-          ncf={lastCompletedSale?.ncf || currentNCF}
-          invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
-          isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
-          date={lastCompletedSale?.date || new Date()}
-          customerName={
-            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.name
-              ? lastCompletedSale.client.name
-              : typeof lastCompletedSale?.client === 'string' && lastCompletedSale.client
-              ? lastCompletedSale.client
-              : (selectedClient ? selectedClient.name : (billingMode === 'electronic' ? 'Consumidor Final' : 'Consumidor Final (Venta de Contado)'))
-          }
-          customerRnc={
-            typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.rnc
-              ? lastCompletedSale.client.rnc
-              : (selectedClient?.rnc || '')
-          }
-          paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
-          creditDays={lastCompletedSale?.creditDays}
-          dueDate={lastCompletedSale?.dueDate}
-          receivedAmount={lastCompletedSale?.lastPaymentInfo?.receivedAmount ?? lastPaymentInfo?.receivedAmount}
-          changeAmount={lastCompletedSale?.lastPaymentInfo?.changeAmount ?? lastPaymentInfo?.changeAmount}
-          transferReference={lastCompletedSale?.lastPaymentInfo?.transferReference ?? lastPaymentInfo?.transferReference}
-          bankAccountName={lastCompletedSale?.lastPaymentInfo?.bankAccountName ?? lastPaymentInfo?.bankAccountName}
-          cashierName={localStorage.getItem('brianna_user_name') || 'Cajero POS'}
-          items={lastCompletedSale?.items || cart.map(item => ({
-            description: item.product.name,
-            quantity: item.quantity,
-            unit_price: item.product.price,
-            total_price: calculateItemTotal(item)
-          }))}
-          subtotal={lastCompletedSale?.subtotal ?? subtotal}
-          taxAmount={lastCompletedSale?.tax ?? tax}
-          total={lastCompletedSale?.total ?? total}
-          securityCode={lastCompletedSale?.lastEcfData?.securityCode || lastEcfData?.securityCode || '34F595'}
-          qrCodeUrl={lastCompletedSale?.lastEcfData?.qrCodeUrl || lastEcfData?.qrCodeUrl}
-          fontSize={receiptFontSize}
-          isPrintOnly={true}
-          paidCurrency={lastCompletedSale?.lastPaymentInfo?.paidCurrency ?? lastPaymentInfo?.paidCurrency}
-          exchangeRate={lastCompletedSale?.lastPaymentInfo?.exchangeRate ?? lastPaymentInfo?.exchangeRate}
-          receivedAmountUsd={lastCompletedSale?.lastPaymentInfo?.receivedAmountUsd ?? lastPaymentInfo?.receivedAmountUsd}
-          changeAmountUsd={lastCompletedSale?.lastPaymentInfo?.changeAmountUsd ?? lastPaymentInfo?.changeAmountUsd}
-          totalUsd={lastCompletedSale?.lastPaymentInfo?.totalUsd ?? lastPaymentInfo?.totalUsd}
-        />,
-        document.body
-      )}
 
       {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII / PDF - Mounted only when printing/success) */}
       {isSuccessModalOpen && !isCashClosureOpen && createPortal(

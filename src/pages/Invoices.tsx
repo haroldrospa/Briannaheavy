@@ -17,10 +17,8 @@ import {
   BanknotesIcon
 } from '@heroicons/react/24/outline';
 import QRCode from '../components/ui/QRCode';
-import ModernReceipt from '../components/ui/ModernReceipt';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
-import { getReceiptFontSize, type ReceiptFontSize } from '../utils/receiptSettings';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
 import { fetchFinancings, getLocalStorageFinancings, updateFinancing, deleteFinancing, type Financing } from '../services/financingService';
 import { fetchReceiptsFromSupabase, getStoredReceipts, saveReceipt, deleteFinancingReceipt, type FinancingPaymentReceipt } from '../services/financingReceiptsService';
@@ -230,7 +228,6 @@ export default function Invoices() {
   const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [creditNoteInvoice, setCreditNoteInvoice] = useState<Invoice | null>(null);
-  const [receiptFontSize] = useState<ReceiptFontSize>(getReceiptFontSize);
 
 
   const loadData = async (force = false) => {
@@ -1181,35 +1178,7 @@ export default function Invoices() {
         })()}
       </AnimatePresence>
 
-      {/* Printable Receipt Portal for Invoices page (Ticket 80mm) */}
-      {viewingInvoice && createPortal(
-        <ModernReceipt
-          ncf={viewingInvoice.ncf || viewingInvoice.invoice_number}
-          invoiceType={viewingInvoice.ncf_type || (viewingInvoice.is_electronic ? 'E32' : 'INTERNO')}
-          isElectronic={viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic'}
-          date={viewingInvoice.created_at || new Date()}
-          customerName={viewingInvoice.customer_name}
-          customerRnc={viewingInvoice.customer_rnc || ''}
-          paymentMethod={viewingInvoice.payment_method || 'Efectivo'}
-          creditDays={viewingInvoice.credit_days}
-          dueDate={viewingInvoice.due_date}
-          cashierName={viewingInvoice.cashier_name || 'Cajero POS'}
-          items={viewingInvoice.items?.map(it => ({
-            description: it.description,
-            quantity: it.quantity,
-            unit_price: it.unit_price,
-            total_price: it.total_price
-          })) || []}
-          subtotal={viewingInvoice.subtotal || viewingInvoice.total_amount / 1.18}
-          taxAmount={viewingInvoice.tax_amount || (viewingInvoice.total_amount - viewingInvoice.total_amount / 1.18)}
-          total={viewingInvoice.total_amount}
-          securityCode={viewingInvoice.ecf_security_code || '34F595'}
-          qrCodeUrl={viewingInvoice.ecf_qr_url}
-          fontSize={receiptFontSize}
-          isPrintOnly={true}
-        />,
-        document.body
-      )}
+
 
       {/* Full Page Letter Invoice Portal for Invoices page (Formato Carta Oficial) */}
       {viewingInvoice && createPortal(

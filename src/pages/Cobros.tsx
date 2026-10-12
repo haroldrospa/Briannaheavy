@@ -17,7 +17,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
 import LetterInvoice from '../components/ui/LetterInvoice';
-import ModernReceipt from '../components/ui/ModernReceipt';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
 import { isShiftOpen, getCurrentUserRegister } from '../services/shiftsService';
@@ -280,24 +279,7 @@ export default function Cobros() {
     });
   };
 
-  const handleTriggerPrintTicket = () => {
-    document.body.classList.remove(
-      'print-letter-mode',
-      'print-barcode-mode',
-      'print-closure-mode',
-      'print-receipt-mode',
-      'print-statement-mode',
-      'print-statement-ticket-mode'
-    );
-    document.body.classList.add('print-ticket-mode');
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        window.print();
-      }, 150);
-    });
-  };
-
-  const handlePrintReceivableInvoice = (item: ReceivableItem, format: 'letter' | 'ticket' = 'letter') => {
+  const handlePrintReceivableInvoice = (item: ReceivableItem) => {
     const storedInvoices = getLocalStorageInvoices();
     const itemInvClean = String(item.invoice || '').trim();
     const matchedInv = storedInvoices.find(inv => {
@@ -382,16 +364,11 @@ export default function Cobros() {
     };
 
     setInvoiceToPrintLetter(invoiceForPrint);
-
-    if (format === 'ticket') {
-      handleTriggerPrintTicket();
-    } else {
-      handleTriggerPrintLetter();
-    }
+    handleTriggerPrintLetter();
   };
 
   const handlePrintReceivableInvoiceLetter = (item: ReceivableItem) => {
-    handlePrintReceivableInvoice(item, 'letter');
+    handlePrintReceivableInvoice(item);
   };
 
 
@@ -2607,46 +2584,7 @@ export default function Cobros() {
         document.body
       )}
 
-      {/* Portal Oficial de Factura Ticket (80mm) para Cuentas por Cobrar */}
-      {invoiceToPrintLetter && typeof document !== 'undefined' && createPortal(
-        <ModernReceipt
-          invoiceNumber={invoiceToPrintLetter.invoice_number || invoiceToPrintLetter.invoice}
-          ncf={invoiceToPrintLetter.ncf || invoiceToPrintLetter.invoice_number}
-          invoiceType={invoiceToPrintLetter.ncf_type || (invoiceToPrintLetter.is_electronic ? 'E32' : 'INTERNO')}
-          isElectronic={Boolean(invoiceToPrintLetter.is_electronic || (invoiceToPrintLetter.ncf && invoiceToPrintLetter.ncf.startsWith('E')))}
-          date={invoiceToPrintLetter.created_at || invoiceToPrintLetter.issueDate || new Date()}
-          customerName={invoiceToPrintLetter.customer_name || invoiceToPrintLetter.customer}
-          customerRnc={invoiceToPrintLetter.customer_rnc || invoiceToPrintLetter.rnc || ''}
-          customerPhone={invoiceToPrintLetter.customer_phone || invoiceToPrintLetter.phone || ''}
-          paymentMethod={invoiceToPrintLetter.payment_method || 'Crédito'}
-          creditDays={invoiceToPrintLetter.credit_days || invoiceToPrintLetter.creditDays || 15}
-          dueDate={invoiceToPrintLetter.due_date || invoiceToPrintLetter.dueDate}
-          cashierName={invoiceToPrintLetter.cashier_name || localStorage.getItem('brianna_user_name') || 'Cajero POS'}
-          items={invoiceToPrintLetter.items?.map((it: any) => ({
-            description: it.description,
-            quantity: it.quantity,
-            unit_price: it.unit_price,
-            total_price: it.total_price
-          })) || [{
-            description: invoiceToPrintLetter.rawItems || 'Repuestos & Servicios de Maquinaria Pesada',
-            quantity: 1,
-            unit_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount,
-            total_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount
-          }]}
-          subtotal={invoiceToPrintLetter.subtotal || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18)}
-          taxAmount={invoiceToPrintLetter.tax_amount || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) - ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18))}
-          total={invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount}
-          paidAmount={invoiceToPrintLetter.paid_amount ?? invoiceToPrintLetter.paidAmount}
-          balance={invoiceToPrintLetter.balance}
-          lastPayment={invoiceToPrintLetter.lastPayment}
-          paymentsHistory={invoiceToPrintLetter.payments_history || invoiceToPrintLetter.paymentsHistory}
-          securityCode={invoiceToPrintLetter.ecf_security_code || '34F595'}
-          qrCodeUrl={invoiceToPrintLetter.ecf_qr_url}
-          trackId={invoiceToPrintLetter.ecf_track_id}
-          isPrintOnly={true}
-        />,
-        document.body
-      )}
+
     </div>
   );
 }

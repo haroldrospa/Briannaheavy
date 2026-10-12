@@ -20,7 +20,6 @@ import {
 import type { CreditNote } from '../types/creditNote';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
-import CreditNoteTicketReceipt from '../components/creditNotes/CreditNoteTicketReceipt';
 import CreditNoteLetterReceipt from '../components/creditNotes/CreditNoteLetterReceipt';
 import QRCode from '../components/ui/QRCode';
 
@@ -569,18 +568,6 @@ export default function CreditNotes() {
                 <button
                   type="button"
                   onClick={() => {
-                    document.body.classList.add('print-ticket-mode');
-                    document.body.classList.remove('print-letter-mode');
-                    setTimeout(() => window.print(), 50);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-gray-200 dark:bg-zinc-700 hover:bg-gray-300 text-zinc-900 dark:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-                >
-                  <PrinterIcon className="w-4 h-4" />
-                  <span>Imprimir Ticket</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
                     document.body.classList.add('print-letter-mode');
                     document.body.classList.remove('print-ticket-mode');
                     setTimeout(() => window.print(), 50);
@@ -588,7 +575,7 @@ export default function CreditNotes() {
                   className="px-5 py-2.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <PrinterIcon className="w-4 h-4" />
-                  <span>Carta PDF</span>
+                  <span>Imprimir Nota de Crédito (Carta)</span>
                 </button>
               </div>
             </motion.div>
@@ -642,13 +629,7 @@ export default function CreditNotes() {
       </AnimatePresence>
 
       {/* Portals for Printing */}
-      {viewingNote && typeof document !== 'undefined' && createPortal(
-        <CreditNoteTicketReceipt
-          creditNote={viewingNote}
-          isPrintOnly={true}
-        />,
-        document.body
-      )}
+
 
       {viewingNote && typeof document !== 'undefined' && createPortal(
         <CreditNoteLetterReceipt
