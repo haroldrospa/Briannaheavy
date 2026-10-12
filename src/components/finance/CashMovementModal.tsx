@@ -149,12 +149,31 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     const originalTitle = document.title;
     const numTag = mov.id.replace(/[^a-zA-Z0-9]/g, '_');
     document.title = `Constancia_Movimiento_${mov.type}_${numTag}`;
-    setTimeout(() => {
-      window.print();
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-letter-mode',
+      'print-barcode-mode',
+      'print-closure-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-movement-mode');
+    requestAnimationFrame(() => {
       setTimeout(() => {
-        document.title = originalTitle;
-      }, 500);
-    }, 120);
+        window.print();
+      }, 100);
+    });
+    const handleAfter = () => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-movement-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
+    setTimeout(() => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-movement-mode');
+    }, 2000);
   };
 
   const handlePrintSessionSummary = () => {
@@ -163,12 +182,31 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     const originalTitle = document.title;
     const dateStr = new Date().toISOString().slice(0, 10);
     document.title = `Reporte_Movimientos_Sesion_${dateStr}`;
-    setTimeout(() => {
-      window.print();
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-letter-mode',
+      'print-barcode-mode',
+      'print-closure-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-movement-mode');
+    requestAnimationFrame(() => {
       setTimeout(() => {
-        document.title = originalTitle;
-      }, 500);
-    }, 120);
+        window.print();
+      }, 100);
+    });
+    const handleAfter = () => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-movement-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
+    setTimeout(() => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-movement-mode');
+    }, 2000);
   };
 
   const handleConfirmDeleteMovement = async () => {
@@ -911,7 +949,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
       {/* 1. CONSTANCIA INDIVIDUAL DE MOVIMIENTO DE FONDOS */}
       {selectedMovementForPrint && typeof document !== 'undefined' && createPortal(
-        <div className="hidden print:block printable-closure bg-white text-black p-8 font-sans min-h-screen">
+        <div className="hidden print:block printable-movement bg-white text-black font-sans w-full max-w-full">
           <div className="max-w-2xl mx-auto border border-gray-300 p-8 rounded-xl">
             {/* Cabecera de Empresa */}
             <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-6">
@@ -1039,7 +1077,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
       {/* 2. REPORTE COMPLETO DE MOVIMIENTOS DE LA SESIÓN */}
       {isPrintingSessionSummary && typeof document !== 'undefined' && createPortal(
-        <div className="hidden print:block printable-closure bg-white text-black p-8 font-sans min-h-screen">
+        <div className="hidden print:block printable-movement bg-white text-black font-sans w-full max-w-full">
           <div className="max-w-3xl mx-auto">
             {/* Cabecera Empresa */}
             <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-4">

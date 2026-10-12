@@ -13,6 +13,26 @@ export const CASH_REGISTERS = [
 
 export type CashRegisterName = typeof CASH_REGISTERS[number] | string;
 
+export const getCurrentUserRegister = (): string => {
+  const role = getActiveRole();
+  const userEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
+  const userName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
+  const posRegister = typeof window !== 'undefined' ? localStorage.getItem('brianna_pos_register') : null;
+
+  if (posRegister) return posRegister;
+
+  const emailLower = userEmail.toLowerCase();
+  const nameLower = userName.toLowerCase();
+
+  if (emailLower.includes('cajero2') || nameLower.includes('cajero 2') || nameLower.includes('caja 2')) {
+    return 'Caja 2 - Repuestos';
+  }
+  if (role === 'Oficina' && (emailLower.includes('finan') || nameLower.includes('finan'))) {
+    return 'Caja Cobros & Financiamientos';
+  }
+  return 'Caja 1 - Repuestos';
+};
+
 export interface ActiveShift {
   id: string;
   register_name: string;

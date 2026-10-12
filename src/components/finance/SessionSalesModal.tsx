@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import QRCode from '../ui/QRCode';
 import ModernReceipt from '../ui/ModernReceipt';
+import LetterInvoice from '../ui/LetterInvoice';
 import { getReceiptFontSize, type ReceiptFontSize } from '../../utils/receiptSettings';
 import logo from '../../assets/logo.png';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -102,6 +103,62 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   if (!isOpen) return null;
 
   const fmt = (n: number) => n.toLocaleString('es-DO', { minimumFractionDigits: 2 });
+
+  const handlePrintLetter = () => {
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-barcode-mode',
+      'print-closure-mode',
+      'print-movement-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-letter-mode');
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 100);
+    });
+
+    const handleAfter = () => {
+      document.body.classList.remove('print-letter-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
+    setTimeout(() => {
+      document.body.classList.remove('print-letter-mode');
+    }, 2000);
+  };
+
+  const handlePrintTicket = () => {
+    document.body.classList.remove(
+      'print-letter-mode',
+      'print-barcode-mode',
+      'print-closure-mode',
+      'print-movement-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-ticket-mode');
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 100);
+    });
+
+    const handleAfter = () => {
+      document.body.classList.remove('print-ticket-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
+    setTimeout(() => {
+      document.body.classList.remove('print-ticket-mode');
+    }, 2000);
+  };
 
   return (
     <>
@@ -473,38 +530,96 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
 
               <div className="flex gap-2 mt-3">
                 <button
-                  onClick={() => window.print()}
+                  type="button"
+                  onClick={handlePrintLetter}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#ED1C24] hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-xs"
+                  title="Imprimir factura completa en formato Carta (Letter)"
                 >
                   <PrinterIcon className="w-3.5 h-3.5" />
-                  Imprimir
+                  Imprimir Carta
                 </button>
                 <button
+                  type="button"
+                  onClick={handlePrintTicket}
+                  className="inline-flex items-center justify-center gap-1.5 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 font-bold py-2.5 px-3 rounded-xl transition-all cursor-pointer text-xs"
+                  title="Imprimir ticket térmico de 80mm"
+                >
+                  <PrinterIcon className="w-3.5 h-3.5" />
+                  Ticket
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSelectedSaleToPrint(null)}
-                  className="bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 font-bold py-2.5 px-4 rounded-xl text-xs transition-all cursor-pointer"
+                  className="bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-500 dark:text-zinc-400 font-bold py-2.5 px-3 rounded-xl text-xs transition-all cursor-pointer"
                 >
                   Cerrar
                 </button>
               </div>
             </motion.div>
 
-            {/* Printable Thermal Receipt Portal */}
+            {/* Full Page Letter Invoice Portal (Formato Carta Oficial DGII) */}
+            {createPortal(
+              <LetterInvoice
+                ncf={selectedSaleToPrint.ncf}
+                invoiceNumber={selectedSaleToPrint.id}
+                invoiceType={selectedSaleToPrint.invoiceType}
+                isElectronic={selectedSaleToPrint.ncf.startsWith('E')}
+                date={selectedSaleToPrint.time ? new Date() : new Date()}
+                customerName={selectedSaleToPrint.client}
+                cashierName={selectedSaleToPrint.cashier_name || selectedSaleToPrint.cashier || 'Harold Rosado'}
+                paymentMethod={selectedSaleToPrint.paymentMethod}
+                items={selectedSaleToPrint.items && selectedSaleToPrint.items.length > 0
+                  ? selectedSaleToPrint.items.map(it => ({
+                      description: it.description,
+                      quantity: it.quantity,
+                      unit_price: it.unit_price,
+                      total_price: it.total_price
+                    }))
+                  : [
+                      {
+                        description: 'Venta General',
+                        quantity: 1,
+                        unit_price: selectedSaleToPrint.subtotal || (selectedSaleToPrint.total / 1.18),
+                        total_price: selectedSaleToPrint.subtotal || (selectedSaleToPrint.total / 1.18)
+                      }
+                    ]}
+                subtotal={selectedSaleToPrint.subtotal || selectedSaleToPrint.total / 1.18}
+                taxAmount={selectedSaleToPrint.tax_amount || (selectedSaleToPrint.total - (selectedSaleToPrint.subtotal || selectedSaleToPrint.total / 1.18))}
+                total={selectedSaleToPrint.total}
+                securityCode="1B19B3"
+                isPrintOnly={true}
+              />,
+              document.body
+            )}
+
+            {/* Printable Thermal Receipt Portal (Ticket 80mm) */}
             {createPortal(
               <ModernReceipt
                 ncf={selectedSaleToPrint.ncf}
+                invoiceNumber={selectedSaleToPrint.id}
                 invoiceType={selectedSaleToPrint.invoiceType}
                 isElectronic={selectedSaleToPrint.ncf.startsWith('E')}
-                date={new Date()}
+                date={selectedSaleToPrint.time ? new Date() : new Date()}
                 customerName={selectedSaleToPrint.client}
+                cashierName={selectedSaleToPrint.cashier_name || selectedSaleToPrint.cashier || 'Harold Rosado'}
                 paymentMethod={selectedSaleToPrint.paymentMethod}
-                items={selectedSaleToPrint.items?.map(it => ({
-                  description: it.description,
-                  quantity: it.quantity,
-                  unit_price: it.unit_price,
-                  total_price: it.total_price
-                })) || []}
+                items={selectedSaleToPrint.items && selectedSaleToPrint.items.length > 0
+                  ? selectedSaleToPrint.items.map(it => ({
+                      description: it.description,
+                      quantity: it.quantity,
+                      unit_price: it.unit_price,
+                      total_price: it.total_price
+                    }))
+                  : [
+                      {
+                        description: 'Venta General',
+                        quantity: 1,
+                        unit_price: selectedSaleToPrint.subtotal || (selectedSaleToPrint.total / 1.18),
+                        total_price: selectedSaleToPrint.subtotal || (selectedSaleToPrint.total / 1.18)
+                      }
+                    ]}
                 subtotal={selectedSaleToPrint.subtotal || selectedSaleToPrint.total / 1.18}
-                taxAmount={selectedSaleToPrint.tax_amount || (selectedSaleToPrint.total - selectedSaleToPrint.total / 1.18)}
+                taxAmount={selectedSaleToPrint.tax_amount || (selectedSaleToPrint.total - (selectedSaleToPrint.subtotal || selectedSaleToPrint.total / 1.18))}
                 total={selectedSaleToPrint.total}
                 securityCode="1B19B3"
                 fontSize={receiptFontSize}

@@ -24,6 +24,7 @@ export interface LetterInvoicePayment {
 
 export interface LetterInvoiceProps {
   ncf: string;
+  invoiceNumber?: string;
   invoiceType?: string;
   isElectronic?: boolean;
   date?: string | Date;
@@ -74,8 +75,34 @@ const formatRD = (amount: number = 0): string => {
   return `RD$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+export const parseSafeDate = (d?: string | Date): Date => {
+  if (!d) return new Date();
+  if (d instanceof Date) return d;
+  if (typeof d === 'string') {
+    const trimmed = d.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [y, m, day] = trimmed.split('-').map(Number);
+      return new Date(y, m - 1, day, 12, 0, 0);
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+};
+
+export const formatSafeReadableDate = (d?: string | Date): string => {
+  if (!d) return '';
+  const dt = parseSafeDate(d);
+  return dt.toLocaleDateString('es-DO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
 export default function LetterInvoice({
   ncf,
+  invoiceNumber,
   invoiceType = 'E32',
   isElectronic = false,
   date = new Date(),
@@ -111,7 +138,7 @@ export default function LetterInvoice({
   totalUsd,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
-  const isCotizacion = (ncf && ncf.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
+  const isCotizacion = (ncf && ncf.startsWith('CT')) || (invoiceNumber && invoiceNumber.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
   const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
 
   const getDocumentTypeName = () => {
@@ -124,7 +151,7 @@ export default function LetterInvoice({
     return 'FACTURA COMERCIAL DE VENTA';
   };
 
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = parseSafeDate(date);
   const formattedDate = dateObj.toLocaleDateString('es-DO', {
     day: '2-digit',
     month: 'long',
@@ -152,7 +179,7 @@ export default function LetterInvoice({
         @media print {
           @page {
             size: letter portrait !important;
-            margin: 8mm 10mm !important;
+            margin: 6mm 8mm !important;
           }
           body.print-letter-mode .letter-invoice-sheet {
             display: block !important;
@@ -160,6 +187,7 @@ export default function LetterInvoice({
             margin: 0 auto !important;
             max-width: 100% !important;
             width: 100% !important;
+            padding: 4mm 6mm !important;
             page-break-after: avoid !important;
           }
         }
@@ -206,8 +234,13 @@ export default function LetterInvoice({
             <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-zinc-900' : 'text-red-600'}`}>
               {getDocumentTypeName()}
             </span>
-            <div className="text-xl font-black font-mono tracking-wider text-zinc-950 mt-1">
-              {ncf || 'CT-000001'}
+            {invoiceNumber && invoiceNumber !== ncf && (
+              <div className="text-xs font-bold text-zinc-600 font-mono mt-1">
+                Factura No: <span className="text-zinc-950 font-black">{invoiceNumber}</span>
+              </div>
+            )}
+            <div className="text-lg font-black font-mono tracking-wider text-zinc-950 mt-0.5">
+              {ncf ? (ncf.startsWith('E') ? `e-NCF: ${ncf}` : ncf.startsWith('INT-') ? `NCF: ${ncf}` : ncf) : (invoiceNumber || 'INT-000001')}
             </div>
           </div>
 
@@ -448,7 +481,7 @@ export default function LetterInvoice({
             <tbody className="divide-y divide-zinc-200 text-[11px]">
               {paymentsHistory.map((p, idx) => (
                 <tr key={idx} className="hover:bg-zinc-50/50">
-                  <td className="py-1.5 px-3 font-medium text-zinc-700">{p.date}</td>
+                  <td className="py-1.5 px-3 font-medium text-zinc-700">{formatSafeReadableDate(p.date)}</td>
                   <td className="py-1.5 px-3 font-medium text-zinc-900">{p.method}</td>
                   <td className="py-1.5 px-3 font-mono text-zinc-600">{p.reference || '—'}</td>
                   <td className="py-1.5 px-3 text-zinc-600">{p.cashier || 'Cajero'}</td>

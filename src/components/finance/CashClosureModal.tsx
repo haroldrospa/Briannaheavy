@@ -35,6 +35,8 @@ import {
   markInvoicesAsClosed,
   setLastClosureTime,
   getLastClosureTime,
+  matchesCashierUser,
+  matchesRegister,
   DEFAULT_SHIFT_FUND,
   type ActiveShift 
 } from '../../services/shiftsService';
@@ -332,16 +334,8 @@ export default function CashClosureModal({
     });
   }, [allFinancingReceipts, filterMode, activeShift, selectedRegister, selectedCashierFilter, isAdmin, loggedInUserName]);
 
-  // Filtrar abonos/cobros a facturas a crédito (registrados desde el módulo Cobros)
+  // Filtrar abonos/cobros a facturas a crédito (registrados desde el módulo Cobros o POS)
   const scopedCreditPayments = useMemo(() => {
-    const isCobrosRegister = selectedRegister === 'todas' || 
-      selectedRegister.toLowerCase().includes('cobro') || 
-      selectedRegister.toLowerCase().includes('finanza');
-
-    if (!isCobrosRegister) {
-      return [];
-    }
-
     const payments: Array<{ id: string; amount: number; method: string; cashier: string; date: string; invoiceNumber: string; customer: string }> = [];
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -368,10 +362,18 @@ export default function CashClosureModal({
 
           if (!matchesTime) return;
 
+          // Si el abono o factura tiene caja asignada, verificar coincidencia si no se seleccionaron todas
+          const pReg = p.register_name || inv.register_name;
+          if (selectedRegister !== 'todas' && pReg) {
+            if (!matchesRegister(selectedRegister, pReg)) {
+              return;
+            }
+          }
+
           if (effectiveCashier && effectiveCashier !== 'todos' && effectiveCashier !== 'todas') {
-            const cLower = effectiveCashier.toLowerCase();
-            const pCashier = (p.cashier || '').toLowerCase().trim();
-            if (!pCashier.includes(cLower) && !cLower.includes(pCashier)) return;
+            if (!matchesCashierUser(p.cashier, effectiveCashier, loggedInUserEmail)) {
+              return;
+            }
           }
 
           payments.push({
@@ -387,7 +389,7 @@ export default function CashClosureModal({
       }
     });
     return payments;
-  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName, loggedInUserEmail]);
 
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
@@ -967,10 +969,30 @@ Observaciones: ${printNotes || 'Sin observaciones'}
     const dateStr = new Date().toISOString().slice(0, 10);
     const regTag = (selectedRegister || 'Caja').replace(/[^a-zA-Z0-9]/g, '_');
     document.title = `Cierre_${regTag}_${savedClosure?.closure_number || dateStr}`;
-    window.print();
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-letter-mode',
+      'print-barcode-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-closure-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 100);
+    });
+    const handleAfter = () => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-closure-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
     setTimeout(() => {
       document.title = originalTitle;
-    }, 1000);
+      document.body.classList.remove('print-closure-mode');
+    }, 2000);
   };
 
   const handleCloseAll = () => {
@@ -1914,116 +1936,125 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
       {/* Printable Document Area via Portal for 100% clean isolation */}
       {createPortal(
-        <div className="hidden print:block printable-closure bg-white text-black font-sans text-[10px] leading-tight w-full max-w-full">
+        <div className="hidden print:block printable-closure bg-white text-black font-sans text-[8.5px] leading-tight w-full max-w-full">
           {/* Executive Company Header */}
-          <div className="flex justify-between items-center pb-3 mb-3 border-b-2 border-black">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="Brianna Heavy Logo" className="h-11 object-contain" />
+          <div className="flex justify-between items-center pb-1.5 mb-2 border-b-2 border-black">
+            <div className="flex items-center gap-2.5">
+              <img src={logo} alt="Brianna Heavy Logo" className="h-8 object-contain" />
               <div>
-                <p className="text-[10px] font-black text-[#ED1C24] uppercase tracking-wider">
+                <p className="text-[8.5px] font-black text-[#ED1C24] uppercase tracking-wider">
                   BRIANNA HEAVY EQUIPMENT • RNC: 132610362
                 </p>
-                <h1 className="text-base font-black text-black mt-0.5 tracking-tight uppercase">
+                <h1 className="text-xs font-black text-black tracking-tight uppercase">
                   Comprobante de Cierre & Arqueo de Caja
                 </h1>
-                <p className="text-[9px] text-gray-600">
+                <p className="text-[7.5px] text-gray-600">
                   Tel: (809) 555-5555 • Av. Principal #123, Santo Domingo, R.D.
                 </p>
               </div>
             </div>
 
-            <div className="text-right text-[9.5px] space-y-0.5 border-l border-gray-300 pl-3">
+            <div className="text-right text-[8px] space-y-0.2 border-l border-gray-300 pl-2.5 leading-tight">
               <p><strong>N° Cierre:</strong> {savedClosure?.closure_number || 'CC-' + Date.now()}</p>
-              <p><strong>Fecha:</strong> {currentDateStr}</p>
-              <p><strong>Hora:</strong> {currentTimeStr}</p>
+              <p><strong>Fecha/Hora:</strong> {currentDateStr} • {currentTimeStr}</p>
               <p><strong>Caja:</strong> {savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}</p>
-              <p><strong>Cajero(a):</strong> {printCashier}</p>
-              <p><strong>Docs en Turno:</strong> {totalDocsCount}</p>
+              <p><strong>Cajero(a):</strong> {printCashier} • <strong>Docs:</strong> {totalDocsCount}</p>
             </div>
           </div>
 
           {/* KPI Financial Reconciliation Summary */}
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Fondo Inicial (Gaveta)</span>
-              <span className="text-xs font-black font-mono text-black">
+          <div className="grid grid-cols-4 gap-1.5 mb-2">
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Fondo Inicial</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
                 RD$ {printInitialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
-            <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Efectivo Turno (Neto)</span>
-              <span className="text-xs font-black font-mono text-emerald-800">
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Efectivo Turno (Neto)</span>
+              <span className="text-[10.5px] font-black font-mono text-emerald-800">
                 RD$ {printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
-            <div className="p-2 border border-gray-300 rounded bg-gray-50">
-              <span className="text-[8.5px] font-bold text-gray-500 block uppercase">Total en Gaveta</span>
-              <span className="text-xs font-black font-mono text-black">
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Total en Gaveta</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
                 RD$ {printTotalDrawer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
 
-            <div className="p-2 border border-gray-400 rounded bg-gray-100">
-              <span className="text-[8.5px] font-bold text-black block uppercase">Efectivo Contado</span>
-              <span className="text-xs font-black font-mono text-black">
+            <div className="p-1 border border-gray-400 rounded bg-gray-100 text-center">
+              <span className="text-[7px] font-bold text-black block uppercase">Efectivo Contado</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
                 RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
 
           {/* Fila Superior: Desglose Físico (Izq) & Ventas + Cuadre Final (Der) */}
-          <div className="grid grid-cols-12 gap-3 mb-2.5 items-start">
+          <div className="grid grid-cols-12 gap-2 mb-2 items-start">
             
             {/* Left: Physical Denomination Count Table */}
             <div className="col-span-6">
-              <h3 className="text-[9.5px] font-black uppercase tracking-wider mb-1 text-black border-b border-gray-300 pb-0.5">
+              <h3 className="text-[8px] font-black uppercase tracking-wider mb-0.5 text-black border-b border-gray-300 pb-0.5">
                 Desglose Físico por Denominación
               </h3>
-              <table className="w-full text-left text-[8.5px] border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100 text-black font-bold uppercase">
-                    <th className="p-0.5 px-1 border border-gray-300">Denominación</th>
-                    <th className="p-0.5 px-1 border border-gray-300 text-center">Tipo</th>
-                    <th className="p-0.5 px-1 border border-gray-300 text-center">Cant.</th>
-                    <th className="p-0.5 px-1 border border-gray-300 text-right">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DENOMINATIONS.map((den) => {
-                    const qty = getPrintDenominationQty(den.value);
-                    const subtotal = qty * den.value;
-                    return (
-                      <tr key={den.value} className="odd:bg-gray-50/50">
-                        <td className="p-0.5 px-1 border border-gray-300 font-bold">{den.label}</td>
-                        <td className="p-0.5 px-1 border border-gray-300 text-center text-gray-600">{den.type}</td>
-                        <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">{qty}</td>
-                        <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
-                          RD$ {subtotal.toLocaleString('es-DO')}
+              {(() => {
+                const activeDenoms = DENOMINATIONS.filter(den => getPrintDenominationQty(den.value) > 0);
+                if (activeDenoms.length === 0) {
+                  return (
+                    <div className="p-1.5 border border-gray-300 rounded bg-gray-50 text-[7.5px] text-gray-600">
+                      <span>Conteo directo en caja: </span>
+                      <strong className="font-mono text-black">RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                  );
+                }
+                return (
+                  <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 text-black font-bold uppercase">
+                        <th className="p-0.5 px-1 border border-gray-300">Denom.</th>
+                        <th className="p-0.5 px-1 border border-gray-300 text-center">Cant.</th>
+                        <th className="p-0.5 px-1 border border-gray-300 text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeDenoms.map((den) => {
+                        const qty = getPrintDenominationQty(den.value);
+                        const subtotal = qty * den.value;
+                        return (
+                          <tr key={den.value} className="odd:bg-gray-50/50">
+                            <td className="p-0.5 px-1 border border-gray-300 font-bold">{den.label}</td>
+                            <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">{qty}</td>
+                            <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                              RD$ {subtotal.toLocaleString('es-DO')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-gray-100 font-black">
+                        <td colSpan={2} className="p-0.5 px-1 border border-gray-300 uppercase">Total Arqueado</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
+                          RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
-                    );
-                  })}
-                  <tr className="bg-gray-100 font-black">
-                    <td colSpan={3} className="p-0.5 px-1 border border-gray-300 uppercase">Total Arqueado</td>
-                    <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
-                      RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
 
             {/* Right: Sales by Method & Cuadre Balance */}
-            <div className="col-span-6 space-y-2">
+            <div className="col-span-6 space-y-1.5">
               
               {/* Ventas por Método */}
               <div>
-                <h3 className="text-[9.5px] font-black uppercase tracking-wider mb-1 text-black border-b border-gray-300 pb-0.5">
-                  Ventas por Método de Pago
+                <h3 className="text-[8px] font-black uppercase tracking-wider mb-0.5 text-black border-b border-gray-300 pb-0.5">
+                  Ventas & Cobros por Método
                 </h3>
-                <table className="w-full text-left text-[8.5px] border-collapse border border-gray-300">
+                <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
                   <tbody>
                     <tr>
                       <td className="p-0.5 px-1 border border-gray-300 font-bold">Efectivo</td>
@@ -2050,7 +2081,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       </td>
                     </tr>
                     <tr className="bg-gray-100 font-black">
-                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado</td>
+                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado/Cobrado</td>
                       <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
                         RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
@@ -2059,47 +2090,51 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 </table>
               </div>
 
-              {/* Desglose de Movimientos: Efectivo y Transferencia */}
-              <div className="p-1.5 border border-gray-300 rounded bg-gray-50/70 text-[8px] space-y-0.5 font-mono">
-                <div className="flex justify-between text-rose-800">
-                  <span>- Egresos efectivo:</span>
-                  <span className="font-bold">-RD$ {printEgresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+              {/* Desglose de Movimientos */}
+              {(printEgresos.length > 0 || printIngresos.length > 0) && (
+                <div className="p-1 border border-gray-300 rounded bg-gray-50/70 text-[7px] space-y-0.2 font-mono leading-tight">
+                  <div className="flex justify-between text-rose-800">
+                    <span>- Egresos efectivo:</span>
+                    <span className="font-bold">-RD$ {printEgresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {printEgresosTransferTotal > 0 && (
+                    <div className="flex justify-between text-amber-800">
+                      <span>- Egreso Transferencia:</span>
+                      <span className="font-bold">-RD$ {printEgresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {printIngresosCashTotal > 0 && (
+                    <div className="flex justify-between text-emerald-800">
+                      <span>+ Ingreso extra efectivo:</span>
+                      <span className="font-bold">+RD$ {printIngresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {printIngresosTransferTotal > 0 && (
+                    <div className="flex justify-between text-blue-800">
+                      <span>+ Ingreso extra Transf:</span>
+                      <span className="font-bold">+RD$ {printIngresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-amber-800">
-                  <span>- Egreso Transferencia:</span>
-                  <span className="font-bold">-RD$ {printEgresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-emerald-800">
-                  <span>+ Ingreso extra efectivo:</span>
-                  <span className="font-bold">+RD$ {printIngresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-blue-800">
-                  <span>+ Ingreso extra Transferencia:</span>
-                  <span className="font-bold">+RD$ {printIngresosTransferTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-black font-black border-t border-gray-300 pt-0.5">
-                  <span>= Efectivo Neto Turno:</span>
-                  <span>RD$ {printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
+              )}
 
               {/* Cuadre / Balance Final */}
-              <div className={`p-2 border rounded ${
+              <div className={`p-1.5 border rounded ${
                 printStatus === 'Cuadrado'
                   ? 'border-emerald-600 bg-emerald-50/60 text-emerald-950'
                   : printStatus === 'Sobrante'
                   ? 'border-blue-600 bg-blue-50/60 text-blue-950'
                   : 'border-rose-600 bg-rose-50/60 text-rose-950'
               }`}>
-                <div className="flex justify-between items-center text-[10px]">
+                <div className="flex justify-between items-center text-[8.5px]">
                   <span className="font-black uppercase tracking-wide">
                     {printStatus === 'Cuadrado' ? '✓ Cuadre Perfecto' : printStatus === 'Sobrante' ? '▲ Sobrante en Caja' : '▼ Faltante en Caja'}
                   </span>
-                  <span className="font-black font-mono text-xs">
+                  <span className="font-black font-mono text-[10px]">
                     RD$ {printVariance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div className="text-[7.5px] font-mono text-gray-600 mt-0.5 flex justify-between">
+                <div className="text-[7px] font-mono text-gray-600 mt-0.5 flex justify-between">
                   <span>Contado: RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                   <span>Esperado: RD$ {printExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                 </div>
@@ -2108,169 +2143,78 @@ Observaciones: ${printNotes || 'Sin observaciones'}
             </div>
           </div>
 
-          {/* Sección Dedicada: Movimientos Separados de Ingresos y Egresos */}
-          <div className="mb-2.5">
-            <div className="flex items-center justify-between border-b-2 border-black pb-0.5 mb-1.5">
-              <h3 className="text-[9.5px] font-black uppercase tracking-wider text-black">
-                Movimientos Extra de Caja ({printMovements.length})
-              </h3>
-              <div className="text-[8.5px] font-mono font-bold flex items-center gap-3">
-                <span className="text-emerald-800">Ingresos: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                <span className="text-rose-800">Egresos: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                <span className="text-black bg-gray-100 px-1.5 py-0.5 rounded border border-gray-300">
-                  Neto: RD$ {(printTotalIngresos - printTotalEgresos).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                </span>
+          {/* Sección Dedicada: Movimientos Separados si existen */}
+          {printMovements.length > 0 && (
+            <div className="mb-1.5">
+              <div className="flex items-center justify-between border-b border-black pb-0.5 mb-1">
+                <h3 className="text-[8px] font-black uppercase tracking-wider text-black">
+                  Movimientos Extra ({printMovements.length})
+                </h3>
+                <div className="text-[7.5px] font-mono font-bold flex items-center gap-2">
+                  <span className="text-emerald-800">In: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-rose-800">Out: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
               </div>
-            </div>
 
-            {printMovements.length === 0 ? (
-              <div className="p-2 border border-gray-200 rounded text-center text-[8.5px] text-gray-500 italic bg-gray-50">
-                Sin entradas ni salidas adicionales registradas en este turno
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 items-start">
-                
-                {/* Columna Izquierda: Ingresos */}
-                <div className="border border-emerald-300 rounded overflow-hidden">
-                  <div className="bg-emerald-100/70 border-b border-emerald-300 px-2 py-1 flex items-center justify-between">
-                    <span className="font-black text-[9px] text-emerald-950 uppercase flex items-center gap-1">
-                      <span>↓ Ingresos Extra ({printIngresos.length})</span>
-                    </span>
-                    <span className="font-mono font-black text-[9px] text-emerald-900">
-                      +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {printIngresos.length === 0 ? (
-                    <p className="text-[8px] text-gray-400 italic p-2 text-center bg-white">
-                      Sin ingresos adicionales en este turno
-                    </p>
-                  ) : (
-                    <table className="w-full text-left text-[8px] border-collapse bg-white">
-                      <thead>
-                        <tr className="bg-emerald-50/50 text-emerald-950 font-bold uppercase border-b border-emerald-200">
-                          <th className="p-0.5 px-1">Concepto</th>
-                          <th className="p-0.5 px-1 text-center w-20">Fecha/Hora</th>
-                          <th className="p-0.5 px-1 text-right w-20">Monto</th>
-                        </tr>
-                      </thead>
+              <div className="grid grid-cols-2 gap-2 items-start">
+                {/* Ingresos */}
+                {printIngresos.length > 0 && (
+                  <div className="border border-emerald-300 rounded overflow-hidden">
+                    <table className="w-full text-left text-[7px] border-collapse bg-white">
                       <tbody>
-                        {printIngresos.map(m => (
-                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0 odd:bg-white even:bg-emerald-50/20">
-                            <td className="p-0.5 px-1 leading-tight">
-                              <div className="font-semibold text-gray-900 break-words">{m.concept || 'Ingreso de Fondos'}</div>
-                              {m.payment_method && m.payment_method !== 'Efectivo' && (
-                                <span className="text-[7px] text-gray-500 font-mono">[{m.payment_method}]</span>
-                              )}
-                            </td>
-                            <td className="p-0.5 px-1 text-center text-gray-500 font-mono text-[7px] whitespace-nowrap">
-                              {m.created_at ? (
-                                <>
-                                  <div>{new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })}</div>
-                                  <div>{new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
-                                </>
-                              ) : '-'}
-                            </td>
-                            <td className="p-0.5 px-1 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                        {printIngresos.slice(0, 4).map(m => (
+                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0">
+                            <td className="p-0.5 px-1 truncate max-w-[120px] font-semibold">{m.concept || 'Ingreso'}</td>
+                            <td className="p-0.5 px-1 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
                               +${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot>
-                        <tr className="bg-emerald-100/50 border-t border-emerald-300 font-black text-[8px]">
-                          <td colSpan={2} className="p-1 uppercase text-emerald-950">Subtotal Ingresos</td>
-                          <td className="p-1 text-right font-mono text-emerald-900">
-                            +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
                     </table>
-                  )}
-                </div>
-
-                {/* Columna Derecha: Egresos / Gastos */}
-                <div className="border border-rose-300 rounded overflow-hidden">
-                  <div className="bg-rose-100/70 border-b border-rose-300 px-2 py-1 flex items-center justify-between">
-                    <span className="font-black text-[9px] text-rose-950 uppercase flex items-center gap-1">
-                      <span>↑ Egresos / Gastos ({printEgresos.length})</span>
-                    </span>
-                    <span className="font-mono font-black text-[9px] text-rose-900">
-                      -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </span>
                   </div>
+                )}
 
-                  {printEgresos.length === 0 ? (
-                    <p className="text-[8px] text-gray-400 italic p-2 text-center bg-white">
-                      Sin egresos ni retiros en este turno
-                    </p>
-                  ) : (
-                    <table className="w-full text-left text-[8px] border-collapse bg-white">
-                      <thead>
-                        <tr className="bg-rose-50/50 text-rose-950 font-bold uppercase border-b border-rose-200">
-                          <th className="p-0.5 px-1">Concepto</th>
-                          <th className="p-0.5 px-1 text-center w-20">Fecha/Hora</th>
-                          <th className="p-0.5 px-1 text-right w-20">Monto</th>
-                        </tr>
-                      </thead>
+                {/* Egresos */}
+                {printEgresos.length > 0 && (
+                  <div className="border border-rose-300 rounded overflow-hidden">
+                    <table className="w-full text-left text-[7px] border-collapse bg-white">
                       <tbody>
-                        {printEgresos.map(m => (
-                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0 odd:bg-white even:bg-rose-50/20">
-                            <td className="p-0.5 px-1 leading-tight">
-                              <div className="font-semibold text-gray-900 break-words">{m.concept || 'Retiro / Gasto de Caja'}</div>
-                              {m.payment_method && m.payment_method !== 'Efectivo' && (
-                                <span className="text-[7px] text-gray-500 font-mono">[{m.payment_method}]</span>
-                              )}
-                            </td>
-                            <td className="p-0.5 px-1 text-center text-gray-500 font-mono text-[7px] whitespace-nowrap">
-                              {m.created_at ? (
-                                <>
-                                  <div>{new Date(m.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })}</div>
-                                  <div>{new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
-                                </>
-                              ) : '-'}
-                            </td>
-                            <td className="p-0.5 px-1 text-right font-mono font-black text-rose-700 whitespace-nowrap">
+                        {printEgresos.slice(0, 4).map(m => (
+                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0">
+                            <td className="p-0.5 px-1 truncate max-w-[120px] font-semibold">{m.concept || 'Egreso'}</td>
+                            <td className="p-0.5 px-1 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
                               -${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot>
-                        <tr className="bg-rose-100/50 border-t border-rose-300 font-black text-[8px]">
-                          <td colSpan={2} className="p-1 uppercase text-rose-950">Subtotal Egresos</td>
-                          <td className="p-1 text-right font-mono text-rose-900">
-                            -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
                     </table>
-                  )}
-                </div>
-
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Observations */}
           {printNotes && (
-            <div className="mb-3 p-1.5 border border-gray-300 rounded bg-gray-50 text-[9px]">
+            <div className="mb-1.5 p-1 border border-gray-300 rounded bg-gray-50 text-[7.5px] leading-tight">
               <strong>Observaciones:</strong> {printNotes}
             </div>
           )}
 
           {/* Signatures */}
-          <div className="grid grid-cols-2 gap-10 pt-4 border-t border-gray-400 mt-4 break-inside-avoid">
-            <div className="text-center space-y-1">
-              <div className="border-t border-black w-40 mx-auto" />
-              <p className="text-[10px] font-bold text-black">Firma del Cajero(a)</p>
-              <p className="text-[9px] text-gray-600">{printCashier}</p>
+          <div className="grid grid-cols-2 gap-8 pt-2 border-t border-gray-400 mt-2 break-inside-avoid">
+            <div className="text-center space-y-0.5">
+              <div className="border-t border-black w-32 mx-auto" />
+              <p className="text-[8.5px] font-bold text-black">Firma del Cajero(a)</p>
+              <p className="text-[7.5px] text-gray-600">{printCashier}</p>
             </div>
 
-            <div className="text-center space-y-1">
-              <div className="border-t border-black w-40 mx-auto" />
-              <p className="text-[10px] font-bold text-black">Firma del Supervisor</p>
-              <p className="text-[9px] text-gray-600">{printSupervisor}</p>
+            <div className="text-center space-y-0.5">
+              <div className="border-t border-black w-32 mx-auto" />
+              <p className="text-[8.5px] font-bold text-black">Firma del Supervisor</p>
+              <p className="text-[7.5px] text-gray-600">{printSupervisor}</p>
             </div>
           </div>
 

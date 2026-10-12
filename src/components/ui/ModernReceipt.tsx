@@ -17,11 +17,13 @@ export interface ReceiptItem {
 
 export interface ModernReceiptProps {
   ncf: string;
+  invoiceNumber?: string;
   invoiceType?: string;
   isElectronic?: boolean;
   date?: string | Date;
   customerName?: string;
   customerRnc?: string;
+  customerPhone?: string;
   paymentMethod?: string;
   creditDays?: number;
   dueDate?: string;
@@ -34,8 +36,31 @@ export interface ModernReceiptProps {
   subtotal: number;
   taxAmount: number;
   total: number;
+  paidAmount?: number;
+  balance?: number;
+  lastPayment?: {
+    receiptNumber?: string;
+    amount: number;
+    amountUsd?: number;
+    currency?: 'DOP' | 'USD';
+    date?: string;
+    method?: string;
+    reference?: string;
+    cashier?: string;
+    newBalance?: number;
+    previousBalance?: number;
+  };
+  paymentsHistory?: Array<{
+    id?: string;
+    date: string;
+    amount: number;
+    method: string;
+    reference?: string;
+    cashier?: string;
+  }>;
   securityCode?: string;
   qrCodeUrl?: string;
+  trackId?: string;
   customConfig?: Partial<InvoiceCustomConfig>;
   fontSize?: ReceiptFontSize;
   paperWidth?: ReceiptPaperWidth;
@@ -56,13 +81,30 @@ const formatUSD = (amount: number = 0): string => {
   return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 };
 
+const parseSafeDate = (d?: string | Date): Date => {
+  if (!d) return new Date();
+  if (d instanceof Date) return d;
+  if (typeof d === 'string') {
+    const trimmed = d.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [y, m, day] = trimmed.split('-').map(Number);
+      return new Date(y, m - 1, day, 12, 0, 0);
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+};
+
 export default function ModernReceipt({
   ncf,
+  invoiceNumber,
   invoiceType = 'INTERNO',
   isElectronic = false,
   date = new Date(),
   customerName = 'Consumidor Final',
   customerRnc = '',
+  customerPhone,
   paymentMethod = 'Efectivo',
   creditDays = 15,
   dueDate,
@@ -75,6 +117,10 @@ export default function ModernReceipt({
   subtotal,
   taxAmount,
   total,
+  paidAmount,
+  balance,
+  lastPayment,
+  paymentsHistory,
   securityCode = '34F595',
   qrCodeUrl,
   customConfig,
@@ -98,7 +144,7 @@ export default function ModernReceipt({
   const fontConf = RECEIPT_FONT_SIZES[activeFontSize] || RECEIPT_FONT_SIZES.md;
   const is58mm = activePaperWidth === '58mm';
 
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const dateObj = parseSafeDate(date);
   const formattedDate = dateObj.toLocaleDateString('es-DO', {
     day: '2-digit',
     month: 'short',
@@ -162,8 +208,13 @@ export default function ModernReceipt({
           <span className="block text-[0.72em] font-black uppercase tracking-widest text-zinc-500">
             {docTitle} {isEcf ? '(e-CF)' : ''}
           </span>
+          {invoiceNumber && invoiceNumber !== ncf && (
+            <span className="block font-mono text-[0.85em] font-bold text-zinc-700 mt-0.5">
+              Factura No. <strong className="text-black">{invoiceNumber}</strong>
+            </span>
+          )}
           <span className="block font-mono font-black tracking-widest text-black mt-0.5" style={{ fontSize: '1.18em' }}>
-            {ncf || 'CT-000001'}
+            {ncf ? (ncf.startsWith('E') ? `e-NCF: ${ncf}` : ncf.startsWith('INT-') ? `NCF: ${ncf}` : ncf) : (invoiceNumber || 'INT-000001')}
           </span>
         </div>
 
@@ -212,6 +263,12 @@ export default function ModernReceipt({
               <div className="flex justify-between items-center pt-0.5">
                 <span className="text-zinc-500 font-medium">RNC/Cédula:</span>
                 <strong className="text-black font-mono font-bold">{customerRnc}</strong>
+              </div>
+            )}
+            {customerPhone && (
+              <div className="flex justify-between items-center pt-0.5">
+                <span className="text-zinc-500 font-medium">Teléfono:</span>
+                <strong className="text-black font-mono font-medium">{customerPhone}</strong>
               </div>
             )}
           </div>
@@ -293,6 +350,76 @@ export default function ModernReceipt({
             </div>
           )}
         </div>
+
+        {/* Abono / Saldo Pendiente si aplica (Cuentas por Cobrar) */}
+        {(paidAmount !== undefined || balance !== undefined) && (
+          <div className="bg-white rounded-xl p-2.5 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.82em' }}>
+            {paidAmount !== undefined && (
+              <div className="flex justify-between font-medium text-emerald-800">
+                <span>Total Abonado / Pagado:</span>
+                <span className="font-mono font-bold">{formatRD(paidAmount)}</span>
+              </div>
+            )}
+            {balance !== undefined && (
+              <div className="flex justify-between font-bold border-t border-zinc-200 pt-1 text-black">
+                <span>Saldo Pendiente:</span>
+                <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {formatRD(Math.max(0, balance))}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Comprobante de Abono si se está imprimiendo un cobro reciente */}
+        {lastPayment && (
+          <div className="bg-emerald-50/80 border border-emerald-300 rounded-xl p-2.5 space-y-1 text-emerald-950" style={{ fontSize: '0.82em' }}>
+            <div className="flex justify-between items-center border-b border-emerald-200 pb-1">
+              <span className="font-black uppercase tracking-wider text-[0.85em]">
+                {lastPayment.receiptNumber ? `Recibo #${lastPayment.receiptNumber}` : 'Comprobante de Abono'}
+              </span>
+              <span className="font-mono font-black text-emerald-800" style={{ fontSize: '1.05em' }}>
+                {formatRD(lastPayment.amount)}
+              </span>
+            </div>
+            <div className="flex justify-between text-zinc-600 pt-0.5">
+              <span>Método:</span>
+              <strong className="text-black">{lastPayment.method || 'Efectivo'}</strong>
+            </div>
+            {lastPayment.reference && (
+              <div className="flex justify-between text-zinc-600">
+                <span>Ref:</span>
+                <strong className="font-mono text-black">{lastPayment.reference}</strong>
+              </div>
+            )}
+            {lastPayment.newBalance !== undefined && (
+              <div className="flex justify-between text-zinc-700 border-t border-emerald-200 pt-0.5">
+                <span>Nuevo Saldo:</span>
+                <strong className="font-mono text-black">{formatRD(lastPayment.newBalance)}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Historial de Abonos si existen */}
+        {paymentsHistory && paymentsHistory.length > 0 && (
+          <div className="bg-zinc-50 border border-zinc-300 rounded-xl p-2 space-y-1.5" style={{ fontSize: '0.78em' }}>
+            <span className="font-black uppercase tracking-wider text-zinc-700 block border-b border-zinc-200 pb-0.5">
+              Historial de Abonos ({paymentsHistory.length})
+            </span>
+            <div className="space-y-1">
+              {paymentsHistory.map((p, pIdx) => {
+                const pDate = parseSafeDate(p.date).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                return (
+                  <div key={p.id || pIdx} className="flex justify-between text-zinc-700">
+                    <span>{pDate} • {p.method}</span>
+                    <strong className="font-mono text-black">{formatRD(p.amount)}</strong>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {!isCotizacion && paymentMethod === 'Efectivo' && receivedAmount !== undefined && receivedAmount > 0 && (
           <div className="bg-white rounded-xl p-2 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.8em' }}>
