@@ -29,7 +29,7 @@ const LOCAL_RNC_DIRECTORY: Record<string, { name: string; status: 'ACTIVO' | 'IN
   '101998823': { name: 'TRANSPORTES CIBAO S.A.', status: 'ACTIVO', type: 'Jurídico', activity: 'Transporte Pesado y Logística' },
   '401002349': { name: 'MINISTERIO DE OBRAS PUBLICAS Y COMUNICACIONES', status: 'ACTIVO', type: 'Jurídico', activity: 'Sector Gubernamental' },
   '101000000': { name: 'INDUSTRIAS NACIONALES S.A.', status: 'ACTIVO', type: 'Jurídico', activity: 'Fabricación y Metalmecánica' },
-  '130882411': { name: 'EQUIPOS Y SERVICIOS DIESEL SRL', status: 'ACTIVO', type: 'Jurídico', activity: 'Reparación y Mantenimiento de Maquinarias' },
+  '40218246656': { name: 'HAROLD MANUEL ROSADO PACHECO', status: 'ACTIVO', type: 'Físico', activity: 'Servicios Profesionales' },
   '40223849101': { name: 'JUAN MANUEL PERALTA', status: 'ACTIVO', type: 'Físico', activity: 'Comercio al por Menor' },
   '00112345678': { name: 'CARLOS RODRIGUEZ PEREZ', status: 'ACTIVO', type: 'Físico', activity: 'Servicios de Transporte' },
   '101844561': { name: 'CENTRO CUESTA NACIONAL S.A.S.', status: 'ACTIVO', type: 'Jurídico', activity: 'Comercio General' },
@@ -117,8 +117,25 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
   const isFisico = clean.length === 11;
   const docType: 'Físico' | 'Jurídico' = isFisico ? 'Físico' : 'Jurídico';
   const isValidMath = isFisico ? validateCedulaMod10(clean) : validateRncMod11(clean);
+  const formattedDoc = isFisico
+    ? `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`
+    : `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`;
 
-  // 1. Verificar caché dinámico en localStorage de clientes guardados (0ms)
+  // 1. Verificar directorio estático en memoria (0ms)
+  if (LOCAL_RNC_DIRECTORY[clean]) {
+    const item = LOCAL_RNC_DIRECTORY[clean];
+    return {
+      success: true,
+      rnc: formattedDoc,
+      name: item.name,
+      status: item.status,
+      type: item.type,
+      activity: item.activity,
+      isValidStructure: true,
+    };
+  }
+
+  // 2. Verificar caché dinámico en localStorage de clientes guardados (0ms)
   try {
     const rawCache = localStorage.getItem('brianna_cached_rncs');
     if (rawCache) {
@@ -126,9 +143,7 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
       if (parsedCache[clean] && parsedCache[clean].name) {
         return {
           success: true,
-          rnc: clean.length === 9
-            ? `${clean.slice(0, 3)}-${clean.slice(3, 8)}-${clean.slice(8)}`
-            : `${clean.slice(0, 3)}-${clean.slice(3, 10)}-${clean.slice(10)}`,
+          rnc: formattedDoc,
           name: parsedCache[clean].name,
           status: parsedCache[clean].status || 'ACTIVO',
           type: docType,
@@ -140,7 +155,34 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
     console.warn('Error reading local RNC cache:', err);
   }
 
-  // 2. Consulta en tiempo real al endpoint DGII oficial
+  // 3. Verificar en lista local de clientes guardados en el sistema (0ms)
+  try {
+    const rawCustomers = localStorage.getItem('brianna_local_customers');
+    if (rawCustomers) {
+      const parsedCustomers = JSON.parse(rawCustomers);
+      if (Array.isArray(parsedCustomers)) {
+        const found = parsedCustomers.find((c: any) => {
+          const doc = (c.document_id || c.rnc || '').replace(/\D/g, '');
+          return doc === clean;
+        });
+        if (found && found.name) {
+          cacheDgiiRnc(clean, found.name);
+          return {
+            success: true,
+            rnc: formattedDoc,
+            name: found.name.toUpperCase(),
+            status: 'ACTIVO',
+            type: docType,
+            isValidStructure: true,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading local customers:', err);
+  }
+
+  // 4. Consulta en tiempo real al endpoint DGII / Cedulas oficial
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
@@ -156,7 +198,7 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
         cacheDgiiRnc(clean, data.name, data.status);
         return {
           success: true,
-          rnc: data.rnc || clean,
+          rnc: data.rnc || formattedDoc,
           name: data.name,
           commercialName: data.commercialName,
           status: data.status || 'ACTIVO',
@@ -167,28 +209,53 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
       }
     }
   } catch (netErr) {
-    console.warn('DGII live lookup error, fallbacking to local:', netErr);
+    console.warn('DGII live lookup error, fallbacking:', netErr);
   }
 
-  // 3. Verificar directorio estático en memoria
-  if (LOCAL_RNC_DIRECTORY[clean]) {
-    const item = LOCAL_RNC_DIRECTORY[clean];
-    return {
-      success: true,
-      rnc: clean,
-      name: item.name,
-      status: item.status,
-      type: item.type,
-      activity: item.activity,
-      isValidStructure: true,
-    };
+  // 5. Fallback directo para Cédulas (11 dígitos) ante la API de Identidad Oficial (OGTIC / Digital.gob.do)
+  if (isFisico) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const cedRes = await fetch(`https://api.digital.gob.do/v3/cedulas/${clean}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (cedRes.ok) {
+        const cedData = await cedRes.json();
+        if (cedData && cedData.success && cedData.data) {
+          const d = cedData.data;
+          const fullName = [d.names, d.firstSurname, d.secondSurname]
+            .filter(Boolean)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase();
+          if (fullName) {
+            cacheDgiiRnc(clean, fullName);
+            return {
+              success: true,
+              rnc: formattedDoc,
+              name: fullName,
+              status: 'ACTIVO',
+              type: 'Físico',
+              activity: 'Persona Física',
+              isValidStructure: true
+            };
+          }
+        }
+      }
+    } catch {
+      // Ignorar fallo de CORS directo si aplica
+    }
   }
 
-  // 4. Si la estructura matemática es válida pero no devolvió nombre
+  // 6. Si la estructura matemática es válida pero no devolvió nombre en ningún servicio
   if (isValidMath) {
     return {
       success: true,
-      rnc: clean,
+      rnc: formattedDoc,
       name: '',
       status: 'ACTIVO',
       type: docType,
@@ -198,7 +265,7 @@ export async function searchDgiiRnc(rawQuery: string): Promise<DgiiRncResult> {
 
   return {
     success: false,
-    rnc: clean,
+    rnc: formattedDoc,
     name: '',
     status: 'NO_REGISTRADO',
     type: docType,

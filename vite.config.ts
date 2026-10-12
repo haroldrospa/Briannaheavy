@@ -20,6 +20,46 @@ function dgiiLookupPlugin(): Plugin {
         }
 
         try {
+          // 1. Si es Cédula (11 dígitos), consultar primero la API oficial de identidad (OGTIC / Digital.gob.do)
+          if (rnc.length === 11) {
+            try {
+              const cedRes = await fetch(`https://api.digital.gob.do/v3/cedulas/${rnc}`, {
+                headers: {
+                  'Accept': 'application/json',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+                }
+              });
+              if (cedRes.ok) {
+                const cedData = (await cedRes.json()) as any;
+                if (cedData && cedData.success && cedData.data) {
+                  const d = cedData.data;
+                  const fullName = [d.names, d.firstSurname, d.secondSurname]
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .toUpperCase();
+                  if (fullName) {
+                    const formattedDoc = `${rnc.slice(0, 3)}-${rnc.slice(3, 10)}-${rnc.slice(10)}`;
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({
+                      success: true,
+                      rnc: formattedDoc,
+                      name: fullName,
+                      status: 'ACTIVO',
+                      type: 'Físico',
+                      activity: 'Persona Física'
+                    }));
+                    return;
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[dgii-lookup] Error consultando api.digital.gob.do:', e);
+            }
+          }
+
           const dgiiUrl = 'https://dgii.gov.do/app/WebApps/ConsultasWeb2/ConsultasWeb/consultas/rnc.aspx';
           const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
@@ -48,6 +88,10 @@ function dgiiLookupPlugin(): Plugin {
             return;
           }
 
+          const formattedInput = rnc.length === 11 
+            ? `${rnc.slice(0, 3)}-${rnc.slice(3, 10)}-${rnc.slice(10)}` 
+            : rnc;
+
           const params = new URLSearchParams();
           params.append('ctl00$smMain', 'ctl00$cphMain$upBusqueda|ctl00$cphMain$btnBuscarPorRNC');
           params.append('__EVENTTARGET', '');
@@ -55,9 +99,9 @@ function dgiiLookupPlugin(): Plugin {
           params.append('__VIEWSTATE', vsMatch[1]);
           if (vsgMatch) params.append('__VIEWSTATEGENERATOR', vsgMatch[1]);
           if (evMatch) params.append('__EVENTVALIDATION', evMatch[1]);
-          params.append('ctl00$cphMain$txtRNCCedula', rnc);
+          params.append('ctl00$cphMain$txtRNCCedula', formattedInput);
           params.append('ctl00$cphMain$txtRazonSocial', '');
-          params.append('ctl00$cphMain$hidActiveTab', '');
+          params.append('ctl00$cphMain$hidActiveTab', rnc.length === 11 ? 'rnc' : '');
           params.append('__ASYNCPOST', 'true');
           params.append('ctl00$cphMain$btnBuscarPorRNC', 'BUSCAR');
 
