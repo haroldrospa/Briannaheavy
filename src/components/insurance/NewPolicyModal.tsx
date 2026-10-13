@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { 
   XMarkIcon, 
   ShieldCheckIcon, 
   TruckIcon, 
   UserIcon, 
   CalendarDaysIcon, 
-  CheckCircleIcon
+  CheckCircleIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { 
   createInsurancePolicy, 
@@ -13,6 +14,8 @@ import {
   type InsurancePolicy, 
   type InsuranceInstallment 
 } from '../../services/insuranceService';
+import { fetchCustomers, type Customer } from '../../services/customersService';
+import { fetchInventory, type InventoryItem } from '../../services/inventoryService';
 
 interface NewPolicyModalProps {
   isOpen: boolean;
@@ -63,6 +66,55 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
   const [currency, setCurrency] = useState<'DOP' | 'USD'>('DOP');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Listas de datos reales desde Supabase / Inventario
+  const [realCustomers, setRealCustomers] = useState<Customer[]>([]);
+  const [realVehicles, setRealVehicles] = useState<InventoryItem[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchCustomers().then(custs => {
+        if (custs) setRealCustomers(custs);
+      });
+      fetchInventory().then(inv => {
+        if (inv) {
+          const vehicles = inv.filter(item => {
+            const t = (item.type || '').toLowerCase();
+            return t.includes('camion') || t.includes('equipo') || item.vin || item.plate;
+          });
+          setRealVehicles(vehicles.length > 0 ? vehicles : inv);
+        }
+      });
+    }
+  }, [isOpen]);
+
+  // Selección rápida de vehículo real del inventario
+  const handleSelectRealVehicle = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const vId = e.target.value;
+    if (!vId) return;
+    const v = realVehicles.find(item => item.id === vId);
+    if (v) {
+      if (v.brand) setBrand(v.brand);
+      if (v.model) setModel(v.model);
+      if (v.year) setYear(String(v.year));
+      if (v.vin) setVin(v.vin);
+      if (v.plate) setPlate(v.plate);
+      if (v.type) setVehicleType(v.type === 'Pieza' ? 'Camión' : v.type);
+      if (v.color) setColor(v.color);
+    }
+  };
+
+  // Selección rápida de cliente real
+  const handleSelectRealCustomer = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cId = e.target.value;
+    if (!cId) return;
+    const c = realCustomers.find(cust => cust.id === cId);
+    if (c) {
+      setClientName(c.name);
+      if (c.document_id) setClientDocument(c.document_id);
+      if (c.phone) setClientPhone(c.phone);
+    }
+  };
 
   // Auto-ajustar fecha de vencimiento a 1 año cuando cambia la fecha de inicio
   const handleStartDateChange = (newStart: string) => {
@@ -187,7 +239,6 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
     try {
       const premiumValue = typeof annualPremium === 'number' ? annualPremium : 0;
 
-      // Preservar cuotas existentes si estamos editando, o generar nuevas
       let finalInstallments = previewInstallments;
       if (policyToEdit && policyToEdit.installments && policyToEdit.installments.length === previewInstallments.length) {
         finalInstallments = previewInstallments.map((inst, idx) => ({
@@ -324,9 +375,26 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
 
           {/* SECCIÓN 2: Cliente Asegurado */}
           <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              <UserIcon className="w-4 h-4 text-[#ED1C24]" />
-              <span>2. Cliente Asegurado</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                <UserIcon className="w-4 h-4 text-[#ED1C24]" />
+                <span>2. Cliente Asegurado</span>
+              </div>
+              {realCustomers.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+                  <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
+                  <select
+                    onChange={handleSelectRealCustomer}
+                    defaultValue=""
+                    className="text-[11px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-lg px-2 py-1 border border-gray-200 dark:border-zinc-700"
+                  >
+                    <option value="" disabled>Seleccionar cliente existente...</option>
+                    {realCustomers.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div className="sm:col-span-1">
@@ -373,9 +441,28 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
 
           {/* SECCIÓN 3: Datos del Vehículo */}
           <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
-            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-              <span>3. Datos del Vehículo Asegurado</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                <span>3. Datos del Vehículo Asegurado</span>
+              </div>
+              {realVehicles.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+                  <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
+                  <select
+                    onChange={handleSelectRealVehicle}
+                    defaultValue=""
+                    className="text-[11px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-lg px-2 py-1 border border-gray-200 dark:border-zinc-700"
+                  >
+                    <option value="" disabled>Cargar vehículo del inventario...</option>
+                    {realVehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.brand || v.name} {v.model ? `(${v.model})` : ''} {v.vin ? `[VIN: ${v.vin}]` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>

@@ -1,4 +1,4 @@
-﻿import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface VehicleData {
   brand: string;
@@ -42,66 +42,6 @@ export interface InsurancePolicy {
 
 const STORAGE_KEY = 'brianna_insurance_policies';
 
-const DEFAULT_POLICIES: InsurancePolicy[] = [
-  {
-    id: 'POL-MACK-2026-01',
-    policy_number: 'POL-UNIV-98231',
-    insurance_company: 'Seguros Universal',
-    client_name: 'Transporte y Constructora Bratique',
-    client_document: '1-32-61036-2',
-    client_phone: '809-555-0199',
-    annual_premium: 65000,
-    currency: 'DOP',
-    payment_plan: 'cuotas_4',
-    installments: [
-      { number: 1, due_date: '2026-02-15', amount: 16250, status: 'pagada', paid_at: '2026-02-15', payment_method: 'Transferencia' },
-      { number: 2, due_date: '2026-05-15', amount: 16250, status: 'pagada', paid_at: '2026-05-14', payment_method: 'Transferencia' },
-      { number: 3, due_date: '2026-08-15', amount: 16250, status: 'pagada', paid_at: '2026-08-15', payment_method: 'Transferencia' },
-      { number: 4, due_date: '2026-11-15', amount: 16250, status: 'pendiente' }
-    ],
-    start_date: '2026-02-15',
-    expiration_date: '2026-11-10',
-    vehicle: {
-      brand: 'Mack',
-      model: 'Pinnacle CXU613',
-      year: '2022',
-      plate: 'L384910',
-      vin: '1M1AN07Y5NN012891',
-      color: 'Blanco',
-      type: 'Cabezote'
-    },
-    notes: 'Póliza todo riesgo para equipo pesado.',
-    created_at: '2026-02-15T10:00:00.000Z'
-  },
-  {
-    id: 'POL-FRT-2026-02',
-    policy_number: 'POL-MAP-44120',
-    insurance_company: 'Mapfre BHD Seguros',
-    client_name: 'Juan Pérez Rainier',
-    client_document: '001-0948210-3',
-    client_phone: '829-555-8321',
-    annual_premium: 48000,
-    currency: 'DOP',
-    payment_plan: 'anual',
-    installments: [
-      { number: 1, due_date: '2026-06-01', amount: 48000, status: 'pagada', paid_at: '2026-06-01', payment_method: 'Transferencia' }
-    ],
-    start_date: '2026-06-01',
-    expiration_date: '2027-06-01',
-    vehicle: {
-      brand: 'Freightliner',
-      model: 'Cascadia 125',
-      year: '2019',
-      plate: 'L290144',
-      vin: '3AKJGLD53KSKH8923',
-      color: 'Azul',
-      type: 'Camión'
-    },
-    notes: 'Cobertura completa de tránsito nacional.',
-    created_at: '2026-06-01T14:30:00.000Z'
-  }
-];
-
 export const getDaysUntilExpiration = (expirationDateStr: string): number => {
   if (!expirationDateStr) return 999;
   const now = new Date();
@@ -119,28 +59,40 @@ export const getPolicyExpirationStatus = (expirationDateStr: string): 'vencido' 
   return 'vigente';
 };
 
+// Filtro estricto para eliminar cualquier póliza de prueba residual
+const isMockPolicy = (p: InsurancePolicy): boolean => {
+  if (!p) return true;
+  const id = String(p.id || '');
+  const num = String(p.policy_number || '');
+  return id === 'POL-MACK-2026-01' || 
+         id === 'POL-FRT-2026-02' || 
+         num === 'POL-UNIV-98231' || 
+         num === 'POL-MAP-44120';
+};
+
 export const getLocalStoragePolicies = (): InsurancePolicy[] => {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (!raw) {
-      saveLocalStoragePolicies(DEFAULT_POLICIES);
-      return DEFAULT_POLICIES;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      const realOnly = parsed.filter(p => !isMockPolicy(p));
+      if (realOnly.length !== parsed.length) {
+        saveLocalStoragePolicies(realOnly);
+      }
+      return realOnly;
     }
-    saveLocalStoragePolicies(DEFAULT_POLICIES);
-    return DEFAULT_POLICIES;
+    return [];
   } catch {
-    return DEFAULT_POLICIES;
+    return [];
   }
 };
 
 export const saveLocalStoragePolicies = (policies: InsurancePolicy[]): void => {
   try {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(policies));
+      const realOnly = (policies || []).filter(p => !isMockPolicy(p));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(realOnly));
       window.dispatchEvent(new CustomEvent('brianna_policies_updated'));
     }
   } catch (err) {
@@ -165,9 +117,10 @@ export const fetchPoliciesFromSupabase = async (): Promise<InsurancePolicy[]> =>
           parsed = data.value;
         }
 
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          saveLocalStoragePolicies(parsed);
-          return parsed;
+        if (Array.isArray(parsed)) {
+          const realOnly = parsed.filter(p => !isMockPolicy(p));
+          saveLocalStoragePolicies(realOnly);
+          return realOnly;
         }
       }
     } catch (err) {
@@ -178,14 +131,15 @@ export const fetchPoliciesFromSupabase = async (): Promise<InsurancePolicy[]> =>
 };
 
 export const syncPoliciesToSupabase = async (policies: InsurancePolicy[]): Promise<void> => {
-  saveLocalStoragePolicies(policies);
+  const realOnly = (policies || []).filter(p => !isMockPolicy(p));
+  saveLocalStoragePolicies(realOnly);
   if (isSupabaseConfigured()) {
     try {
       await supabase
         .from('system_settings')
         .upsert([{
           key: 'insurance_policies',
-          value: JSON.stringify(policies),
+          value: JSON.stringify(realOnly),
           updated_at: new Date().toISOString()
         }]);
     } catch (err) {
