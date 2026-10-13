@@ -34,7 +34,7 @@ const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
 const POS = lazyWithRetry(() => import('./pages/POS'));
 const Cobros = lazyWithRetry(() => import('./pages/Cobros'));
 const Inventory = lazyWithRetry(() => import('./pages/Inventory'));
-const Financing = lazyWithRetry(() => import('./pages/Financing'));
+const Insurances = lazyWithRetry(() => import('./pages/Insurances'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const Reports = lazyWithRetry(() => import('./pages/Reports'));
 const Customers = lazyWithRetry(() => import('./pages/Customers'));
@@ -97,18 +97,22 @@ function App() {
                   <Route path="/inventario" element={<Inventory />} />
                   <Route path="/herramientas" element={<Tools />} />
                   <Route path="/catalogo" element={<Catalog />} />
-                  <Route path="/financiamientos" element={<Financing />} />
+                  <Route path="/seguros" element={<Insurances />} />
+                  <Route path="/financiamientos" element={<Navigate to="/seguros" replace />} />
                   <Route path="/bancos" element={<Banks />} />
                   <Route path="/reportes" element={<Reports />} />
                   <Route path="/configuracion" element={<Settings />} />
 
                   {/* Alias en Inglés & Catch-all Fallback */}
+                  <Route path="/seguro" element={<Navigate to="/seguros" replace />} />
+                  <Route path="/insurance" element={<Navigate to="/seguros" replace />} />
+                  <Route path="/insurances" element={<Navigate to="/seguros" replace />} />
                   <Route path="/tools" element={<Navigate to="/herramientas" replace />} />
                   <Route path="/herramienta" element={<Navigate to="/herramientas" replace />} />
                   <Route path="/banco" element={<Navigate to="/bancos" replace />} />
                   <Route path="/banks" element={<Navigate to="/bancos" replace />} />
                   <Route path="/receivables" element={<Navigate to="/cobros" replace />} />
-                  <Route path="/finanzas" element={<Navigate to="/financiamientos" replace />} />
+                  <Route path="/finanzas" element={<Navigate to="/seguros" replace />} />
                   <Route path="/inventory" element={<Navigate to="/inventario" replace />} />
                   <Route path="/catalog" element={<Navigate to="/catalogo" replace />} />
                   <Route path="/customers" element={<Navigate to="/clientes" replace />} />
@@ -118,7 +122,7 @@ function App() {
                   <Route path="/credit-note" element={<Navigate to="/notas-credito" replace />} />
                   <Route path="/users" element={<Navigate to="/configuracion?tab=usuarios" replace />} />
                   <Route path="/permisos" element={<Navigate to="/configuracion?tab=permisos" replace />} />
-                  <Route path="/financing" element={<Navigate to="/financiamientos" replace />} />
+                  <Route path="/financing" element={<Navigate to="/seguros" replace />} />
                   <Route path="/reports" element={<Navigate to="/reportes" replace />} />
                   <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
                   <Route path="*" element={<Navigate to="/inventario" replace />} />
