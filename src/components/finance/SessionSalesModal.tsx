@@ -49,8 +49,8 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const loadMovements = async () => {
     const movs = await fetchCashMovements(true);
     if (movs) {
-      const filtered = filterMovementsByShift(movs, 'today', undefined, undefined, 'todos');
-      setCashMovements(filtered.length > 0 ? filtered : movs);
+      const filtered = filterMovementsByShift(movs, 'shift', undefined, undefined, 'todos');
+      setCashMovements(filtered);
     }
   };
 

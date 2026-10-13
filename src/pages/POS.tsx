@@ -2280,26 +2280,30 @@ export default function POS() {
 
     // 2. Async background sync with Supabase
     const loadPosData = async () => {
-      const [inv, cust, invs] = await Promise.all([
-        fetchInventory(),
-        fetchCustomers(),
-        fetchInvoices()
-      ]);
+      try {
+        const [invRes, custRes, invsRes] = await Promise.allSettled([
+          fetchInventory(true),
+          fetchCustomers(true),
+          fetchInvoices(true)
+        ]);
 
-      if (inv) {
-        setDbProducts(inv.map(mapInventoryItemToProduct));
-      }
-      if (cust) {
-        setDbClients(cust.map(c => ({
-          id: c.id,
-          name: c.name,
-          type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
-          rnc: c.document_id,
-        })));
-      }
-      if (invs) {
-        setSessionSales(filterInvoicesByShift(invs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
-        setActiveQuotationsCount(getActiveQuotationsCount());
+        if (invRes.status === 'fulfilled' && invRes.value) {
+          setDbProducts(invRes.value.map(mapInventoryItemToProduct));
+        }
+        if (custRes.status === 'fulfilled' && custRes.value) {
+          setDbClients(custRes.value.map(c => ({
+            id: c.id,
+            name: c.name,
+            type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
+            rnc: c.document_id,
+          })));
+        }
+        if (invsRes.status === 'fulfilled' && invsRes.value) {
+          setSessionSales(filterInvoicesByShift(invsRes.value.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+          setActiveQuotationsCount(getActiveQuotationsCount());
+        }
+      } catch (err) {
+        console.warn('Error loading POS data from Supabase:', err);
       }
     };
     loadPosData();
