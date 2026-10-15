@@ -12,6 +12,7 @@ import QRCode from '../ui/QRCode';
 import LetterInvoice from '../ui/LetterInvoice';
 import logo from '../../assets/logo.png';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
+import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { filterMovementsByShift } from '../../services/shiftsService';
 import CashMovementModal from './CashMovementModal';
 import { getInvoiceCustomConfig } from '../../utils/receiptSettings';
@@ -42,21 +43,63 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('Todos');
   const [movementTypeFilter, setMovementTypeFilter] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
+  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
   const [selectedSaleToPrint, setSelectedSaleToPrint] = useState<SessionSale | null>(null);
   
-  const [cashMovements, setCashMovements] = useState<CashMovement[]>(getLocalStorageMovements);
+  const [rawMovements, setRawMovements] = useState<CashMovement[]>(getLocalStorageMovements);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
 
   const loadMovements = async () => {
-    const movs = await fetchCashMovements(true);
-    if (movs) {
-      const filtered = filterMovementsByShift(movs, 'shift', undefined, undefined, 'todos');
-      setCashMovements(filtered);
+    try {
+      const data = await fetchCashMovements(true);
+      let invoicePayments = getLocalInvoicePayments();
+      try {
+        const remotePayments = await fetchRemoteInvoicePayments();
+        if (remotePayments && Object.keys(remotePayments).length > 0) {
+          invoicePayments = remotePayments;
+        }
+      } catch {}
+
+      const seenPaymentIds = new Set<string>();
+      const abonosAsMovements: CashMovement[] = [];
+      Object.values(invoicePayments).forEach(summary => {
+        if (summary.payments_history && Array.isArray(summary.payments_history)) {
+          summary.payments_history.forEach(p => {
+            if (!p.id || seenPaymentIds.has(p.id)) return;
+            seenPaymentIds.add(p.id);
+
+            const pm = p.method || 'Efectivo';
+            const isCard = pm.toLowerCase().includes('tarjeta');
+            const isBank = pm.toLowerCase().includes('transferencia') || pm.toLowerCase().includes('usd');
+
+            abonosAsMovements.push({
+              id: `abono_${p.id}`,
+              type: 'Ingreso',
+              amount: Number(p.amount) || 0,
+              concept: `Abono Factura #${summary.invoice_number || 'S/N'}${summary.customer_name ? ` • ${summary.customer_name}` : ''}`,
+              payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
+              reference: p.reference,
+              register_name: p.register_name || 'Caja 1 - Repuestos',
+              created_by: p.cashier || 'Rosa Iris Peñalo',
+              created_at: p.date || new Date().toISOString()
+            });
+          });
+        }
+      });
+
+      setRawMovements([...(data || []), ...abonosAsMovements]);
+    } catch {
+      setRawMovements(getLocalStorageMovements());
     }
   };
 
+  const cashMovements = useMemo(() => {
+    return filterMovementsByShift(rawMovements, timeScope, undefined, 'todas', 'todos');
+  }, [rawMovements, timeScope]);
+
   useEffect(() => {
     if (isOpen) {
+      setTimeScope('today');
       loadMovements();
       const handler = () => loadMovements();
       window.addEventListener('brianna_cash_movements_changed', handler);
@@ -251,6 +294,43 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
 
             {activeTab === 'Movimientos' && (
               <>
+                {/* Selector de Período */}
+                <div className="flex gap-0.5 bg-zinc-100 dark:bg-zinc-800/60 p-0.5 rounded-lg text-[10.5px]">
+                  <button
+                    type="button"
+                    onClick={() => setTimeScope('today')}
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                      timeScope === 'today'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                    }`}
+                  >
+                    Hoy (Todo el día)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeScope('shift')}
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                      timeScope === 'shift'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                    }`}
+                  >
+                    Turno Actual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeScope('all')}
+                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                      timeScope === 'all'
+                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-bold'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                    }`}
+                  >
+                    Historial
+                  </button>
+                </div>
+
                 <div className="flex gap-1">
                   {(['Todos', 'Ingreso', 'Egreso'] as const).map(t => (
                     <button

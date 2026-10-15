@@ -83,6 +83,7 @@ export default function CashClosureModal({
   const [selectedRegister, setSelectedRegister] = useState<string>(defaultRegister);
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
+  const [movementsTimeScope, setMovementsTimeScope] = useState<'today' | 'shift' | 'all'>('today');
   const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => loggedInUserName);
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
@@ -176,6 +177,7 @@ export default function CashClosureModal({
     setSelectedCashierFilter(loggedInUserName);
     setCashierName(loggedInUserName);
     setFilterMode('shift');
+    setMovementsTimeScope('today');
     setCountMode('shift_only');
     const jennifer = adminNames.find(n => n.toLowerCase().includes('jennifer')) || 'Jennifer';
     setSupervisorName(jennifer);
@@ -432,12 +434,12 @@ export default function CashClosureModal({
   const allShiftMovements = useMemo(() => {
     return filterMovementsByShift(
       allMovements, 
-      filterMode, 
+      movementsTimeScope, 
       activeShift || undefined, 
-      selectedRegister, 
+      selectedRegister === 'todas' ? 'todas' : selectedRegister, 
       'todos'
     );
-  }, [allMovements, filterMode, activeShift, selectedRegister]);
+  }, [allMovements, movementsTimeScope, activeShift, selectedRegister]);
 
   // 2. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
   const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
@@ -568,11 +570,16 @@ export default function CashClosureModal({
       const isCredit = false;
       const isCash = !isCard && !isBank;
 
-      const isMine = isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail);
+      const lastClosureTime = getLastClosureTime(selectedRegister);
+      const mTime = m.created_at ? new Date(m.created_at).getTime() : 0;
+      const isFromCurrentShift = lastClosureTime <= 0 || isNaN(mTime) || mTime > lastClosureTime;
+      const isMine = isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail) && isFromCurrentShift;
       const author = m.created_by || (m as any).user_name || '';
 
       const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
       const baseBadge = isCard ? 'Tarjeta' : isBank ? 'Transferencia' : (isIngreso ? 'Ingreso' : 'Retiro');
+      const badgeAuthor = author || 'Otro';
+      const badgeLabel = isMine ? baseBadge : (!isFromCurrentShift ? `${baseBadge} • Turno ant.` : `${baseBadge} • ${badgeAuthor}`);
 
       list.push({
         id: `mov-${m.id}`,
@@ -591,7 +598,7 @@ export default function CashClosureModal({
         isCredit,
         isMine,
         author,
-        badgeText: isMine ? baseBadge : `${baseBadge} • ${author || 'Otro'}`,
+        badgeText: badgeLabel,
         badgeColorClass: !isMine
           ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
           : !isCash
@@ -1575,15 +1582,43 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   {/* Movimientos de Caja y Ventas del Turno */}
                   <div className="bg-white dark:bg-zinc-900/90 p-2.5 sm:p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs space-y-2">
                     {/* Header: Title & Totals on Top Row */}
-                    <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-100 dark:border-zinc-800/80">
-                      <div className="flex items-center gap-1.5">
-                        <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
-                        <h3 className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
-                          Movimientos
-                        </h3>
-                        <span className="text-[9.5px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.2 rounded-full">
-                          {unifiedShiftMovements.length}
-                        </span>
+                    <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-100 dark:border-zinc-800/80 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
+                          <h3 className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                            Movimientos
+                          </h3>
+                          <span className="text-[9.5px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.2 rounded-full">
+                            {unifiedShiftMovements.length}
+                          </span>
+                        </div>
+
+                        {/* Selector de Período para Movimientos: Hoy vs Turno */}
+                        <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg text-[9.5px] font-bold border border-zinc-200/50 dark:border-zinc-700/50">
+                          <button
+                            type="button"
+                            onClick={() => setMovementsTimeScope('today')}
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                              movementsTimeScope === 'today'
+                                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-black'
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                            }`}
+                          >
+                            Hoy (Todo el día)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementsTimeScope('shift')}
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                              movementsTimeScope === 'shift'
+                                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-black'
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                            }`}
+                          >
+                            Turno Actual
+                          </button>
+                        </div>
                       </div>
 
                       {/* Minimalist Totals Chip */}
