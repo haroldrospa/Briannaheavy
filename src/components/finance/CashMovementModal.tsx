@@ -59,8 +59,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   // Por defecto, mostrar todos los movimientos a todos los usuarios ('all')
   // con la opción de filtrar por 'Mis movimientos' ('mine')
   const [userScope, setUserScope] = useState<'mine' | 'all'>('all');
-  // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual), 'all' (Historial completo)
-  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
+  // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual)
+  const [timeScope, setTimeScope] = useState<'today' | 'shift'>('today');
   // Alcance de caja: 'todas' (Todas las cajas registradoras) o 'current' (Solo la caja activa)
   const [registerScope, setRegisterScope] = useState<'todas' | 'current'>('todas');
 
@@ -809,17 +809,6 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 >
                   Turno Actual
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setTimeScope('all')}
-                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
-                    timeScope === 'all'
-                      ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
-                      : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
-                  }`}
-                >
-                  Historial Completo
-                </button>
               </div>
 
               {/* Selector de Caja y Usuarios */}
@@ -906,7 +895,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     <p className="text-xs font-bold">
                       {userScope === 'mine'
                         ? 'No tienes movimientos propios registrados en este período.'
-                        : `No hay movimientos registrados en ${timeScope === 'today' ? 'el día de hoy' : (timeScope === 'shift' ? 'este turno' : 'el historial')}.`}
+                        : `No hay movimientos registrados en ${timeScope === 'today' ? 'el día de hoy.' : 'este turno.'}`}
                     </p>
                     {timeScope === 'shift' && (
                       <button
@@ -1213,12 +1202,12 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             {/* Título */}
             <div className="text-center mb-5">
               <h2 className="text-base font-black uppercase tracking-wide">
-                REPORTE DE INGRESOS Y EGRESOS {timeScope === 'today' ? 'DEL DÍA' : (timeScope === 'shift' ? 'DEL TURNO' : 'GENERAL')}
+                REPORTE DE INGRESOS Y EGRESOS {timeScope === 'today' ? 'DEL DÍA' : 'DEL TURNO'}
               </h2>
               <p className="text-xs text-gray-600">
                 {userScope === 'mine'
                   ? `Movimientos registrados por: ${currentUserName}`
-                  : (timeScope === 'today' ? 'Todos los movimientos de hoy' : (timeScope === 'shift' ? 'Todos los movimientos de este turno' : 'Historial completo de movimientos'))}
+                  : (timeScope === 'today' ? 'Todos los movimientos de hoy' : 'Todos los movimientos de este turno')}
                 {registerScope === 'todas' ? ' • Todas las Cajas' : ` • ${activeRegisterName}`}
               </p>
             </div>

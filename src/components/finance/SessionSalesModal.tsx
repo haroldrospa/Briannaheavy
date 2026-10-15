@@ -43,7 +43,7 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('Todos');
   const [movementTypeFilter, setMovementTypeFilter] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
-  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
+  const [timeScope, setTimeScope] = useState<'today' | 'shift'>('today');
   const [selectedSaleToPrint, setSelectedSaleToPrint] = useState<SessionSale | null>(null);
   
   const [rawMovements, setRawMovements] = useState<CashMovement[]>(getLocalStorageMovements);
@@ -317,17 +317,6 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                     }`}
                   >
                     Turno Actual
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeScope('all')}
-                    className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
-                      timeScope === 'all'
-                        ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-bold'
-                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
-                    }`}
-                  >
-                    Historial
                   </button>
                 </div>
 
