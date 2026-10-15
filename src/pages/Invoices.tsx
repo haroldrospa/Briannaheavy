@@ -211,8 +211,8 @@ export default function Invoices() {
     const list = invoices.filter(inv => {
       if (isQuotationInvoice(inv)) return false;
 
-      // Cada usuario solo puede ver las ventas que él mismo facturó si está en 'mis_facturas'
-      if (salesScope === 'mis_facturas' || !isAdmin) {
+      // Solo filtrar por cajero si el usuario selecciona explícitamente la pestaña 'mis_facturas'
+      if (salesScope === 'mis_facturas') {
         const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
         const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
         if (!matchesCashierUser(inv.cashier_name, currentUserName, currentUserEmail)) {
@@ -236,7 +236,7 @@ export default function Invoices() {
     });
 
     return sortUnifiedInvoices(list);
-  }, [invoices, salesScope, isAdmin, searchTerm, filterMode]);
+  }, [invoices, salesScope, searchTerm, filterMode]);
 
   const [displayLimit, setDisplayLimit] = useState(50);
 
@@ -299,32 +299,30 @@ export default function Invoices() {
         </div>
 
         {/* Sales Scope Tabs (Mis Facturas vs Todas) */}
-        {isAdmin && (
-          <div className="flex items-center p-1 bg-white dark:bg-[#121318] rounded-full border border-gray-200/80 dark:border-zinc-800 shadow-xs shrink-0">
-            <button
-              type="button"
-              onClick={() => setSalesScope('mis_facturas')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                salesScope === 'mis_facturas'
-                  ? 'bg-[#ED1C24] text-white shadow-xs'
-                  : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Mis Facturas
-            </button>
-            <button
-              type="button"
-              onClick={() => setSalesScope('todas')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                salesScope === 'todas'
-                  ? 'bg-[#ED1C24] text-white shadow-xs'
-                  : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Todas (General)
-            </button>
-          </div>
-        )}
+        <div className="flex items-center p-1 bg-white dark:bg-[#121318] rounded-full border border-gray-200/80 dark:border-zinc-800 shadow-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setSalesScope('mis_facturas')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              salesScope === 'mis_facturas'
+                ? 'bg-[#ED1C24] text-white shadow-xs'
+                : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            Mis Facturas
+          </button>
+          <button
+            type="button"
+            onClick={() => setSalesScope('todas')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              salesScope === 'todas'
+                ? 'bg-[#ED1C24] text-white shadow-xs'
+                : 'text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            Todas (General)
+          </button>
+        </div>
 
         {/* Filter Mode Tabs */}
         <div className="flex items-center p-1 bg-white dark:bg-[#121318] rounded-full border border-gray-200/80 dark:border-zinc-800 shadow-xs overflow-x-auto scrollbar-hide shrink-0">
