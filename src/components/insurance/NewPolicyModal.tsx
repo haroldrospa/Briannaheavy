@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   XMarkIcon, 
   ShieldCheckIcon, 
@@ -62,7 +62,9 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
     return d.toISOString().slice(0, 10);
   });
   const [annualPremium, setAnnualPremium] = useState<number | ''>(45000);
-  const [paymentPlan, setPaymentPlan] = useState<'anual' | 'cuotas_4'>('cuotas_4');
+  const [paymentPlan, setPaymentPlan] = useState<'anual' | 'cuotas'>('cuotas');
+  const [installmentsCount, setInstallmentsCount] = useState<number>(4);
+  const [installmentsFrequency, setInstallmentsFrequency] = useState<'mensual' | 'quincenal' | 'bimestral' | 'trimestral' | 'semestral'>('trimestral');
   const [currency, setCurrency] = useState<'DOP' | 'USD'>('DOP');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -151,7 +153,14 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setStartDate(policyToEdit.start_date);
       setExpirationDate(policyToEdit.expiration_date);
       setAnnualPremium(policyToEdit.annual_premium);
-      setPaymentPlan(policyToEdit.payment_plan);
+      const isAnual = policyToEdit.payment_plan === 'anual' || (policyToEdit.installments && policyToEdit.installments.length <= 1);
+      setPaymentPlan(isAnual ? 'anual' : 'cuotas');
+      const count = policyToEdit.installments && policyToEdit.installments.length > 0 ? policyToEdit.installments.length : 4;
+      setInstallmentsCount(count);
+      if (count === 4) setInstallmentsFrequency('trimestral');
+      else if (count === 2) setInstallmentsFrequency('semestral');
+      else if (count === 6) setInstallmentsFrequency('bimestral');
+      else setInstallmentsFrequency('mensual');
       setCurrency(policyToEdit.currency || 'DOP');
       setNotes(policyToEdit.notes || '');
     } else {
@@ -174,13 +183,15 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       nextYear.setFullYear(nextYear.getFullYear() + 1);
       setExpirationDate(nextYear.toISOString().slice(0, 10));
       setAnnualPremium(45000);
-      setPaymentPlan('cuotas_4');
+      setPaymentPlan('cuotas');
+      setInstallmentsCount(4);
+      setInstallmentsFrequency('trimestral');
       setCurrency('DOP');
       setNotes('');
     }
   }, [policyToEdit, isOpen]);
 
-  // Generar cuotas precalculadas
+  // Generar cuotas precalculadas dinámicas
   const previewInstallments = useMemo(() => {
     const total = typeof annualPremium === 'number' ? annualPremium : 0;
     if (total <= 0) return [];
@@ -189,29 +200,46 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       return [
         {
           number: 1,
-          due_date: startDate,
+          due_date: startDate || new Date().toISOString().slice(0, 10),
           amount: total,
           status: 'pendiente' as const
         }
       ];
     }
 
-    const installmentAmount = Math.round((total / 4) * 100) / 100;
-    const items: InsuranceInstallment[] = [];
-    const baseDate = new Date(startDate);
+    const count = Math.max(1, Math.min(60, Number(installmentsCount) || 1));
+    const baseAmount = Math.floor((total / count) * 100) / 100;
+    const remainder = Math.round((total - (baseAmount * count)) * 100) / 100;
 
-    for (let i = 0; i < 4; i++) {
+    const items: InsuranceInstallment[] = [];
+    const baseDate = new Date(startDate || new Date().toISOString().slice(0, 10));
+
+    for (let i = 0; i < count; i++) {
       const d = new Date(baseDate);
-      d.setMonth(d.getMonth() + (i * 3));
+      if (installmentsFrequency === 'quincenal') {
+        d.setDate(d.getDate() + (i * 15));
+      } else if (installmentsFrequency === 'bimestral') {
+        d.setMonth(d.getMonth() + (i * 2));
+      } else if (installmentsFrequency === 'trimestral') {
+        d.setMonth(d.getMonth() + (i * 3));
+      } else if (installmentsFrequency === 'semestral') {
+        d.setMonth(d.getMonth() + (i * 6));
+      } else {
+        // mensual default
+        d.setMonth(d.getMonth() + i);
+      }
+
+      const amount = i === count - 1 ? Math.round((baseAmount + remainder) * 100) / 100 : baseAmount;
+
       items.push({
         number: i + 1,
-        due_date: d.toISOString().slice(0, 10),
-        amount: i === 3 ? (total - installmentAmount * 3) : installmentAmount,
+        due_date: !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : startDate,
+        amount,
         status: 'pendiente'
       });
     }
     return items;
-  }, [annualPremium, paymentPlan, startDate]);
+  }, [annualPremium, paymentPlan, installmentsCount, installmentsFrequency, startDate]);
 
   if (!isOpen) return null;
 
@@ -249,6 +277,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         }));
       }
 
+      const finalPaymentPlan = paymentPlan === 'anual' ? 'anual' : (installmentsCount === 4 ? 'cuotas_4' : `cuotas_${installmentsCount}`);
       const payload = {
         policy_number: policyNumber.trim().toUpperCase(),
         insurance_company: finalCompany,
@@ -257,7 +286,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         client_phone: clientPhone.trim() || undefined,
         annual_premium: premiumValue,
         currency,
-        payment_plan: paymentPlan,
+        payment_plan: finalPaymentPlan,
         installments: finalInstallments,
         start_date: startDate,
         expiration_date: expirationDate,
@@ -626,27 +655,116 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   Modalidad de Pago *
                 </label>
                 <select
-                  value={paymentPlan}
-                  onChange={(e) => setPaymentPlan(e.target.value as any)}
+                  value={paymentPlan === 'anual' ? 'anual' : (['2', '3', '4', '6', '10', '12'].includes(String(installmentsCount)) ? String(installmentsCount) : 'custom')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'anual') {
+                      setPaymentPlan('anual');
+                    } else if (val === 'custom') {
+                      setPaymentPlan('cuotas');
+                    } else {
+                      setPaymentPlan('cuotas');
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed)) {
+                        setInstallmentsCount(parsed);
+                        if (parsed === 2) setInstallmentsFrequency('semestral');
+                        else if (parsed === 3) setInstallmentsFrequency('trimestral');
+                        else if (parsed === 4) setInstallmentsFrequency('trimestral');
+                        else if (parsed === 6) setInstallmentsFrequency('bimestral');
+                        else setInstallmentsFrequency('mensual');
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                 >
                   <option value="anual">Totalidad Anual (1 Pago)</option>
-                  <option value="cuotas_4">En 4 Cuotas (Trimestrales)</option>
+                  <option value="2">En 2 Cuotas (Semestrales)</option>
+                  <option value="3">En 3 Cuotas (Cuatrimestrales)</option>
+                  <option value="4">En 4 Cuotas (Trimestrales)</option>
+                  <option value="6">En 6 Cuotas (Bimestrales)</option>
+                  <option value="10">En 10 Cuotas (Mensuales)</option>
+                  <option value="12">En 12 Cuotas (Mensuales)</option>
+                  <option value="custom">Personalizado (Cualquier número de cuotas)...</option>
                 </select>
               </div>
             </div>
+
+            {/* Selector interactivo de cantidad de cuotas y frecuencia */}
+            {paymentPlan !== 'anual' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3.5 rounded-2xl bg-gray-50/70 dark:bg-zinc-800/40 border border-gray-200/80 dark:border-zinc-700/80">
+                {/* Cantidad de Cuotas */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-700 dark:text-zinc-300">
+                      Cantidad de Cuotas *
+                    </label>
+                    <span className="text-[10.5px] text-gray-400 font-medium">
+                      (1 a 60 cuotas)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInstallmentsCount(prev => Math.max(1, prev - 1))}
+                      className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-base flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+                      title="Disminuir cuota"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={installmentsCount}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setInstallmentsCount(isNaN(val) ? 1 : Math.max(1, Math.min(60, val)));
+                      }}
+                      className="flex-1 px-3 py-2 text-center bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-black text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setInstallmentsCount(prev => Math.min(60, prev + 1))}
+                      className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-base flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
+                      title="Aumentar cuota"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Frecuencia de Pago */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Frecuencia de Pago
+                  </label>
+                  <select
+                    value={installmentsFrequency}
+                    onChange={(e) => setInstallmentsFrequency(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                  >
+                    <option value="mensual">Mensual (Cada 1 mes)</option>
+                    <option value="quincenal">Quincenal (Cada 15 días)</option>
+                    <option value="bimestral">Bimestral (Cada 2 meses)</option>
+                    <option value="trimestral">Trimestral (Cada 3 meses)</option>
+                    <option value="semestral">Semestral (Cada 6 meses)</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Vista previa de Cuotas Generadas */}
             <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
               <div className="flex items-center justify-between mb-2.5">
                 <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">
-                  Desglose de Cuotas ({paymentPlan === 'anual' ? '1 Pago Anual' : '4 Cuotas Trimestrales'}):
+                  Desglose de Cuotas ({previewInstallments.length} {previewInstallments.length === 1 ? 'Cuota' : 'Cuotas'} • {paymentPlan === 'anual' ? '1 Pago Único' : installmentsFrequency.charAt(0).toUpperCase() + installmentsFrequency.slice(1)}):
                 </span>
                 <span className="text-xs font-black text-gray-900 dark:text-white">
                   Total: {currency === 'DOP' ? 'RD$' : 'US$'} {(typeof annualPremium === 'number' ? annualPremium : 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
                 {previewInstallments.map((inst) => (
                   <div 
                     key={inst.number}

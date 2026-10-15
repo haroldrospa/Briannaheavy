@@ -29,7 +29,7 @@ export interface InsurancePolicy {
   client_phone?: string;
   annual_premium: number; // Prima anual
   currency?: 'DOP' | 'USD';
-  payment_plan: 'anual' | 'cuotas_4'; // Totalidad anual o 4 cuotas
+  payment_plan: 'anual' | 'cuotas_4' | string; // Totalidad anual o en cuotas (cualquier cantidad)
   installments: InsuranceInstallment[];
   start_date: string; // YYYY-MM-DD
   expiration_date: string; // YYYY-MM-DD (1 año desde inicio o personalizado)

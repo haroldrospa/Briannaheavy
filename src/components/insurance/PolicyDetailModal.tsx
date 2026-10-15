@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { 
   XMarkIcon, 
   ShieldCheckIcon, 
@@ -246,7 +246,7 @@ export default function PolicyDetailModal({
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-black text-gray-400 uppercase tracking-wider">
-                  Prima Anual ({policy.payment_plan === 'anual' ? '1 Pago' : '4 Cuotas'})
+                  Prima Anual ({policy.payment_plan === 'anual' || (policy.installments && policy.installments.length <= 1) ? '1 Pago Único' : `${policy.installments?.length || 4} Cuotas`})
                 </span>
                 <p className="text-xl font-black text-gray-900 dark:text-white">
                   {policy.currency || 'DOP'} {policy.annual_premium.toLocaleString('es-DO', { minimumFractionDigits: 2 })}

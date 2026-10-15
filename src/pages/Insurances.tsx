@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheckIcon, 
   PlusIcon, 
@@ -415,7 +415,7 @@ export default function Insurances() {
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-gray-400">Modalidad:</span>
                       <span className="font-bold text-gray-700 dark:text-zinc-300">
-                        {policy.payment_plan === 'anual' ? '1 Pago Anual' : `4 Cuotas (${paidCount}/${totalCount} pagadas)`}
+                        {policy.payment_plan === 'anual' || totalCount <= 1 ? '1 Pago Anual' : `${totalCount} Cuotas (${paidCount}/${totalCount} pagadas)`}
                       </span>
                     </div>
 
