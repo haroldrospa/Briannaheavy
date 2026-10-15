@@ -22,7 +22,8 @@ import {
   ShoppingCartIcon,
   ArrowUpRightIcon,
   ArrowDownLeftIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -141,7 +142,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'todos' | 'ventas' | 'ingreso' | 'egreso'>('todos');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('mios');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -605,6 +606,10 @@ export default function CashClosureModal({
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments, allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
+  const unifiedMisMovimientos = useMemo(() => 
+    unifiedShiftMovements.filter(m => m.isMine !== false),
+    [unifiedShiftMovements]
+  );
   const unifiedVentas = useMemo(() => 
     unifiedShiftMovements.filter(m => m.category === 'venta' || m.category === 'financiamiento' || m.category === 'cobro'),
     [unifiedShiftMovements]
@@ -619,11 +624,12 @@ export default function CashClosureModal({
   );
 
   const displayedMovements = useMemo(() => {
+    if (movementTab === 'mios') return unifiedMisMovimientos;
     if (movementTab === 'ventas') return unifiedVentas;
     if (movementTab === 'ingreso') return unifiedIngresos;
     if (movementTab === 'egreso') return unifiedEgresos;
     return unifiedShiftMovements;
-  }, [movementTab, unifiedShiftMovements, unifiedVentas, unifiedIngresos, unifiedEgresos]);
+  }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedVentas, unifiedIngresos, unifiedEgresos]);
 
   // Totales de entradas y salidas que suman estrictamente al cuadre actual (excluyendo movimientos de otros usuarios)
   const quadreInflowsAmount = useMemo(() => {
@@ -1585,6 +1591,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10px]">
                           <button
                             type="button"
+                            onClick={() => setMovementTab('mios')}
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
+                              movementTab === 'mios' 
+                                ? 'bg-[#ED1C24] text-white shadow-2xs font-bold' 
+                                : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white font-medium'
+                            }`}
+                          >
+                            <UserIcon className="w-3 h-3" />
+                            <span>Mis Movimientos</span>
+                            <span className="text-[9px] opacity-85 font-mono">({unifiedMisMovimientos.length})</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setMovementTab('todos')}
                             className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'todos' 
@@ -1653,7 +1672,9 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                     {displayedMovements.length === 0 ? (
                       <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-center text-[11px] font-medium text-zinc-400">
-                        {movementTab === 'ventas'
+                        {movementTab === 'mios'
+                          ? 'No tienes movimientos propios en este turno'
+                          : movementTab === 'ventas'
                           ? 'Sin ventas registradas en este turno'
                           : movementTab === 'ingreso'
                           ? 'Sin ingresos registrados en este turno'
