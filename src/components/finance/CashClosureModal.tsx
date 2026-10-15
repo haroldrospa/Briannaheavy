@@ -1574,88 +1574,21 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                   {/* Movimientos de Caja y Ventas del Turno */}
                   <div className="bg-white dark:bg-zinc-900/90 p-2.5 sm:p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs space-y-2">
-                    {/* Header: Title + Minimalist Segmented Tabs + Totals */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-1.5 border-b border-zinc-100 dark:border-zinc-800/80">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <ArrowPathIcon className="w-3 h-3 text-zinc-400 dark:text-zinc-500" />
-                          <h3 className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
-                            Movimientos
-                          </h3>
-                          <span className="text-[9px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1 py-0.2 rounded-full">
-                            {unifiedShiftMovements.length}
-                          </span>
-                        </div>
-
-                        {/* Modern Segmented Control */}
-                        <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10px]">
-                          <button
-                            type="button"
-                            onClick={() => setMovementTab('mios')}
-                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                              movementTab === 'mios' 
-                                ? 'bg-[#ED1C24] text-white shadow-2xs font-bold' 
-                                : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white font-medium'
-                            }`}
-                          >
-                            <UserIcon className="w-3 h-3" />
-                            <span>Mis Movimientos</span>
-                            <span className="text-[9px] opacity-85 font-mono">({unifiedMisMovimientos.length})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMovementTab('todos')}
-                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                              movementTab === 'todos' 
-                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
-                            }`}
-                          >
-                            <span>Todos</span>
-                            <span className="text-[9px] opacity-60">({unifiedShiftMovements.length})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMovementTab('ventas')}
-                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                              movementTab === 'ventas' 
-                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
-                            }`}
-                          >
-                            <span>Ventas</span>
-                            <span className="text-[9px] opacity-60">({unifiedVentas.length})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMovementTab('ingreso')}
-                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                              movementTab === 'ingreso' 
-                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
-                            }`}
-                          >
-                            <span>Ingresos</span>
-                            <span className="text-[9px] opacity-60">({unifiedIngresos.length})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMovementTab('egreso')}
-                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
-                              movementTab === 'egreso' 
-                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
-                            }`}
-                          >
-                            <span>Egresos</span>
-                            <span className="text-[9px] opacity-60">({unifiedEgresos.length})</span>
-                          </button>
-                        </div>
+                    {/* Header: Title & Totals on Top Row */}
+                    <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-100 dark:border-zinc-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
+                        <h3 className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                          Movimientos
+                        </h3>
+                        <span className="text-[9.5px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.2 rounded-full">
+                          {unifiedShiftMovements.length}
+                        </span>
                       </div>
 
                       {/* Minimalist Totals Chip */}
                       <div 
-                        className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10.5px] font-mono shadow-2xs self-start sm:self-auto" 
+                        className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10.5px] font-mono shadow-2xs" 
                         title={`Suma de este cuadre: +RD$ ${quadreInflowsAmount.toLocaleString('es-DO')} / -RD$ ${quadreOutflowsAmount.toLocaleString('es-DO')} | Total general visible: +RD$ ${totalInflowsAmount.toLocaleString('es-DO')} / -RD$ ${totalOutflowsAmount.toLocaleString('es-DO')}`}
                       >
                         <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
@@ -1668,6 +1601,81 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           -RD$ {quadreOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Segmented Control Filter Bar (Full Width & Clean) */}
+                    <div className="flex items-center p-0.5 bg-zinc-100/90 dark:bg-zinc-800/80 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10.5px] overflow-x-auto scrollbar-hide">
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('mios')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'mios' 
+                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <UserIcon className="w-3 h-3 text-zinc-500" />
+                        <span>Mis Movimientos</span>
+                        <span className={`text-[9px] font-mono font-bold px-1 rounded-full ${
+                          movementTab === 'mios' 
+                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200' 
+                            : 'opacity-65'
+                        }`}>
+                          ({unifiedMisMovimientos.length})
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('todos')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'todos' 
+                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <span>Todos</span>
+                        <span className="text-[9px] opacity-60 font-mono">({unifiedShiftMovements.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('ventas')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'ventas' 
+                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <span>Ventas</span>
+                        <span className="text-[9px] opacity-60 font-mono">({unifiedVentas.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('ingreso')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'ingreso' 
+                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <span>Ingresos</span>
+                        <span className="text-[9px] opacity-60 font-mono">({unifiedIngresos.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('egreso')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'egreso' 
+                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <span>Egresos</span>
+                        <span className="text-[9px] opacity-60 font-mono">({unifiedEgresos.length})</span>
+                      </button>
                     </div>
 
                     {displayedMovements.length === 0 ? (
