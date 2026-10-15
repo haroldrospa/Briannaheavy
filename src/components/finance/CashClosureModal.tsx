@@ -1118,52 +1118,51 @@ Observaciones: ${printNotes || 'Sin observaciones'}
     <>
       <AnimatePresence>
         {!showCompletionOptions && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/55 print:hidden backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2.5 lg:p-3 bg-black/55 print:hidden backdrop-blur-xs">
             <motion.div
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 10 }}
-            className="bg-white dark:bg-[#18181b] rounded-3xl w-full max-w-5xl lg:max-w-6xl max-h-[96vh] flex flex-col overflow-hidden shadow-2xl border border-zinc-200/80 dark:border-zinc-800"
+            className="bg-white dark:bg-[#18181b] rounded-2xl sm:rounded-3xl w-full max-w-5xl lg:max-w-6xl max-h-[98vh] flex flex-col overflow-hidden shadow-2xl border border-zinc-200/80 dark:border-zinc-800"
           >
             {/* Top Modal Header Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/80 shrink-0 bg-white dark:bg-[#18181b]">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 flex items-center justify-center font-bold shrink-0">
-                  <CalculatorIcon className="h-5 w-5 stroke-[2]" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 border-b border-zinc-100 dark:border-zinc-800/80 shrink-0 bg-white dark:bg-[#18181b]">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 flex items-center justify-center font-bold shrink-0">
+                  <CalculatorIcon className="h-4 w-4 stroke-[2]" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white leading-tight tracking-tight">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white leading-tight tracking-tight">
                       Cierre & Arqueo de Caja
                     </h2>
-                    <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
+                    <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
                       {selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister}
                     </span>
                     {!isShiftOpenState && !isAdmin && (
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40">
+                      <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40">
                         Turno Cerrado
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap text-xs font-medium mt-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs font-medium mt-0.5">
                     {/* Badge 1: Apertura de Turno con Fecha y Hora */}
-                    <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs">
-                      <ClockIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Apertura:</span>
+                    <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-200/80 dark:border-emerald-800/60 text-[10.5px]">
+                      <ClockIcon className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">Apertura:</span>
                       <strong className="font-bold text-emerald-900 dark:text-emerald-100">{shiftOpenDateStr} • {shiftOpenTimeDisplay}</strong>
                     </span>
 
-                    {/* Separador elegante */}
-                    <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline font-bold">→</span>
+                    <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline font-bold text-xs">→</span>
 
                     {/* Badge 2: Cierre / Actual */}
-                    <span className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 px-3 py-1 rounded-xl border border-zinc-200/80 dark:border-zinc-700/60 shadow-2xs">
-                      <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Cierre / Actual:</span>
+                    <span className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 px-2 py-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-700/60 text-[10.5px]">
+                      <span className="font-semibold text-zinc-500 dark:text-zinc-400">Cierre / Actual:</span>
                       <strong className="font-bold text-zinc-900 dark:text-white">{currentTimeStr}</strong>
                     </span>
 
                     {/* Badge 3: Operaciones */}
-                    <span className="inline-flex items-center gap-1 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-xl border border-zinc-200/60 dark:border-zinc-800 text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-800 text-[10.5px] font-semibold">
                       <strong className="font-black text-zinc-900 dark:text-white">{totalDocsCount}</strong>
                       <span>{totalDocsCount === 1 ? 'operación' : 'operaciones'}</span>
                     </span>
@@ -1172,7 +1171,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 self-end sm:self-auto">
+              <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                 {!isShiftOpenState && !isAdmin && (
                   <button
                     type="button"
@@ -1180,7 +1179,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       onClose(false);
                       window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
                     }}
-                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer animate-pulse"
+                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white px-2.5 py-1.5 rounded-lg text-xs font-black transition-all shadow-xs cursor-pointer animate-pulse"
                     title="Abrir turno con fondo inicial"
                   >
                     <span>Abrir Turno</span>
@@ -1190,10 +1189,10 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 <button
                   type="button"
                   onClick={() => handlePrint()}
-                  className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                  className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs"
                   title="Vista Previa de Impresión"
                 >
-                  <PrinterIcon className="h-4 w-4" />
+                  <PrinterIcon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Imprimir</span>
                 </button>
 
@@ -1201,13 +1200,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   type="button"
                   onClick={handleFinalizeClosure}
                   disabled={isSavingClosure}
-                  className="flex items-center gap-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white/90 active:scale-[0.98] px-4 sm:px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white/90 active:scale-[0.98] px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
                 >
                   {isSavingClosure ? (
                     <span>Guardando...</span>
                   ) : (
                     <>
-                      <CheckCircleIcon className="h-4 w-4 stroke-[2.5]" />
+                      <CheckCircleIcon className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Finalizar Cierre</span>
                     </>
                   )}
@@ -1216,22 +1215,22 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 <button
                   type="button"
                   onClick={() => onClose()}
-                  className="p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
                 >
-                  <XMarkIcon className="h-5 w-5" />
+                  <XMarkIcon className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
             {/* Screen UI Body */}
-            <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-3.5 sm:px-5 py-2.5 sm:py-3 space-y-2.5 custom-scrollbar">
               
               {/* Top KPI Metrics Bar */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                 {/* Fondo Inicial Card (with quick edit) */}
-                <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 relative group">
+                <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 sm:p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80 relative group">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">
+                    <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block truncate">
                       Fondo Inicial ({selectedRegister === 'todas' ? 'Caja' : selectedRegister.split(' - ')[0]})
                     </span>
                     {!isEditingFund ? (
@@ -1241,7 +1240,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-0.5 transition-colors cursor-pointer"
                         title="Ajustar fondo inicial"
                       >
-                        <PencilSquareIcon className="w-3.5 h-3.5" />
+                        <PencilSquareIcon className="w-3 h-3" />
                       </button>
                     ) : (
                       <button
@@ -1250,18 +1249,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         className="text-emerald-500 hover:text-emerald-600 p-0.5 transition-colors cursor-pointer"
                         title="Guardar fondo"
                       >
-                        <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />
+                        <CheckIcon className="w-3 h-3 stroke-[3]" />
                       </button>
                     )}
                   </div>
 
                   {!isEditingFund ? (
-                    <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-1 block">
+                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-0.5 block leading-tight">
                       RD$ {initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </span>
                   ) : (
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-xs font-bold text-zinc-500 font-mono">RD$</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[10px] font-bold text-zinc-500 font-mono">RD$</span>
                       <input 
                         type="number"
                         min="0"
@@ -1269,105 +1268,105 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         value={tempFund}
                         onChange={(e) => setTempFund(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSaveInitialFund()}
-                        className="w-full px-2 py-0.5 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded-lg text-xs font-bold font-mono outline-none"
+                        className="w-full px-1.5 py-0.2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 rounded text-xs font-bold font-mono outline-none"
                         autoFocus
                       />
                     </div>
                   )}
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block mt-0.5">
+                  <span className="text-[9.5px] text-zinc-400 dark:text-zinc-500 font-medium block truncate">
                     Base fija en gaveta
                   </span>
                 </div>
 
                 {/* Total Facturado / Cobrado */}
-                <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
+                <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 sm:p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 block">Ventas / Cobros Totales</span>
-                    <span className="text-[10px] font-medium px-1.5 py-0.2 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
+                    <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block truncate">Ventas / Cobros Totales</span>
+                    <span className="text-[9px] font-medium px-1 py-0.2 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
                       {totalDocsCount} docs
                     </span>
                   </div>
-                  <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-1 block">
+                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-0.5 block leading-tight">
                     RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block mt-0.5">
+                  <span className="text-[9.5px] text-zinc-400 dark:text-zinc-500 font-medium block truncate">
                     Efectivo, Tarjeta, Transf, Crédito
                   </span>
                 </div>
 
                 {/* Efectivo del Turno (Neto) - SEPARADO DEL FONDO INICIAL */}
-                <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100/90 dark:border-emerald-800/40">
+                <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-2 sm:p-2.5 rounded-xl border border-emerald-100/90 dark:border-emerald-800/40">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 block">
+                    <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 block truncate">
                       Efectivo Turno (Neto)
                     </span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded">
+                    <span className="text-[8.5px] font-bold px-1 py-0.2 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded uppercase">
                       A Entregar
                     </span>
                   </div>
-                  <span className="text-base font-black text-emerald-950 dark:text-emerald-100 font-mono mt-1 block">
+                  <span className="text-sm font-black text-emerald-950 dark:text-emerald-100 font-mono mt-0.5 block leading-tight">
                     RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-medium block mt-0.5 truncate" title={`Fondo inicial: RD$ ${initialFund.toLocaleString('es-DO')} | Total gaveta: RD$ ${expectedCashTotal.toLocaleString('es-DO')}`}>
+                  <span className="text-[9.5px] text-emerald-700/80 dark:text-emerald-400/80 font-medium block truncate" title={`Fondo inicial: RD$ ${initialFund.toLocaleString('es-DO')} | Total gaveta: RD$ ${expectedCashTotal.toLocaleString('es-DO')}`}>
                     {initialFund > 0 ? `Total gaveta: RD$ ${expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : 'Sin fondo inicial'}
                   </span>
                 </div>
 
                 {/* Efectivo Contado */}
-                <div className="bg-zinc-100/80 dark:bg-zinc-800/60 p-3.5 rounded-2xl border border-zinc-200/80 dark:border-zinc-700/60">
+                <div className="bg-zinc-100/80 dark:bg-zinc-800/60 p-2 sm:p-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-700/60">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 block">Efectivo Contado</span>
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 bg-zinc-200/80 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded font-mono">
+                    <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300 block truncate">Efectivo Contado</span>
+                    <span className="text-[8.5px] font-semibold px-1 py-0.2 bg-zinc-200/80 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded font-mono">
                       {effectiveCountMode === 'shift_only' ? 'Solo Turno' : 'Gaveta'}
                     </span>
                   </div>
-                  <span className="text-base font-bold text-zinc-900 dark:text-white font-mono mt-1 block">
+                  <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono mt-0.5 block leading-tight">
                     RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium block mt-0.5 truncate">
+                  <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 font-medium block truncate">
                     Esperado: RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
 
               {/* Content Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
                 
                 {/* Left Column: Denomination Counter (6 Cols) */}
-                <div className="lg:col-span-6 space-y-2.5">
+                <div className="lg:col-span-6 space-y-2">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                      <BanknotesIcon className="h-4 w-4 text-zinc-500" />
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                      <BanknotesIcon className="h-3.5 w-3.5 text-zinc-500" />
                       Conteo Físico ({selectedRegister === 'todas' ? 'Todas' : selectedRegister.split(' - ')[0]})
                     </h3>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleResetCounts}
-                        className="text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1 transition-colors cursor-pointer"
+                        className="text-[11px] font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1 transition-colors cursor-pointer"
                       >
-                        <ArrowPathIcon className="h-3.5 w-3.5" /> Limpiar
+                        <ArrowPathIcon className="h-3 w-3" /> Limpiar
                       </button>
                     </div>
                   </div>
 
                   {/* Toggle selector: Solo Efectivo del Turno vs Gaveta Completa con Fondo */}
                   {initialFund > 0 && (
-                    <div className="grid grid-cols-2 p-1 bg-zinc-100/90 dark:bg-zinc-800/80 rounded-xl gap-1 text-xs border border-zinc-200/60 dark:border-zinc-700/60">
+                    <div className="grid grid-cols-2 p-0.5 bg-zinc-100/90 dark:bg-zinc-800/80 rounded-lg gap-1 text-xs border border-zinc-200/60 dark:border-zinc-700/60">
                       <button
                         type="button"
                         onClick={() => setCountMode('shift_only')}
-                        className={`py-1.5 px-2.5 rounded-lg transition-all cursor-pointer text-left ${
+                        className={`py-1 px-2 rounded-md transition-all cursor-pointer text-left ${
                           effectiveCountMode === 'shift_only'
                             ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
                             : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px]">Solo Efectivo Turno</span>
-                          {effectiveCountMode === 'shift_only' && <span className="text-[8.5px] px-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded font-bold uppercase">Activo</span>}
+                          <span className="text-[10px]">Solo Efectivo Turno</span>
+                          {effectiveCountMode === 'shift_only' && <span className="text-[8px] px-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded font-bold uppercase">Activo</span>}
                         </div>
-                        <span className="block text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
+                        <span className="block text-[9.5px] font-mono text-emerald-600 dark:text-emerald-400 font-bold mt-0.2">
                           RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </button>
@@ -1375,17 +1374,17 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <button
                         type="button"
                         onClick={() => setCountMode('with_fund')}
-                        className={`py-1.5 px-2.5 rounded-lg transition-all cursor-pointer text-left ${
+                        className={`py-1 px-2 rounded-md transition-all cursor-pointer text-left ${
                           effectiveCountMode === 'with_fund'
                             ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
                             : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px]">Gaveta Completa</span>
-                          {effectiveCountMode === 'with_fund' && <span className="text-[8.5px] px-1 bg-zinc-200 dark:bg-zinc-600 text-zinc-800 dark:text-zinc-200 rounded font-bold uppercase">Activo</span>}
+                          <span className="text-[10px]">Gaveta Completa</span>
+                          {effectiveCountMode === 'with_fund' && <span className="text-[8px] px-1 bg-zinc-200 dark:bg-zinc-600 text-zinc-800 dark:text-zinc-200 rounded font-bold uppercase">Activo</span>}
                         </div>
-                        <span className="block text-[10px] font-mono text-zinc-600 dark:text-zinc-300 font-bold mt-0.5">
+                        <span className="block text-[9.5px] font-mono text-zinc-600 dark:text-zinc-300 font-bold mt-0.2">
                           RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </button>
@@ -1393,19 +1392,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   )}
 
                   {/* Screen Interactive Denomination Grid */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 p-2.5">
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 rounded-xl border border-zinc-100 dark:border-zinc-800/80 p-1.5 sm:p-2">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
                       {DENOMINATIONS.map((den) => {
                         const qty = counts[den.value] || 0;
                         const subtotal = qty * den.value;
                         return (
                           <div 
                             key={den.value} 
-                            className="flex items-center justify-between py-1 px-2 hover:bg-white dark:hover:bg-zinc-800/40 rounded-xl transition-colors"
+                            className="flex items-center justify-between py-0.5 px-1.5 hover:bg-white dark:hover:bg-zinc-800/40 rounded-lg transition-colors"
                           >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{den.label}</span>
-                              <span className="text-[9px] font-medium text-zinc-400 dark:text-zinc-500 uppercase">{den.type === 'Billete' ? 'BIL' : 'MON'}</span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono">{den.label}</span>
+                              <span className="text-[8px] font-medium text-zinc-400 dark:text-zinc-500 uppercase">{den.type === 'Billete' ? 'BIL' : 'MON'}</span>
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1415,9 +1414,9 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 value={counts[den.value] === undefined ? '' : counts[den.value]}
                                 onChange={(e) => handleCountChange(den.value, e.target.value)}
                                 placeholder="0"
-                                className="w-13 h-7 px-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-bold text-center text-zinc-900 dark:text-white outline-none focus:border-zinc-400 dark:focus:border-zinc-500 transition-all"
+                                className="w-11 h-6 px-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-[11px] font-bold text-center text-zinc-900 dark:text-white outline-none focus:border-zinc-400 dark:focus:border-zinc-500 transition-all"
                               />
-                              <span className="text-xs font-mono font-medium text-zinc-700 dark:text-zinc-300 w-15 text-right">
+                              <span className="text-[11px] font-mono font-medium text-zinc-700 dark:text-zinc-300 w-13 text-right">
                                 ${subtotal.toLocaleString('es-DO')}
                               </span>
                             </div>
@@ -1428,29 +1427,29 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </div>
 
                   {/* Arqueo Footer Total */}
-                  <div className="flex justify-between items-center px-4 py-3 bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80">
+                  <div className="flex justify-between items-center px-3 py-1.5 bg-zinc-50/60 dark:bg-zinc-900/40 rounded-xl border border-zinc-100 dark:border-zinc-800/80">
                     <div>
-                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 block">Total Arqueado en Efectivo</span>
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                      <span className="text-[10.5px] font-semibold text-zinc-600 dark:text-zinc-400 block leading-tight">Total Arqueado en Efectivo</span>
+                      <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block truncate">
                         {effectiveCountMode === 'shift_only' && initialFund > 0
                           ? `Esperado Turno: RD$ ${shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (Fondo separado)`
                           : `Esperado: RD$ ${targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
                       </span>
                     </div>
-                    <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                       RD$ {physicalCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
 
                   {/* Facturas de Ventas y Total Vendido */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 sm:p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
                         <DocumentTextIcon className="w-3.5 h-3.5 text-zinc-400" />
                         Facturas de Ventas ({scopedInvoices.length})
                       </h3>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">Total Vendido:</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">Total:</span>
                         <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
                           RD$ {totalInvoicesAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
@@ -1458,15 +1457,15 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
 
                     {scopedInvoices.length === 0 ? (
-                      <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
+                      <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-lg text-center text-[11px] font-medium text-zinc-400">
                         Sin facturas de venta registradas en este turno
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                      <div className="space-y-1 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
                         {scopedInvoices.map(inv => (
-                          <div key={inv.id} className="flex items-center justify-between p-2 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${
+                          <div key={inv.id} className="flex items-center justify-between p-1.5 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-bold shrink-0 ${
                                 inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
                                 inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
                                 inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
@@ -1475,18 +1474,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 {inv.payment_method || 'Efectivo'}
                               </span>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 truncate">
-                                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-xs">{inv.invoice_number}</span>
-                                  <span className="text-zinc-500 dark:text-zinc-400 text-[11px] truncate">{inv.customer_name || 'Consumidor Final'}</span>
+                                <div className="flex items-center gap-1 truncate">
+                                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px]">{inv.invoice_number}</span>
+                                  <span className="text-zinc-500 dark:text-zinc-400 text-[10.5px] truncate">{inv.customer_name || 'Consumidor Final'}</span>
                                 </div>
-                                {inv.created_at && (
-                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                                    {new Date(inv.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })} • {new Date(inv.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                  </div>
-                                )}
                               </div>
                             </div>
-                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-2">
+                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-1.5 text-xs">
                               +RD$ {Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -1497,37 +1491,37 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 </div>
 
                 {/* Right Column: Breakdown & Status (6 Cols) */}
-                <div className="lg:col-span-6 space-y-3">
+                <div className="lg:col-span-6 space-y-2">
                   
                   {/* Resumen Separado de Efectivo (Fondo Inicial vs Turno) */}
                   {initialFund > 0 && (
-                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 rounded-xl border border-zinc-100 dark:border-zinc-800/80 space-y-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                          <BanknotesIcon className="w-3.5 h-3.5 text-zinc-400" />
+                        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                          <BanknotesIcon className="w-3 h-3 text-zinc-400" />
                           Separación de Efectivo (Gaveta)
                         </h3>
-                        <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-200/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] font-mono font-bold text-zinc-500 bg-zinc-200/60 dark:bg-zinc-800 px-1 py-0.2 rounded">
                           {selectedRegister === 'todas' ? 'Caja General' : selectedRegister.split(' - ')[0]}
                         </span>
                       </div>
 
-                      <div className="space-y-1.5 text-xs">
-                        <div className="flex justify-between items-center p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
-                          <span className="font-medium text-zinc-600 dark:text-zinc-400">Fondo Inicial (se queda en caja):</span>
-                          <span className="font-bold font-mono text-zinc-800 dark:text-zinc-200">
+                      <div className="grid grid-cols-3 gap-1.5 text-xs">
+                        <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                          <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Fondo Inicial (Queda)</span>
+                          <span className="font-bold font-mono text-[11px] text-zinc-800 dark:text-zinc-200">
                             RD$ {initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center p-2 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/70 dark:border-emerald-900/40">
-                          <span className="font-semibold text-emerald-800 dark:text-emerald-300">Efectivo Generado en Turno (a retirar):</span>
-                          <span className="font-black font-mono text-emerald-700 dark:text-emerald-300">
+                        <div className="p-1.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/70 dark:border-emerald-900/40 text-center">
+                          <span className="text-[9.5px] text-emerald-800 dark:text-emerald-300 font-semibold block truncate">Turno (A Retirar)</span>
+                          <span className="font-black font-mono text-[11px] text-emerald-700 dark:text-emerald-300">
                             RD$ {shiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 font-bold text-zinc-900 dark:text-zinc-100">
-                          <span className="text-zinc-700 dark:text-zinc-300">Total Físico Teórico en Gaveta:</span>
-                          <span className="font-mono text-xs">
+                        <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                          <span className="text-[9.5px] text-zinc-700 dark:text-zinc-300 font-bold block truncate">Total Teórico Gaveta</span>
+                          <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
                             RD$ {expectedCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
@@ -1536,36 +1530,36 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   )}
 
                   {/* Ventas por Método de Pago */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 rounded-xl border border-zinc-100 dark:border-zinc-800/80 space-y-1">
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                       Desglose de Ingresos ({selectedRegister})
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
-                        <span className="font-medium text-zinc-600 dark:text-zinc-400">Efectivo</span>
-                        <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                    <div className="grid grid-cols-4 gap-1.5 text-xs">
+                      <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                        <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Efectivo</span>
+                        <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
                           ${systemSales.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
-                        <span className="font-medium text-zinc-600 dark:text-zinc-400">Tarjeta</span>
-                        <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                      <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                        <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Tarjeta</span>
+                        <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
                           ${systemSales.card.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
-                        <span className="font-medium text-zinc-600 dark:text-zinc-400">Transferencia</span>
-                        <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                      <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                        <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Transferencia</span>
+                        <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
                           ${systemSales.transfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80">
-                        <span className="font-medium text-zinc-600 dark:text-zinc-400">Crédito</span>
-                        <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100">
+                      <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
+                        <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Crédito</span>
+                        <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
                           ${systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -1573,76 +1567,76 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </div>
 
                   {/* Movimientos de Caja y Ventas del Turno */}
-                  <div className="bg-white dark:bg-zinc-900/90 p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs space-y-3">
+                  <div className="bg-white dark:bg-zinc-900/90 p-2.5 sm:p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs space-y-2">
                     {/* Header: Title + Minimalist Segmented Tabs + Totals */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-1.5">
-                          <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
-                          <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-1.5 border-b border-zinc-100 dark:border-zinc-800/80">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <ArrowPathIcon className="w-3 h-3 text-zinc-400 dark:text-zinc-500" />
+                          <h3 className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
                             Movimientos
                           </h3>
-                          <span className="text-[10px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.2 rounded-full">
+                          <span className="text-[9px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1 py-0.2 rounded-full">
                             {unifiedShiftMovements.length}
                           </span>
                         </div>
 
                         {/* Modern Segmented Control */}
-                        <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-xs">
+                        <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10px]">
                           <button
                             type="button"
                             onClick={() => setMovementTab('todos')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'todos' 
                                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
                                 : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
                             <span>Todos</span>
-                            <span className="text-[10px] opacity-60">({unifiedShiftMovements.length})</span>
+                            <span className="text-[9px] opacity-60">({unifiedShiftMovements.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('ventas')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'ventas' 
                                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
                                 : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
                             <span>Ventas</span>
-                            <span className="text-[10px] opacity-60">({unifiedVentas.length})</span>
+                            <span className="text-[9px] opacity-60">({unifiedVentas.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('ingreso')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'ingreso' 
                                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
                                 : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
                             <span>Ingresos</span>
-                            <span className="text-[10px] opacity-60">({unifiedIngresos.length})</span>
+                            <span className="text-[9px] opacity-60">({unifiedIngresos.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('egreso')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'egreso' 
                                 ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
                                 : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
                             <span>Egresos</span>
-                            <span className="text-[10px] opacity-60">({unifiedEgresos.length})</span>
+                            <span className="text-[9px] opacity-60">({unifiedEgresos.length})</span>
                           </button>
                         </div>
                       </div>
 
                       {/* Minimalist Totals Chip */}
                       <div 
-                        className="flex items-center gap-2.5 bg-zinc-50 dark:bg-zinc-800/60 px-3 py-1 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] font-mono shadow-2xs self-start lg:self-auto" 
+                        className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/60 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60 text-[10.5px] font-mono shadow-2xs self-start sm:self-auto" 
                         title={`Suma de este cuadre: +RD$ ${quadreInflowsAmount.toLocaleString('es-DO')} / -RD$ ${quadreOutflowsAmount.toLocaleString('es-DO')} | Total general visible: +RD$ ${totalInflowsAmount.toLocaleString('es-DO')} / -RD$ ${totalOutflowsAmount.toLocaleString('es-DO')}`}
                       >
                         <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
@@ -1658,7 +1652,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
 
                     {displayedMovements.length === 0 ? (
-                      <div className="p-6 bg-zinc-50/50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center text-xs font-medium text-zinc-400">
+                      <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-center text-[11px] font-medium text-zinc-400">
                         {movementTab === 'ventas'
                           ? 'Sin ventas registradas en este turno'
                           : movementTab === 'ingreso'
@@ -1668,7 +1662,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           : 'Sin ventas ni movimientos registrados en este turno'}
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                      <div className="space-y-1 max-h-28 sm:max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                         {displayedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
                           const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
@@ -1678,15 +1672,15 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           return (
                             <div 
                               key={m.id} 
-                              className={`flex items-center justify-between p-2.5 px-3 rounded-xl border text-xs transition-all ${
+                              className={`flex items-center justify-between p-1.5 px-2.5 rounded-lg border text-xs transition-all ${
                                 isExternalMovement 
                                   ? 'bg-amber-50/20 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/30' 
-                                  : 'bg-zinc-50/40 dark:bg-zinc-900/50 border-zinc-200/70 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-white dark:hover:bg-zinc-900 shadow-2xs'
+                                  : 'bg-zinc-50/40 dark:bg-zinc-900/50 border-zinc-200/70 dark:border-zinc-800/80 hover:bg-white dark:hover:bg-zinc-900'
                               }`}
                             >
-                              <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
                                 {/* Modern Icon Box */}
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
                                   isVenta
                                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40'
                                     : isCobro
@@ -1696,59 +1690,54 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                     : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
                                 }`}>
                                   {isVenta ? (
-                                    <ShoppingCartIcon className="w-4 h-4" />
+                                    <ShoppingCartIcon className="w-3.5 h-3.5" />
                                   ) : isCobro ? (
-                                    <CreditCardIcon className="w-4 h-4" />
+                                    <CreditCardIcon className="w-3.5 h-3.5" />
                                   ) : isIngreso ? (
-                                    <ArrowDownLeftIcon className="w-4 h-4" />
+                                    <ArrowDownLeftIcon className="w-3.5 h-3.5" />
                                   ) : (
-                                    <ArrowUpRightIcon className="w-4 h-4" />
+                                    <ArrowUpRightIcon className="w-3.5 h-3.5" />
                                   )}
                                 </div>
 
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={m.concept}>
+                                    <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[160px] sm:max-w-[240px] text-[11px]" title={m.concept}>
                                       {m.concept}
                                     </span>
                                     {isExternalMovement && (
-                                      <span className="text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40 px-1.5 py-0.2 rounded-md shrink-0">
+                                      <span className="text-[9px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40 px-1 py-0.2 rounded shrink-0">
                                         Informativo
                                       </span>
                                     )}
                                   </div>
 
-                                  <div className="text-[11px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5 flex-wrap mt-0.5 font-normal">
-                                    <span className="font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.2 rounded text-[10px]">
+                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1 flex-wrap font-normal">
+                                    <span className="font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-1 py-0.2 rounded text-[9px]">
                                       {m.paymentMethod}
                                     </span>
-                                    {m.reference && (
-                                      <span className="font-mono text-zinc-400 dark:text-zinc-500 text-[10px]">
-                                        • Ref: {m.reference}
-                                      </span>
-                                    )}
                                     {m.createdAt && (
-                                      <span className="text-zinc-400 dark:text-zinc-500 text-[10px]">
+                                      <span className="text-zinc-400 dark:text-zinc-500 text-[9.5px]">
                                         • {new Date(m.createdAt).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })} • {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                       </span>
                                     )}
                                     {isExternalMovement && (
-                                      <span className="text-amber-700/90 dark:text-amber-400/90 font-medium text-[10px]">
-                                        • Por: {m.author || 'Otro usuario'} (no suma a tu cuadre)
+                                      <span className="text-amber-700/90 dark:text-amber-400/90 font-medium text-[9.5px]">
+                                        • Por: {m.author || 'Otro usuario'}
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
 
-                              <div className="text-right shrink-0 ml-3">
-                                <span className={`font-mono font-bold text-xs sm:text-sm tracking-tight ${
+                              <div className="text-right shrink-0 ml-2">
+                                <span className={`font-mono font-bold text-xs tracking-tight ${
                                   isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                                 } ${isExternalMovement ? 'opacity-65' : ''}`}>
                                   {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </span>
                                 {isExternalMovement && (
-                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600/90 dark:text-amber-400/90">
+                                  <span className="block text-[7.5px] font-bold uppercase tracking-wider text-amber-600/90 dark:text-amber-400/90">
                                     No sumado
                                   </span>
                                 )}
@@ -1762,10 +1751,10 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                   {/* Cobros y Recibos de Financiamiento / Crédito */}
                   {(scopedFinancingReceipts.length > 0 || scopedCreditPayments.length > 0) && (
-                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2">
+                    <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 rounded-xl border border-zinc-100 dark:border-zinc-800/80 space-y-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                          <DocumentArrowDownIcon className="w-3.5 h-3.5 text-zinc-400" />
+                        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                          <DocumentArrowDownIcon className="w-3 h-3 text-zinc-400" />
                           Cobros & Recibos ({scopedFinancingReceipts.length + scopedCreditPayments.length})
                         </h3>
                         <span className="text-[10px] font-mono font-bold text-emerald-600">
@@ -1773,38 +1762,36 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         </span>
                       </div>
 
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                        {/* Recibos de financiamiento */}
+                      <div className="space-y-1 max-h-20 overflow-y-auto pr-1 custom-scrollbar">
                         {scopedFinancingReceipts.map(rc => (
-                          <div key={rc.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0">
+                          <div key={rc.id} className="flex items-center justify-between p-1 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0">
                                 {rc.paymentMethod || 'Efectivo'}
                               </span>
                               <div className="truncate">
-                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{rc.receiptNumber}</span>
-                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{rc.customerName}</span>
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[10.5px] mr-1">{rc.receiptNumber}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400 text-[9.5px] truncate">{rc.customerName}</span>
                               </div>
                             </div>
-                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-1.5 text-xs">
                               +${Number(rc.totalPaid).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                         ))}
 
-                        {/* Pagos de crédito */}
                         {scopedCreditPayments.map(p => (
-                          <div key={p.id} className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0">
+                          <div key={p.id} className="flex items-center justify-between p-1 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shrink-0">
                                 {p.method || 'Efectivo'}
                               </span>
                               <div className="truncate">
-                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px] mr-1">{p.invoiceNumber}</span>
-                                <span className="text-zinc-500 dark:text-zinc-400 text-[10px] truncate">{p.customer}</span>
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[10.5px] mr-1">{p.invoiceNumber}</span>
+                                <span className="text-zinc-500 dark:text-zinc-400 text-[9.5px] truncate">{p.customer}</span>
                               </div>
                             </div>
-                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                            <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400 shrink-0 ml-1.5 text-xs">
                               +${Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -1813,104 +1800,124 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                     </div>
                   )}
 
-                  {/* Status / Reconciliation Badge */}
+                  {/* Status / Reconciliation & Supervisor Unified Bar */}
                   {physicalCashTotal === 0 && targetExpectedCash > 0 ? (
-                    <div className="p-3.5 rounded-2xl border bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <ClockIcon className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <div>
-                            <span className="text-xs uppercase font-bold tracking-wider block">
-                              Pendiente Conteo Físico
-                            </span>
-                            <span className="text-[11px] opacity-75 block font-medium">
-                              {effectiveCountMode === 'shift_only' && initialFund > 0
-                                ? `El fondo de RD$ ${initialFund.toLocaleString('es-DO')} se queda en gaveta. Cuenta el efectivo recaudado.`
-                                : 'Ingresa los billetes y monedas en la tabla de la izquierda para cuadrar'}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-sm font-bold font-mono leading-none text-right">
-                          <span className="text-[10px] block opacity-75 uppercase">
-                            {effectiveCountMode === 'shift_only' && initialFund > 0 ? 'Esperado Turno' : 'Esperado Total'}
+                    <div className="p-2 sm:p-2.5 rounded-xl border bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ClockIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <div className="min-w-0">
+                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
+                            Pendiente Conteo Físico
                           </span>
-                          RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </p>
+                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
+                            {effectiveCountMode === 'shift_only' && initialFund > 0
+                              ? `Fondo de RD$ ${initialFund.toLocaleString('es-DO')} en gaveta. Cuenta recaudación.`
+                              : 'Ingresa billetes y monedas para cuadrar'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                        <div className="text-right">
+                          <span className="text-[8.5px] block opacity-75 uppercase">Esperado</span>
+                          <span className="text-xs font-bold font-mono">
+                            RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-amber-200/60 dark:border-amber-800/60">
+                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
+                          <select
+                            value={supervisorName}
+                            onChange={(e) => setSupervisorName(e.target.value)}
+                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
+                          >
+                            {adminNames.map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   ) : targetExpectedCash < 0 ? (
-                    <div className="p-3.5 rounded-2xl border bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
-                          <div>
-                            <span className="text-xs uppercase font-bold tracking-wider block">
-                              Alerta: Efectivo Teórico Negativo
-                            </span>
-                            <span className="text-[11px] opacity-75 block font-medium">
-                              Los retiros registrados superan el fondo de la caja
-                            </span>
-                          </div>
+                    <div className="p-2 sm:p-2.5 rounded-xl border bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        <div className="min-w-0">
+                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
+                            Alerta: Efectivo Teórico Negativo
+                          </span>
+                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
+                            Retiros superan fondo de caja
+                          </span>
                         </div>
-                        <p className="text-base font-bold font-mono leading-none">
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                        <span className="text-xs font-bold font-mono">
                           RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </p>
+                        </span>
+                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-rose-200/60 dark:border-rose-800/60">
+                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
+                          <select
+                            value={supervisorName}
+                            onChange={(e) => setSupervisorName(e.target.value)}
+                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
+                          >
+                            {adminNames.map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   ) : (
-                    <div className={`p-3.5 rounded-2xl border ${
+                    <div className={`p-2 sm:p-2.5 rounded-xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 ${
                       variance === 0 
                         ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300'
                         : variance > 0
                         ? 'bg-blue-50/80 border-blue-200/80 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800/60 dark:text-blue-300'
                         : 'bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300'
                     }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          {variance >= 0 ? (
-                            <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                          ) : (
-                            <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
-                          )}
-                          <div>
-                            <span className="text-xs uppercase font-bold tracking-wider block">
-                              {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
-                            </span>
-                            <span className="text-[11px] opacity-75 block font-medium">
-                              {variance === 0 
-                                ? (isMatchWithFund && effectiveCountMode === 'shift_only'
-                                    ? 'Coincide con la gaveta completa (fondo incluido)'
-                                    : effectiveCountMode === 'shift_only' && initialFund > 0
-                                    ? 'Efectivo de turno cuadrado (fondo inicial intacto)'
-                                    : 'El efectivo coincide exactamente')
-                                : variance > 0 
-                                ? 'Hay más dinero del esperado' 
-                                : 'Falta dinero según el sistema'}
-                            </span>
-                          </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {variance >= 0 ? (
+                          <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
+                            {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
+                          </span>
+                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
+                            {variance === 0 
+                              ? (isMatchWithFund && effectiveCountMode === 'shift_only'
+                                  ? 'Coincide con gaveta completa'
+                                  : effectiveCountMode === 'shift_only' && initialFund > 0
+                                  ? 'Turno cuadrado (fondo intacto)'
+                                  : 'Efectivo coincide exactamente')
+                              : variance > 0 
+                              ? 'Hay más dinero del esperado' 
+                              : 'Falta dinero según el sistema'}
+                          </span>
                         </div>
-                        <p className="text-base font-bold font-mono leading-none">
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                        <span className="text-xs font-bold font-mono">
                           RD$ {variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </p>
+                        </span>
+                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60">
+                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
+                          <select
+                            value={supervisorName}
+                            onChange={(e) => setSupervisorName(e.target.value)}
+                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
+                          >
+                            {adminNames.map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )}
-
-                  {/* Selector simple de Supervisor(a) */}
-                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-50/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                    <span className="font-semibold text-zinc-600 dark:text-zinc-400">Supervisor(a):</span>
-                    <select
-                      value={supervisorName}
-                      onChange={(e) => setSupervisorName(e.target.value)}
-                      className="px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-900 dark:text-white outline-none cursor-pointer focus:border-zinc-400 dark:focus:border-zinc-500 shadow-xs"
-                    >
-                      {adminNames.map(name => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
                 </div>
               </div>
