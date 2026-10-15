@@ -334,12 +334,19 @@ export default function ModernReceipt({
         >
           <div className="flex justify-between items-center">
             <span className="font-black uppercase tracking-wider text-black" style={{ fontSize: '0.85em' }}>
-              {isCotizacion ? 'TOTAL COTIZACIÓN' : 'TOTAL FACTURA'}
+              {isCotizacion ? 'TOTAL COTIZACIÓN' : (balance !== undefined && balance > 0.01 ? 'SALDO PENDIENTE' : 'TOTAL FACTURA')}
             </span>
             <span className="font-mono font-black tracking-tight text-black" style={{ fontSize: '1.25em' }}>
-              {formatRD(total)}
+              {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
             </span>
           </div>
+
+          {balance !== undefined && balance > 0.01 && (
+            <div className="flex justify-between text-zinc-500 font-mono text-[0.75em]">
+              <span>Monto Total Factura:</span>
+              <span>{formatRD(total)}</span>
+            </div>
+          )}
 
           {(paidCurrency === 'USD' || (exchangeRate && exchangeRate > 0)) && (
             <div className="flex justify-between items-center pt-1 border-t border-zinc-200 text-zinc-600 font-mono" style={{ fontSize: '0.8em' }}>

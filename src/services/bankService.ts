@@ -2,6 +2,7 @@ import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receip
 import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, type CashMovement } from './cashMovementsService';
 import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, type Invoice } from './invoicesService';
 import { getStoredReceipts } from './financingReceiptsService';
+import { getLocalInvoicePayments } from './invoicePaymentsService';
 
 export interface BankTransaction {
   id: string;
@@ -263,6 +264,50 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
       });
     }
   });
+
+  // C2. Añadir abonos a facturas a crédito (cobros)
+  try {
+    const paymentsMap = getLocalInvoicePayments();
+    Object.values(paymentsMap).forEach(summary => {
+      if (Array.isArray(summary.payments_history)) {
+        summary.payments_history.forEach(p => {
+          const txId = `abono-${p.id}`;
+          if (seenIds.has(txId)) return;
+          seenIds.add(txId);
+
+          const pm = (p.method || 'Efectivo').toLowerCase();
+          const isTransfer = pm.includes('transferencia') || pm.includes('transf') || pm.includes('usd') || pm.includes('banco');
+          const isCard = pm.includes('tarjeta');
+
+          let assignedBankId = defaultBank.id;
+          let assignedBankName = defaultBank.bankName;
+
+          if (!isTransfer && !isCard) {
+            assignedBankId = 'caja-general';
+            assignedBankName = 'Caja General (Efectivo)';
+          }
+
+          aggregated.push({
+            id: txId,
+            bank_account_id: assignedBankId,
+            bank_account_name: assignedBankName,
+            type: 'Ingreso',
+            amount: Number(p.amount) || 0,
+            concept: `Abono Factura #${summary.invoice_number || 'S/N'}${summary.customer_name ? ` - ${summary.customer_name}` : ''}`,
+            reference: p.reference,
+            payment_method: isCard ? 'Tarjeta' : (isTransfer ? 'Transferencia' : 'Efectivo'),
+            category: 'Venta / Facturación',
+            date: p.date || new Date().toISOString(),
+            created_by: p.cashier || 'Cajero',
+            source_id: p.id,
+            source_type: 'cash_movement'
+          });
+        });
+      }
+    });
+  } catch (err) {
+    console.warn('Error adding invoice abonos to bank transactions:', err);
+  }
 
   // D. Añadir recibos de financiamiento pagados por Transferencia
   try {

@@ -1,4 +1,11 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { 
+  fetchRemoteInvoicePayments, 
+  mergePaymentsIntoInvoices, 
+  getLocalInvoicePayments,
+  saveLocalInvoicePayments,
+  type InvoicePaymentSummary 
+} from './invoicePaymentsService';
 
 export interface InvoiceItem {
   id?: string;
@@ -82,8 +89,10 @@ let inMemoryInvoices: Invoice[] | null = null;
 let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
 
 export const getLocalStorageInvoices = (): Invoice[] => {
+  const paymentsMap = getLocalInvoicePayments();
   if (inMemoryInvoices !== null) {
-    return inMemoryInvoices.filter(inv => !isQuotationInvoice(inv));
+    const filtered = inMemoryInvoices.filter(inv => !isQuotationInvoice(inv));
+    return mergePaymentsIntoInvoices(filtered, paymentsMap);
   }
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -95,7 +104,7 @@ export const getLocalStorageInvoices = (): Invoice[] => {
       if (filtered.length !== parsed.length) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
       }
-      return filtered;
+      return mergePaymentsIntoInvoices(filtered, paymentsMap);
     }
     return [];
   } catch {
@@ -131,13 +140,22 @@ export const applyRealtimeInvoiceChange = (
 
   if (newRecord?.id) {
     if (isQuotationInvoice(newRecord)) return;
+    const paymentsMap = getLocalInvoicePayments();
     let updated: Invoice[];
     if (eventType === 'INSERT') {
-      updated = [newRecord as Invoice, ...current.filter(inv => String(inv.id) !== String(newRecord.id))];
+      const mergedRecord = mergePaymentsIntoInvoices([newRecord as Invoice], paymentsMap)[0] || newRecord;
+      updated = [mergedRecord as Invoice, ...current.filter(inv => String(inv.id) !== String(newRecord.id))];
     } else {
-      updated = current.map(inv => String(inv.id) === String(newRecord.id) ? { ...inv, ...newRecord } : inv);
+      updated = current.map(inv => {
+        if (String(inv.id) === String(newRecord.id)) {
+          const merged = { ...inv, ...newRecord };
+          return mergePaymentsIntoInvoices([merged as Invoice], paymentsMap)[0] || merged;
+        }
+        return inv;
+      });
       if (!updated.some(inv => String(inv.id) === String(newRecord.id))) {
-        updated.unshift(newRecord as Invoice);
+        const mergedRecord = mergePaymentsIntoInvoices([newRecord as Invoice], paymentsMap)[0] || newRecord;
+        updated.unshift(mergedRecord as Invoice);
       }
     }
     saveLocalStorageInvoices(updated);
@@ -194,9 +212,11 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           .limit(300);
 
         if (!error && data) {
+          const paymentsMap = await fetchRemoteInvoicePayments();
           const supabaseInvoices = (data as Invoice[]).filter(inv => !isQuotationInvoice(inv));
+          const mergedInvoices = mergePaymentsIntoInvoices(supabaseInvoices, paymentsMap);
           lastInvoicesFetchTime = Date.now();
-          saveLocalStorageInvoices(supabaseInvoices);
+          saveLocalStorageInvoices(mergedInvoices);
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
@@ -223,7 +243,7 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
             }
           }
 
-          return supabaseInvoices;
+          return mergedInvoices;
         }
       } catch (err) {
         console.warn('Error fetching invoices from Supabase, returning local:', err);
@@ -453,6 +473,42 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice> & Reco
       if (Object.keys(dbPayload).length > 0) {
         const res = await supabase.from('invoices').update(dbPayload).eq('id', id).select().maybeSingle();
         if (!res.error) data = res.data;
+      }
+
+      if (updates.payments_history && Array.isArray(updates.payments_history)) {
+        try {
+          const currentInvs = getLocalStorageInvoices();
+          const matchedInv = currentInvs.find(inv => inv.id === id);
+          const paymentsMap = getLocalInvoicePayments();
+          const invNum = matchedInv?.invoice_number || updates.invoice_number || '';
+          const cleanNum = invNum.trim().replace(/^0+/, '');
+          const keyToUse = id || cleanNum || invNum;
+
+          const summaryEntry: InvoicePaymentSummary = {
+            invoice_id: id,
+            invoice_number: invNum,
+            ncf: matchedInv?.ncf || updates.ncf || '',
+            total_amount: Number(matchedInv?.total_amount || updates.total_amount || 0),
+            paid_amount: Number(updates.paid_amount || 0),
+            balance: Number(updates.balance || 0),
+            status: updates.status || (Number(updates.balance) <= 0.01 ? 'Pagada' : 'Pendiente'),
+            payments_history: updates.payments_history,
+            updated_at: new Date().toISOString()
+          };
+
+          paymentsMap[keyToUse] = summaryEntry;
+          if (cleanNum) paymentsMap[cleanNum] = summaryEntry;
+          if (invNum) paymentsMap[invNum] = summaryEntry;
+          saveLocalInvoicePayments(paymentsMap);
+
+          await supabase.from('system_settings').upsert({
+            key: 'invoice_payments',
+            value: paymentsMap,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+        } catch (paySyncErr) {
+          console.warn('Error syncing payments_history to system_settings in updateInvoice:', paySyncErr);
+        }
       }
 
       if (updates.items && Array.isArray(updates.items)) {

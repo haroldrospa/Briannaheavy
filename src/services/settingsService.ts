@@ -196,6 +196,15 @@ export const fetchAllSystemSettings = async (): Promise<Record<string, any>> => 
           }
         } catch {}
       }
+
+      if (row.key === 'invoice_payments' && row.value && typeof row.value === 'object') {
+        try {
+          localStorage.setItem('brianna_invoice_payments', JSON.stringify(row.value));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_invoice_payments_updated', { detail: row.value }));
+          }
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn('Exception during fetchAllSystemSettings:', err);

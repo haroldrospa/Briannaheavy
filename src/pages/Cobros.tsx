@@ -12,10 +12,12 @@ import {
   PencilSquareIcon,
   TrashIcon,
   EyeIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  ArrowsRightLeftIcon,
+  ArrowDownCircleIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, createInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
@@ -23,6 +25,7 @@ import { isShiftOpen, getCurrentUserRegister } from '../services/shiftsService';
 import { getActiveRole } from '../utils/rolePermissions';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
 import { getExchangeRate, EXCHANGE_RATE_EVENT } from '../utils/exchangeRate';
+import { registerRemoteInvoicePayment } from '../services/invoicePaymentsService';
 import logo from '../assets/logo.png';
 
 export interface ReceivableItem {
@@ -186,6 +189,15 @@ export default function Cobros() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'statement'>('details');
 
+  const activeDetailItem = useMemo(() => {
+    if (!selectedDetailItem) return null;
+    return receivables.find(r => 
+      (r.id && r.id === selectedDetailItem.id) || 
+      (r.invoice_id && r.invoice_id === selectedDetailItem.invoice_id) || 
+      (r.invoice && selectedDetailItem.invoice && r.invoice.trim() === selectedDetailItem.invoice.trim())
+    ) || selectedDetailItem;
+  }, [selectedDetailItem, receivables]);
+
   const handleOpenDetails = (item: ReceivableItem, tab: 'details' | 'statement' = 'details') => {
     setSelectedDetailItem(item);
     setActiveDetailTab(tab);
@@ -194,16 +206,16 @@ export default function Cobros() {
 
   // Facturas asociadas al cliente seleccionado
   const associatedCustomerInvoices = useMemo(() => {
-    if (!selectedDetailItem) return [];
-    const cleanName = selectedDetailItem.customer.trim().toLowerCase();
-    const cleanRnc = (selectedDetailItem.rnc || '').trim().toLowerCase();
+    if (!activeDetailItem) return [];
+    const cleanName = activeDetailItem.customer.trim().toLowerCase();
+    const cleanRnc = (activeDetailItem.rnc || '').trim().toLowerCase();
     return receivables.filter(r => {
       const rName = r.customer.trim().toLowerCase();
       const rRnc = (r.rnc || '').trim().toLowerCase();
       if (cleanRnc && cleanRnc !== '000000000' && cleanRnc === rRnc) return true;
       return rName === cleanName;
     });
-  }, [selectedDetailItem, receivables]);
+  }, [activeDetailItem, receivables]);
 
   // Totales financieros acumulados del cliente
   const customerTotals = useMemo(() => {
@@ -261,6 +273,170 @@ export default function Cobros() {
 
     return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [associatedCustomerInvoices]);
+
+  // Pestaña principal: Facturas por cobrar vs Movimientos de Abonos
+  const [mainTab, setMainTab] = useState<'receivables' | 'movements'>('receivables');
+
+  // Historial global de TODOS los movimientos de abonos registrados en el sistema
+  const allReceivablePayments = useMemo(() => {
+    const list: Array<{
+      id: string;
+      invoice: string;
+      invoice_id?: string;
+      ncf: string;
+      customer: string;
+      rnc: string;
+      date: string;
+      amount: number;
+      method: string;
+      reference?: string;
+      cashier?: string;
+      currency?: 'DOP' | 'USD';
+      amountUsd?: number;
+      exchangeRate?: number;
+      balanceAfter?: number;
+      rawItem?: ReceivableItem;
+    }> = [];
+
+    receivables.forEach(item => {
+      if (item.paymentsHistory && item.paymentsHistory.length > 0) {
+        item.paymentsHistory.forEach(p => {
+          list.push({
+            id: p.id || `${item.id}_${p.date}_${p.amount}`,
+            invoice: item.invoice,
+            invoice_id: item.invoice_id,
+            ncf: item.ncf,
+            customer: item.customer,
+            rnc: item.rnc,
+            date: p.date,
+            amount: Number(p.amount) || 0,
+            method: p.method,
+            reference: p.reference,
+            cashier: p.cashier,
+            currency: p.currency,
+            amountUsd: p.amountUsd,
+            exchangeRate: p.exchangeRate,
+            balanceAfter: item.balance,
+            rawItem: item
+          });
+        });
+      }
+    });
+
+    return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [receivables]);
+
+  // Total acumulado de abonos cobrados
+  const totalAbonosCartera = useMemo(() => {
+    return allReceivablePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [allReceivablePayments]);
+
+  // Movimientos de abonos filtrados por la búsqueda
+  const filteredPayments = useMemo(() => {
+    if (!searchQuery.trim()) return allReceivablePayments;
+    const q = searchQuery.toLowerCase().trim();
+    return allReceivablePayments.filter(p => 
+      p.customer.toLowerCase().includes(q) ||
+      p.invoice.toLowerCase().includes(q) ||
+      p.ncf.toLowerCase().includes(q) ||
+      (p.reference || '').toLowerCase().includes(q) ||
+      (p.cashier || '').toLowerCase().includes(q) ||
+      p.method.toLowerCase().includes(q)
+    );
+  }, [allReceivablePayments, searchQuery]);
+
+  const handleOpenReceiptFromPayment = (payment: any, item?: ReceivableItem) => {
+    const currentItem = item || receivables.find(r => 
+      (r.invoice && payment.invoice && r.invoice.trim() === payment.invoice.trim()) || 
+      (r.invoice_id && payment.invoice_id && r.invoice_id === payment.invoice_id)
+    );
+    const dateObj = payment.date ? new Date(payment.date) : new Date();
+    const formattedDate = !isNaN(dateObj.getTime())
+      ? dateObj.toLocaleDateString('es-DO', { 
+          day: '2-digit', 
+          month: 'long', 
+          year: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      : payment.date;
+
+    const receiptNum = payment.reference || `REC-${(payment.id || '').replace(/^pay_/, '').slice(-6).toUpperCase() || 'ABONO'}`;
+    const prevBal = (currentItem?.balance || 0) + (payment.amount || 0);
+
+    setLastPaymentReceipt({
+      receiptNumber: receiptNum,
+      customer: payment.customer || currentItem?.customer || 'Cliente',
+      rnc: payment.rnc || currentItem?.rnc || '',
+      invoice: payment.invoice,
+      ncf: payment.ncf || currentItem?.ncf || '',
+      date: formattedDate,
+      amountPaid: payment.amount,
+      amountPaidUsd: payment.amountUsd,
+      paidCurrency: payment.currency || 'DOP',
+      exchangeRate: payment.exchangeRate,
+      previousBalance: prevBal,
+      newBalance: currentItem?.balance || 0,
+      method: payment.method,
+      reference: payment.reference || 'N/A',
+      cashier: payment.cashier || 'Cajero POS'
+    });
+
+    if (currentItem) {
+      const storedInvoices = getLocalStorageInvoices();
+      const itemInvClean = String(currentItem.invoice || '').trim();
+      const matchedInv = storedInvoices.find(inv => {
+        if (inv.id && currentItem.invoice_id && String(inv.id) === String(currentItem.invoice_id)) return true;
+        if (inv.invoice_number && itemInvClean) {
+          if (String(inv.invoice_number).trim() === itemInvClean) return true;
+        }
+        return false;
+      });
+
+      const paymentAmount = Number(payment.amount) || 0;
+      const aboInvoiceNum = `ABO-${currentItem.invoice}`;
+      const recNcf = payment.reference?.startsWith('REC-') ? payment.reference : `REC-${(payment.id || '').replace(/^pay_/, '').slice(-6).toUpperCase() || 'ABONO'}`;
+
+      setInvoiceToPrintLetter({
+        ...(matchedInv || {}),
+        id: payment.id || currentItem.invoice_id,
+        invoice_number: aboInvoiceNum,
+        affectedInvoiceNumber: currentItem.invoice,
+        isAbono: true,
+        ncf: recNcf,
+        ncf_type: 'ABONO',
+        created_at: payment.date || new Date().toISOString(),
+        customer_name: payment.customer || currentItem.customer,
+        customer_rnc: payment.rnc || currentItem.rnc || '',
+        customer_phone: currentItem.phone || (matchedInv as any)?.customer_phone || '',
+        customer_address: (matchedInv as any)?.customer_address || '',
+        payment_method: payment.method,
+        transfer_reference: payment.reference,
+        cashier_name: payment.cashier || matchedInv?.cashier_name || 'Cajero POS',
+        total_amount: paymentAmount,
+        subtotal: paymentAmount,
+        tax_amount: 0,
+        paid_amount: paymentAmount,
+        balance: payment.balanceAfter !== undefined ? payment.balanceAfter : currentItem.balance,
+        previousBalance: prevBal,
+        newBalance: payment.balanceAfter !== undefined ? payment.balanceAfter : currentItem.balance,
+        paidCurrency: payment.currency,
+        exchangeRate: payment.exchangeRate,
+        receivedAmountUsd: payment.amountUsd,
+        totalUsd: payment.amountUsd,
+        items: [
+          {
+            description: `Abono a Factura a Crédito No. ${currentItem.invoice} (Saldo Restante: RD$ ${(payment.balanceAfter !== undefined ? payment.balanceAfter : currentItem.balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })})`,
+            quantity: 1,
+            unit_price: paymentAmount,
+            total_price: paymentAmount
+          }
+        ]
+      });
+    }
+
+    setIsReceiptModalOpen(true);
+  };
 
   const handleTriggerPrintLetter = () => {
     document.body.classList.remove(
@@ -408,25 +584,32 @@ export default function Cobros() {
   const [shiftWarningMessage, setShiftWarningMessage] = useState<string>('');
 
   const requireOpenShift = (actionMessage: string): boolean => {
-    if (getActiveRole() === 'Administrador') return true;
     if (!isShiftActive) {
       setShiftWarningMessage(actionMessage);
       setShowShiftWarningModal(true);
+      setIsOpenShiftModalOpen(true);
       return false;
     }
     return true;
   };
 
   useEffect(() => {
+    const reg = getCurrentUserRegister();
+    setActiveRegister(reg);
+    const open = isShiftOpen(reg);
+    setIsShiftActive(open);
+    if (!open) {
+      setIsOpenShiftModalOpen(true);
+    }
+
     const handleShiftUpdate = () => {
-      const reg = getCurrentUserRegister();
-      setActiveRegister(reg);
-      setIsShiftActive(isShiftOpen(reg));
+      const currentReg = getCurrentUserRegister();
+      setActiveRegister(currentReg);
+      setIsShiftActive(isShiftOpen(currentReg));
     };
     const handleOpenShiftRequested = (e: any) => {
-      if (getActiveRole() === 'Administrador') return;
-      const reg = getCurrentUserRegister();
-      if (!e.detail?.register || e.detail.register === reg || e.detail.register === 'todas') {
+      const currentReg = getCurrentUserRegister();
+      if (!e.detail?.register || e.detail.register === currentReg || e.detail.register === 'todas') {
         setIsOpenShiftModalOpen(true);
       }
     };
@@ -466,9 +649,11 @@ export default function Cobros() {
     };
 
     window.addEventListener('brianna_invoices_updated', handleUpdate);
+    window.addEventListener('brianna_invoice_payments_updated', handleUpdate);
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_invoices_updated', handleUpdate);
+      window.removeEventListener('brianna_invoice_payments_updated', handleUpdate);
     };
   }, [loadData]);
 
@@ -588,6 +773,15 @@ export default function Cobros() {
 
     // Update backend invoice if matching invoice exists
     try {
+      await registerRemoteInvoicePayment(
+        selectedReceivable.invoice_id,
+        selectedReceivable.invoice,
+        selectedReceivable.totalAmount,
+        newPaymentRecord,
+        newBalance,
+        (selectedReceivable.paidAmount || 0) + amount,
+        selectedReceivable.ncf
+      );
       await updateInvoice(selectedReceivable.invoice_id, {
         status: newBalance <= 0.01 ? 'Pagada' : 'Pendiente',
         balance: newBalance,
@@ -619,84 +813,77 @@ export default function Cobros() {
     };
     setLastPaymentReceipt(paymentReceiptData);
 
-    // Prepare Updated Letter/Ticket Invoice for Instant Printing
-    const storedInvoices = getLocalStorageInvoices();
     const selInvClean = String(selectedReceivable.invoice || '').trim();
-    const matchedInv = storedInvoices.find(inv => {
-      if (inv.id && selectedReceivable.invoice_id && String(inv.id) === String(selectedReceivable.invoice_id)) return true;
-      if (inv.invoice_number && selInvClean) {
-        if (String(inv.invoice_number).trim() === selInvClean) return true;
-        if (formatInvoiceNumber(inv.invoice_number) === formatInvoiceNumber(selInvClean)) return true;
-      }
-      return false;
-    });
+    const abonoCount = (selectedReceivable.paymentsHistory?.length || 0) + 1;
+    const abonoInvoiceNum = abonoCount > 1 ? `ABO-${selInvClean}-${abonoCount}` : `ABO-${selInvClean}`;
+    const abonoNcf = `REC-${new Date().getFullYear()}-${String(receiptNumber).padStart(4, '0')}`;
+    const abonoItemDesc = `Abono a Factura a Crédito No. ${selInvClean} (Saldo Restante: RD$ ${newBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })})`;
 
-    let parsedItems = matchedInv?.items;
-    if (typeof parsedItems === 'string') {
-      try {
-        parsedItems = JSON.parse(parsedItems);
-      } catch {}
+    // Crear la Factura Oficial de Abono en la tabla de facturas e items
+    try {
+      await createInvoice({
+        invoice_number: abonoInvoiceNum,
+        ncf: abonoNcf,
+        ncf_type: 'ABONO',
+        customer_name: selectedReceivable.customer,
+        customer_rnc: selectedReceivable.rnc || '',
+        subtotal: amount,
+        tax_amount: 0,
+        total_amount: amount,
+        payment_method: fullMethodLabel,
+        cashier_name: cashierName,
+        register_name: activeRegister,
+        status: 'Pagada (Abono)',
+        is_electronic: false,
+        billing_mode: 'internal',
+        transfer_reference: paymentReference || undefined
+      }, [
+        {
+          description: abonoItemDesc,
+          quantity: 1,
+          unit_price: amount,
+          total_price: amount
+        }
+      ]);
+    } catch (err) {
+      console.warn('Error saving abono invoice to invoices table:', err);
     }
 
-    const itemsForPrint = (Array.isArray(parsedItems) && parsedItems.length > 0)
-      ? parsedItems.map((it: any) => ({
-          description: it.description || 'Repuesto / Servicio',
-          quantity: Number(it.quantity) || 1,
-          unit_price: Number(it.unit_price) || 0,
-          total_price: Number(it.total_price) || 0
-        }))
-      : [
-          {
-            description: selectedReceivable.items || 'Repuestos & Servicios de Maquinaria Pesada',
-            quantity: 1,
-            unit_price: selectedReceivable.totalAmount,
-            total_price: selectedReceivable.totalAmount
-          }
-        ];
-
-    const subtotal = matchedInv?.subtotal !== undefined && Number(matchedInv.subtotal) > 0
-      ? Number(matchedInv.subtotal)
-      : (selectedReceivable.totalAmount / 1.18);
-
-    const taxAmount = matchedInv?.tax_amount !== undefined && Number(matchedInv.tax_amount) >= 0
-      ? Number(matchedInv.tax_amount)
-      : (selectedReceivable.totalAmount - subtotal);
-    
+    // Configurar Factura de Abono para Impresión Inmediata Oficial
     setInvoiceToPrintLetter({
-      ...(matchedInv || {}),
-      id: selectedReceivable.invoice_id,
-      invoice_number: selectedReceivable.invoice,
-      ncf: selectedReceivable.ncf || matchedInv?.ncf || '',
-      ncf_type: matchedInv?.ncf_type || (selectedReceivable.ncf?.startsWith('E31') ? 'E31' : selectedReceivable.ncf?.startsWith('E32') ? 'E32' : 'INTERNO'),
-      is_electronic: Boolean(matchedInv?.is_electronic || (selectedReceivable.ncf && selectedReceivable.ncf.startsWith('E'))),
-      created_at: matchedInv?.created_at || selectedReceivable.issueDate,
+      id: `abo_${Date.now()}`,
+      invoice_number: abonoInvoiceNum,
+      affectedInvoiceNumber: selInvClean,
+      isAbono: true,
+      ncf: abonoNcf,
+      ncf_type: 'ABONO',
+      is_electronic: false,
+      created_at: paidIsoDate,
       customer_name: selectedReceivable.customer,
       customer_rnc: selectedReceivable.rnc,
-      customer_phone: selectedReceivable.phone || (matchedInv as any)?.customer_phone || '',
-      customer_address: (matchedInv as any)?.customer_address || '',
-      payment_method: matchedInv?.payment_method || 'Crédito',
-      credit_days: selectedReceivable.creditDays,
-      due_date: selectedReceivable.dueDate,
+      customer_phone: selectedReceivable.phone || '',
+      payment_method: fullMethodLabel,
+      transfer_reference: paymentReference,
       cashier_name: cashierName,
-      total_amount: selectedReceivable.totalAmount,
-      subtotal,
-      tax_amount: taxAmount,
-      paid_amount: (selectedReceivable.paidAmount || 0) + amount,
+      total_amount: amount,
+      subtotal: amount,
+      tax_amount: 0,
+      paid_amount: amount,
       balance: newBalance,
-      payments_history: updatedHistory,
-      lastPayment: {
-        receiptNumber,
-        amount,
-        amountUsd,
-        currency: paymentCurrency,
-        date: formattedPaymentDate,
-        method: fullMethodLabel,
-        reference: paymentReference,
-        cashier: cashierName,
-        newBalance,
-        previousBalance
-      },
-      items: itemsForPrint
+      previousBalance,
+      newBalance,
+      paidCurrency: paymentCurrency,
+      exchangeRate: paymentCurrency === 'USD' ? (exchangeRate || 60) : undefined,
+      receivedAmountUsd: amountUsd,
+      totalUsd: amountUsd,
+      items: [
+        {
+          description: abonoItemDesc,
+          quantity: 1,
+          unit_price: amount,
+          total_price: amount
+        }
+      ]
     });
 
     setPaymentDate(new Date().toISOString().slice(0, 10));
@@ -871,6 +1058,33 @@ export default function Cobros() {
         </div>
       </div>
 
+      {/* Banner de Turno Cerrado */}
+      {!isShiftActive && (
+        <div className="bg-amber-500/10 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <LockClosedIcon className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-black text-amber-950 dark:text-amber-100 flex items-center gap-1.5">
+                <span>Turno de Caja Cerrado ({activeRegister})</span>
+              </h4>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                Debes aperturar el turno con el fondo inicial antes de registrar pagos o cobros en el sistema.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOpenShiftModalOpen(true)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+          >
+            <LockClosedIcon className="w-4 h-4 stroke-[2.5]" />
+            <span>Aperturar Turno</span>
+          </button>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         <div className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
@@ -910,38 +1124,79 @@ export default function Cobros() {
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-[#16171d] p-2.5 sm:p-3 rounded-2xl border border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
-        {/* Search */}
-        <div className="relative flex-1">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por cliente, Cédula, RNC o No. Factura..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-transparent focus:border-[#ED1C24] focus:outline-none transition-all"
-          />
-        </div>
+      {/* Main Tabs Selector: Facturas por Cobrar vs Movimientos de Abonos */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setMainTab('receivables')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            mainTab === 'receivables'
+              ? 'bg-[#ED1C24] text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <CurrencyDollarIcon className="w-4 h-4" />
+          <span>Facturas por Cobrar</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+            mainTab === 'receivables' ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300'
+          }`}>
+            {receivables.length}
+          </span>
+        </button>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-hide shrink-0">
-          {(['Todos', 'Pendiente', 'Con Abono', 'Atrasado', 'Saldado'] as const).map((st) => (
-            <button
-              key={st}
-              type="button"
-              onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
-                statusFilter === st
-                  ? 'bg-[#ED1C24] text-white shadow-2xs font-black'
-                  : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          onClick={() => setMainTab('movements')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            mainTab === 'movements'
+              ? 'bg-[#ED1C24] text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <ArrowsRightLeftIcon className="w-4 h-4" />
+          <span>Movimientos de Abonos</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+            mainTab === 'movements' ? 'bg-white/25 text-white' : 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+          }`}>
+            {allReceivablePayments.length}
+          </span>
+        </button>
       </div>
+
+      {mainTab === 'receivables' ? (
+        <>
+          {/* Search & Filter Bar */}
+          <div className="bg-white dark:bg-[#16171d] p-2.5 sm:p-3 rounded-2xl border border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+            {/* Search */}
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por cliente, Cédula, RNC o No. Factura..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-transparent focus:border-[#ED1C24] focus:outline-none transition-all"
+              />
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-hide shrink-0">
+              {(['Todos', 'Pendiente', 'Con Abono', 'Atrasado', 'Saldado'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    statusFilter === st
+                      ? 'bg-[#ED1C24] text-white shadow-2xs font-black'
+                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
 
       {/* Receivables Table / List */}
       <div className="bg-white dark:bg-[#16171d] rounded-2xl sm:rounded-3xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden shadow-2xs">
@@ -1164,6 +1419,192 @@ export default function Cobros() {
           </>
         )}
       </div>
+      </>
+      ) : (
+        /* VISTA: MOVIMIENTOS DE ABONOS */
+        <div className="space-y-3">
+          {/* Search Bar for Movements */}
+          <div className="bg-white dark:bg-[#16171d] p-2.5 sm:p-3 rounded-2xl border border-gray-200/80 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar movimiento de abono por cliente, factura, referencia o cajero..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-[#f4f3f1] dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 rounded-xl text-xs font-bold border border-transparent focus:border-[#ED1C24] focus:outline-none transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200/50 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold shrink-0">
+              <span>Total Recaudado en Abonos:</span>
+              <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                RD$ {totalAbonosCartera.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla de Movimientos de Abonos */}
+          <div className="bg-white dark:bg-[#16171d] rounded-2xl sm:rounded-3xl border border-gray-200/80 dark:border-zinc-800 overflow-hidden shadow-2xs">
+            {filteredPayments.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <ArrowsRightLeftIcon className="w-10 h-10 text-gray-300 dark:text-zinc-700 mx-auto" />
+                <p className="text-sm font-black text-gray-700 dark:text-zinc-300">No hay movimientos de abonos registrados</p>
+                <p className="text-xs text-gray-400">Aún no se han procesado cobros ni abonos a facturas a crédito o no coinciden con la búsqueda.</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile Cards */}
+                <div className="md:hidden divide-y divide-gray-100 dark:divide-zinc-800">
+                  {filteredPayments.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => handleOpenReceiptFromPayment(p, p.rawItem)}
+                      className="p-4 space-y-2.5 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-black text-sm text-gray-900 dark:text-white">{p.customer}</h4>
+                          <p className="text-[11px] font-mono text-gray-400">Factura: {p.invoice} • {p.ncf}</p>
+                        </div>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                          {p.method}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-zinc-400">
+                        <span>Cajero(a): <strong className="text-gray-700 dark:text-zinc-200">{p.cashier || 'Cajero POS'}</strong></span>
+                        <span className="font-mono">{p.date ? new Date(p.date).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800">
+                        <div>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold block">Monto Abonado</span>
+                          <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                            +RD$ {p.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReceiptFromPayment(p, p.rawItem);
+                          }}
+                          className="px-3 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-zinc-900 rounded-full text-xs font-black shadow-xs"
+                        >
+                          Ver Comprobante
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800 text-left">
+                    <thead>
+                      <tr className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
+                        <th className="px-3.5 py-2.5">Fecha y Hora</th>
+                        <th className="px-3.5 py-2.5">Cliente</th>
+                        <th className="px-3.5 py-2.5">Factura & e-NCF</th>
+                        <th className="px-3.5 py-2.5">Concepto</th>
+                        <th className="px-3.5 py-2.5 text-center">Método de Pago</th>
+                        <th className="px-3.5 py-2.5">Referencia</th>
+                        <th className="px-3.5 py-2.5">Cajero(a)</th>
+                        <th className="px-3.5 py-2.5 text-right">Monto Abonado</th>
+                        <th className="px-3.5 py-2.5 text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 text-[11.5px]">
+                      {filteredPayments.map((p) => {
+                        const d = p.date ? new Date(p.date) : new Date();
+                        const dateStr = !isNaN(d.getTime()) 
+                          ? d.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : p.date;
+                        const timeStr = !isNaN(d.getTime()) 
+                          ? d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })
+                          : '';
+
+                        return (
+                          <tr
+                            key={p.id}
+                            onClick={() => handleOpenReceiptFromPayment(p, p.rawItem)}
+                            className="hover:bg-red-50/30 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                            title="Clic para ver comprobante de movimiento de abono"
+                          >
+                            <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400 font-medium">
+                              <span className="block font-bold text-gray-900 dark:text-white">{dateStr}</span>
+                              <span className="text-[10px] text-gray-400">{timeStr}</span>
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <span className="font-bold text-gray-900 dark:text-white block group-hover:text-[#ED1C24] transition-colors leading-tight">
+                                {p.customer}
+                              </span>
+                              <span className="font-mono text-[10px] text-gray-400">{p.rnc || 'Consumidor Final'}</span>
+                            </td>
+                            <td className="px-3.5 py-2.5 font-mono">
+                              <span className="font-bold text-gray-900 dark:text-zinc-200 block">{p.invoice}</span>
+                              <span className="text-[9.5px] text-[#ED1C24] font-black">{p.ncf}</span>
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold text-[10.5px]">
+                                <ArrowDownCircleIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                <span>Abono Factura a Crédito</span>
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300">
+                                {p.method}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 font-mono text-gray-500 text-[11px]">
+                              {p.reference || 'N/A'}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-gray-700 dark:text-zinc-300 font-medium">
+                              {p.cashier || 'Cajero POS'}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right font-mono">
+                              <span className="font-black text-emerald-600 dark:text-emerald-400 text-xs block">
+                                +RD$ {p.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              </span>
+                              {p.amountUsd && (
+                                <span className="text-[10px] text-gray-400 block font-medium">
+                                  ${p.amountUsd.toFixed(2)} USD
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenReceiptFromPayment(p, p.rawItem)}
+                                  className="px-2.5 py-1 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 rounded-full text-[10.5px] font-bold transition-all cursor-pointer shadow-2xs"
+                                  title="Ver comprobante oficial de pago"
+                                >
+                                  Ver Comprobante
+                                </button>
+                                {p.rawItem && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePrintReceivableInvoiceLetter(p.rawItem!)}
+                                    className="p-1 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                    title="Imprimir Factura Carta con Saldo Actualizado"
+                                  >
+                                    <PrinterIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal para Registrar Abono / Pago */}
       {isPaymentModalOpen && selectedReceivable && (
@@ -1419,6 +1860,10 @@ export default function Cobros() {
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{lastPaymentReceipt.receiptNumber}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-gray-400 dark:text-zinc-500">Fecha y Hora:</span>
+                <span className="font-medium text-gray-800 dark:text-zinc-200">{lastPaymentReceipt.date}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-400 dark:text-zinc-500">Cliente:</span>
                 <span className="font-medium text-gray-900 dark:text-white truncate max-w-[180px]">{lastPaymentReceipt.customer}</span>
               </div>
@@ -1426,21 +1871,37 @@ export default function Cobros() {
                 <span className="text-gray-400 dark:text-zinc-500">Factura:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">{lastPaymentReceipt.invoice}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 dark:text-zinc-500">Método de Pago:</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{lastPaymentReceipt.method}</span>
+              </div>
+              {lastPaymentReceipt.reference && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400 dark:text-zinc-500">Referencia:</span>
+                  <span className="font-mono text-gray-700 dark:text-zinc-300">{lastPaymentReceipt.reference}</span>
+                </div>
+              )}
+              {lastPaymentReceipt.cashier && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400 dark:text-zinc-500">Cajero(a):</span>
+                  <span className="font-medium text-gray-800 dark:text-zinc-200">{lastPaymentReceipt.cashier}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t border-gray-200/60 dark:border-zinc-700/60 pt-2 font-medium">
                 <span className="text-gray-700 dark:text-zinc-300">Monto cobrado:</span>
                 <div className="text-right">
-                  <span className="font-mono text-gray-900 dark:text-white font-bold block">
-                    RD$ {lastPaymentReceipt.amountPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black text-sm block">
+                    +RD$ {lastPaymentReceipt.amountPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
                   {lastPaymentReceipt.paidCurrency === 'USD' && lastPaymentReceipt.amountPaidUsd && (
-                    <span className="text-[11px] font-mono text-gray-500 dark:text-zinc-400 block">
+                    <span className="text-[11px] font-mono text-gray-500 dark:text-zinc-400 block font-medium">
                       ${lastPaymentReceipt.amountPaidUsd.toFixed(2)} USD (Tasa: {lastPaymentReceipt.exchangeRate?.toFixed(2)})
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex justify-between text-gray-500 dark:text-zinc-400">
-                <span>Nuevo saldo:</span>
+              <div className="flex justify-between text-gray-500 dark:text-zinc-400 border-t border-gray-100 dark:border-zinc-800/60 pt-1.5">
+                <span>Saldo pendiente restante:</span>
                 <span className="font-mono font-bold text-gray-900 dark:text-white">
                   RD$ {lastPaymentReceipt.newBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                 </span>
@@ -1448,21 +1909,30 @@ export default function Cobros() {
             </div>
 
             <div className="flex flex-col gap-2 mt-4">
-              <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleTriggerPrintLetter()}
+                className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-red-900/20 transition-all active:scale-[0.98]"
+                title="Imprimir comprobante oficial de abono en formato Carta"
+              >
+                <PrinterIcon className="w-4 h-4 stroke-[2.2]" />
+                <span>Imprimir Factura de Abono (Carta)</span>
+              </button>
+              {selectedReceivable && (
                 <button
                   type="button"
-                  onClick={() => handleTriggerPrintLetter()}
-                  className="w-full py-3 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-red-900/20 transition-all active:scale-[0.98]"
-                  title="Imprimir factura completa en formato Carta oficial DGII"
+                  onClick={() => handlePrintReceivableInvoice(selectedReceivable)}
+                  className="w-full py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  title="Imprimir la factura a crédito original con todos sus artículos"
                 >
-                  <PrinterIcon className="w-4 h-4 stroke-[2.2]" />
-                  <span>Imprimir Factura (Carta)</span>
+                  <DocumentTextIcon className="w-3.5 h-3.5" />
+                  <span>Imprimir Factura Original Completa</span>
                 </button>
-              </div>
+              )}
               <button
                 type="button"
                 onClick={() => setIsReceiptModalOpen(false)}
-                className="w-full py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                className="w-full py-2 text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200 rounded-xl text-xs font-medium cursor-pointer transition-colors"
               >
                 Listo / Cerrar
               </button>
@@ -1810,7 +2280,8 @@ export default function Cobros() {
             isOpen={isCashClosureOpen}
             onClose={(didCloseShift) => {
               setIsCashClosureOpen(false);
-              if (didCloseShift && getActiveRole() !== 'Administrador') {
+              if (didCloseShift) {
+                setIsShiftActive(false);
                 setIsOpenShiftModalOpen(true);
               }
             }}
@@ -1883,7 +2354,7 @@ export default function Cobros() {
 
       {/* Modal de Información Completa y Estado de Cuenta del Cliente */}
       <AnimatePresence>
-        {isDetailModalOpen && selectedDetailItem && (
+        {isDetailModalOpen && activeDetailItem && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
@@ -1907,23 +2378,23 @@ export default function Cobros() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                        {selectedDetailItem.customer}
+                        {activeDetailItem.customer}
                       </h3>
                       <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border ${
-                        selectedDetailItem.status === 'Saldado'
+                        activeDetailItem.status === 'Saldado'
                           ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/40'
-                          : selectedDetailItem.status === 'Atrasado'
+                          : activeDetailItem.status === 'Atrasado'
                           ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/40'
-                          : selectedDetailItem.status === 'Con Abono'
+                          : activeDetailItem.status === 'Con Abono'
                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/40'
                           : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/40'
                       }`}>
-                        {selectedDetailItem.status}
+                        {activeDetailItem.status}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
-                      RNC / Cédula: <span className="font-mono text-gray-700 dark:text-zinc-300 font-medium">{selectedDetailItem.rnc || 'Consumidor Final'}</span>
-                      {selectedDetailItem.phone && <span> • Tel: {selectedDetailItem.phone}</span>}
+                      RNC / Cédula: <span className="font-mono text-gray-700 dark:text-zinc-300 font-medium">{activeDetailItem.rnc || 'Consumidor Final'}</span>
+                      {activeDetailItem.phone && <span> • Tel: {activeDetailItem.phone}</span>}
                     </p>
                   </div>
                 </div>
@@ -1950,7 +2421,7 @@ export default function Cobros() {
                       : 'text-gray-500 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   }`}
                 >
-                  Detalle de la factura ({selectedDetailItem.invoice})
+                  Detalle de la factura ({activeDetailItem.invoice})
                 </button>
                 <button
                   type="button"
@@ -1976,7 +2447,7 @@ export default function Cobros() {
                           Total Factura
                         </span>
                         <span className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-1 block">
-                          RD$ {selectedDetailItem.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {activeDetailItem.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Monto original</span>
                       </div>
@@ -1986,7 +2457,7 @@ export default function Cobros() {
                           Total Pagado / Abonado
                         </span>
                         <span className="text-xl font-bold font-mono text-gray-900 dark:text-white mt-1 block">
-                          RD$ {selectedDetailItem.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {activeDetailItem.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">Abonos aplicados</span>
                       </div>
@@ -1995,11 +2466,11 @@ export default function Cobros() {
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block">
                           Saldo Pendiente
                         </span>
-                        <span className={`text-xl font-bold font-mono mt-1 block ${selectedDetailItem.balance > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
-                          RD$ {selectedDetailItem.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        <span className={`text-xl font-bold font-mono mt-1 block ${activeDetailItem.balance > 0 ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-zinc-400'}`}>
+                          RD$ {activeDetailItem.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-xs text-gray-400 dark:text-zinc-500 block mt-0.5">
-                          {selectedDetailItem.balance <= 0 ? 'Totalmente saldada' : 'Pendiente de cobro'}
+                          {activeDetailItem.balance <= 0 ? 'Totalmente saldada' : 'Pendiente de cobro'}
                         </span>
                       </div>
                     </div>
@@ -2008,27 +2479,27 @@ export default function Cobros() {
                     <div className="bg-gray-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-gray-200/70 dark:border-zinc-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                       <div>
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Comprobante Fiscal</span>
-                        <p className="font-mono font-bold text-gray-900 dark:text-white text-sm">{selectedDetailItem.invoice}</p>
-                        <p className="font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{selectedDetailItem.ncf}</p>
+                        <p className="font-mono font-bold text-gray-900 dark:text-white text-sm">{activeDetailItem.invoice}</p>
+                        <p className="font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{activeDetailItem.ncf}</p>
                       </div>
 
                       <div>
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Plazo & Emisión</span>
-                        <p className="font-medium text-gray-900 dark:text-white">Emisión: {selectedDetailItem.issueDate}</p>
-                        <p className="text-gray-500 dark:text-zinc-400">Plazo: {selectedDetailItem.creditDays} días</p>
+                        <p className="font-medium text-gray-900 dark:text-white">Emisión: {activeDetailItem.issueDate}</p>
+                        <p className="text-gray-500 dark:text-zinc-400">Plazo: {activeDetailItem.creditDays} días</p>
                       </div>
 
                       <div>
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Vencimiento</span>
-                        <p className="font-medium text-gray-900 dark:text-white font-mono">{selectedDetailItem.dueDate}</p>
-                        {selectedDetailItem.balance > 0 ? (
-                          new Date() > new Date(selectedDetailItem.dueDate) ? (
+                        <p className="font-medium text-gray-900 dark:text-white font-mono">{activeDetailItem.dueDate}</p>
+                        {activeDetailItem.balance > 0 ? (
+                          new Date() > new Date(activeDetailItem.dueDate) ? (
                             <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 block mt-0.5">
-                              Vencida hace {Math.max(1, Math.floor((new Date().getTime() - new Date(selectedDetailItem.dueDate).getTime()) / (1000 * 60 * 60 * 24)))} días
+                              Vencida hace {Math.max(1, Math.floor((new Date().getTime() - new Date(activeDetailItem.dueDate).getTime()) / (1000 * 60 * 60 * 24)))} días
                             </span>
                           ) : (
                             <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block mt-0.5">
-                              Vigente ({Math.max(0, Math.ceil((new Date(selectedDetailItem.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días restantes)
+                              Vigente ({Math.max(0, Math.ceil((new Date(activeDetailItem.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días restantes)
                             </span>
                           )
                         ) : (
@@ -2043,7 +2514,7 @@ export default function Cobros() {
                         Artículos / Repuestos Facturados
                       </span>
                       <p className="text-xs sm:text-sm font-medium text-gray-800 dark:text-zinc-200">
-                        {selectedDetailItem.items}
+                        {activeDetailItem.items}
                       </p>
                     </div>
 
@@ -2054,11 +2525,11 @@ export default function Cobros() {
                           Historial de Abonos
                         </span>
                         <span className="text-xs text-gray-400">
-                          {selectedDetailItem.paymentsHistory?.length || 0} {selectedDetailItem.paymentsHistory?.length === 1 ? 'pago' : 'pagos'}
+                          {activeDetailItem.paymentsHistory?.length || 0} {activeDetailItem.paymentsHistory?.length === 1 ? 'pago' : 'pagos'}
                         </span>
                       </div>
 
-                      {selectedDetailItem.paymentsHistory && selectedDetailItem.paymentsHistory.length > 0 ? (
+                      {activeDetailItem.paymentsHistory && activeDetailItem.paymentsHistory.length > 0 ? (
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
@@ -2071,7 +2542,7 @@ export default function Cobros() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
-                              {selectedDetailItem.paymentsHistory.map((p, idx) => (
+                              {activeDetailItem.paymentsHistory.map((p, idx) => (
                                 <tr key={p.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
                                   <td className="px-4 py-2.5 font-medium text-gray-600 dark:text-zinc-300">{p.date}</td>
                                   <td className="px-4 py-2.5">
@@ -2288,7 +2759,7 @@ export default function Cobros() {
 
                   <button
                     type="button"
-                    onClick={() => handlePrintReceivableInvoiceLetter(selectedDetailItem)}
+                    onClick={() => handlePrintReceivableInvoiceLetter(activeDetailItem)}
                     className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
                     title="Imprimir esta factura en formato Carta con historial de abonos"
                   >
@@ -2307,12 +2778,12 @@ export default function Cobros() {
                 </div>
 
                 <div className="flex items-center justify-end gap-2.5">
-                  {selectedDetailItem.balance > 0 ? (
+                  {activeDetailItem.balance > 0 ? (
                     <button
                       type="button"
                       onClick={() => {
                         setIsDetailModalOpen(false);
-                        handleOpenPayment(selectedDetailItem);
+                        handleOpenPayment(activeDetailItem);
                       }}
                       className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
                     >
@@ -2546,6 +3017,10 @@ export default function Cobros() {
       {invoiceToPrintLetter && typeof document !== 'undefined' && createPortal(
         <LetterInvoice
           invoiceNumber={invoiceToPrintLetter.invoice_number || invoiceToPrintLetter.invoice}
+          affectedInvoiceNumber={invoiceToPrintLetter.affectedInvoiceNumber}
+          isAbono={Boolean(invoiceToPrintLetter.isAbono || invoiceToPrintLetter.invoice_number?.startsWith('ABO-'))}
+          previousBalance={invoiceToPrintLetter.previousBalance}
+          newBalance={invoiceToPrintLetter.newBalance}
           ncf={invoiceToPrintLetter.ncf || invoiceToPrintLetter.invoice_number}
           invoiceType={invoiceToPrintLetter.ncf_type || (invoiceToPrintLetter.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={Boolean(invoiceToPrintLetter.is_electronic || (invoiceToPrintLetter.ncf && invoiceToPrintLetter.ncf.startsWith('E')))}
@@ -2558,6 +3033,11 @@ export default function Cobros() {
           creditDays={invoiceToPrintLetter.credit_days || invoiceToPrintLetter.creditDays || 15}
           dueDate={invoiceToPrintLetter.due_date || invoiceToPrintLetter.dueDate}
           cashierName={invoiceToPrintLetter.cashier_name || localStorage.getItem('brianna_user_name') || 'Cajero POS'}
+          transferReference={invoiceToPrintLetter.transfer_reference || invoiceToPrintLetter.reference}
+          paidCurrency={invoiceToPrintLetter.paidCurrency}
+          exchangeRate={invoiceToPrintLetter.exchangeRate}
+          receivedAmountUsd={invoiceToPrintLetter.receivedAmountUsd}
+          totalUsd={invoiceToPrintLetter.totalUsd}
           items={invoiceToPrintLetter.items?.map((it: any) => ({
             description: it.description,
             quantity: it.quantity,
@@ -2569,8 +3049,8 @@ export default function Cobros() {
             unit_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount,
             total_price: invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount
           }]}
-          subtotal={invoiceToPrintLetter.subtotal || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18)}
-          taxAmount={invoiceToPrintLetter.tax_amount || ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) - ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18))}
+          subtotal={invoiceToPrintLetter.subtotal ?? ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18)}
+          taxAmount={invoiceToPrintLetter.tax_amount ?? ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) - ((invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount) / 1.18))}
           total={invoiceToPrintLetter.total_amount || invoiceToPrintLetter.totalAmount}
           paidAmount={invoiceToPrintLetter.paid_amount ?? invoiceToPrintLetter.paidAmount}
           balance={invoiceToPrintLetter.balance}

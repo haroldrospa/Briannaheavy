@@ -16,6 +16,7 @@ import {
   UserIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
+import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
@@ -66,7 +67,42 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const loadMovements = async () => {
     try {
       const data = await fetchCashMovements(true);
-      setMovements(data);
+      let invoicePayments = getLocalInvoicePayments();
+      try {
+        const remotePayments = await fetchRemoteInvoicePayments();
+        if (remotePayments && Object.keys(remotePayments).length > 0) {
+          invoicePayments = remotePayments;
+        }
+      } catch {}
+
+      const seenPaymentIds = new Set<string>();
+      const abonosAsMovements: CashMovement[] = [];
+      Object.values(invoicePayments).forEach(summary => {
+        if (summary.payments_history && Array.isArray(summary.payments_history)) {
+          summary.payments_history.forEach(p => {
+            if (!p.id || seenPaymentIds.has(p.id)) return;
+            seenPaymentIds.add(p.id);
+
+            const pm = p.method || 'Efectivo';
+            const isCard = pm.toLowerCase().includes('tarjeta');
+            const isBank = pm.toLowerCase().includes('transferencia') || pm.toLowerCase().includes('usd');
+
+            abonosAsMovements.push({
+              id: `abono_${p.id}`,
+              type: 'Ingreso',
+              amount: Number(p.amount) || 0,
+              concept: `Abono Factura #${summary.invoice_number || 'S/N'}${summary.customer_name ? ` • ${summary.customer_name}` : ''}`,
+              payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
+              reference: p.reference,
+              register_name: p.register_name || activeRegisterName,
+              created_by: p.cashier || 'Rosa Iris Peñalo',
+              created_at: p.date || new Date().toISOString()
+            });
+          });
+        }
+      });
+
+      setMovements([...data, ...abonosAsMovements]);
     } catch {
       // Ignorar error de carga
     }

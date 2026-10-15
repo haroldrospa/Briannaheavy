@@ -24,8 +24,16 @@ import { fetchFinancings, getLocalStorageFinancings } from '../services/financin
 import { fetchCustomers, getLocalStorageCustomers } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
 import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cashClosuresService';
+import { fetchCashMovements, getLocalStorageMovements } from '../services/cashMovementsService';
 
-const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], closures: any[] = []) => {
+const mapReportsData = (
+  invs: any[], 
+  fins: any[], 
+  custs: any[], 
+  items: any[], 
+  closures: any[] = [],
+  movements: any[] = []
+) => {
   const mappedData: Record<string, any[]> = {
     ecf: [],
     internas: [],
@@ -156,20 +164,46 @@ const mapReportsData = (invs: any[], fins: any[], custs: any[], items: any[], cl
   }
 
   if (closures && closures.length > 0) {
-    mappedData.caja = closures.map((c: any) => ({
-      code: c.closure_number,
-      date: c.created_at ? c.created_at.slice(0, 10) : '2026-07-21',
-      register: c.register_name || 'Caja 1 - Repuestos',
-      cashier: c.cashier_name || 'Harold Rosado',
-      initialFund: Number(c.initial_fund || 0),
-      incomes: Number(c.cash_movements_in || 0),
-      expenses: Number(c.cash_movements_out || 0),
-      totalCash: Number(c.system_sales_cash || 0),
-      totalCard: Number(c.system_sales_card || 0),
-      totalTransfer: Number(c.system_sales_transfer || 0),
-      counted: Number(c.counted_cash || 0),
-      difference: Number(c.difference || 0),
-      status: c.status || 'Cuadrado'
+    mappedData.caja = closures.map((c: any) => {
+      const salesCash = Number(c.system_sales_cash || 0);
+      const salesCard = Number(c.system_sales_card || 0);
+      const salesTransfer = Number(c.system_sales_transfer || 0);
+      const movIn = Number(c.cash_movements_in || 0);
+      const movOut = Number(c.cash_movements_out || 0);
+      
+      // Ingresos totales del cuadre: Ventas registradas + Entradas manuales de efectivo
+      const salesTotal = salesCash + salesCard + salesTransfer;
+      const totalIncome = (salesTotal > 0 ? salesTotal : Number(c.total_sales || 0)) + movIn;
+
+      return {
+        code: c.closure_number,
+        date: c.created_at ? c.created_at.slice(0, 10) : '2026-07-21',
+        register: c.register_name || 'Caja 1 - Repuestos',
+        cashier: c.cashier_name || c.cashier || c.user_name || 'Harold Rosado',
+        initialFund: Number(c.initial_fund || 0),
+        incomes: totalIncome,
+        expenses: movOut,
+        totalCash: salesCash,
+        totalCard: salesCard,
+        totalTransfer: salesTransfer,
+        counted: Number(c.counted_cash || 0),
+        difference: Number(c.difference || 0),
+        status: c.status || 'Cuadrado'
+      };
+    });
+  }
+
+  if (movements && movements.length > 0) {
+    mappedData.movimientos_caja = movements.map((m: any) => ({
+      code: m.reference || (m.id ? `MOV-${String(m.id).slice(0, 8)}` : 'MOV-N/A'),
+      date: m.created_at ? m.created_at.slice(0, 10) : '2026-07-21',
+      register: m.register_name || 'Caja General',
+      cashier: m.created_by || 'Cajero',
+      type: m.type || 'Ingreso',
+      concept: m.concept || 'Movimiento de caja',
+      method: m.payment_method || 'Efectivo',
+      bank: m.bank_account_name || 'Caja Chica',
+      amount: Number(m.amount || 0)
     }));
   }
 
@@ -225,7 +259,8 @@ export default function Reports() {
       getLocalStorageFinancings(),
       getLocalStorageCustomers(),
       getLocalStorageInventory(),
-      getLocalStorageCashClosures()
+      getLocalStorageCashClosures(),
+      getLocalStorageMovements()
     )
   );
 
@@ -233,16 +268,17 @@ export default function Reports() {
     let isMounted = true;
     const loadRealData = async () => {
       try {
-        const [invs, fins, custs, items, closures] = await Promise.all([
+        const [invs, fins, custs, items, closures, movs] = await Promise.all([
           fetchInvoices(),
           fetchFinancings(),
           fetchCustomers(),
           fetchInventory(),
-          fetchCashClosures()
+          fetchCashClosures(),
+          fetchCashMovements()
         ]);
 
         if (isMounted) {
-          const mappedData = mapReportsData(invs, fins, custs, items, closures);
+          const mappedData = mapReportsData(invs, fins, custs, items, closures, movs);
           setDbData(mappedData);
         }
       } catch (err) {
@@ -259,7 +295,8 @@ export default function Reports() {
         const custs = getLocalStorageCustomers();
         const items = getLocalStorageInventory();
         const closures = getLocalStorageCashClosures();
-        setDbData(mapReportsData(invs, fins, custs, items, closures));
+        const movs = getLocalStorageMovements();
+        setDbData(mapReportsData(invs, fins, custs, items, closures, movs));
       }
     };
 
@@ -268,6 +305,7 @@ export default function Reports() {
     window.addEventListener('brianna_customers_updated', handleUpdate);
     window.addEventListener('brianna_inventory_updated', handleUpdate);
     window.addEventListener('brianna_cash_closures_updated', handleUpdate);
+    window.addEventListener('brianna_cash_movements_updated', handleUpdate);
 
     return () => {
       isMounted = false;
@@ -276,6 +314,7 @@ export default function Reports() {
       window.removeEventListener('brianna_customers_updated', handleUpdate);
       window.removeEventListener('brianna_inventory_updated', handleUpdate);
       window.removeEventListener('brianna_cash_closures_updated', handleUpdate);
+      window.removeEventListener('brianna_cash_movements_updated', handleUpdate);
     };
   }, []);
 
@@ -317,14 +356,21 @@ export default function Reports() {
   const selectedReportInfo = REPORT_TYPES.find(r => r.id === activeReport) || REPORT_TYPES[0];
 
   const reportData = useMemo(() => {
-    const list: any[] = dbData[activeReport] || [];
+    let list: any[] = dbData[activeReport] || [];
+
+    if (startDate && endDate) {
+      list = list.filter((r: any) => {
+        if (!r.date) return true;
+        return r.date >= startDate && r.date <= endDate;
+      });
+    }
 
     if (activeReport === 'ecf' && selectedNcfType !== 'todos') {
-      return list.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
+      list = list.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
     }
 
     return list;
-  }, [dbData, activeReport, selectedNcfType]);
+  }, [dbData, activeReport, selectedNcfType, startDate, endDate]);
 
   // Group e-CF data dynamically by Voucher Type (E31, E32, E33, E34, E44, E45, etc.)
   const ecfGroupedByType = useMemo(() => {
@@ -391,11 +437,16 @@ export default function Reports() {
   }, [dbData.ecf, selectedNcfType]);
 
   const cajaTotals = useMemo(() => {
-    const movs = dbData.movimientos_caja || [];
-    const incomes = movs.filter(m => m.type === 'Ingreso').reduce((sum, m) => sum + (m.amount || 0), 0);
-    const expenses = movs.filter(m => m.type === 'Egreso').reduce((sum, m) => sum + (m.amount || 0), 0);
+    if (activeReport === 'caja') {
+      const incomes = reportData.reduce((sum: number, r: any) => sum + (Number(r.incomes) || 0), 0);
+      const expenses = reportData.reduce((sum: number, r: any) => sum + (Number(r.expenses) || 0), 0);
+      return { incomes, expenses, net: incomes - expenses };
+    }
+    const movs = activeReport === 'movimientos_caja' ? reportData : (dbData.movimientos_caja || []);
+    const incomes = movs.filter((m: any) => m.type === 'Ingreso').reduce((sum: number, m: any) => sum + (Number(m.amount) || 0), 0);
+    const expenses = movs.filter((m: any) => m.type === 'Egreso').reduce((sum: number, m: any) => sum + (Number(m.amount) || 0), 0);
     return { incomes, expenses, net: incomes - expenses };
-  }, [dbData.movimientos_caja]);
+  }, [activeReport, reportData, dbData.movimientos_caja]);
 
   const handleGenerateReport = () => {
     setIsGenerated(true);
@@ -454,9 +505,9 @@ export default function Reports() {
         formattedReportCode, `"${r.client}"`, `"${r.rnc}"`, r.type, r.invoices, r.creditLimit.toFixed(2), r.totalSpent.toFixed(2)
       ]);
     } else if (activeReport === 'caja') {
-      headers = ['No. Reporte', 'Fecha', 'Caja', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
+      headers = ['No. Reporte', 'Fecha', 'Caja', 'Usuario / Cajero', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedReportCode, r.date, r.register, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
+        formattedReportCode, r.date, `"${r.register}"`, `"${r.cashier}"`, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
       ]);
     } else if (activeReport === 'inspecciones') {
       headers = ['Código Reporte', 'Fecha', 'Vehículo / Maquinaria', 'Chasis / VIN', 'Inspector', 'Millas / Km', 'Ítems Buenos', 'Ítems Regulares', 'Ítems Deficientes', 'Estado'];
@@ -1305,7 +1356,7 @@ export default function Reports() {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-[10px] font-black uppercase text-gray-500 dark:text-zinc-400 tracking-wider print:bg-gray-200 print:text-black">
                         <th className="p-3 print:py-1.5">Fecha</th>
-                        <th className="p-3 print:py-1.5">Caja</th>
+                        <th className="p-3 print:py-1.5">Caja / Usuario</th>
                         <th className="p-3 print:py-1.5">Fondo Inicial</th>
                         <th className="p-3 print:py-1.5">Ingresos (+)</th>
                         <th className="p-3 print:py-1.5">Egresos (-)</th>
@@ -1319,7 +1370,12 @@ export default function Reports() {
                       {reportData.map((row: any, idx: number) => (
                         <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50">
                           <td className="p-3 print:py-1.5 font-bold text-gray-900 dark:text-white print:text-black">{row.date}</td>
-                          <td className="p-3 print:py-1.5">{row.register}</td>
+                          <td className="p-3 print:py-1.5">
+                            <div className="font-semibold text-gray-900 dark:text-white print:text-black">{row.register}</div>
+                            <div className="text-[11px] text-gray-500 dark:text-zinc-400 print:text-gray-600 flex items-center gap-1 mt-0.5">
+                              <span className="font-medium text-amber-600 dark:text-amber-400">👤 {row.cashier}</span>
+                            </div>
+                          </td>
                           <td className="p-3 print:py-1.5">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                           <td className="p-3 print:py-1.5 font-bold text-emerald-600 dark:text-emerald-400 print:text-black">
                             +RD$ {row.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -1337,9 +1393,27 @@ export default function Reports() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
-                        <td colSpan={8} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Total Acumulado en Caja:</td>
-                        <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
+                      <tr className="bg-gray-100/90 dark:bg-zinc-800/80 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
+                        <td colSpan={2} className="p-3 print:py-1.5 uppercase tracking-wider">Totales Consolidados:</td>
+                        <td className="p-3 print:py-1.5">
+                          RD$ {reportData.reduce((sum: number, r: any) => sum + (r.initialFund || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                          +RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-red-600 dark:text-red-400 font-bold">
+                          -RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-gray-700 dark:text-zinc-300">
+                          RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCash || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-blue-600 dark:text-blue-400">
+                          RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCard || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-purple-600 dark:text-purple-400">
+                          RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalTransfer || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 print:py-1.5 text-right font-black text-gray-900 dark:text-white">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -1870,7 +1944,7 @@ export default function Reports() {
                 <thead>
                   <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
                     <th className="p-2.5">Fecha</th>
-                    <th className="p-2.5">Caja</th>
+                    <th className="p-2.5">Caja / Usuario</th>
                     <th className="p-2.5">Fondo Inicial</th>
                     <th className="p-2.5">Ingresos (+)</th>
                     <th className="p-2.5">Egresos (-)</th>
@@ -1884,7 +1958,10 @@ export default function Reports() {
                   {reportData.map((row: any, idx: number) => (
                     <tr key={idx} className="even:bg-gray-50/80">
                       <td className="p-2.5 font-bold text-gray-900">{row.date}</td>
-                      <td className="p-2.5">{row.register}</td>
+                      <td className="p-2.5">
+                        <div className="font-bold text-gray-900">{row.register}</div>
+                        <div className="text-[9.5px] text-gray-600 font-medium">👤 {row.cashier}</div>
+                      </td>
                       <td className="p-2.5">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5 text-emerald-700 font-bold">+RD$ {row.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5 text-red-700 font-bold">-RD$ {row.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
@@ -1897,8 +1974,28 @@ export default function Reports() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={8} className="p-2.5 text-right uppercase tracking-wider">Total Acumulado en Caja:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                    <td colSpan={2} className="p-2.5 uppercase tracking-wider">Totales Consolidados:</td>
+                    <td className="p-2.5">
+                      RD$ {reportData.reduce((sum: number, r: any) => sum + (r.initialFund || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-emerald-400">
+                      +RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-red-400">
+                      -RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5">
+                      RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCash || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-blue-300">
+                      RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCard || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-purple-300">
+                      RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalTransfer || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2.5 text-right font-black">
+                      RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

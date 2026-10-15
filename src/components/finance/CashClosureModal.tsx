@@ -18,7 +18,11 @@ import {
   CheckIcon, 
   ClockIcon,
   LockClosedIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  ShoppingCartIcon,
+  ArrowUpRightIcon,
+  ArrowDownLeftIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -27,6 +31,7 @@ import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../s
 import { getLocalStorageUsers, fetchUsers, type UserProfile } from '../../services/usersService';
 import { 
   getActiveShift, 
+  fetchLatestOpenShift,
   closeShift, 
   updateActiveShiftFund, 
   filterInvoicesByShift, 
@@ -37,7 +42,6 @@ import {
   getLastClosureTime,
   matchesCashierUser,
   matchesRegister,
-  DEFAULT_SHIFT_FUND,
   type ActiveShift 
 } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
@@ -169,7 +173,18 @@ export default function CashClosureModal({
     const shift = getActiveShift(regToLoad);
     setActiveShift(shift);
 
-    const fund = shift && shift.initial_fund !== undefined ? shift.initial_fund : (isAdmin ? 0 : DEFAULT_SHIFT_FUND);
+    // Sincronizar en segundo plano con el último turno abierto registrado en Supabase
+    fetchLatestOpenShift(regToLoad, loggedInUserName).then(remoteShift => {
+      if (remoteShift) {
+        setActiveShift(remoteShift);
+        if (remoteShift.initial_fund !== undefined && !isNaN(remoteShift.initial_fund) && remoteShift.initial_fund >= 0) {
+          setInitialFund(remoteShift.initial_fund);
+          setTempFund(String(remoteShift.initial_fund));
+        }
+      }
+    });
+
+    const fund = shift && shift.initial_fund !== undefined ? shift.initial_fund : 0;
     setInitialFund(fund);
     setTempFund(String(fund));
     setCashierName(loggedInUserName);
@@ -259,14 +274,18 @@ export default function CashClosureModal({
 
   // Filtrar facturas garantizando estricta independencia por Caja y Cajero
   const scopedInvoices = useMemo(() => {
+    const effectiveCashier = isAdmin && (!selectedCashierFilter || selectedCashierFilter === loggedInUserName)
+      ? 'todos'
+      : (selectedCashierFilter || loggedInUserName);
+
     return filterInvoicesByShift(
       allInvoices, 
       filterMode, 
       activeShift || undefined, 
       selectedRegister, 
-      loggedInUserName || selectedCashierFilter
+      effectiveCashier
     );
-  }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter, isAdmin]);
 
   // Filtrar recibos de financiamientos por Caja, Turno/Fecha y Cajero
   const scopedFinancingReceipts = useMemo(() => {
@@ -459,7 +478,7 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: '🛒 Venta',
+        badgeText: 'Venta',
         badgeColorClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
       });
     });
@@ -488,7 +507,7 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: '📑 Financ.',
+        badgeText: 'Financ.',
         badgeColorClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
       });
     });
@@ -517,7 +536,7 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: '💰 Cobro',
+        badgeText: 'Cobro',
         badgeColorClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
       });
     });
@@ -538,7 +557,7 @@ export default function CashClosureModal({
       const author = m.created_by || (m as any).user_name || '';
 
       const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
-      const baseBadge = isCard ? '💳 Tarjeta' : isBank ? '🏦 Transf' : (isIngreso ? '↓ Ingreso' : '↑ Retiro');
+      const baseBadge = isCard ? 'Tarjeta' : isBank ? 'Transferencia' : (isIngreso ? 'Ingreso' : 'Retiro');
 
       list.push({
         id: `mov-${m.id}`,
@@ -803,19 +822,50 @@ export default function CashClosureModal({
 
   // Valores consolidados para impresión y reportes (prioriza el cierre guardado o los datos en vivo)
   const printInitialFund = savedClosure?.initial_fund !== undefined ? Number(savedClosure.initial_fund) : initialFund;
-  const printTotalSales = savedClosure?.total_sales !== undefined ? Number(savedClosure.total_sales) : grandTotalSales;
-  const printShiftCashNet = shiftCashNet;
+  const printSalesCash = (savedClosure?.system_sales_cash !== undefined && Number(savedClosure.system_sales_cash) > 0)
+    ? Number(savedClosure.system_sales_cash)
+    : (systemSales.cash > 0 ? systemSales.cash : Number(savedClosure?.system_sales_cash || 0));
+  const printSalesCard = (savedClosure?.system_sales_card !== undefined && Number(savedClosure.system_sales_card) > 0)
+    ? Number(savedClosure.system_sales_card)
+    : (systemSales.card > 0 ? systemSales.card : Number(savedClosure?.system_sales_card || 0));
+  const printSalesTransfer = (savedClosure?.system_sales_transfer !== undefined && Number(savedClosure.system_sales_transfer) > 0)
+    ? Number(savedClosure.system_sales_transfer)
+    : (systemSales.transfer > 0 ? systemSales.transfer : Number(savedClosure?.system_sales_transfer || 0));
+  const printSalesCredit = (savedClosure?.system_sales_credit !== undefined && Number(savedClosure.system_sales_credit) > 0)
+    ? Number(savedClosure.system_sales_credit)
+    : (systemSales.credit > 0 ? systemSales.credit : Number(savedClosure?.system_sales_credit || 0));
+  const printTotalSales = (savedClosure?.total_sales !== undefined && Number(savedClosure.total_sales) > 0)
+    ? Number(savedClosure.total_sales)
+    : (grandTotalSales > 0 ? grandTotalSales : (printSalesCash + printSalesCard + printSalesTransfer + printSalesCredit));
+
+  const printTotalIngresos = useMemo(() => {
+    if (savedClosure?.cash_movements_in !== undefined && Number(savedClosure.cash_movements_in) > 0) {
+      return Number(savedClosure.cash_movements_in);
+    }
+    return cashMovementsTotals.ingresos;
+  }, [savedClosure, cashMovementsTotals]);
+
+  const printTotalEgresos = useMemo(() => {
+    if (savedClosure?.cash_movements_out !== undefined && Number(savedClosure.cash_movements_out) > 0) {
+      return Number(savedClosure.cash_movements_out);
+    }
+    return cashMovementsTotals.egresos;
+  }, [savedClosure, cashMovementsTotals]);
+
+  const printShiftCashNet = (printSalesCash + printTotalIngresos - printTotalEgresos);
   const printTotalDrawer = printInitialFund + printShiftCashNet;
-  const printExpectedCash = savedClosure?.expected_cash !== undefined ? Number(savedClosure.expected_cash) : targetExpectedCash;
-  const printPhysicalCash = savedClosure?.counted_cash !== undefined ? Number(savedClosure.counted_cash) : physicalCashTotal;
+  const printExpectedCash = (savedClosure?.expected_cash !== undefined && Number(savedClosure.expected_cash) > 0)
+    ? Number(savedClosure.expected_cash)
+    : (targetExpectedCash > 0 ? targetExpectedCash : printTotalDrawer);
+  const printPhysicalCash = (savedClosure?.counted_cash !== undefined && Number(savedClosure.counted_cash) > 0)
+    ? Number(savedClosure.counted_cash)
+    : (physicalCashTotal > 0 ? physicalCashTotal : printExpectedCash);
   const printVariance = savedClosure?.difference !== undefined ? Number(savedClosure.difference) : variance;
   const printStatus = savedClosure?.status || (Math.abs(printVariance) < 0.01 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
-  const printSalesCash = savedClosure?.system_sales_cash !== undefined ? Number(savedClosure.system_sales_cash) : systemSales.cash;
-  const printSalesCard = savedClosure?.system_sales_card !== undefined ? Number(savedClosure.system_sales_card) : systemSales.card;
-  const printSalesTransfer = savedClosure?.system_sales_transfer !== undefined ? Number(savedClosure.system_sales_transfer) : systemSales.transfer;
-  const printSalesCredit = savedClosure?.system_sales_credit !== undefined ? Number(savedClosure.system_sales_credit) : systemSales.credit;
   const printNotes = savedClosure?.notes !== undefined ? savedClosure.notes : notes;
-  const printCashier = savedClosure?.cashier_name || cashierName;
+  const printCashier = (savedClosure?.cashier_name && !savedClosure.cashier_name.toLowerCase().includes('harold'))
+    ? savedClosure.cashier_name
+    : (activeShift?.cashier_name || cashierName);
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
   const printMovements = useMemo(() => {
@@ -830,19 +880,6 @@ export default function CashClosureModal({
     return printMovements.filter(m => m.type === 'Egreso');
   }, [printMovements]);
 
-  const printTotalIngresos = useMemo(() => {
-    if (savedClosure?.cash_movements_in !== undefined && Number(savedClosure.cash_movements_in) > 0) {
-      return Number(savedClosure.cash_movements_in);
-    }
-    return printIngresos.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
-  }, [savedClosure, printIngresos]);
-
-  const printTotalEgresos = useMemo(() => {
-    if (savedClosure?.cash_movements_out !== undefined && Number(savedClosure.cash_movements_out) > 0) {
-      return Number(savedClosure.cash_movements_out);
-    }
-    return printEgresos.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
-  }, [savedClosure, printEgresos]);
 
   const isMovementTransfer = (m: CashMovement) => {
     const pm = (m.payment_method || '').toLowerCase().trim();
@@ -903,7 +940,9 @@ export default function CashClosureModal({
    BRIANNA HEAVY EQUIPMENT - CIERRE DE CAJA
 ==================================================
 N° Comprobante: ${savedClosure?.closure_number || 'CC-' + Date.now()}
-Fecha: ${currentDateStr} • ${currentTimeStr}
+Fecha: ${currentDateStr}
+• Apertura Turno: ${shiftOpenTimeDisplay}
+• Cierre / Arqueo: ${currentTimeStr}
 Caja: ${savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}
 Cajero(a): ${printCashier}
 Supervisor: ${printSupervisor}
@@ -1007,17 +1046,64 @@ Observaciones: ${printNotes || 'Sin observaciones'}
   };
 
   const isShiftOpenState = activeShift?.is_open;
-  const shiftStartStr = isShiftOpenState
-    ? (activeShift?.opened_at ? new Date(activeShift.opened_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'En curso')
-    : 'Cerrado';
+  
+  const shiftOpenTimeDisplay = useMemo(() => {
+    // 1. Si activeShift tiene opened_at válido
+    if (activeShift?.opened_at) {
+      const d = new Date(activeShift.opened_at);
+      if (!isNaN(d.getTime())) {
+        const isMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
+        if (!isMidnight) {
+          return d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+      }
+    }
+    // 2. Si hay facturas o movimientos en el turno, tomar la hora del primer documento
+    const allItems = [...scopedInvoices, ...scopedMovements];
+    if (allItems.length > 0) {
+      const dates = allItems
+        .map(i => new Date((i as any).created_at || (i as any).date).getTime())
+        .filter(t => !isNaN(t) && t > 0)
+        .sort((a, b) => a - b);
+      if (dates.length > 0) {
+        return new Date(dates[0]).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
+      }
+    }
+    // 3. Fallback a opened_at si existe
+    if (activeShift?.opened_at) {
+      return new Date(activeShift.opened_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    return '08:00 a. m.';
+  }, [activeShift, scopedInvoices, scopedMovements]);
+
+  const shiftOpenDateStr = useMemo(() => {
+    if (activeShift?.opened_at) {
+      const d = new Date(activeShift.opened_at);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+    }
+    const allItems = [...scopedInvoices, ...scopedMovements];
+    if (allItems.length > 0) {
+      const dates = allItems
+        .map(i => new Date((i as any).created_at || (i as any).date).getTime())
+        .filter(t => !isNaN(t) && t > 0)
+        .sort((a, b) => a - b);
+      if (dates.length > 0) {
+        return new Date(dates[0]).toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+    }
+    return currentDateStr;
+  }, [activeShift, scopedInvoices, scopedMovements, currentDateStr]);
 
   if (!isOpen) return null;
 
   return (
     <>
       <AnimatePresence>
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/55 print:hidden backdrop-blur-xs">
-          <motion.div
+        {!showCompletionOptions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/55 print:hidden backdrop-blur-xs">
+            <motion.div
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 10 }}
@@ -1043,20 +1129,29 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 mt-0.5 font-medium">
-                    <ClockIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                    <span>{currentDateStr} • {currentTimeStr}</span>
-                    <span className="text-zinc-300 dark:text-zinc-700">|</span>
-                    {isShiftOpenState || isAdmin ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                        Turno: {shiftStartStr} ({totalDocsCount} {totalDocsCount === 1 ? 'venta/cobro' : 'ventas/cobros'})
-                      </span>
-                    ) : (
-                      <span className="text-amber-600 dark:text-amber-400 font-bold">
-                        Turno Cerrado (0 docs en curso)
-                      </span>
-                    )}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap text-xs font-medium mt-1.5">
+                    {/* Badge 1: Apertura de Turno con Fecha y Hora */}
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs">
+                      <ClockIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Apertura:</span>
+                      <strong className="font-bold text-emerald-900 dark:text-emerald-100">{shiftOpenDateStr} • {shiftOpenTimeDisplay}</strong>
+                    </span>
+
+                    {/* Separador elegante */}
+                    <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline font-bold">→</span>
+
+                    {/* Badge 2: Cierre / Actual */}
+                    <span className="inline-flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 px-3 py-1 rounded-xl border border-zinc-200/80 dark:border-zinc-700/60 shadow-2xs">
+                      <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Cierre / Actual:</span>
+                      <strong className="font-bold text-zinc-900 dark:text-white">{currentTimeStr}</strong>
+                    </span>
+
+                    {/* Badge 3: Operaciones */}
+                    <span className="inline-flex items-center gap-1 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-xl border border-zinc-200/60 dark:border-zinc-800 text-[11px] font-semibold">
+                      <strong className="font-black text-zinc-900 dark:text-white">{totalDocsCount}</strong>
+                      <span>{totalDocsCount === 1 ? 'operación' : 'operaciones'}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1462,78 +1557,92 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </div>
 
                   {/* Movimientos de Caja y Ventas del Turno */}
-                  <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-100 dark:border-zinc-800/80 space-y-2.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                          <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400" />
-                          Movimientos ({unifiedShiftMovements.length})
-                        </h3>
+                  <div className="bg-white dark:bg-zinc-900/90 p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs space-y-3">
+                    {/* Header: Title + Minimalist Segmented Tabs + Totals */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <ArrowPathIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
+                          <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+                            Movimientos
+                          </h3>
+                          <span className="text-[10px] font-bold font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-1.5 py-0.2 rounded-full">
+                            {unifiedShiftMovements.length}
+                          </span>
+                        </div>
 
-                        {/* Selector / Tabs */}
-                        <div className="flex items-center bg-zinc-200/70 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px]">
+                        {/* Modern Segmented Control */}
+                        <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-xs">
                           <button
                             type="button"
                             onClick={() => setMovementTab('todos')}
-                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'todos' 
-                                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs' 
-                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
-                            Todos ({unifiedShiftMovements.length})
+                            <span>Todos</span>
+                            <span className="text-[10px] opacity-60">({unifiedShiftMovements.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('ventas')}
-                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'ventas' 
-                                ? 'bg-blue-600 text-white shadow-xs' 
-                                : 'text-blue-700 dark:text-blue-400 hover:bg-blue-100/50 dark:hover:bg-blue-950/30'
+                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
-                            <span>🛒 Ventas ({unifiedVentas.length})</span>
+                            <span>Ventas</span>
+                            <span className="text-[10px] opacity-60">({unifiedVentas.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('ingreso')}
-                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'ingreso' 
-                                ? 'bg-emerald-600 text-white shadow-xs' 
-                                : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/30'
+                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
-                            <span>↓ Ingresos ({unifiedIngresos.length})</span>
+                            <span>Ingresos</span>
+                            <span className="text-[10px] opacity-60">({unifiedIngresos.length})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setMovementTab('egreso')}
-                            className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                               movementTab === 'egreso' 
-                                ? 'bg-rose-600 text-white shadow-xs' 
-                                : 'text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-950/30'
+                                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-semibold' 
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
                             }`}
                           >
-                            <span>↑ Egresos ({unifiedEgresos.length})</span>
+                            <span>Egresos</span>
+                            <span className="text-[10px] opacity-60">({unifiedEgresos.length})</span>
                           </button>
                         </div>
                       </div>
 
+                      {/* Minimalist Totals Chip */}
                       <div 
-                        className="text-[10px] font-mono font-bold flex items-center gap-1.5" 
+                        className="flex items-center gap-2.5 bg-zinc-50 dark:bg-zinc-800/60 px-3 py-1 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-[11px] font-mono shadow-2xs self-start lg:self-auto" 
                         title={`Suma de este cuadre: +RD$ ${quadreInflowsAmount.toLocaleString('es-DO')} / -RD$ ${quadreOutflowsAmount.toLocaleString('es-DO')} | Total general visible: +RD$ ${totalInflowsAmount.toLocaleString('es-DO')} / -RD$ ${totalOutflowsAmount.toLocaleString('es-DO')}`}
                       >
-                        <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           +RD$ {quadreInflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/40">
+                        <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                           -RD$ {quadreOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
 
                     {displayedMovements.length === 0 ? (
-                      <div className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 rounded-xl text-center text-xs font-medium text-zinc-400">
+                      <div className="p-6 bg-zinc-50/50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center text-xs font-medium text-zinc-400">
                         {movementTab === 'ventas'
                           ? 'Sin ventas registradas en este turno'
                           : movementTab === 'ingreso'
@@ -1543,52 +1652,88 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           : 'Sin ventas ni movimientos registrados en este turno'}
                       </div>
                     ) : (
-                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                         {displayedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
                           const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
+                          const isVenta = m.category === 'venta';
+                          const isCobro = m.category === 'cobro' || m.category === 'financiamiento';
 
                           return (
-                            <div key={m.id} className={`flex items-center justify-between p-1.5 px-2.5 rounded-xl border text-xs transition-colors ${
-                              isExternalMovement 
-                                ? 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/40' 
-                                : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700'
-                            }`}>
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${m.badgeColorClass}`}>
-                                  {m.badgeText}
-                                </span>
+                            <div 
+                              key={m.id} 
+                              className={`flex items-center justify-between p-2.5 px-3 rounded-xl border text-xs transition-all ${
+                                isExternalMovement 
+                                  ? 'bg-amber-50/20 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/30' 
+                                  : 'bg-zinc-50/40 dark:bg-zinc-900/50 border-zinc-200/70 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-white dark:hover:bg-zinc-900 shadow-2xs'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                {/* Modern Icon Box */}
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isVenta
+                                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40'
+                                    : isCobro
+                                    ? 'bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-100 dark:border-teal-900/40'
+                                    : isIngreso
+                                    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40'
+                                    : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
+                                }`}>
+                                  {isVenta ? (
+                                    <ShoppingCartIcon className="w-4 h-4" />
+                                  ) : isCobro ? (
+                                    <CreditCardIcon className="w-4 h-4" />
+                                  ) : isIngreso ? (
+                                    <ArrowDownLeftIcon className="w-4 h-4" />
+                                  ) : (
+                                    <ArrowUpRightIcon className="w-4 h-4" />
+                                  )}
+                                </div>
+
                                 <div className="min-w-0">
-                                  <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={m.concept}>
-                                    {m.concept}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[200px] sm:max-w-[320px]" title={m.concept}>
+                                      {m.concept}
+                                    </span>
+                                    {isExternalMovement && (
+                                      <span className="text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/40 px-1.5 py-0.2 rounded-md shrink-0">
+                                        Informativo
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-medium text-zinc-600 dark:text-zinc-400">{m.paymentMethod}</span>
+
+                                  <div className="text-[11px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5 flex-wrap mt-0.5 font-normal">
+                                    <span className="font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.2 rounded text-[10px]">
+                                      {m.paymentMethod}
+                                    </span>
                                     {m.reference && (
-                                      <span>• Ref: {m.reference}</span>
+                                      <span className="font-mono text-zinc-400 dark:text-zinc-500 text-[10px]">
+                                        • Ref: {m.reference}
+                                      </span>
                                     )}
                                     {m.createdAt && (
-                                      <span>
+                                      <span className="text-zinc-400 dark:text-zinc-500 text-[10px]">
                                         • {new Date(m.createdAt).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })} • {new Date(m.createdAt).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                       </span>
                                     )}
                                     {isExternalMovement && (
-                                      <span className="text-amber-700 dark:text-amber-400 font-semibold text-[9px] bg-amber-100/70 dark:bg-amber-950/60 px-1.5 py-0.2 rounded">
-                                        No suma a este cuadre (Por: {m.author || 'Otro usuario'})
+                                      <span className="text-amber-700/90 dark:text-amber-400/90 font-medium text-[10px]">
+                                        • Por: {m.author || 'Otro usuario'} (no suma a tu cuadre)
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-right shrink-0 ml-2">
-                                <span className={`font-black font-mono ${
+
+                              <div className="text-right shrink-0 ml-3">
+                                <span className={`font-mono font-bold text-xs sm:text-sm tracking-tight ${
                                   isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                                } ${isExternalMovement ? 'opacity-70' : ''}`}>
+                                } ${isExternalMovement ? 'opacity-65' : ''}`}>
                                   {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </span>
                                 {isExternalMovement && (
-                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                    Informativo
+                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600/90 dark:text-amber-400/90">
+                                    No sumado
                                   </span>
                                 )}
                               </div>
@@ -1756,12 +1901,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
             </div>
           </motion.div>
         </div>
+        )}
       </AnimatePresence>
 
       {/* Modal de Finalización con Opciones */}
       <AnimatePresence>
         {showCompletionOptions && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 print:hidden">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:hidden">
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1908,19 +2054,17 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               )}
 
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                {!isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleCloseAll();
-                      window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
-                    }}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/20"
-                  >
-                    <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
-                    <span>Abrir Nuevo Turno</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseAll();
+                    window.dispatchEvent(new CustomEvent('brianna_open_shift_requested', { detail: { register: selectedRegister } }));
+                  }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold py-3 rounded-2xl text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/20"
+                >
+                  <LockClosedIcon className="h-4 w-4 stroke-[2.2]" />
+                  <span>Abrir Nuevo Turno</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleCloseAll}
@@ -1956,7 +2100,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
             <div className="text-right text-[8px] space-y-0.2 border-l border-gray-300 pl-2.5 leading-tight">
               <p><strong>N° Cierre:</strong> {savedClosure?.closure_number || 'CC-' + Date.now()}</p>
-              <p><strong>Fecha/Hora:</strong> {currentDateStr} • {currentTimeStr}</p>
+              <p><strong>Apertura:</strong> {shiftOpenTimeDisplay} | <strong>Cierre:</strong> {currentTimeStr} • {currentDateStr}</p>
               <p><strong>Caja:</strong> {savedClosure?.register_name || (selectedRegister === 'todas' ? 'Consolidado General' : selectedRegister)}</p>
               <p><strong>Cajero(a):</strong> {printCashier} • <strong>Docs:</strong> {totalDocsCount}</p>
             </div>

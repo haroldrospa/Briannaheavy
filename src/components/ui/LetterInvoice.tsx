@@ -69,6 +69,10 @@ export interface LetterInvoiceProps {
   receivedAmountUsd?: number;
   changeAmountUsd?: number;
   totalUsd?: number;
+  isAbono?: boolean;
+  affectedInvoiceNumber?: string;
+  previousBalance?: number;
+  newBalance?: number;
 }
 
 const formatRD = (amount: number = 0): string => {
@@ -136,12 +140,38 @@ export default function LetterInvoice({
   receivedAmountUsd,
   changeAmountUsd,
   totalUsd,
+  isAbono: isAbonoProp,
+  affectedInvoiceNumber,
+  previousBalance: propPreviousBalance,
+  newBalance: propNewBalance,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
+  const isAbono = Boolean(
+    isAbonoProp ||
+    invoiceNumber?.startsWith('ABO-') ||
+    invoiceType === 'ABONO' ||
+    (invoiceType && invoiceType.toUpperCase().includes('ABONO'))
+  );
+  const resolvedAffectedInvoice = affectedInvoiceNumber || 
+    (invoiceNumber?.startsWith('ABO-') ? invoiceNumber.replace(/^ABO-/, '').split('-')[0] : '');
+
+  const effectivePrevBalance = propPreviousBalance !== undefined 
+    ? propPreviousBalance 
+    : (lastPayment?.previousBalance !== undefined 
+      ? lastPayment.previousBalance 
+      : ((balance !== undefined ? balance : 0) + total));
+
+  const effectiveNewBalance = propNewBalance !== undefined 
+    ? propNewBalance 
+    : (lastPayment?.newBalance !== undefined 
+      ? lastPayment.newBalance 
+      : (balance !== undefined ? balance : 0));
+
   const isCotizacion = (ncf && ncf.startsWith('CT')) || (invoiceNumber && invoiceNumber.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
-  const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
+  const isEcf = !isCotizacion && !isAbono && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
 
   const getDocumentTypeName = () => {
+    if (isAbono) return 'COMPROBANTE OFICIAL DE ABONO A FACTURA';
     if (isCotizacion) return 'COTIZACIÓN / PRESUPUESTO';
     if (invoiceType === 'E31') return 'FACTURA ELECTRÓNICA DE CRÉDITO FISCAL (e-CF)';
     if (invoiceType === 'E32') return 'FACTURA ELECTRÓNICA DE CONSUMO (e-CF)';
@@ -231,17 +261,26 @@ export default function LetterInvoice({
         {/* Tarjeta de NCF y Tipo de Documento */}
         <div className="w-[300px] border-2 border-zinc-900 rounded-2xl p-4 bg-zinc-50/50 text-right space-y-2">
           <div>
-            <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-zinc-900' : 'text-red-600'}`}>
+            <span className={`text-[10px] font-black tracking-wider uppercase block ${isCotizacion ? 'text-zinc-900' : isAbono ? 'text-emerald-700' : 'text-red-600'}`}>
               {getDocumentTypeName()}
             </span>
             {invoiceNumber && invoiceNumber !== ncf && (
               <div className="text-xs font-bold text-zinc-600 font-mono mt-1">
-                Factura No: <span className="text-zinc-950 font-black">{invoiceNumber}</span>
+                {isAbono ? 'Comprobante No: ' : 'Factura No: '}
+                <span className="text-zinc-950 font-black">{invoiceNumber}</span>
               </div>
             )}
             <div className="text-lg font-black font-mono tracking-wider text-zinc-950 mt-0.5">
               {ncf ? (ncf.startsWith('E') ? `e-NCF: ${ncf}` : ncf.startsWith('INT-') ? `NCF: ${ncf}` : ncf) : (invoiceNumber || 'INT-000001')}
             </div>
+            {isAbono && resolvedAffectedInvoice && (
+              <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 text-[11px] font-bold">
+                <span>Factura Afectada:</span>
+                <span className="font-mono font-black text-indigo-950">
+                  No. {resolvedAffectedInvoice}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-zinc-200 pt-2 text-xs space-y-1 text-zinc-700">
@@ -254,12 +293,18 @@ export default function LetterInvoice({
               <strong className="font-mono text-zinc-900">{formattedTime}</strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : 'Término de Pago:'}</span>
+              <span className="text-zinc-500 font-medium">{isCotizacion ? 'Condición:' : isAbono ? 'Tipo Operación:' : 'Término de Pago:'}</span>
               <strong className="uppercase text-zinc-900">
-                {isCotizacion ? 'Presupuesto' : (paymentMethod === 'Crédito' ? `Crédito (${creditDays || 15} Días)` : paymentMethod)}
+                {isCotizacion ? 'Presupuesto' : isAbono ? 'Abono a Factura a Crédito' : (paymentMethod === 'Crédito' ? `Crédito (${creditDays || 15} Días)` : paymentMethod)}
               </strong>
             </div>
-            {!isCotizacion && paymentMethod === 'Crédito' && (
+            {isAbono && (
+              <div className="flex justify-between text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
+                <span className="font-bold text-emerald-800">Estado del Abono:</span>
+                <strong className="font-mono font-black">Aplicado en Cuenta</strong>
+              </div>
+            )}
+            {!isCotizacion && !isAbono && paymentMethod === 'Crédito' && (
               <div className="flex justify-between text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px]">
                 <span className="font-bold text-amber-800">Fecha Vencimiento:</span>
                 <strong className="font-mono font-black">
@@ -389,21 +434,24 @@ export default function LetterInvoice({
             </p>
           )}
         </div>
-        {lastPayment && (
-          <div className="col-span-2 pt-2.5 mt-1 border-t border-zinc-200 flex flex-wrap justify-between items-center bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
+        {(isAbono || lastPayment) && (
+          <div className="col-span-2 pt-2.5 mt-1 border-t border-zinc-200 flex flex-wrap justify-between items-center bg-emerald-50/80 p-3 rounded-xl border border-emerald-300">
             <div>
-              <span className="font-black text-emerald-900 block text-[11px] uppercase tracking-wider">
-                Comprobante de Abono / Pago {lastPayment.receiptNumber ? `(Recibo #${lastPayment.receiptNumber})` : ''}
+              <span className="font-black text-emerald-950 block text-[11px] uppercase tracking-wider">
+                {isAbono 
+                  ? `Comprobante Oficial de Abono a Factura${resolvedAffectedInvoice ? ` No. ${resolvedAffectedInvoice}` : ''}`
+                  : `Comprobante de Abono / Pago ${lastPayment?.receiptNumber ? `(Recibo #${lastPayment.receiptNumber})` : ''}`}
               </span>
               <span className="text-[11px] text-zinc-600">
-                Fecha: <strong className="text-zinc-800">{lastPayment.date || formattedDate}</strong> • Método: <strong className="text-zinc-800">{lastPayment.method || 'Efectivo'}</strong>
-                {lastPayment.reference ? ` • Ref: ${lastPayment.reference}` : ''}
+                Fecha: <strong className="text-zinc-800">{lastPayment?.date || formattedDate}</strong> • Método: <strong className="text-zinc-800">{paymentMethod || lastPayment?.method || 'Efectivo'}</strong>
+                {(transferReference || lastPayment?.reference) ? ` • Ref: ${transferReference || lastPayment?.reference}` : ''}
+                {cashierName ? ` • Atendido por: ${cashierName}` : ''}
               </span>
             </div>
             <div className="text-right">
               <span className="text-[9px] font-bold text-zinc-500 uppercase block">Monto Abonado</span>
               <span className="font-mono font-black text-emerald-700 text-sm">
-                {formatRD(lastPayment.amount)}
+                {formatRD(lastPayment?.amount || total)}
               </span>
             </div>
           </div>
@@ -451,7 +499,7 @@ export default function LetterInvoice({
             ) : (
               <tr>
                 <td colSpan={6} className="py-4 text-center text-zinc-500">
-                  {isCotizacion ? 'Cotización General' : 'Venta General de Mercancía / Servicios'}
+                  {isCotizacion ? 'Cotización General' : isAbono ? 'Abono a Cuenta por Cobrar' : 'Venta General de Mercancía / Servicios'}
                 </td>
               </tr>
             )}
@@ -460,7 +508,7 @@ export default function LetterInvoice({
       </div>
 
       {/* 3.1 Historial de Abonos si existen */}
-      {paymentsHistory && paymentsHistory.length > 0 && (
+      {paymentsHistory && paymentsHistory.length > 0 && !isAbono && (
         <div className="mb-6 border border-zinc-200 rounded-2xl overflow-hidden text-xs">
           <div className="bg-zinc-100 px-3.5 py-2 border-b border-zinc-200 font-black text-zinc-800 text-[11px] uppercase tracking-wider flex justify-between items-center">
             <span>Historial de Abonos / Pagos Aplicados ({paymentsHistory.length})</span>
@@ -517,7 +565,7 @@ export default function LetterInvoice({
             </div>
             <div className="space-y-1 text-[11px] text-zinc-600">
               <span className="font-black text-zinc-900 uppercase tracking-wide block">
-                {isEcf ? 'Comprobante Fiscal Electrónico (DGII)' : 'Timbre Digital de Facturación'}
+                {isEcf ? 'Comprobante Fiscal Electrónico (DGII)' : isAbono ? 'Comprobante Oficial de Caja' : 'Timbre Digital de Facturación'}
               </span>
               {securityCode && (
                 <p>
@@ -536,7 +584,7 @@ export default function LetterInvoice({
               <p className="text-[10px] text-zinc-500 leading-tight pt-1">
                 {isEcf
                   ? 'Escanea el código QR con cualquier dispositivo móvil o la app de la DGII para verificar la autenticidad y validez de este comprobante electrónico.'
-                  : 'Escanea el código QR para verificar la autenticidad y los datos de esta factura comercial.'}
+                  : 'Escanea el código QR para verificar la autenticidad y los datos de este documento comercial.'}
               </p>
             </div>
           </div>
@@ -544,66 +592,129 @@ export default function LetterInvoice({
 
         {/* Lado Derecho: Totales */}
         <div className="col-span-5 space-y-2 text-xs">
-          <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
-            <div className="flex justify-between text-zinc-600 font-medium">
-              <span>Subtotal Gravado:</span>
-              <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-zinc-600 font-medium">
-              <span>ITBIS (18%):</span>
-              <span className="font-mono text-zinc-900 font-bold">{formatRD(taxAmount)}</span>
-            </div>
-            {taxAmount === 0 && (
+          {isAbono ? (
+            <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
               <div className="flex justify-between text-zinc-600 font-medium">
-                <span>Monto Exento:</span>
+                <span>Monto Facturado en este Abono:</span>
+                <span className="font-mono text-zinc-900 font-bold">{formatRD(total)}</span>
+              </div>
+              <div className="flex justify-between text-zinc-600 font-medium">
+                <span>Balance Anterior de la Cuenta:</span>
+                <span className="font-mono text-zinc-700 font-bold">{formatRD(effectivePrevBalance)}</span>
+              </div>
+              <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
+                <span>Total Aplicado a Cuenta:</span>
+                <span className="font-mono text-emerald-700 font-black">-{formatRD(total)}</span>
+              </div>
+              <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
+                <span>Saldo Pendiente Restante:</span>
+                <span className={`font-mono font-black ${effectiveNewBalance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatRD(Math.max(0, effectiveNewBalance))}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
+              <div className="flex justify-between text-zinc-600 font-medium">
+                <span>Subtotal Gravado:</span>
                 <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
               </div>
-            )}
-            {paidAmount !== undefined && (
-              <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
-                <span>Total Abonado / Pagado:</span>
-                <span className="font-mono text-emerald-700 font-black">{formatRD(paidAmount)}</span>
+              <div className="flex justify-between text-zinc-600 font-medium">
+                <span>ITBIS (18%):</span>
+                <span className="font-mono text-zinc-900 font-bold">{formatRD(taxAmount)}</span>
               </div>
-            )}
-            {balance !== undefined && (
-              <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
-                <span>Saldo Pendiente:</span>
-                <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatRD(Math.max(0, balance))}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className={`p-3.5 rounded-2xl flex justify-between items-center shadow-md ${
-            balance !== undefined && balance <= 0.01 ? 'bg-emerald-950 text-white' : 'bg-zinc-950 text-white'
-          }`}>
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
-                {isCotizacion ? 'Total Cotizado' : (balance !== undefined ? 'Monto Total Factura' : 'Total a Pagar')}
-              </span>
-              <span className="text-lg font-black font-mono tracking-tight text-white">
-                {formatRD(total)}
-              </span>
-              {paidCurrency === 'USD' && totalUsd !== undefined && (
-                <span className="text-xs font-bold text-emerald-400 font-mono block mt-0.5">
-                  ≈ $ {totalUsd.toFixed(2)} USD
-                </span>
+              {taxAmount === 0 && (
+                <div className="flex justify-between text-zinc-600 font-medium">
+                  <span>Monto Exento:</span>
+                  <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
+                </div>
               )}
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
-                {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
-              </span>
+              {paidAmount !== undefined && (
+                <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
+                  <span>Total Abonado / Pagado:</span>
+                  <span className="font-mono text-emerald-700 font-black">{formatRD(paidAmount)}</span>
+                </div>
+              )}
               {balance !== undefined && (
-                <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${
-                  balance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'
-                }`}>
-                  {balance <= 0.01 ? '✓ SALDADA' : 'PENDIENTE'}
-                </span>
+                <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
+                  <span>Saldo Pendiente:</span>
+                  <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {formatRD(Math.max(0, balance))}
+                  </span>
+                </div>
               )}
             </div>
-          </div>
+          )}
+
+          {isAbono ? (
+            <div className="p-3.5 rounded-2xl flex justify-between items-center shadow-md bg-emerald-950 text-white">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 block">
+                  Total Abonado en este Comprobante
+                </span>
+                <span className="text-xl font-black font-mono tracking-tight text-white">
+                  {formatRD(total)}
+                </span>
+                <span className="text-[11px] text-emerald-200 font-mono block mt-0.5">
+                  Saldo Restante: {formatRD(Math.max(0, effectiveNewBalance))}
+                </span>
+                {paidCurrency === 'USD' && totalUsd !== undefined && (
+                  <span className="text-xs font-bold text-emerald-300 font-mono block mt-0.5">
+                    ≈ $ {totalUsd.toFixed(2)} USD
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
+                  ABONO APLICADO
+                </span>
+                <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${
+                  effectiveNewBalance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'
+                }`}>
+                  {effectiveNewBalance <= 0.01 ? '✓ CUENTA SALDADA' : 'SALDO PENDIENTE'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className={`p-3.5 rounded-2xl flex justify-between items-center shadow-md ${
+              balance !== undefined && balance <= 0.01 ? 'bg-emerald-950 text-white' : 'bg-zinc-950 text-white'
+            }`}>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
+                  {isCotizacion 
+                    ? 'Total Cotizado' 
+                    : (balance !== undefined && balance > 0.01 
+                        ? 'Saldo Pendiente' 
+                        : (balance !== undefined && balance <= 0.01 ? 'Total Factura (Saldada)' : 'Total a Pagar'))}
+                </span>
+                <span className="text-lg font-black font-mono tracking-tight text-white">
+                  {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
+                </span>
+                {balance !== undefined && balance > 0.01 && (
+                  <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">
+                    Monto Original: {formatRD(total)} {paidAmount ? `• Abonado: ${formatRD(paidAmount)}` : ''}
+                  </span>
+                )}
+                {paidCurrency === 'USD' && totalUsd !== undefined && (
+                  <span className="text-xs font-bold text-emerald-400 font-mono block mt-0.5">
+                    ≈ $ {(balance !== undefined && balance > 0.01 && exchangeRate ? (balance / exchangeRate).toFixed(2) : totalUsd.toFixed(2))} USD
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
+                  {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
+                </span>
+                {balance !== undefined && (
+                  <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${
+                    balance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'
+                  }`}>
+                    {balance <= 0.01 ? '✓ SALDADA' : 'PENDIENTE'}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -64,6 +64,8 @@ export function parseInvoiceTimestamp(dateStr?: string | number | null): number 
 export function extractInvoiceSeqNumber(numStr?: string): number {
   if (!numStr) return 0;
   const s = String(numStr).trim();
+  const aboMatch = s.match(/ABO-(\d+)/i);
+  if (aboMatch) return parseInt(aboMatch[1], 10) || 0;
   const recMatch = s.match(/REC-\d+-(\d+)/i) || s.match(/REC-(\d+)/i);
   if (recMatch) return parseInt(recMatch[1], 10) || 0;
   const finMatch = s.match(/FIN-(\d+)/i);
@@ -166,12 +168,14 @@ export default function Invoices() {
     window.addEventListener('brianna_role_updated', handleRoleUpdate);
     window.addEventListener('brianna_invoices_updated', handleInvoicesUpdate);
     window.addEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+    window.addEventListener('brianna_invoice_payments_updated', handleInvoicesUpdate);
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_role_updated', handleRoleUpdate);
       window.removeEventListener('brianna_invoices_updated', handleInvoicesUpdate);
       window.removeEventListener('brianna_invoices_changed', handleInvoicesUpdate);
+      window.removeEventListener('brianna_invoice_payments_updated', handleInvoicesUpdate);
     };
   }, []);
 
@@ -401,16 +405,29 @@ export default function Invoices() {
                       </div>
 
                       {/* Status Badge */}
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                        isPaid
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
-                          : isPending
-                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
-                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                        {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
-                      </span>
+                      {(() => {
+                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.status?.includes('Abono') || invoice.ncf_type === 'ABONO';
+                        if (isAbono) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                              Abono a Factura
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            isPaid
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
+                              : isPending
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                            {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Middle Row: Client info & Total */}
@@ -553,20 +570,53 @@ export default function Invoices() {
                         {invoice.payment_method === 'Crédito' ? `Crédito (${invoice.credit_days || 15} Días)` : (invoice.payment_method || 'Efectivo')}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-sm font-black text-gray-900 dark:text-zinc-100 font-mono">
-                      RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <td className="px-5 py-3.5 whitespace-nowrap text-sm font-mono">
+                      <div className="font-black text-gray-900 dark:text-zinc-100">
+                        RD$ {invoice.total_amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      {Boolean((invoice as any).paid_amount && (invoice as any).paid_amount > 0) && (
+                        <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          Abonado: RD$ {Number((invoice as any).paid_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </div>
+                      )}
+                      {Boolean((invoice as any).balance !== undefined && (invoice as any).balance > 0 && (invoice as any).paid_amount > 0) && (
+                        <div className="text-[11px] font-black text-red-600 dark:text-rose-400">
+                          Pendiente: RD$ {Number((invoice as any).balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        isPaid
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
-                          : isPending
-                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
-                          : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                        {invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
-                      </span>
+                      {(() => {
+                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.status?.includes('Abono') || invoice.ncf_type === 'ABONO';
+                        if (isAbono) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                              Abono a Factura
+                            </span>
+                          );
+                        }
+                        const hasAbonos = Array.isArray((invoice as any).payments_history) && (invoice as any).payments_history.length > 0;
+                        const abonosCount = (invoice as any).payments_history?.length || 0;
+                        const isConAbono = invoice.status === 'Con Abono' || (hasAbonos && (invoice as any).balance > 0);
+                        
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            isConAbono
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40'
+                              : isPaid
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
+                              : isPending
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${isConAbono ? 'bg-blue-500' : isPaid ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                            {isConAbono 
+                              ? `Con Abono${abonosCount > 0 ? ` (${abonosCount})` : ''}` 
+                              : invoice.status?.includes('Emitida') ? 'Emitida' : invoice.status || 'Pagada'}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -928,8 +978,8 @@ export default function Invoices() {
                   </div>
                 </div>
 
-                {/* Totals */}
-                <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-xl p-3 space-y-1 text-xs mb-4">
+                {/* Totals & Abonos */}
+                <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-xl p-3 space-y-1 text-xs mb-3">
                   <div className="flex justify-between text-gray-500 dark:text-zinc-400">
                     <span>Subtotal:</span>
                     <span className="font-mono">${(viewingInvoice.subtotal || viewingInvoice.total_amount / 1.18).toFixed(2)}</span>
@@ -939,10 +989,50 @@ export default function Invoices() {
                     <span className="font-mono">${(viewingInvoice.tax_amount || (viewingInvoice.total_amount - viewingInvoice.total_amount / 1.18)).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-black border-t border-gray-200 dark:border-zinc-800 pt-1.5 text-gray-900 dark:text-white">
-                    <span>Total:</span>
+                    <span>Total Factura:</span>
                     <span className="font-mono">RD$ {viewingInvoice.total_amount.toFixed(2)}</span>
                   </div>
+                  {Boolean((viewingInvoice as any).paid_amount && Number((viewingInvoice as any).paid_amount) > 0) && (
+                    <div className="flex justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400 pt-1 border-t border-gray-200/50 dark:border-zinc-800">
+                      <span>Total Abonado:</span>
+                      <span className="font-mono">RD$ {Number((viewingInvoice as any).paid_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {Boolean((viewingInvoice as any).balance !== undefined && (viewingInvoice as any).paid_amount > 0) && (
+                    <div className="flex justify-between text-xs font-black text-red-600 dark:text-rose-400">
+                      <span>Saldo Pendiente:</span>
+                      <span className="font-mono">RD$ {Number((viewingInvoice as any).balance).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Historial de Abonos si existen */}
+                {Array.isArray((viewingInvoice as any).payments_history) && (viewingInvoice as any).payments_history.length > 0 && (
+                  <div className="bg-gray-50 dark:bg-zinc-900/60 rounded-xl p-3 space-y-2 mb-4 border border-gray-200/70 dark:border-zinc-800">
+                    <div className="flex items-center justify-between border-b border-gray-200/60 dark:border-zinc-800 pb-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+                        Historial de Abonos ({(viewingInvoice as any).payments_history.length})
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 divide-y divide-gray-100 dark:divide-zinc-800/60">
+                      {(viewingInvoice as any).payments_history.map((p: any, idx: number) => (
+                        <div key={p.id || idx} className="pt-1.5 first:pt-0 flex justify-between items-start text-xs">
+                          <div>
+                            <div className="font-semibold text-gray-800 dark:text-zinc-200">
+                              {p.method || 'Abono'} {p.reference ? `(Ref: ${p.reference})` : ''}
+                            </div>
+                            <div className="text-[10px] text-gray-400">
+                              {p.date ? new Date(p.date).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'} • {p.cashier || 'Caja'}
+                            </div>
+                          </div>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex items-center justify-end gap-2">
@@ -980,6 +1070,9 @@ export default function Invoices() {
       {/* Full Page Letter Invoice Portal for Invoices page (Formato Carta Oficial) */}
       {viewingInvoice && createPortal(
         <LetterInvoice
+          invoiceNumber={viewingInvoice.invoice_number}
+          affectedInvoiceNumber={viewingInvoice.invoice_number?.startsWith('ABO-') ? viewingInvoice.invoice_number.replace(/^ABO-/, '').split('-')[0] : undefined}
+          isAbono={Boolean(viewingInvoice.invoice_number?.startsWith('ABO-') || viewingInvoice.status?.includes('Abono') || viewingInvoice.ncf_type === 'ABONO')}
           ncf={viewingInvoice.ncf || viewingInvoice.invoice_number}
           invoiceType={viewingInvoice.ncf_type || (viewingInvoice.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic'}
@@ -990,6 +1083,7 @@ export default function Invoices() {
           creditDays={viewingInvoice.credit_days}
           dueDate={viewingInvoice.due_date}
           cashierName={viewingInvoice.cashier_name || 'Cajero POS'}
+          transferReference={viewingInvoice.transfer_reference}
           items={viewingInvoice.items?.map(it => ({
             description: it.description,
             quantity: it.quantity,
@@ -999,6 +1093,9 @@ export default function Invoices() {
           subtotal={viewingInvoice.subtotal || viewingInvoice.total_amount / 1.18}
           taxAmount={viewingInvoice.tax_amount || (viewingInvoice.total_amount - viewingInvoice.total_amount / 1.18)}
           total={viewingInvoice.total_amount}
+          paidAmount={(viewingInvoice as any).paid_amount}
+          balance={(viewingInvoice as any).balance}
+          paymentsHistory={(viewingInvoice as any).payments_history || (viewingInvoice as any).paymentsHistory}
           securityCode={viewingInvoice.ecf_security_code || '34F595'}
           qrCodeUrl={viewingInvoice.ecf_qr_url}
           trackId={viewingInvoice.ecf_track_id}

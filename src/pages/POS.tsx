@@ -2124,13 +2124,21 @@ export default function POS() {
     const handleQuotationsUpdate = () => {
       setActiveQuotationsCount(getActiveQuotationsCount());
     };
+    const checkShift = () => {
+      const open = isShiftOpen(activeRegister);
+      setIsShiftActive(open);
+      if (!open) {
+        setIsOpenShiftModalOpen(true);
+      }
+    };
+    // Comprobar apertura de turno al entrar al POS
+    checkShift();
+
     const handleShiftUpdate = () => {
       setIsShiftActive(isShiftOpen(activeRegister));
     };
     const handleOpenShiftRequested = () => {
-      if (getActiveRole() !== 'Administrador') {
-        setIsOpenShiftModalOpen(true);
-      }
+      setIsOpenShiftModalOpen(true);
     };
     const handleExchangeRateUpdate = (e: any) => {
       setPosExchangeRate(e.detail?.rate || getExchangeRate());
@@ -2664,11 +2672,10 @@ export default function POS() {
 
   const openCheckout = useCallback(() => {
     if (cart.length === 0) return;
-    const role = getActiveRole();
-    if (role !== 'Administrador' && !isShiftActive) {
+    if (!isShiftActive) {
       showAlert({
         title: 'Turno de Caja Cerrado',
-        description: 'Debes abrir el turno e ingresar el fondo inicial de caja para poder facturar.',
+        description: 'Debes aperturar el turno e ingresar el fondo inicial de caja antes de poder facturar.',
         variant: 'warning'
       });
       setIsOpenShiftModalOpen(true);
@@ -3325,8 +3332,35 @@ export default function POS() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-2.5 sm:p-3.5 md:p-4 relative">
-        <div className="h-full flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-5 print:hidden">
+      <div className="flex-1 overflow-hidden p-2.5 sm:p-3.5 md:p-4 relative flex flex-col">
+        {/* Banner de Turno Cerrado */}
+        {!isShiftActive && (
+          <div className="mb-3 bg-amber-500/10 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 p-3 sm:p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <LockClosedIcon className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-black text-amber-950 dark:text-amber-100 flex items-center gap-1.5">
+                  <span>Turno de Caja Cerrado ({activeRegister})</span>
+                </h4>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  Debes aperturar el turno con el fondo inicial antes de facturar o cobrar en el sistema.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsOpenShiftModalOpen(true)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black rounded-xl shadow-md shadow-emerald-900/20 transition-all cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+            >
+              <LockClosedIcon className="w-4 h-4 stroke-[2.5]" />
+              <span>Aperturar Turno</span>
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3 sm:gap-4 lg:gap-5 print:hidden">
       {/* Products Grid */}
       <div className={`flex-1 flex-col overflow-hidden ${mobileTab === 'cart' ? 'hidden md:flex' : 'flex'}`}>
         <div className="pb-2.5 sm:pb-4 space-y-2.5 sm:space-y-3">
@@ -4203,9 +4237,8 @@ export default function POS() {
               setIsCashClosureOpen(false);
               if (didCloseShift) {
                 setSessionSales([]);
-                if (getActiveRole() !== 'Administrador') {
-                  setIsOpenShiftModalOpen(true);
-                }
+                setIsShiftActive(false);
+                setIsOpenShiftModalOpen(true);
               }
             }}
           />
