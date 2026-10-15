@@ -27,6 +27,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
+import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { createCashClosure, getLocalStorageCashClosures, type CashClosure } from '../../services/cashClosuresService';
 import { fetchAllFinancingReceipts, type FinancingPaymentReceipt } from '../../services/financingReceiptsService';
 import { getLocalStorageUsers, fetchUsers, type UserProfile } from '../../services/usersService';
@@ -68,6 +69,36 @@ const DENOMINATIONS = [
   { value: 1, label: 'RD$ 1', type: 'Moneda' },
 ];
 
+const getAbonosAsMovements = (invoicePayments: Record<string, any>, defaultRegister = 'Caja 1 - Repuestos'): CashMovement[] => {
+  const seenPaymentIds = new Set<string>();
+  const abonos: CashMovement[] = [];
+  Object.values(invoicePayments || {}).forEach((summary: any) => {
+    if (summary && summary.payments_history && Array.isArray(summary.payments_history)) {
+      summary.payments_history.forEach((p: any) => {
+        if (!p || !p.id || seenPaymentIds.has(p.id)) return;
+        seenPaymentIds.add(p.id);
+
+        const pm = p.method || 'Efectivo';
+        const isCard = pm.toLowerCase().includes('tarjeta');
+        const isBank = pm.toLowerCase().includes('transferencia') || pm.toLowerCase().includes('usd');
+
+        abonos.push({
+          id: `abono_${p.id}`,
+          type: 'Ingreso',
+          amount: Number(p.amount) || 0,
+          concept: `Abono Factura #${summary.invoice_number || 'S/N'}${summary.customer_name ? ` • ${summary.customer_name}` : ''}`,
+          payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
+          reference: p.reference,
+          register_name: p.register_name || defaultRegister,
+          created_by: p.cashier || 'Rosa Iris Peñalo',
+          created_at: p.date || new Date().toISOString()
+        });
+      });
+    }
+  });
+  return abonos;
+};
+
 export default function CashClosureModal({ 
   isOpen, 
   onClose, 
@@ -87,7 +118,11 @@ export default function CashClosureModal({
   const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => loggedInUserName);
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
-  const [allMovements, setAllMovements] = useState<CashMovement[]>(() => getLocalStorageMovements());
+  const [allMovements, setAllMovements] = useState<CashMovement[]>(() => {
+    const localMovs = getLocalStorageMovements();
+    const abonos = getAbonosAsMovements(getLocalInvoicePayments(), defaultRegister);
+    return [...localMovs, ...abonos];
+  });
   const [allFinancingReceipts, setAllFinancingReceipts] = useState<FinancingPaymentReceipt[]>(() => {
     try {
       return fetchAllFinancingReceipts();
@@ -143,7 +178,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('mios');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('todos');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -178,6 +213,7 @@ export default function CashClosureModal({
     setCashierName(loggedInUserName);
     setFilterMode('shift');
     setMovementsTimeScope('today');
+    setMovementTab('todos');
     setCountMode('shift_only');
     const jennifer = adminNames.find(n => n.toLowerCase().includes('jennifer')) || 'Jennifer';
     setSupervisorName(jennifer);
@@ -239,8 +275,11 @@ export default function CashClosureModal({
     }
 
     // 1. Carga instantánea de caché local con 0ms de latencia
+    const regToLoad = selectedRegister === 'todas' ? 'Caja 1 - Repuestos' : selectedRegister;
     setAllInvoices(getLocalStorageInvoices());
-    setAllMovements(getLocalStorageMovements());
+    const initialLocalMovs = getLocalStorageMovements();
+    const initialAbonos = getAbonosAsMovements(getLocalInvoicePayments(), regToLoad);
+    setAllMovements([...initialLocalMovs, ...initialAbonos]);
     try {
       setAllFinancingReceipts(fetchAllFinancingReceipts());
     } catch (e) {
@@ -252,9 +291,25 @@ export default function CashClosureModal({
       if (invs && invs.length > 0) setAllInvoices(invs);
     }).catch(e => console.warn('Background invoice fetch:', e));
 
-    fetchCashMovements(false).then(movs => {
-      if (movs && movs.length > 0) setAllMovements(movs);
-    }).catch(e => console.warn('Background movements fetch:', e));
+    const syncFullMovements = async (forceRemote = false) => {
+      try {
+        const movs = await fetchCashMovements(forceRemote);
+        let payments = getLocalInvoicePayments();
+        try {
+          const remotePayments = await fetchRemoteInvoicePayments();
+          if (remotePayments && Object.keys(remotePayments).length > 0) {
+            payments = remotePayments;
+          }
+        } catch {}
+
+        const abonos = getAbonosAsMovements(payments, regToLoad);
+        setAllMovements([...(movs || []), ...abonos]);
+      } catch (e) {
+        console.warn('Background movements sync error:', e);
+      }
+    };
+
+    syncFullMovements(false);
 
     fetchUsers(false).then(users => {
       if (users && users.length > 0) {
@@ -273,19 +328,21 @@ export default function CashClosureModal({
     };
 
     const handleMovementsRefresh = () => {
-      setAllMovements(getLocalStorageMovements());
-      fetchCashMovements(true).then(movs => {
-        if (movs && movs.length > 0) setAllMovements(movs);
-      }).catch(e => console.warn('Background movements refresh:', e));
+      const currentLocalMovs = getLocalStorageMovements();
+      const currentAbonos = getAbonosAsMovements(getLocalInvoicePayments(), regToLoad);
+      setAllMovements([...currentLocalMovs, ...currentAbonos]);
+      syncFullMovements(true);
     };
 
     window.addEventListener('brianna_receipts_updated', handleReceiptsRefresh);
     window.addEventListener('brianna_cash_movements_changed', handleMovementsRefresh);
     window.addEventListener('brianna_bank_transactions_changed', handleMovementsRefresh);
+    window.addEventListener('brianna_invoice_payments_updated', handleMovementsRefresh);
     return () => {
       window.removeEventListener('brianna_receipts_updated', handleReceiptsRefresh);
       window.removeEventListener('brianna_cash_movements_changed', handleMovementsRefresh);
       window.removeEventListener('brianna_bank_transactions_changed', handleMovementsRefresh);
+      window.removeEventListener('brianna_invoice_payments_updated', handleMovementsRefresh);
     };
   }, [isOpen, selectedRegister, isAdmin, loggedInUserName]);
 
@@ -530,7 +587,10 @@ export default function CashClosureModal({
     });
 
     // 3. Cobros de facturas a crédito
+    const seenCreditPaymentKeys = new Set<string>();
     scopedCreditPayments.forEach(p => {
+      const cleanKey = String(p.id).replace(/^pay_/, '').replace(/^abono_/, '');
+      seenCreditPaymentKeys.add(cleanKey);
       const pm = (p.method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
@@ -561,6 +621,13 @@ export default function CashClosureModal({
     // 4. Movimientos manuales de caja (ingresos y egresos): se muestran TODOS los movimientos del turno a todos los usuarios,
     // pero distinguiendo cuáles pertenecen al cuadre del cajero en sesión y cuáles a otros usuarios
     allShiftMovements.forEach(m => {
+      if (m.id.startsWith('abono_')) {
+        const cleanKey = m.id.replace(/^abono_/, '').replace(/^pay_/, '');
+        if (seenCreditPaymentKeys.has(cleanKey)) {
+          return;
+        }
+      }
+
       const isIngreso = m.type === 'Ingreso';
       const pm = (m.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
@@ -577,15 +644,16 @@ export default function CashClosureModal({
       const author = m.created_by || (m as any).user_name || '';
 
       const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
-      const baseBadge = isCard ? 'Tarjeta' : isBank ? 'Transferencia' : (isIngreso ? 'Ingreso' : 'Retiro');
+      const isAbono = m.id.startsWith('abono_') || conceptText.toLowerCase().includes('abono');
+      const baseBadge = isAbono ? 'Cobro Factura' : (isCard ? 'Tarjeta' : isBank ? 'Transferencia' : (isIngreso ? 'Ingreso' : 'Retiro'));
       const badgeAuthor = author || 'Otro';
       const badgeLabel = isMine ? baseBadge : (!isFromCurrentShift ? `${baseBadge} • Turno ant.` : `${baseBadge} • ${badgeAuthor}`);
 
       list.push({
         id: `mov-${m.id}`,
         type: m.type,
-        category: isIngreso ? 'ingreso_manual' : 'egreso_manual',
-        categoryLabel: isIngreso ? 'Ingreso Manual' : 'Egreso / Retiro',
+        category: isAbono ? 'cobro' : (isIngreso ? 'ingreso_manual' : 'egreso_manual'),
+        categoryLabel: isAbono ? 'Cobro Factura' : (isIngreso ? 'Ingreso Manual' : 'Egreso / Retiro'),
         concept: conceptText,
         customer: (m as any).customer || '',
         amount: Number(m.amount) || 0,
@@ -601,6 +669,8 @@ export default function CashClosureModal({
         badgeText: badgeLabel,
         badgeColorClass: !isMine
           ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
+          : isAbono
+          ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
           : !isCash
           ? (isCard ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300')
           : isIngreso
@@ -701,6 +771,11 @@ export default function CashClosureModal({
   const cashMovementsTotals = useMemo(() => {
     let ingresos = 0, egresos = 0;
     scopedMovements.forEach(m => {
+      // Si el movimiento es un abono a factura, no contarlo en cashMovementsTotals si ya se cuenta en scopedCreditPayments
+      if (m.id.startsWith('abono_') && scopedCreditPayments.some(cp => m.id.includes(cp.id) || (cp.id && m.id.includes(cp.id.replace(/^pay_/, ''))))) {
+        return;
+      }
+
       const pm = (m.payment_method || '').toLowerCase().trim();
       const reasonLower = ((m as any).reason || '').toLowerCase();
       const isNonCash = 
@@ -720,7 +795,7 @@ export default function CashClosureModal({
       else if (m.type === 'Egreso') egresos += amt;
     });
     return { ingresos, egresos };
-  }, [scopedMovements]);
+  }, [scopedMovements, scopedCreditPayments]);
 
   const grandTotalSales = systemSales.cash + systemSales.card + systemSales.transfer + systemSales.credit;
   const totalInvoicesAmount = useMemo(() => {
@@ -1628,12 +1703,12 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       >
                         <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          +RD$ {quadreInflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          +RD$ {(movementTab === 'mios' ? quadreInflowsAmount : totalInflowsAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                         <span className="text-zinc-300 dark:text-zinc-600">|</span>
                         <span className="text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                          -RD$ {quadreOutflowsAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          -RD$ {(movementTab === 'mios' ? quadreOutflowsAmount : totalOutflowsAmount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
