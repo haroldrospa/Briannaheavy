@@ -14,6 +14,7 @@ import logo from '../../assets/logo.png';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { filterMovementsByShift } from '../../services/shiftsService';
 import CashMovementModal from './CashMovementModal';
+import { getInvoiceCustomConfig } from '../../utils/receiptSettings';
 
 export interface SessionSale {
   id: string;
@@ -437,8 +438,8 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
               <div className="p-4 bg-white border border-gray-200 rounded-2xl text-black text-xs font-mono space-y-3">
                 <div className="text-center space-y-0.5 pb-2.5 border-b border-dashed border-gray-300">
                   <img src={logo} alt="Brianna" className="h-12 w-auto max-w-[150px] mx-auto object-contain mb-1" style={{ imageRendering: '-webkit-optimize-contrast' }} />
-                  <p className="font-black text-[12px] uppercase">BRIANNA HEAVY EQUIPMENT S.R.L.</p>
-                  <p className="text-[9px] text-gray-500">RNC: 131-48841-7 • Tel: (809) 555-5555</p>
+                  <p className="font-black text-[12px] uppercase">{getInvoiceCustomConfig().companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.'}</p>
+                  <p className="text-[9px] text-gray-500">RNC: {getInvoiceCustomConfig().rnc || '132-91036-2'} • Tel: {getInvoiceCustomConfig().phone || '849-856-9951'}</p>
                 </div>
 
                 <div className="bg-gray-100 p-2 rounded-xl text-center">

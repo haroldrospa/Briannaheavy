@@ -432,21 +432,16 @@ export const filterInvoicesByShift = (
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  const currentRole = getActiveRole();
-  const isAdmin = currentRole === 'Administrador';
-
-  // Cada venta es independiente: por defecto filtrar a las ventas del usuario actual, o todos si es admin
+  // Cada venta/cuadre es independiente por cajero: cada usuario sólo cuenta sus propias operaciones,
+  // salvo que se solicite explícitamente 'todos' / 'todas'
   let effectiveCashier = selectedCashier;
   if (effectiveCashier === 'current_user' || !effectiveCashier) {
-    effectiveCashier = isAdmin ? 'todos' : currentUserName;
+    effectiveCashier = currentUserName;
   }
 
   // 1. Filtrar por Cajera/Usuario si no se solicitó explícitamente ver 'todas' / 'todos'
   if (effectiveCashier !== 'todas' && effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
-    const isMeAdmin = isAdmin && matchesCashierUser(effectiveCashier, currentUserName, currentUserEmail);
-    if (!isMeAdmin) {
-      list = list.filter(inv => matchesCashierUser(inv.cashier_name, effectiveCashier, currentUserEmail));
-    }
+    list = list.filter(inv => matchesCashierUser(inv.cashier_name, effectiveCashier, currentUserEmail));
   }
 
   // 2. Filtrar por Caja específica si no es 'todas' (usando equivalencias inteligentes entre Caja 1 y Caja Principal)

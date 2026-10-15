@@ -73,9 +73,9 @@ export interface InvoiceCustomConfig {
 
 export const DEFAULT_INVOICE_CONFIG: InvoiceCustomConfig = {
   companyName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-  rnc: '132-61036-2',
-  phone: '(809) 555-5555',
-  address: 'Santo Domingo, República Dominicana',
+  rnc: '132-91036-2',
+  phone: '849-856-9951',
+  address: 'Autopista Duarte KM 8#17 Sector La Penda La Vega, Dom. Rep.',
   footerMessage: '¡GRACIAS POR SU PREFERENCIA!',
   showLogo: true,
   showQrCode: true,

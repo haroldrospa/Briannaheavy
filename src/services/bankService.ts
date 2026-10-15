@@ -34,7 +34,7 @@ export const CASH_ACCOUNT: CompanyBankAccount = {
   accountType: 'Efectivo en Caja',
   currency: 'DOP',
   holderName: 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-  rnc: '132-61036-2'
+  rnc: '132-91036-2'
 };
 
 const MANUAL_BANK_STORAGE_KEY = 'brianna_manual_bank_transactions';

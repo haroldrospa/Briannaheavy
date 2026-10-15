@@ -689,7 +689,7 @@ export default function Banks() {
               <img src={logo} alt="Logo" className="h-12 object-contain" />
               <div>
                 <h2 className="text-xl font-black uppercase text-black">BRIANNA HEAVY EQUIPMENT S.R.L.</h2>
-                <p className="text-xs font-bold text-gray-700">RNC: 132-61036-2 • EXTRACTO DE MOVIMIENTOS FINANCIEROS</p>
+                <p className="text-xs font-bold text-gray-700">RNC: 132-91036-2 • EXTRACTO DE MOVIMIENTOS FINANCIEROS</p>
                 <p className="text-xs text-gray-600">Fecha de emisión: {new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </div>

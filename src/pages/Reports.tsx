@@ -16,7 +16,8 @@ import {
   TruckIcon,
   XMarkIcon,
   EyeIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
 import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice } from '../services/invoicesService';
@@ -25,6 +26,55 @@ import { fetchCustomers, getLocalStorageCustomers } from '../services/customersS
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
 import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cashClosuresService';
 import { fetchCashMovements, getLocalStorageMovements } from '../services/cashMovementsService';
+import { fetchWorkOrders, getLocalStorageWorkOrders, fetchTruckInspections, getLocalStorageTruckInspections } from '../services/maintenanceService';
+import { getInvoiceCustomConfig } from '../utils/receiptSettings';
+
+export const CLOSURE_DENOMINATIONS = [
+  { value: 2000, label: 'RD$ 2,000', type: 'Billete' },
+  { value: 1000, label: 'RD$ 1,000', type: 'Billete' },
+  { value: 500, label: 'RD$ 500', type: 'Billete' },
+  { value: 200, label: 'RD$ 200', type: 'Billete' },
+  { value: 100, label: 'RD$ 100', type: 'Billete' },
+  { value: 50, label: 'RD$ 50', type: 'Billete' },
+  { value: 25, label: 'RD$ 25', type: 'Moneda' },
+  { value: 10, label: 'RD$ 10', type: 'Moneda' },
+  { value: 5, label: 'RD$ 5', type: 'Moneda' },
+  { value: 1, label: 'RD$ 1', type: 'Moneda' },
+];
+
+export const formatFullDateTime = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('es-DO', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+  } catch {}
+  return String(dateStr);
+};
+
+export const formatPrettyDate = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  try {
+    const raw = String(dateStr).slice(0, 10).trim();
+    const parts = raw.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts.map(Number);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const month = months[m - 1] || '';
+        return `${d} ${month}, ${y}`;
+      }
+    }
+  } catch {}
+  return String(dateStr);
+};
 
 const mapReportsData = (
   invs: any[], 
@@ -32,7 +82,9 @@ const mapReportsData = (
   custs: any[], 
   items: any[], 
   closures: any[] = [],
-  movements: any[] = []
+  movements: any[] = [],
+  workOrders: any[] = [],
+  inspections: any[] = []
 ) => {
   const mappedData: Record<string, any[]> = {
     ecf: [],
@@ -135,6 +187,47 @@ const mapReportsData = (
       status: f.status === 'Activo' ? 'Al día' : f.status,
       nextPayment: f.start_date ? f.start_date.slice(0, 10) : '2026-08-15'
     }));
+
+    // Generar reporte oficial de moras y recargos
+    const overdueList: any[] = [];
+    fins.forEach((f: any) => {
+      const isMora = f.status === 'En mora' || f.status === 'Vencido';
+      if (f.installments && Array.isArray(f.installments) && f.installments.length > 0) {
+        f.installments.forEach((inst: any) => {
+          const isInstMora = inst.status === 'En Mora' || (inst.status === 'Pendiente' && inst.due_date && new Date(inst.due_date).getTime() < Date.now());
+          if (isInstMora) {
+            const dueDate = inst.due_date ? new Date(inst.due_date) : new Date(f.start_date || Date.now());
+            const diffDays = Math.max(1, Math.floor((Date.now() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
+            const unpaid = Number(inst.amount || (f.financed_amount / (f.installments_count || 12))) - Number(inst.paid_amount || 0);
+            const penalty = unpaid * 0.05; // 5% de mora estándar
+            overdueList.push({
+              code: `MOR-${String(f.id).slice(0, 4)}-${inst.installment_number || 1}`,
+              client: f.customer_name || 'Cliente',
+              invoice: `FIN-${f.id} (Cuota #${inst.installment_number || 1})`,
+              daysOverdue: diffDays,
+              unpaidInstallment: unpaid,
+              penalty: penalty,
+              totalDue: unpaid + penalty,
+              date: inst.due_date ? inst.due_date.slice(0, 10) : (f.start_date ? f.start_date.slice(0, 10) : new Date().toISOString().slice(0, 10))
+            });
+          }
+        });
+      } else if (isMora) {
+        const unpaid = Number(f.financed_amount || 0) * 0.15;
+        const penalty = unpaid * 0.05;
+        overdueList.push({
+          code: `MOR-${String(f.id).slice(0, 6)}`,
+          client: f.customer_name || 'Cliente',
+          invoice: `FIN-${f.id}`,
+          daysOverdue: 30,
+          unpaidInstallment: unpaid,
+          penalty: penalty,
+          totalDue: unpaid + penalty,
+          date: f.start_date ? f.start_date.slice(0, 10) : new Date().toISOString().slice(0, 10)
+        });
+      }
+    });
+    mappedData.moras = overdueList;
   }
 
   if (custs && custs.length > 0) {
@@ -168,42 +261,137 @@ const mapReportsData = (
       const salesCash = Number(c.system_sales_cash || 0);
       const salesCard = Number(c.system_sales_card || 0);
       const salesTransfer = Number(c.system_sales_transfer || 0);
+      const salesCredit = Number(c.system_sales_credit || 0);
       const movIn = Number(c.cash_movements_in || 0);
       const movOut = Number(c.cash_movements_out || 0);
       
       // Ingresos totales del cuadre: Ventas registradas + Entradas manuales de efectivo
-      const salesTotal = salesCash + salesCard + salesTransfer;
+      const salesTotal = salesCash + salesCard + salesTransfer + salesCredit;
       const totalIncome = (salesTotal > 0 ? salesTotal : Number(c.total_sales || 0)) + movIn;
 
       return {
+        id: c.id,
         code: c.closure_number,
         date: c.created_at ? c.created_at.slice(0, 10) : '2026-07-21',
+        createdAt: c.created_at,
         register: c.register_name || 'Caja 1 - Repuestos',
         cashier: c.cashier_name || c.cashier || c.user_name || 'Harold Rosado',
+        supervisor: c.supervisor_name || 'Jennifer',
         initialFund: Number(c.initial_fund || 0),
         incomes: totalIncome,
         expenses: movOut,
+        totalSales: Number(c.total_sales || 0) || salesTotal,
         totalCash: salesCash,
         totalCard: salesCard,
         totalTransfer: salesTransfer,
+        totalCredit: salesCredit,
+        expectedCash: Number(c.expected_cash || (Number(c.initial_fund || 0) + salesCash + movIn - movOut)),
         counted: Number(c.counted_cash || 0),
         difference: Number(c.difference || 0),
-        status: c.status || 'Cuadrado'
+        status: c.status || 'Cuadrado',
+        denominations: c.denominations || {},
+        movements: c.movements || [],
+        notes: c.notes || '',
+        raw: c
       };
     });
   }
 
   if (movements && movements.length > 0) {
-    mappedData.movimientos_caja = movements.map((m: any) => ({
-      code: m.reference || (m.id ? `MOV-${String(m.id).slice(0, 8)}` : 'MOV-N/A'),
-      date: m.created_at ? m.created_at.slice(0, 10) : '2026-07-21',
-      register: m.register_name || 'Caja General',
-      cashier: m.created_by || 'Cajero',
-      type: m.type || 'Ingreso',
-      concept: m.concept || 'Movimiento de caja',
-      method: m.payment_method || 'Efectivo',
-      bank: m.bank_account_name || 'Caja Chica',
-      amount: Number(m.amount || 0)
+    mappedData.movimientos_caja = movements.map((m: any) => {
+      // 1. Formatear código de movimiento legible
+      let displayCode = '';
+      if (m.reference && typeof m.reference === 'string' && m.reference.trim() && !m.reference.toLowerCase().startsWith('ref:')) {
+        displayCode = m.reference.trim();
+      } else if (m.id) {
+        const strId = String(m.id);
+        if (strId.startsWith('MOV-') || strId.startsWith('FAC-') || strId.startsWith('REC-')) {
+          displayCode = strId;
+        } else {
+          const cleanId = strId.replace(/^mov-/, '').replace(/^abono_/, 'ABN-');
+          displayCode = `MOV-${cleanId.slice(0, 8).toUpperCase()}`;
+        }
+      } else {
+        displayCode = `MOV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      }
+
+      // 2. Extraer o inferir categoría inteligente
+      let category = m.category || '';
+      const cLower = String(m.concept || m.reason || '').toLowerCase();
+      if (!category) {
+        if (cLower.includes('abono') || cLower.includes('cuota') || cLower.includes('factura')) category = 'Cobro / Facturación';
+        else if (cLower.includes('combustible') || cLower.includes('gasoil') || cLower.includes('gasolina')) category = 'Combustible';
+        else if (cLower.includes('almuerzo') || cLower.includes('comida') || cLower.includes('dieta')) category = 'Dietas y Personal';
+        else if (cLower.includes('repuesto') || cLower.includes('pieza') || cLower.includes('taller') || cLower.includes('mantenimiento')) category = 'Repuestos y Taller';
+        else if (cLower.includes('nomina') || cLower.includes('nómina') || cLower.includes('salario') || cLower.includes('sueldo')) category = 'Nómina';
+        else if (cLower.includes('suplidor') || cLower.includes('proveedor')) category = 'Pago a Suplidores';
+        else if (cLower.includes('aporte') || cLower.includes('capital') || cLower.includes('socio')) category = 'Aporte de Capital';
+        else if (cLower.includes('retiro')) category = 'Retiro de Caja';
+        else if (cLower.includes('deposito') || cLower.includes('depósito')) category = 'Depósito Bancario';
+        else if (m.type === 'Ingreso') {
+          const method = String(m.payment_method || '').toLowerCase();
+          if (method.includes('transferencia')) category = 'Depósito / Transferencia';
+          else if (method.includes('tarjeta')) category = 'Cobro con Tarjeta';
+          else category = 'Ingreso Operativo';
+        } else {
+          const method = String(m.payment_method || '').toLowerCase();
+          if (method.includes('transferencia')) category = 'Transferencia / Pago';
+          else if (method.includes('tarjeta')) category = 'Pago con Tarjeta';
+          else category = 'Gasto Operativo';
+        }
+      }
+
+      // 3. Concepto / Descripción completa
+      const description = m.concept || m.reason || (m.type === 'Ingreso' ? 'Ingreso de Fondos' : 'Egreso / Gasto de Caja');
+      const author = m.created_by || m.cashier || m.cashier_name || m.user_name || m.author || 'Harold Rosado';
+
+      return {
+        id: displayCode,
+        code: displayCode,
+        date: m.created_at ? m.created_at.slice(0, 10) : (m.date ? String(m.date).slice(0, 10) : '2026-10-15'),
+        register: m.register_name || 'Caja General',
+        cashier: author,
+        created_by: author,
+        type: m.type === 'Ingreso' ? 'Ingreso' : 'Egreso',
+        category: category,
+        concept: description,
+        description: description,
+        method: m.payment_method || m.method || 'Efectivo',
+        bank: m.bank_account_name || 'Caja Chica',
+        amount: Math.abs(Number(m.amount || 0))
+      };
+    });
+  }
+
+  if (inspections && inspections.length > 0) {
+    mappedData.inspecciones = inspections.map((ins: any) => {
+      const goodCount = [ins.brakes_ok, ins.lights_ok, ins.tires_ok, ins.engine_ok].filter(Boolean).length;
+      const defCount = 4 - goodCount;
+      return {
+        code: ins.report_number || `INS-${String(ins.id).slice(0, 6)}`,
+        date: ins.created_at ? ins.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        vehicle: ins.truck_name || 'Camión MACK Granite',
+        vin: ins.chassis_number || '1M2AX13C5PM001892',
+        inspector: ins.driver_name || 'Inspector Técnico',
+        mileage: ins.mileage_hours ? `${ins.mileage_hours} km` : '45,200 km',
+        goodItems: goodCount * 10,
+        regItems: 2,
+        defItems: defCount,
+        status: defCount === 0 ? 'Aprobado' : (defCount <= 1 ? 'Aprobado con Obs.' : 'Pendiente'),
+      };
+    });
+  }
+
+  if (workOrders && workOrders.length > 0) {
+    mappedData.ordenes_trabajo = workOrders.map((wo: any) => ({
+      code: wo.control_number || `OT-${String(wo.id).slice(0, 6)}`,
+      date: wo.created_at ? wo.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      equipment: wo.truck_name || 'Equipo Pesado',
+      service: wo.description || 'Mantenimiento preventivo',
+      technician: wo.technician_name || 'Taller Central',
+      type: 'Taller',
+      status: wo.status || 'Completada',
+      totalCost: Number(wo.total_cost || ((wo.labor_cost || 0) + (wo.parts_cost || 0)) || 0)
     }));
   }
 
@@ -242,6 +430,7 @@ export default function Reports() {
   const [activeReport, setActiveReport] = useState('ecf');
   const [selectedCategory, setSelectedCategory] = useState<string>('todos');
   const [selectedNcfType, setSelectedNcfType] = useState<string>('todos');
+  const [selectedMovementType, setSelectedMovementType] = useState<string>('todos');
   const [isGenerated, setIsGenerated] = useState(true);
   const [startDate, setStartDate] = useState(() => {
     const now = new Date();
@@ -253,6 +442,20 @@ export default function Reports() {
   });
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
+  const [selectedClosureForDetail, setSelectedClosureForDetail] = useState<any>(null);
+  const [companyConfig, setCompanyConfig] = useState(getInvoiceCustomConfig);
+
+  useEffect(() => {
+    const handleConfigUpdate = () => {
+      setCompanyConfig(getInvoiceCustomConfig());
+    };
+    window.addEventListener('brianna_invoice_config_changed', handleConfigUpdate);
+    window.addEventListener('brianna_company_profile_updated', handleConfigUpdate);
+    return () => {
+      window.removeEventListener('brianna_invoice_config_changed', handleConfigUpdate);
+      window.removeEventListener('brianna_company_profile_updated', handleConfigUpdate);
+    };
+  }, []);
   const [dbData, setDbData] = useState<Record<string, any[]>>(() => 
     mapReportsData(
       getLocalStorageInvoices(),
@@ -260,7 +463,9 @@ export default function Reports() {
       getLocalStorageCustomers(),
       getLocalStorageInventory(),
       getLocalStorageCashClosures(),
-      getLocalStorageMovements()
+      getLocalStorageMovements(),
+      getLocalStorageWorkOrders(),
+      getLocalStorageTruckInspections()
     )
   );
 
@@ -268,17 +473,19 @@ export default function Reports() {
     let isMounted = true;
     const loadRealData = async () => {
       try {
-        const [invs, fins, custs, items, closures, movs] = await Promise.all([
+        const [invs, fins, custs, items, closures, movs, orders, inspections] = await Promise.all([
           fetchInvoices(),
           fetchFinancings(),
           fetchCustomers(),
           fetchInventory(),
-          fetchCashClosures(),
-          fetchCashMovements()
+          fetchCashClosures(true),
+          fetchCashMovements(),
+          fetchWorkOrders(),
+          fetchTruckInspections()
         ]);
 
         if (isMounted) {
-          const mappedData = mapReportsData(invs, fins, custs, items, closures, movs);
+          const mappedData = mapReportsData(invs, fins, custs, items, closures, movs, orders, inspections);
           setDbData(mappedData);
         }
       } catch (err) {
@@ -296,7 +503,9 @@ export default function Reports() {
         const items = getLocalStorageInventory();
         const closures = getLocalStorageCashClosures();
         const movs = getLocalStorageMovements();
-        setDbData(mapReportsData(invs, fins, custs, items, closures, movs));
+        const orders = getLocalStorageWorkOrders();
+        const inspections = getLocalStorageTruckInspections();
+        setDbData(mapReportsData(invs, fins, custs, items, closures, movs, orders, inspections));
       }
     };
 
@@ -306,6 +515,8 @@ export default function Reports() {
     window.addEventListener('brianna_inventory_updated', handleUpdate);
     window.addEventListener('brianna_cash_closures_updated', handleUpdate);
     window.addEventListener('brianna_cash_movements_updated', handleUpdate);
+    window.addEventListener('brianna_work_orders_updated', handleUpdate);
+    window.addEventListener('brianna_inspections_updated', handleUpdate);
 
     return () => {
       isMounted = false;
@@ -315,6 +526,8 @@ export default function Reports() {
       window.removeEventListener('brianna_inventory_updated', handleUpdate);
       window.removeEventListener('brianna_cash_closures_updated', handleUpdate);
       window.removeEventListener('brianna_cash_movements_updated', handleUpdate);
+      window.removeEventListener('brianna_work_orders_updated', handleUpdate);
+      window.removeEventListener('brianna_inspections_updated', handleUpdate);
     };
   }, []);
 
@@ -369,8 +582,12 @@ export default function Reports() {
       list = list.filter((r: any) => (r.ncf_prefix || r.code?.substring(0, 3)) === selectedNcfType);
     }
 
+    if (activeReport === 'movimientos_caja' && selectedMovementType !== 'todos') {
+      list = list.filter((r: any) => r.type === selectedMovementType);
+    }
+
     return list;
-  }, [dbData, activeReport, selectedNcfType, startDate, endDate]);
+  }, [dbData, activeReport, selectedNcfType, selectedMovementType, startDate, endDate]);
 
   // Group e-CF data dynamically by Voucher Type (E31, E32, E33, E34, E44, E45, etc.)
   const ecfGroupedByType = useMemo(() => {
@@ -442,15 +659,53 @@ export default function Reports() {
       const expenses = reportData.reduce((sum: number, r: any) => sum + (Number(r.expenses) || 0), 0);
       return { incomes, expenses, net: incomes - expenses };
     }
-    const movs = activeReport === 'movimientos_caja' ? reportData : (dbData.movimientos_caja || []);
+    let movs = dbData.movimientos_caja || [];
+    if (startDate && endDate) {
+      movs = movs.filter((r: any) => {
+        if (!r.date) return true;
+        return r.date >= startDate && r.date <= endDate;
+      });
+    }
     const incomes = movs.filter((m: any) => m.type === 'Ingreso').reduce((sum: number, m: any) => sum + (Number(m.amount) || 0), 0);
     const expenses = movs.filter((m: any) => m.type === 'Egreso').reduce((sum: number, m: any) => sum + (Number(m.amount) || 0), 0);
     return { incomes, expenses, net: incomes - expenses };
-  }, [activeReport, reportData, dbData.movimientos_caja]);
+  }, [activeReport, reportData, dbData.movimientos_caja, startDate, endDate]);
 
   const handleGenerateReport = () => {
     setIsGenerated(true);
     incrementSeqNumber();
+  };
+
+  const handlePrintClosure = (closure: any) => {
+    if (!closure) return;
+    const originalTitle = document.title;
+    const dateStr = closure.date || new Date().toISOString().slice(0, 10);
+    const regTag = (closure.register || 'Caja').replace(/[^a-zA-Z0-9]/g, '_');
+    document.title = `Cierre_${regTag}_${closure.code || dateStr}`;
+    document.body.classList.remove(
+      'print-ticket-mode',
+      'print-letter-mode',
+      'print-barcode-mode',
+      'print-receipt-mode',
+      'print-statement-mode',
+      'print-statement-ticket-mode'
+    );
+    document.body.classList.add('print-closure-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 100);
+    });
+    const handleAfter = () => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-closure-mode');
+      window.removeEventListener('afterprint', handleAfter);
+    };
+    window.addEventListener('afterprint', handleAfter);
+    setTimeout(() => {
+      document.title = originalTitle;
+      document.body.classList.remove('print-closure-mode');
+    }, 2000);
   };
 
   const handlePrint = () => {
@@ -490,9 +745,9 @@ export default function Reports() {
         formattedReportCode, r.code, `"${r.client}"`, r.invoice, r.daysOverdue, r.unpaidInstallment.toFixed(2), r.penalty.toFixed(2), r.totalDue.toFixed(2)
       ]);
     } else if (activeReport === 'movimientos_caja') {
-      headers = ['No. Reporte', 'Código', 'Fecha', 'Tipo', 'Categoría', 'Concepto / Descripción', 'Método Pago', 'Monto (RD$)'];
+      headers = ['No. Reporte', 'Código', 'Fecha', 'Usuario / Cajero', 'Tipo', 'Categoría', 'Concepto / Descripción', 'Método Pago', 'Monto (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedReportCode, r.id, r.date, r.type, r.category, `"${r.description}"`, r.method, (r.type === 'Ingreso' ? r.amount : -r.amount).toFixed(2)
+        formattedReportCode, r.id || r.code, r.date, `"${r.cashier || r.created_by || 'Harold Rosado'}"`, r.type, `"${r.category || 'General'}"`, `"${(r.description || r.concept || '').replace(/"/g, '""')}"`, r.method, (r.type === 'Ingreso' ? r.amount : -r.amount).toFixed(2)
       ]);
     } else if (activeReport === 'inventario') {
       headers = ['No. Reporte', 'Código', 'Artículo', 'Categoría', 'Stock Inicial', 'Entradas', 'Salidas', 'Stock Actual', 'Precio Unitario (RD$)', 'Valor Total (RD$)'];
@@ -505,9 +760,9 @@ export default function Reports() {
         formattedReportCode, `"${r.client}"`, `"${r.rnc}"`, r.type, r.invoices, r.creditLimit.toFixed(2), r.totalSpent.toFixed(2)
       ]);
     } else if (activeReport === 'caja') {
-      headers = ['No. Reporte', 'Fecha', 'Caja', 'Usuario / Cajero', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
+      headers = ['No. Reporte', 'Fecha', 'Usuario', 'Fondo Inicial (RD$)', 'Ingresos (RD$)', 'Egresos (RD$)', 'Efectivo (RD$)', 'Tarjeta (RD$)', 'Transferencia (RD$)', 'Total Contado (RD$)'];
       rows = reportData.map((r: any) => [
-        formattedReportCode, r.date, `"${r.register}"`, `"${r.cashier}"`, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
+        formattedReportCode, `"${formatPrettyDate(r.date)}"`, `"${r.cashier}"`, r.initialFund.toFixed(2), r.incomes.toFixed(2), r.expenses.toFixed(2), r.totalCash.toFixed(2), r.totalCard.toFixed(2), r.totalTransfer.toFixed(2), r.counted.toFixed(2)
       ]);
     } else if (activeReport === 'inspecciones') {
       headers = ['Código Reporte', 'Fecha', 'Vehículo / Maquinaria', 'Chasis / VIN', 'Inspector', 'Millas / Km', 'Ítems Buenos', 'Ítems Regulares', 'Ítems Deficientes', 'Estado'];
@@ -902,6 +1157,69 @@ export default function Reports() {
                       </span>
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* Movimientos de Caja Sub-Selector */}
+              {activeReport === 'movimientos_caja' && (
+                <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50/80 dark:bg-zinc-800/40 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 print:hidden">
+                  <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 px-2">
+                    Filtrar por Flujo:
+                  </span>
+
+                  <button
+                    onClick={() => setSelectedMovementType('todos')}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedMovementType === 'todos'
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-xs font-black'
+                        : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700'
+                    }`}
+                  >
+                    <span>Todos los Movimientos</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                      selectedMovementType === 'todos'
+                        ? 'bg-white/20 text-white dark:bg-black/10 dark:text-gray-900'
+                        : 'bg-gray-100 dark:bg-zinc-700 text-gray-800 dark:text-zinc-200'
+                    }`}>
+                      {(dbData.movimientos_caja || []).length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedMovementType('Ingreso')}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedMovementType === 'Ingreso'
+                        ? 'bg-emerald-600 text-white shadow-xs font-black'
+                        : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700'
+                    }`}
+                  >
+                    <span>🟢 Solo Ingresos</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                      selectedMovementType === 'Ingreso'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600'
+                    }`}>
+                      {(dbData.movimientos_caja || []).filter((m: any) => m.type === 'Ingreso').length}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedMovementType('Egreso')}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedMovementType === 'Egreso'
+                        ? 'bg-[#ED1C24] text-white shadow-xs font-black'
+                        : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-700 border border-gray-200 dark:border-zinc-700'
+                    }`}
+                  >
+                    <span>🔴 Solo Egresos</span>
+                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                      selectedMovementType === 'Egreso'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-red-50 dark:bg-red-950/60 text-red-600'
+                    }`}>
+                      {(dbData.movimientos_caja || []).filter((m: any) => m.type === 'Egreso').length}
+                    </span>
+                  </button>
                 </div>
               )}
 
@@ -1306,6 +1624,7 @@ export default function Reports() {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-[10px] font-black uppercase text-gray-500 dark:text-zinc-400 tracking-wider print:bg-gray-200 print:text-black">
                         <th className="p-3 print:py-1.5">Código / Fecha</th>
+                        <th className="p-3 print:py-1.5">Usuario</th>
                         <th className="p-3 print:py-1.5">Tipo</th>
                         <th className="p-3 print:py-1.5">Categoría</th>
                         <th className="p-3 print:py-1.5">Concepto / Descripción</th>
@@ -1317,8 +1636,17 @@ export default function Reports() {
                       {reportData.map((mov: any, idx: number) => (
                         <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50">
                           <td className="p-3 print:py-1.5">
-                            <div className="font-bold text-gray-900 dark:text-white print:text-black">{mov.id}</div>
-                            <div className="text-[10px] text-gray-400 font-normal">{mov.date}</div>
+                            <div className="font-bold font-mono text-gray-900 dark:text-white print:text-black">{mov.id || mov.code}</div>
+                            <div className="text-[10px] text-gray-400 font-medium">{formatPrettyDate(mov.date)}</div>
+                          </td>
+                          <td className="p-3 print:py-1.5 whitespace-nowrap">
+                            <div className="font-bold text-gray-900 dark:text-white print:text-black flex items-center gap-1.5">
+                              <span className="text-gray-400 text-xs">👤</span>
+                              <span>{mov.cashier || mov.created_by || 'Harold Rosado'}</span>
+                            </div>
+                            {mov.register && mov.register !== 'Caja General' && (
+                              <div className="text-[10px] text-gray-400 font-normal">{mov.register}</div>
+                            )}
                           </td>
                           <td className="p-3 print:py-1.5">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] print:text-[9px] font-black uppercase inline-flex items-center gap-1 ${
@@ -1329,10 +1657,14 @@ export default function Reports() {
                               {mov.type === 'Ingreso' ? '🟢 Ingreso' : '🔴 Egreso'}
                             </span>
                           </td>
-                          <td className="p-3 print:py-1.5 font-bold text-gray-700 dark:text-zinc-300 print:text-black">{mov.category}</td>
-                          <td className="p-3 print:py-1.5 text-gray-600 dark:text-zinc-400 print:text-black">{mov.description}</td>
-                          <td className="p-3 print:py-1.5">{mov.method}</td>
-                          <td className={`p-3 print:py-1.5 text-right font-black ${
+                          <td className="p-3 print:py-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200/80 dark:border-zinc-700">
+                              {mov.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="p-3 print:py-1.5 text-gray-800 dark:text-zinc-200 print:text-black font-medium">{mov.description || mov.concept || 'Movimiento de caja'}</td>
+                          <td className="p-3 print:py-1.5 text-gray-700 dark:text-zinc-300">{mov.method || 'Efectivo'}</td>
+                          <td className={`p-3 print:py-1.5 text-right font-black font-mono ${
                             mov.type === 'Ingreso' ? 'text-emerald-600 dark:text-emerald-400 print:text-black' : 'text-red-600 dark:text-red-400 print:text-black'
                           }`}>
                             {mov.type === 'Ingreso' ? '+' : '-'}RD$ {mov.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -1342,7 +1674,7 @@ export default function Reports() {
                     </tbody>
                     <tfoot>
                       <tr className="bg-gray-50/80 dark:bg-zinc-800/60 border-t-2 border-gray-900 dark:border-zinc-300 text-gray-900 dark:text-white font-black text-xs print:border-black print:text-black print:text-[10px]">
-                        <td colSpan={5} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Flujo Neto Total de Movimientos:</td>
+                        <td colSpan={6} className="p-3 print:py-1.5 text-right uppercase tracking-wider">Flujo Neto Total de Movimientos:</td>
                         <td className="p-3 print:py-1.5 text-right text-gray-900 dark:text-white font-black">
                           RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
@@ -1356,7 +1688,7 @@ export default function Reports() {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-zinc-800/60 border-b border-gray-200 dark:border-zinc-800 text-[10px] font-black uppercase text-gray-500 dark:text-zinc-400 tracking-wider print:bg-gray-200 print:text-black">
                         <th className="p-3 print:py-1.5">Fecha</th>
-                        <th className="p-3 print:py-1.5">Caja / Usuario</th>
+                        <th className="p-3 print:py-1.5">Usuario</th>
                         <th className="p-3 print:py-1.5">Fondo Inicial</th>
                         <th className="p-3 print:py-1.5">Ingresos (+)</th>
                         <th className="p-3 print:py-1.5">Egresos (-)</th>
@@ -1364,16 +1696,31 @@ export default function Reports() {
                         <th className="p-3 print:py-1.5">Tarjeta</th>
                         <th className="p-3 print:py-1.5">Transferencia</th>
                         <th className="p-3 print:py-1.5 text-right">Total Contado</th>
+                        <th className="p-3 print:py-1.5 text-right print:hidden">Acción</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs font-medium text-gray-800 dark:text-zinc-200 print:divide-gray-300 print:text-[10px]">
                       {reportData.map((row: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50">
-                          <td className="p-3 print:py-1.5 font-bold text-gray-900 dark:text-white print:text-black">{row.date}</td>
-                          <td className="p-3 print:py-1.5">
-                            <div className="font-semibold text-gray-900 dark:text-white print:text-black">{row.register}</div>
-                            <div className="text-[11px] text-gray-500 dark:text-zinc-400 print:text-gray-600 flex items-center gap-1 mt-0.5">
-                              <span className="font-medium text-amber-600 dark:text-amber-400">👤 {row.cashier}</span>
+                        <tr 
+                          key={idx} 
+                          onClick={() => setSelectedClosureForDetail(row)}
+                          className="hover:bg-red-50/40 dark:hover:bg-zinc-800/60 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 print:odd:bg-gray-50 cursor-pointer transition-colors group"
+                          title="Haga clic para ver el detalle e imprimir el comprobante de este cierre"
+                        >
+                          <td className="p-3 print:py-1.5 whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 dark:bg-zinc-800/60 border border-gray-200/80 dark:border-zinc-700/80 text-xs font-semibold text-gray-900 dark:text-zinc-100 print:bg-transparent print:border-none print:p-0">
+                              <CalendarDaysIcon className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 shrink-0 print:hidden" />
+                              <span>{formatPrettyDate(row.date)}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 print:py-1.5 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-[11px] flex items-center justify-center border border-zinc-200 dark:border-zinc-700 shrink-0 print:hidden">
+                                {(row.cashier || 'U').charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-bold text-gray-900 dark:text-white print:text-black text-xs">
+                                {row.cashier}
+                              </span>
                             </div>
                           </td>
                           <td className="p-3 print:py-1.5">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
@@ -1388,6 +1735,20 @@ export default function Reports() {
                           <td className="p-3 print:py-1.5 text-purple-600 dark:text-purple-400 print:text-black">RD$ {row.totalTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                           <td className="p-3 print:py-1.5 text-right font-black text-gray-900 dark:text-white print:text-black">
                             RD$ {row.counted.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 print:py-1.5 text-right print:hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedClosureForDetail(row);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-100 hover:bg-[#ED1C24] dark:bg-zinc-800 dark:hover:bg-[#ED1C24] text-gray-700 hover:text-white dark:text-zinc-200 dark:hover:text-white font-bold text-[11px] transition-all shadow-xs cursor-pointer group-hover:bg-[#ED1C24] group-hover:text-white"
+                              title="Ver detalle del cierre"
+                            >
+                              <EyeIcon className="h-3.5 w-3.5" />
+                              <span>Ver Detalle</span>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1416,6 +1777,7 @@ export default function Reports() {
                         <td className="p-3 print:py-1.5 text-right font-black text-gray-900 dark:text-white">
                           RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
+                        <td className="p-3 print:py-1.5 print:hidden"></td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1545,7 +1907,7 @@ export default function Reports() {
       </div>
 
       {/* Isolated Print Portal (Rendered directly under document.body) */}
-      {!selectedInspectionForPrint && typeof document !== 'undefined' && createPortal(
+      {!selectedInspectionForPrint && !selectedClosureForDetail && typeof document !== 'undefined' && createPortal(
         <div id="report-printable-area" className="hidden print:block font-sans text-black bg-white p-6">
           {/* Top Brand Accent Line */}
           <div className="w-full h-1.5 bg-[#ED1C24] mb-4 rounded-full" />
@@ -1833,6 +2195,7 @@ export default function Reports() {
                 <thead>
                   <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
                     <th className="p-2.5">Código / Fecha</th>
+                    <th className="p-2.5">Usuario</th>
                     <th className="p-2.5">Tipo</th>
                     <th className="p-2.5">Categoría</th>
                     <th className="p-2.5">Concepto / Descripción</th>
@@ -1843,7 +2206,8 @@ export default function Reports() {
                 <tbody className="divide-y divide-gray-200 font-medium">
                   {reportData.map((mov: any, idx: number) => (
                     <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{mov.id} <span className="text-gray-500 font-normal">({mov.date})</span></td>
+                      <td className="p-2.5 font-bold font-mono text-gray-900">{mov.id || mov.code} <span className="text-gray-500 font-normal">({mov.date})</span></td>
+                      <td className="p-2.5 font-bold text-gray-800">👤 {mov.cashier || mov.created_by || 'Harold Rosado'}</td>
                       <td className="p-2.5">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                           mov.type === 'Ingreso' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-red-100 text-red-900 border border-red-300'
@@ -1851,10 +2215,10 @@ export default function Reports() {
                           {mov.type === 'Ingreso' ? '🟢 INGRESO' : '🔴 EGRESO'}
                         </span>
                       </td>
-                      <td className="p-2.5 font-bold">{mov.category}</td>
-                      <td className="p-2.5 text-gray-700">{mov.description}</td>
-                      <td className="p-2.5">{mov.method}</td>
-                      <td className={`p-2.5 text-right font-black ${mov.type === 'Ingreso' ? 'text-emerald-700' : 'text-red-700'}`}>
+                      <td className="p-2.5 font-bold">{mov.category || 'General'}</td>
+                      <td className="p-2.5 text-gray-700">{mov.description || mov.concept || 'Movimiento de caja'}</td>
+                      <td className="p-2.5">{mov.method || 'Efectivo'}</td>
+                      <td className={`p-2.5 text-right font-black font-mono ${mov.type === 'Ingreso' ? 'text-emerald-700' : 'text-red-700'}`}>
                         {mov.type === 'Ingreso' ? '+' : '-'}RD$ {mov.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -1862,7 +2226,7 @@ export default function Reports() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider">Flujo Neto Total:</td>
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Flujo Neto Total:</td>
                     <td className="p-2.5 text-right">RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
@@ -1944,7 +2308,7 @@ export default function Reports() {
                 <thead>
                   <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
                     <th className="p-2.5">Fecha</th>
-                    <th className="p-2.5">Caja / Usuario</th>
+                    <th className="p-2.5">Usuario</th>
                     <th className="p-2.5">Fondo Inicial</th>
                     <th className="p-2.5">Ingresos (+)</th>
                     <th className="p-2.5">Egresos (-)</th>
@@ -1957,11 +2321,8 @@ export default function Reports() {
                 <tbody className="divide-y divide-gray-200 font-medium">
                   {reportData.map((row: any, idx: number) => (
                     <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.date}</td>
-                      <td className="p-2.5">
-                        <div className="font-bold text-gray-900">{row.register}</div>
-                        <div className="text-[9.5px] text-gray-600 font-medium">👤 {row.cashier}</div>
-                      </td>
+                      <td className="p-2.5 font-bold text-gray-900 whitespace-nowrap">{formatPrettyDate(row.date)}</td>
+                      <td className="p-2.5 font-bold text-gray-900 whitespace-nowrap">👤 {row.cashier}</td>
                       <td className="p-2.5">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5 text-emerald-700 font-bold">+RD$ {row.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                       <td className="p-2.5 text-red-700 font-bold">-RD$ {row.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
@@ -2138,6 +2499,471 @@ export default function Reports() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Selected Cash Closure Detail Modal (Screen View) */}
+      {selectedClosureForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xs print:hidden">
+          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-gray-100 dark:border-zinc-800">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/40 flex items-center justify-center text-[#ED1C24]">
+                  <BanknotesIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-gray-900 dark:text-white">
+                      Detalle del Cierre de Caja
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200 dark:border-zinc-700">
+                      {selectedClosureForDetail.code}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                    {formatFullDateTime(selectedClosureForDetail.createdAt || selectedClosureForDetail.date)} • {selectedClosureForDetail.register}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintClosure(selectedClosureForDetail)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#ED1C24] hover:bg-[#d91920] active:scale-[0.98] text-white font-bold text-xs transition-all shadow-md shadow-red-600/20 cursor-pointer"
+                  title="Imprimir comprobante oficial"
+                >
+                  <PrinterIcon className="h-4 w-4" />
+                  <span>Imprimir Comprobante (PDF)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClosureForDetail(null)}
+                  className="p-2 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Personnel & Status Ribbon */}
+              <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-zinc-800/40 border border-gray-200/70 dark:border-zinc-700/60">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">Cajero(a)</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-[11px] flex items-center justify-center">
+                        {(selectedClosureForDetail.cashier || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white">
+                        {selectedClosureForDetail.cashier}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="h-8 w-px bg-gray-200 dark:bg-zinc-700 hidden sm:block" />
+
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">Supervisor(a)</span>
+                    <span className="text-xs font-bold text-gray-900 dark:text-white block mt-1">
+                      {selectedClosureForDetail.supervisor || 'Jennifer'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">Diferencia</span>
+                    <span className={`text-xs font-mono font-black block mt-0.5 ${
+                      selectedClosureForDetail.difference === 0 
+                        ? 'text-emerald-600 dark:text-emerald-400' 
+                        : selectedClosureForDetail.difference > 0 
+                        ? 'text-blue-600 dark:text-blue-400' 
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {selectedClosureForDetail.difference > 0 ? '+' : ''}RD$ {Number(selectedClosureForDetail.difference || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide border ${
+                    selectedClosureForDetail.status === 'Cuadrado'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : selectedClosureForDetail.status === 'Sobrante'
+                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                      : 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                  }`}>
+                    {selectedClosureForDetail.status === 'Cuadrado' ? '✓ Cuadrado' : selectedClosureForDetail.status === 'Sobrante' ? '▲ Sobrante' : '▼ Faltante'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 4 Financial KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-white dark:bg-zinc-800/30 border border-gray-200/80 dark:border-zinc-800">
+                  <span className="text-[10.5px] font-semibold text-gray-500 dark:text-zinc-400 block">Fondo Inicial</span>
+                  <span className="text-lg font-black font-mono text-gray-900 dark:text-white block mt-1">
+                    RD$ {Number(selectedClosureForDetail.initialFund || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40">
+                  <span className="text-[10.5px] font-semibold text-emerald-800 dark:text-emerald-400 block">Ventas Totales</span>
+                  <span className="text-lg font-black font-mono text-emerald-700 dark:text-emerald-300 block mt-1">
+                    +RD$ {Number(selectedClosureForDetail.totalSales || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-red-50/50 dark:bg-red-950/20 border border-red-200/80 dark:border-red-900/40">
+                  <span className="text-[10.5px] font-semibold text-red-800 dark:text-red-400 block">Egresos / Retiros</span>
+                  <span className="text-lg font-black font-mono text-red-700 dark:text-red-300 block mt-1">
+                    -RD$ {Number(selectedClosureForDetail.expenses || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm">
+                  <span className="text-[10.5px] font-semibold text-gray-300 dark:text-zinc-600 block">Efectivo Contado</span>
+                  <span className="text-lg font-black font-mono block mt-1">
+                    RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Two Column Section: Methods & Denominations */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Métodos de Pago */}
+                <div className="p-5 rounded-2xl bg-gray-50/60 dark:bg-zinc-800/30 border border-gray-200/80 dark:border-zinc-800">
+                  <h4 className="text-xs font-black uppercase text-gray-900 dark:text-white tracking-wider mb-3">
+                    Ventas & Cobros por Método
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-zinc-800">
+                      <span className="font-medium text-gray-600 dark:text-zinc-400">💵 Efectivo</span>
+                      <span className="font-mono font-bold text-gray-900 dark:text-white">
+                        RD$ {Number(selectedClosureForDetail.totalCash || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-zinc-800">
+                      <span className="font-medium text-gray-600 dark:text-zinc-400">💳 Tarjeta de Crédito/Débito</span>
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                        RD$ {Number(selectedClosureForDetail.totalCard || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-zinc-800">
+                      <span className="font-medium text-gray-600 dark:text-zinc-400">🏦 Transferencia Bancaria</span>
+                      <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
+                        RD$ {Number(selectedClosureForDetail.totalTransfer || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-zinc-800">
+                      <span className="font-medium text-gray-600 dark:text-zinc-400">📋 Ventas a Crédito</span>
+                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                        RD$ {Number(selectedClosureForDetail.totalCredit || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 font-black text-sm text-gray-900 dark:text-white">
+                      <span>Total Facturado</span>
+                      <span className="font-mono">
+                        RD$ {Number(selectedClosureForDetail.totalSales || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desglose Físico por Denominación */}
+                <div className="p-5 rounded-2xl bg-gray-50/60 dark:bg-zinc-800/30 border border-gray-200/80 dark:border-zinc-800">
+                  <h4 className="text-xs font-black uppercase text-gray-900 dark:text-white tracking-wider mb-3">
+                    Desglose Físico por Denominación
+                  </h4>
+                  {(() => {
+                    const denoms = selectedClosureForDetail.denominations || {};
+                    const activeDenoms = CLOSURE_DENOMINATIONS.filter(den => {
+                      const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                      return qty > 0;
+                    });
+                    if (activeDenoms.length === 0) {
+                      return (
+                        <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 text-center text-xs text-gray-500 dark:text-zinc-400">
+                          <p>Conteo directo registrado en gaveta:</p>
+                          <p className="text-base font-black font-mono text-gray-900 dark:text-white mt-1">
+                            RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-1.5 text-xs max-h-56 overflow-y-auto pr-1">
+                        {activeDenoms.map(den => {
+                          const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                          const subtotal = qty * den.value;
+                          return (
+                            <div key={den.value} className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-zinc-800">
+                              <span className="font-bold text-gray-800 dark:text-zinc-200">{den.label}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-gray-400 text-[11px] font-mono">{qty} unid.</span>
+                                <span className="font-mono font-bold text-gray-900 dark:text-white min-w-[80px] text-right">
+                                  RD$ {subtotal.toLocaleString('es-DO')}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div className="flex justify-between items-center pt-2 font-black text-xs text-gray-900 dark:text-white border-t border-gray-200 dark:border-zinc-700">
+                          <span>Total Arqueado:</span>
+                          <span className="font-mono">
+                            RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Observaciones si existen */}
+              {selectedClosureForDetail.notes && (
+                <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 text-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 block mb-1">
+                    Observaciones Registradas
+                  </span>
+                  <p className="text-gray-800 dark:text-zinc-200 font-medium whitespace-pre-wrap">
+                    {selectedClosureForDetail.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/20 flex justify-between items-center shrink-0">
+              <span className="text-[11px] text-gray-400">
+                Sistema de Control y Arqueo Oficial • Brianna Heavy Equipment S.R.L.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedClosureForDetail(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:text-gray-800 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintClosure(selectedClosureForDetail)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#ED1C24] hover:bg-[#d91920] transition-colors cursor-pointer shadow-sm shadow-red-600/20"
+                >
+                  <PrinterIcon className="h-4 w-4" />
+                  <span>Imprimir Comprobante (PDF)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Isolated Print Portal for Cash Closure Voucher */}
+      {selectedClosureForDetail && typeof document !== 'undefined' && createPortal(
+        <div className="hidden print:block printable-closure bg-white text-black font-sans text-[8.5px] leading-tight w-full max-w-full">
+          {/* Executive Company Header */}
+          <div className="flex justify-between items-center pb-1.5 mb-2 border-b-2 border-black">
+            <div className="flex items-center gap-2.5">
+              <img src={logo} alt="Brianna Heavy Logo" className="h-8 object-contain" />
+              <div>
+                <p className="text-[8.5px] font-black text-[#ED1C24] uppercase tracking-wider">
+                  {companyConfig.companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.'} • RNC: {companyConfig.rnc || '132-91036-2'}
+                </p>
+                <h1 className="text-xs font-black text-black tracking-tight uppercase">
+                  Comprobante de Cierre & Arqueo de Caja
+                </h1>
+                <p className="text-[7.5px] text-gray-600">
+                  Tel: {companyConfig.phone || '849-856-9951'} • {companyConfig.address || 'Autopista Duarte KM 8#17 Sector La Penda, La Vega, Dom. Rep.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right text-[8px] space-y-0.5 border-l border-gray-300 pl-2.5 leading-tight">
+              <p><strong>N° Cierre:</strong> <span className="font-mono font-bold">{selectedClosureForDetail.code}</span></p>
+              <p><strong>Fecha/Hora:</strong> {formatFullDateTime(selectedClosureForDetail.createdAt || selectedClosureForDetail.date)}</p>
+              <p><strong>Caja:</strong> {selectedClosureForDetail.register}</p>
+              <p><strong>Cajero(a):</strong> {selectedClosureForDetail.cashier}</p>
+            </div>
+          </div>
+
+          {/* KPI Financial Reconciliation Summary */}
+          <div className="grid grid-cols-4 gap-1.5 mb-2">
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Fondo Inicial</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
+                RD$ {Number(selectedClosureForDetail.initialFund || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Ventas Turno</span>
+              <span className="text-[10.5px] font-black font-mono text-emerald-800">
+                RD$ {Number(selectedClosureForDetail.totalSales || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="p-1 border border-gray-300 rounded bg-gray-50 text-center">
+              <span className="text-[7px] font-bold text-gray-500 block uppercase">Efectivo Esperado</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
+                RD$ {Number(selectedClosureForDetail.expectedCash || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="p-1 border border-gray-400 rounded bg-gray-100 text-center">
+              <span className="text-[7px] font-bold text-black block uppercase">Efectivo Contado</span>
+              <span className="text-[10.5px] font-black font-mono text-black">
+                RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+
+          {/* Fila Superior: Desglose Físico (Izq) & Ventas + Cuadre Final (Der) */}
+          <div className="grid grid-cols-12 gap-2 mb-2 items-start">
+            {/* Left: Physical Denomination Count Table */}
+            <div className="col-span-6">
+              <h3 className="text-[8px] font-black uppercase tracking-wider mb-0.5 text-black border-b border-gray-300 pb-0.5">
+                Desglose Físico por Denominación
+              </h3>
+              {(() => {
+                const denoms = selectedClosureForDetail.denominations || {};
+                const activeDenoms = CLOSURE_DENOMINATIONS.filter(den => {
+                  const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                  return qty > 0;
+                });
+                if (activeDenoms.length === 0) {
+                  return (
+                    <div className="p-1.5 border border-gray-300 rounded bg-gray-50 text-[7.5px] text-gray-600">
+                      <span>Conteo directo en caja: </span>
+                      <strong className="font-mono text-black">RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                  );
+                }
+                return (
+                  <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100 text-black font-bold uppercase">
+                        <th className="p-0.5 px-1 border border-gray-300">Denom.</th>
+                        <th className="p-0.5 px-1 border border-gray-300 text-center">Cant.</th>
+                        <th className="p-0.5 px-1 border border-gray-300 text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeDenoms.map((den) => {
+                        const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                        const subtotal = qty * den.value;
+                        return (
+                          <tr key={den.value} className="odd:bg-gray-50/50">
+                            <td className="p-0.5 px-1 border border-gray-300 font-bold">{den.label}</td>
+                            <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">{qty}</td>
+                            <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                              RD$ {subtotal.toLocaleString('es-DO')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="bg-gray-100 font-black">
+                        <td colSpan={2} className="p-0.5 px-1 border border-gray-300 uppercase">Total Arqueado</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
+                          RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+
+            {/* Right: Sales by Method & Cuadre Balance */}
+            <div className="col-span-6 space-y-1.5">
+              <div>
+                <h3 className="text-[8px] font-black uppercase tracking-wider mb-0.5 text-black border-b border-gray-300 pb-0.5">
+                  Ventas & Cobros por Método
+                </h3>
+                <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
+                  <tbody>
+                    <tr>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Efectivo</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                        RD$ {Number(selectedClosureForDetail.totalCash || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Tarjeta</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                        RD$ {Number(selectedClosureForDetail.totalCard || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Transferencia</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                        RD$ {Number(selectedClosureForDetail.totalTransfer || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Crédito</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                        RD$ {Number(selectedClosureForDetail.totalCredit || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="bg-gray-100 font-black">
+                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado/Cobrado</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
+                        RD$ {Number(selectedClosureForDetail.totalSales || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Balance / Cuadre Final */}
+              <div className={`p-1.5 border rounded ${
+                selectedClosureForDetail.status === 'Cuadrado'
+                  ? 'border-emerald-600 bg-emerald-50/60 text-emerald-950'
+                  : selectedClosureForDetail.status === 'Sobrante'
+                  ? 'border-blue-600 bg-blue-50/60 text-blue-950'
+                  : 'border-rose-600 bg-rose-50/60 text-rose-950'
+              }`}>
+                <div className="flex justify-between items-center text-[8.5px]">
+                  <span className="font-black uppercase tracking-wide">
+                    {selectedClosureForDetail.status === 'Cuadrado' ? '✓ Cuadre Perfecto' : selectedClosureForDetail.status === 'Sobrante' ? '▲ Sobrante en Caja' : '▼ Faltante en Caja'}
+                  </span>
+                  <span className="font-black font-mono text-[10px]">
+                    RD$ {Number(selectedClosureForDetail.difference || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="text-[7px] font-mono text-gray-600 mt-0.5 flex justify-between">
+                  <span>Contado: RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span>Esperado: RD$ {Number(selectedClosureForDetail.expectedCash || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Observations */}
+          {selectedClosureForDetail.notes && (
+            <div className="mb-2 p-1.5 border border-gray-300 rounded bg-gray-50 text-[7.5px] leading-tight">
+              <strong>Observaciones:</strong> {selectedClosureForDetail.notes}
+            </div>
+          )}
+
+          {/* Official Signatures */}
+          <div className="grid grid-cols-2 gap-8 pt-3 border-t border-gray-400 mt-2 break-inside-avoid">
+            <div className="text-center space-y-0.5">
+              <div className="border-t border-black w-36 mx-auto" />
+              <p className="text-[8.5px] font-bold text-black">Firma del Cajero(a)</p>
+              <p className="text-[7.5px] text-gray-600">{selectedClosureForDetail.cashier}</p>
+            </div>
+
+            <div className="text-center space-y-0.5">
+              <div className="border-t border-black w-36 mx-auto" />
+              <p className="text-[8.5px] font-bold text-black">Firma del Supervisor</p>
+              <p className="text-[7.5px] text-gray-600">{selectedClosureForDetail.supervisor || 'Jennifer'}</p>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

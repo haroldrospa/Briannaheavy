@@ -190,3 +190,21 @@ export const createTruckInspection = async (inspection: Omit<TruckInspection, 'i
   localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(updated));
   return newInspection;
 };
+
+export const getLocalStorageWorkOrders = (): WorkOrder[] => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_WORK_ORDERS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const getLocalStorageTruckInspections = (): TruckInspection[] => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_INSPECTIONS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};

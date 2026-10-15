@@ -220,11 +220,11 @@ export default function Settings() {
   const [showInvoiceToast, setShowInvoiceToast] = useState(false);
 
   const [companyProfile, setCompanyProfile] = useState({
-    name: invoiceConfig.companyName || 'Brianna Heavy Equipment S.R.L.',
-    rnc: invoiceConfig.rnc || '132-61036-2',
-    phone: invoiceConfig.phone || '(809) 555-5555',
+    name: invoiceConfig.companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
+    rnc: invoiceConfig.rnc || '132-91036-2',
+    phone: invoiceConfig.phone || '849-856-9951',
     email: localStorage.getItem('brianna_company_email') || 'contacto@briannaheavy.com',
-    address: invoiceConfig.address || 'Av. Principal #123, Santo Domingo, R.D.',
+    address: invoiceConfig.address || 'Autopista Duarte KM 8#17 Sector La Penda La Vega, Dom. Rep.',
   });
   const [showCompanyToast, setShowCompanyToast] = useState(false);
 
@@ -638,10 +638,10 @@ export default function Settings() {
       if (allSettings.company_profile) {
         setCompanyProfile({
           name: allSettings.company_profile.name || 'BRIANNA HEAVY EQUIPMENT S.R.L.',
-          rnc: allSettings.company_profile.rnc || '132-61036-2',
-          phone: allSettings.company_profile.phone || '(809) 555-5555',
+          rnc: allSettings.company_profile.rnc || '132-91036-2',
+          phone: allSettings.company_profile.phone || '849-856-9951',
           email: allSettings.company_profile.email || 'contacto@briannaheavy.com',
-          address: allSettings.company_profile.address || 'Av. Principal #123, Santo Domingo, R.D.',
+          address: allSettings.company_profile.address || 'Autopista Duarte KM 8#17 Sector La Penda La Vega, Dom. Rep.',
         });
       }
       if (Array.isArray(allSettings.company_bank_accounts) && allSettings.company_bank_accounts.length > 0) {

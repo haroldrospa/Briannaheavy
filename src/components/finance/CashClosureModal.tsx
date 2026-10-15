@@ -45,6 +45,7 @@ import {
   type ActiveShift 
 } from '../../services/shiftsService';
 import { getActiveRole } from '../../utils/rolePermissions';
+import { getInvoiceCustomConfig } from '../../utils/receiptSettings';
 
 interface CashClosureModalProps {
   isOpen: boolean;
@@ -149,6 +150,19 @@ export default function CashClosureModal({
   const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [isSavingClosure, setIsSavingClosure] = useState(false);
   const [savedClosure, setSavedClosure] = useState<CashClosure | null>(null);
+  const [companyConfig, setCompanyConfig] = useState(getInvoiceCustomConfig);
+
+  useEffect(() => {
+    const handleConfigUpdate = () => {
+      setCompanyConfig(getInvoiceCustomConfig());
+    };
+    window.addEventListener('brianna_invoice_config_changed', handleConfigUpdate);
+    window.addEventListener('brianna_company_profile_updated', handleConfigUpdate);
+    return () => {
+      window.removeEventListener('brianna_invoice_config_changed', handleConfigUpdate);
+      window.removeEventListener('brianna_company_profile_updated', handleConfigUpdate);
+    };
+  }, []);
 
 
   // Cargar datos iniciales al abrir o al cambiar de caja seleccionada
@@ -274,9 +288,9 @@ export default function CashClosureModal({
 
   // Filtrar facturas garantizando estricta independencia por Caja y Cajero
   const scopedInvoices = useMemo(() => {
-    const effectiveCashier = isAdmin && (!selectedCashierFilter || selectedCashierFilter === loggedInUserName)
+    const effectiveCashier = (selectedCashierFilter === 'todos' || selectedCashierFilter === 'todas')
       ? 'todos'
-      : (selectedCashierFilter || loggedInUserName);
+      : (selectedCashierFilter || loggedInUserName || '').trim();
 
     return filterInvoicesByShift(
       allInvoices, 
@@ -285,7 +299,7 @@ export default function CashClosureModal({
       selectedRegister, 
       effectiveCashier
     );
-  }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter, isAdmin]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter]);
 
   // Filtrar recibos de financiamientos por Caja, Turno/Fecha y Cajero
   const scopedFinancingReceipts = useMemo(() => {
@@ -937,7 +951,9 @@ export default function CashClosureModal({
 
   const generateReportText = () => {
     return `==================================================
-   BRIANNA HEAVY EQUIPMENT - CIERRE DE CAJA
+   ${companyConfig.companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.'} - CIERRE DE CAJA
+   RNC: ${companyConfig.rnc || '132-91036-2'} • Tel: ${companyConfig.phone || '849-856-9951'}
+   ${companyConfig.address || 'Autopista Duarte KM 8#17 Sector La Penda La Vega, Dom. Rep.'}
 ==================================================
 N° Comprobante: ${savedClosure?.closure_number || 'CC-' + Date.now()}
 Fecha: ${currentDateStr}
@@ -2087,13 +2103,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               <img src={logo} alt="Brianna Heavy Logo" className="h-8 object-contain" />
               <div>
                 <p className="text-[8.5px] font-black text-[#ED1C24] uppercase tracking-wider">
-                  BRIANNA HEAVY EQUIPMENT • RNC: 132610362
+                  {companyConfig.companyName || 'BRIANNA HEAVY EQUIPMENT S.R.L.'} • RNC: {companyConfig.rnc || '132-91036-2'}
                 </p>
                 <h1 className="text-xs font-black text-black tracking-tight uppercase">
                   Comprobante de Cierre & Arqueo de Caja
                 </h1>
                 <p className="text-[7.5px] text-gray-600">
-                  Tel: (809) 555-5555 • Av. Principal #123, Santo Domingo, R.D.
+                  Tel: {companyConfig.phone || '849-856-9951'} • {companyConfig.address || 'Autopista Duarte KM 8#17 Sector La Penda La Vega, Dom. Rep.'}
                 </p>
               </div>
             </div>

@@ -380,7 +380,7 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
                 BRIANNA HEAVY EQUIPMENT S.R.L.
               </h1>
               <div className="flex items-center gap-2 text-[10px] sm:text-xs text-gray-500 dark:text-zinc-400 print:text-gray-600 font-bold">
-                <span>RNC: 132-61036-2</span>
+                <span>RNC: 132-91036-2</span>
                 <span>•</span>
                 <span className="text-[#ED1C24] font-black uppercase">Hoja de Inspección Técnica Vehicular</span>
               </div>

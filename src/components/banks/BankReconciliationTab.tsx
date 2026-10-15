@@ -1109,7 +1109,7 @@ export default function BankReconciliationTab({
             <img src={logo} alt="Brianna Heavy Equipment" className="h-12 w-auto" />
             <div>
               <h1 className="text-xl font-black uppercase tracking-tight">BRIANNA HEAVY EQUIPMENT S.R.L.</h1>
-              <p className="text-xs font-bold text-gray-700">RNC: 132-61036-2 • Santo Domingo, República Dominicana</p>
+              <p className="text-xs font-bold text-gray-700">RNC: 132-91036-2 • Autopista Duarte KM 8#17 Sector La Penda, La Vega, Dom. Rep.</p>
               <p className="text-xs font-black uppercase mt-1">Acta de Conciliación Bancaria Mensual</p>
             </div>
           </div>

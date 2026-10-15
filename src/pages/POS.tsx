@@ -55,7 +55,7 @@ import SessionSalesModal from '../components/finance/SessionSalesModal';
 import type { SessionSale } from '../components/finance/SessionSalesModal';
 import QRCode from '../components/ui/QRCode';
 import LetterInvoice from '../components/ui/LetterInvoice';
-import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
+import { getCompanyBankAccounts, getInvoiceCustomConfig, type CompanyBankAccount } from '../utils/receiptSettings';
 import { getActiveRole, hasPermission } from '../utils/rolePermissions';
 import { verifyAdminMasterKey } from '../utils/scheduleStorage';
 import { 
@@ -1792,7 +1792,7 @@ const CheckoutModal = memo(({
                         <BuildingLibraryIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400" />
                         <span>Cuentas para Transferencia</span>
                       </div>
-                      <span className="font-mono text-[9px] text-gray-400 dark:text-zinc-500">RNC: 132-61036-2</span>
+                      <span className="font-mono text-[9px] text-gray-400 dark:text-zinc-500">RNC: {getInvoiceCustomConfig().rnc || '132-91036-2'}</span>
                     </div>
 
                     <div className="space-y-1.5">
@@ -4095,114 +4095,129 @@ export default function POS() {
                 <XMarkIcon className="w-5 h-5" />
               </button>
 
-              {/* Status Icon */}
-              <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 mb-3 shadow-xs">
-                <CheckCircleIcon className="h-8 w-8 stroke-[2.2]" />
+              {/* Minimal Status Icon */}
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mb-3 ring-8 ring-emerald-50/60 dark:ring-emerald-950/20">
+                <CheckIcon className="h-6 w-6 stroke-[2.5]" />
               </div>
 
               {/* Title & Subtitle */}
-              <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
                 {lastCompletedSale?.ncf.startsWith('CT')
                   ? '¡Cotización Creada!'
                   : '¡Venta Facturada con Éxito!'}
               </h3>
-              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
                 {lastCompletedSale?.ncf.startsWith('CT')
-                  ? 'El presupuesto ha sido registrado.'
-                  : 'Comprobante emitido correctamente.'}
+                  ? 'El presupuesto ha sido registrado correctamente.'
+                  : 'Comprobante fiscal electrónico emitido.'}
               </p>
 
-              {/* Invoice & Total Summary Card */}
-              <div className="my-3.5 py-3 px-4 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800 flex flex-col items-center gap-1.5">
+              {/* Amount Hero Section */}
+              <div className="mt-3.5 mb-2 text-center">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                  {lastCompletedSale?.ncf.startsWith('CT') ? 'Número Cotización' : 'Comprobante NCF'}
+                  Monto Facturado
                 </div>
-                <div className="text-2xl font-black font-mono tracking-wider text-[#ED1C24] dark:text-red-500">
-                  {lastCompletedSale?.ncf || currentNCF}
+                <div className="text-3xl font-black tracking-tight text-gray-900 dark:text-white mt-0.5 font-mono">
+                  RD$ {(lastCompletedSale?.total ?? total).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div className="text-sm font-bold text-gray-800 dark:text-zinc-200 text-center">
-                  Total: RD$ {(lastCompletedSale?.total ?? total).toFixed(2)} • {lastCompletedSale?.paymentMethod === 'Crédito' ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)` : (lastCompletedSale?.paymentMethod || paymentMethod)}
+                
+                {/* Payment & Credit Pill */}
+                <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-zinc-800/80 text-gray-700 dark:text-zinc-300 border border-gray-200/60 dark:border-zinc-700/60">
+                  <span className={`w-1.5 h-1.5 rounded-full ${lastCompletedSale?.paymentMethod === 'Crédito' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                  <span>
+                    {lastCompletedSale?.paymentMethod === 'Crédito'
+                      ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)`
+                      : (lastCompletedSale?.paymentMethod || paymentMethod)}
+                  </span>
+                  {lastCompletedSale?.paymentMethod === 'Crédito' && lastCompletedSale?.dueDate && (
+                    <span className="text-gray-400 dark:text-zinc-500 font-normal">• Vence {lastCompletedSale.dueDate}</span>
+                  )}
                 </div>
+
+                {/* USD Payment notice */}
                 {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' && (
-                  <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 flex-wrap justify-center">
-                    <span>💵 Pagado en USD:</span>
-                    <span>${(lastCompletedSale.lastPaymentInfo.totalUsd || ((lastCompletedSale?.total ?? total) / (lastCompletedSale.lastPaymentInfo.exchangeRate || 60))).toFixed(2)} USD</span>
-                    <span className="text-[10px] text-gray-500 font-normal">(Tasa: RD$ {lastCompletedSale.lastPaymentInfo.exchangeRate?.toFixed(2)})</span>
+                  <div className="mt-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
+                    <span>💵 ${(lastCompletedSale.lastPaymentInfo.totalUsd || ((lastCompletedSale?.total ?? total) / (lastCompletedSale.lastPaymentInfo.exchangeRate || 60))).toFixed(2)} USD</span>
+                    <span className="text-[10px] text-gray-400 font-normal">(Tasa: RD$ {lastCompletedSale.lastPaymentInfo.exchangeRate?.toFixed(2)})</span>
                   </div>
                 )}
-                {lastCompletedSale?.paymentMethod === 'Crédito' && lastCompletedSale?.dueDate && (
-                  <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
-                    📅 Vence el: {lastCompletedSale.dueDate}
-                  </div>
-                )}
+              </div>
+
+              {/* Modern Minimalist Receipt Details Card */}
+              <div className="my-3.5 bg-gray-50/90 dark:bg-zinc-900/60 rounded-2xl p-3.5 border border-gray-100 dark:border-zinc-800/80 text-left space-y-2.5">
+                {/* Row 1: NCF */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                    {lastCompletedSale?.ncf.startsWith('CT') ? 'Cotización' : 'Comprobante NCF'}
+                  </span>
+                  <span className="font-mono font-bold text-xs tracking-wider text-gray-900 dark:text-white bg-white dark:bg-zinc-800 px-2 py-0.5 rounded-md border border-gray-200/80 dark:border-zinc-700 shadow-2xs">
+                    {lastCompletedSale?.ncf || currentNCF}
+                  </span>
+                </div>
+
+                {/* Row 2: Cliente */}
                 {lastCompletedSale?.client && (
-                  <div className="text-xs text-gray-500 dark:text-zinc-400 truncate max-w-full">
-                    Cliente: {lastCompletedSale.client.name}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-200/60 dark:border-zinc-800 text-xs">
+                    <span className="text-gray-500 dark:text-zinc-400 font-medium shrink-0">Cliente</span>
+                    <span className="text-gray-900 dark:text-zinc-200 font-semibold text-right truncate">
+                      {lastCompletedSale.client.name}
+                    </span>
                   </div>
                 )}
 
-                {/* QR Code Container */}
-                <div className="mt-1 p-2 bg-white rounded-xl shadow-xs border border-gray-200/80 flex flex-col items-center">
-                  <QRCode
-                    value={
-                      lastCompletedSale?.lastEcfData?.qrCodeUrl ||
-                      lastEcfData?.qrCodeUrl ||
-                      `https://dgii.gov.do/ecf/consultatimbre?encf=${lastCompletedSale?.ncf || currentNCF}&monto=${(lastCompletedSale?.total ?? total).toFixed(2)}`
-                    }
-                    size={95}
-                    level="M"
-                  />
-                  <div className="mt-1 flex items-center gap-1 text-[9px] font-mono text-gray-500">
+                {/* Row 3: Timbre Digital e-CF & QR Compact */}
+                <div className="pt-2 border-t border-gray-200/60 dark:border-zinc-800 flex items-center gap-3">
+                  <div className="p-1.5 bg-white rounded-xl border border-gray-200 shadow-2xs shrink-0">
+                    <QRCode
+                      value={
+                        lastCompletedSale?.lastEcfData?.qrCodeUrl ||
+                        lastEcfData?.qrCodeUrl ||
+                        `https://dgii.gov.do/ecf/consultatimbre?encf=${lastCompletedSale?.ncf || currentNCF}&monto=${(lastCompletedSale?.total ?? total).toFixed(2)}`
+                      }
+                      size={64}
+                      level="M"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      <span>Timbre Digital DGII</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5 leading-tight">
+                      Facturación electrónica e-CF validada.
+                    </p>
                     {lastCompletedSale?.lastEcfData?.securityCode && (
-                      <span>Cód: <strong>{lastCompletedSale.lastEcfData.securityCode}</strong> •</span>
+                      <div className="text-[10px] font-mono text-gray-500 dark:text-zinc-400 mt-1">
+                        Cód. Seguridad: <strong className="text-gray-900 dark:text-zinc-200 font-bold">{lastCompletedSale.lastEcfData.securityCode}</strong>
+                      </div>
                     )}
-                    <span className="text-emerald-600 font-bold">Timbre Digital</span>
                   </div>
                 </div>
               </div>
 
-              {/* Question: Imprimir */}
-              <div className="mb-3">
-                <span className="text-xs font-semibold text-gray-600 dark:text-zinc-300">
-                  {lastCompletedSale?.ncf.startsWith('CT')
-                    ? '¿Desea imprimir o descargar la cotización en PDF?'
-                    : '¿Desea imprimir la factura?'}
-                </span>
+              {/* Action Buttons */}
+              <div className="space-y-2 mt-4">
+                <button
+                  type="button"
+                  onClick={printLetter}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.99] text-white rounded-xl font-bold text-xs tracking-wide shadow-md shadow-red-900/20 transition-all cursor-pointer"
+                >
+                  <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
+                  <span>
+                    {lastCompletedSale?.ncf.startsWith('CT')
+                      ? 'Imprimir Cotización (Carta)'
+                      : 'Imprimir Factura (Carta)'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetPOS}
+                  className="w-full py-2.5 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800/60 rounded-xl font-semibold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>+ {lastCompletedSale?.ncf.startsWith('CT') ? 'Nueva Cotización / Venta' : 'Nueva Venta'}</span>
+                </button>
               </div>
-
-              {/* Action Buttons: Ticket & Letter */}
-              {lastCompletedSale?.ncf.startsWith('CT') ? (
-                <div className="flex flex-col gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={printLetter}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
-                  >
-                    <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Imprimir Cotización (PDF / Carta)</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={printLetter}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs shadow-md shadow-red-900/20 transition-all cursor-pointer"
-                  >
-                    <PrinterIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Imprimir Factura (Carta)</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Nueva Venta Button */}
-              <button
-                type="button"
-                onClick={resetPOS}
-                className="w-full py-2.5 bg-gray-50 dark:bg-zinc-900/70 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-xs border border-gray-200/70 dark:border-zinc-800 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>➕ {lastCompletedSale?.ncf.startsWith('CT') ? 'Nueva Cotización / Venta' : 'Nueva Venta'}</span>
-              </button>
             </motion.div>
           </div>
         )}
