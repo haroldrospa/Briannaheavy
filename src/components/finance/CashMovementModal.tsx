@@ -12,14 +12,12 @@ import {
   DocumentTextIcon,
   PlusIcon,
   TrashIcon,
-  CreditCardIcon,
-  UserIcon
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
 import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
-import { getActiveRole } from '../../utils/rolePermissions';
 import logo from '../../assets/logo.png';
 
 interface CashMovementModalProps {
@@ -55,14 +53,16 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const activeRegisterName = defaultRegister || (typeof window !== 'undefined' ? localStorage.getItem('brianna_active_register') : '') || 'Caja 1 - Repuestos';
   const activeShift = useMemo(() => getActiveShift(activeRegisterName), [activeRegisterName, isOpen]);
 
-  const currentRole = getActiveRole();
-  const isAdmin = currentRole === 'Administrador';
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
   // Por defecto, mostrar todos los movimientos a todos los usuarios ('all')
   // con la opción de filtrar por 'Mis movimientos' ('mine')
   const [userScope, setUserScope] = useState<'mine' | 'all'>('all');
+  // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual), 'all' (Historial completo)
+  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
+  // Alcance de caja: 'todas' (Todas las cajas registradoras) o 'current' (Solo la caja activa)
+  const [registerScope, setRegisterScope] = useState<'todas' | 'current'>('todas');
 
   const loadMovements = async () => {
     try {
@@ -111,6 +111,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   useEffect(() => {
     if (isOpen) {
       setUserScope('all'); // Por defecto siempre mostrar todos los movimientos a todos los usuarios
+      setTimeScope('today'); // Por defecto mostrar todos los movimientos de hoy
+      setRegisterScope('todas'); // Por defecto mostrar movimientos de todas las cajas
       const accounts = getCompanyBankAccounts();
       setBankAccounts(accounts);
       if (accounts.length > 0 && !selectedBankId) {
@@ -137,10 +139,11 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     };
   }, [isOpen, selectedBankId, selectedCardId, initialTab]);
 
-  // 1. Todos los movimientos del turno y caja actual
+  // 1. Todos los movimientos según el período y la caja seleccionada
   const allSessionMovements = useMemo(() => {
-    return filterMovementsByShift(movements, 'shift', activeShift, activeRegisterName, 'todos');
-  }, [movements, activeShift, activeRegisterName]);
+    const targetRegister = registerScope === 'current' ? activeRegisterName : 'todas';
+    return filterMovementsByShift(movements, timeScope, activeShift, targetRegister, 'todos');
+  }, [movements, timeScope, registerScope, activeShift, activeRegisterName]);
 
   // 2. Movimientos filtrados según el alcance (por defecto todos, o solo míos si se selecciona 'mine')
   const sessionMovements = useMemo(() => {
@@ -340,10 +343,10 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
           <div className="flex justify-between items-start mb-2.5">
             <div>
               <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                Brianna Heavy Equipment • {activeRegisterName}
+                Brianna Heavy Equipment • {registerScope === 'todas' ? 'Todas las Cajas' : activeRegisterName}
               </div>
               <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
-                {activeTab === 'form' ? `Movimiento de Fondos (${type})` : 'Historial de la Sesión'}
+                {activeTab === 'form' ? `Movimiento de Fondos (${type})` : 'Historial de Movimientos'}
               </h3>
             </div>
             <button 
@@ -744,7 +747,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
               </div>
             </form>
           ) : (
-            /* TAB HISTORIAL DE LA SESIÓN - DISEÑO LIMPIO Y SENCILLO */
+            /* TAB HISTORIAL DE MOVIMIENTOS - DISEÑO LIMPIO Y COMPLETO */
             <div className="space-y-3">
               {/* Barra Resumen Compacta con Botón de Imprimir */}
               <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800">
@@ -782,19 +785,75 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 </button>
               </div>
 
-              {/* Selector de alcance: Ver todos los movimientos (por defecto) vs Mis movimientos */}
-              <div className="flex items-center justify-between p-2 px-3 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <UserIcon className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400 shrink-0" />
-                  <span className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 truncate">
-                    Mostrar movimientos:
-                  </span>
+              {/* Selector de Período Temporal */}
+              <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-2xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setTimeScope('today')}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                    timeScope === 'today'
+                      ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
+                  }`}
+                >
+                  Hoy (Todo el día)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeScope('shift')}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                    timeScope === 'shift'
+                      ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
+                  }`}
+                >
+                  Turno Actual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeScope('all')}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                    timeScope === 'all'
+                      ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
+                  }`}
+                >
+                  Historial Completo
+                </button>
+              </div>
+
+              {/* Selector de Caja y Usuarios */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2 px-3 bg-gray-50 dark:bg-zinc-900/80 rounded-2xl border border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center gap-1 bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setRegisterScope('todas')}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      registerScope === 'todas'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                    }`}
+                  >
+                    Todas las Cajas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRegisterScope('current')}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      registerScope === 'current'
+                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                    }`}
+                  >
+                    Esta Caja
+                  </button>
                 </div>
-                <div className="flex bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold shrink-0">
+
+                <div className="flex items-center gap-1 bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl text-[11px] font-bold">
                   <button
                     type="button"
                     onClick={() => setUserScope('all')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       userScope === 'all'
                         ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                         : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
@@ -805,7 +864,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   <button
                     type="button"
                     onClick={() => setUserScope('mine')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       userScope === 'mine'
                         ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                         : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
@@ -846,16 +905,25 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   <div className="py-12 text-center text-gray-400 dark:text-zinc-500">
                     <p className="text-xs font-bold">
                       {userScope === 'mine'
-                        ? 'No tienes movimientos propios registrados en esta sesión.'
-                        : 'No hay movimientos registrados en esta sesión.'}
+                        ? 'No tienes movimientos propios registrados en este período.'
+                        : `No hay movimientos registrados en ${timeScope === 'today' ? 'el día de hoy' : (timeScope === 'shift' ? 'este turno' : 'el historial')}.`}
                     </p>
+                    {timeScope === 'shift' && (
+                      <button
+                        type="button"
+                        onClick={() => setTimeScope('today')}
+                        className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer block mx-auto"
+                      >
+                        Ver todos los movimientos de hoy (Día completo)
+                      </button>
+                    )}
                     {userScope === 'mine' && allSessionMovements.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setUserScope('all')}
-                        className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                        className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer block mx-auto"
                       >
-                        Ver todos los movimientos de la sesión ({allSessionMovements.length})
+                        Ver todos los movimientos ({allSessionMovements.length})
                       </button>
                     )}
                   </div>
@@ -1145,12 +1213,13 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             {/* Título */}
             <div className="text-center mb-5">
               <h2 className="text-base font-black uppercase tracking-wide">
-                REPORTE DE INGRESOS Y EGRESOS DE LA SESIÓN
+                REPORTE DE INGRESOS Y EGRESOS {timeScope === 'today' ? 'DEL DÍA' : (timeScope === 'shift' ? 'DEL TURNO' : 'GENERAL')}
               </h2>
               <p className="text-xs text-gray-600">
-                {isAdmin && userScope === 'mine'
+                {userScope === 'mine'
                   ? `Movimientos registrados por: ${currentUserName}`
-                  : 'Todos los movimientos de la sesión'}
+                  : (timeScope === 'today' ? 'Todos los movimientos de hoy' : (timeScope === 'shift' ? 'Todos los movimientos de este turno' : 'Historial completo de movimientos'))}
+                {registerScope === 'todas' ? ' • Todas las Cajas' : ` • ${activeRegisterName}`}
               </p>
             </div>
 
