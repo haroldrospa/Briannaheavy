@@ -12,10 +12,14 @@ import {
   DocumentTextIcon,
   PlusIcon,
   TrashIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  ArrowPathIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { createCashMovement, fetchCashMovements, deleteCashMovement, type CashMovement } from '../../services/cashMovementsService';
+import { createCashMovement, fetchCashMovements, deleteCashMovement, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
+import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, formatInvoiceNumber, type Invoice } from '../../services/invoicesService';
+import { fetchAllFinancingReceipts } from '../../services/financingReceiptsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
 import logo from '../../assets/logo.png';
@@ -43,7 +47,10 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
   // History and session states
   const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [historyFilterType, setHistoryFilterType] = useState<'Todos' | 'Ingreso' | 'Egreso'>('Todos');
+  const [historyFilterType, setHistoryFilterType] = useState<'Todos' | 'Ventas' | 'Abonos' | 'Financ' | 'Ingreso' | 'Egreso'>('Todos');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('todos');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [selectedMovementForPrint, setSelectedMovementForPrint] = useState<CashMovement | null>(null);
   const [isPrintingSessionSummary, setIsPrintingSessionSummary] = useState<boolean>(false);
   const [lastCreatedMovement, setLastCreatedMovement] = useState<CashMovement | null>(null);
@@ -59,14 +66,22 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   // Por defecto, mostrar todos los movimientos a todos los usuarios ('all')
   // con la opción de filtrar por 'Mis movimientos' ('mine')
   const [userScope, setUserScope] = useState<'mine' | 'all'>('all');
-  // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual)
-  const [timeScope, setTimeScope] = useState<'today' | 'shift'>('today');
+  // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual), 'all' (Todo el Histórico)
+  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
   // Alcance de caja: 'todas' (Todas las cajas registradoras) o 'current' (Solo la caja activa)
   const [registerScope, setRegisterScope] = useState<'todas' | 'current'>('todas');
 
   const loadMovements = async () => {
     try {
-      const data = await fetchCashMovements(true);
+      // 1. Movimientos manuales (con soporte offline)
+      let data: CashMovement[] = [];
+      try {
+        data = await fetchCashMovements(true);
+      } catch {
+        data = getLocalStorageMovements();
+      }
+
+      // 2. Abonos y pagos a facturas a crédito
       let invoicePayments = getLocalInvoicePayments();
       try {
         const remotePayments = await fetchRemoteInvoicePayments();
@@ -85,7 +100,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
             const pm = p.method || 'Efectivo';
             const isCard = pm.toLowerCase().includes('tarjeta');
-            const isBank = pm.toLowerCase().includes('transferencia') || pm.toLowerCase().includes('usd');
+            const isBank = pm.toLowerCase().includes('transferencia') || pm.toLowerCase().includes('usd') || pm.toLowerCase().includes('banco');
 
             abonosAsMovements.push({
               id: `abono_${p.id}`,
@@ -102,7 +117,76 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         }
       });
 
-      setMovements([...data, ...abonosAsMovements]);
+      // 3. Facturas y ventas directas del POS de todos los usuarios
+      let invoicesList: Invoice[] = [];
+      try {
+        invoicesList = await fetchInvoices(true);
+      } catch {
+        invoicesList = getLocalStorageInvoices();
+      }
+
+      const salesAsMovements: CashMovement[] = [];
+      (invoicesList || []).forEach(inv => {
+        if (isQuotationInvoice(inv)) return; // Excluir cotizaciones
+        const pm = (inv.payment_method || 'Efectivo').trim();
+        const pmLower = pm.toLowerCase();
+        const isCredit = pmLower.includes('créd') || pmLower.includes('cred');
+        const isCard = pmLower.includes('tarjeta');
+        const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco') || pmLower.includes('usd');
+
+        salesAsMovements.push({
+          id: `inv_${inv.id || inv.invoice_number}`,
+          type: 'Ingreso',
+          amount: Number(inv.total_amount) || 0,
+          concept: `Venta Factura #${formatInvoiceNumber(inv.invoice_number)}${inv.customer_name ? ` • ${inv.customer_name}` : ''}${isCredit ? ' (Crédito)' : ''}`,
+          payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : (isCredit ? 'Crédito' : 'Efectivo')),
+          bank_account_id: inv.bank_account_id,
+          bank_account_name: inv.bank_account_name,
+          reference: inv.transfer_reference || inv.ncf || inv.invoice_number,
+          register_name: inv.register_name || activeRegisterName,
+          created_by: inv.cashier_name || 'Sistema',
+          created_at: inv.created_at || new Date().toISOString()
+        });
+      });
+
+      // 4. Recibos de financiamientos
+      const financingMovements: CashMovement[] = [];
+      try {
+        const financingList = fetchAllFinancingReceipts();
+        (financingList || []).forEach(rc => {
+          const pm = (rc.paymentMethod || 'Efectivo').trim();
+          const pmLower = pm.toLowerCase();
+          const isCard = pmLower.includes('tarjeta');
+          const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco') || pmLower.includes('usd');
+
+          financingMovements.push({
+            id: `fin_${rc.id || rc.receiptNumber}`,
+            type: 'Ingreso',
+            amount: Number(rc.totalPaid) || 0,
+            concept: `Recibo Financiamiento #${rc.receiptNumber}${rc.customerName ? ` • ${rc.customerName}` : ''}`,
+            payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
+            bank_account_name: rc.bankName,
+            reference: rc.referenceNumber || rc.receiptNumber,
+            register_name: rc.registerName || activeRegisterName,
+            created_by: rc.cashierName || 'Sistema',
+            created_at: rc.createdAt || rc.date || new Date().toISOString()
+          });
+        });
+      } catch (finErr) {
+        console.warn('Error cargando recibos de financiamiento:', finErr);
+      }
+
+      // Unificar y deduplicar por id único
+      const uniqueMap = new Map<string, CashMovement>();
+      [...data, ...abonosAsMovements, ...salesAsMovements, ...financingMovements].forEach(m => {
+        if (m && m.id) uniqueMap.set(m.id, m);
+      });
+
+      const unified = Array.from(uniqueMap.values()).sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setMovements(unified);
     } catch {
       // Ignorar error de carga
     }
@@ -113,6 +197,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
       setUserScope('all'); // Por defecto siempre mostrar todos los movimientos a todos los usuarios
       setTimeScope('today'); // Por defecto mostrar todos los movimientos de hoy
       setRegisterScope('todas'); // Por defecto mostrar movimientos de todas las cajas
+      setSelectedUserFilter('todos');
+      setSearchTerm('');
       const accounts = getCompanyBankAccounts();
       setBankAccounts(accounts);
       if (accounts.length > 0 && !selectedBankId) {
@@ -139,39 +225,94 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
     };
   }, [isOpen, selectedBankId, selectedCardId, initialTab]);
 
-  // 1. Todos los movimientos según el período y la caja seleccionada
+  // 1. Todos los movimientos según el período temporal y la caja seleccionada
   const allSessionMovements = useMemo(() => {
     const targetRegister = registerScope === 'current' ? activeRegisterName : 'todas';
     return filterMovementsByShift(movements, timeScope, activeShift, targetRegister, 'todos');
   }, [movements, timeScope, registerScope, activeShift, activeRegisterName]);
 
-  // 2. Movimientos filtrados según el alcance (por defecto todos, o solo míos si se selecciona 'mine')
+  // Lista de cajeros / usuarios únicos presentes en los movimientos
+  const availableUsers = useMemo(() => {
+    const set = new Set<string>();
+    allSessionMovements.forEach(m => {
+      if (m.created_by && m.created_by.trim()) {
+        set.add(m.created_by.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [allSessionMovements]);
+
+  // 2. Movimientos filtrados según el alcance de usuario
   const sessionMovements = useMemo(() => {
+    let list = allSessionMovements;
     if (userScope === 'mine') {
-      return allSessionMovements.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail));
+      list = list.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail));
+    } else if (selectedUserFilter !== 'todos') {
+      const uLower = selectedUserFilter.toLowerCase().trim();
+      list = list.filter(m => {
+        const creator = (m.created_by || '').toLowerCase().trim();
+        return creator.includes(uLower) || uLower.includes(creator);
+      });
     }
-    return allSessionMovements;
-  }, [allSessionMovements, userScope, currentUserName, currentUserEmail]);
+    return list;
+  }, [allSessionMovements, userScope, selectedUserFilter, currentUserName, currentUserEmail]);
 
   // Total de movimientos propios en esta sesión
   const mySessionMovementsCount = useMemo(() => {
     return allSessionMovements.filter(m => isMovementOfUser(m, currentUserName, currentUserEmail)).length;
   }, [allSessionMovements, currentUserName, currentUserEmail]);
 
+  // 3. Filtrado por categoría / tipo y por buscador de texto
   const filteredSessionMovements = useMemo(() => {
-    if (historyFilterType === 'Ingreso') return sessionMovements.filter(m => m.type === 'Ingreso');
-    if (historyFilterType === 'Egreso') return sessionMovements.filter(m => m.type === 'Egreso');
-    return sessionMovements;
-  }, [sessionMovements, historyFilterType]);
+    let list = sessionMovements;
+
+    // Filtro por categoría
+    if (historyFilterType === 'Ingreso') {
+      list = list.filter(m => m.type === 'Ingreso');
+    } else if (historyFilterType === 'Egreso') {
+      list = list.filter(m => m.type === 'Egreso');
+    } else if (historyFilterType === 'Ventas') {
+      list = list.filter(m => m.id.startsWith('inv_'));
+    } else if (historyFilterType === 'Abonos') {
+      list = list.filter(m => m.id.startsWith('abono_'));
+    } else if (historyFilterType === 'Financ') {
+      list = list.filter(m => m.id.startsWith('fin_'));
+    }
+
+    // Filtro por término de búsqueda
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      list = list.filter(m => {
+        const concept = (m.concept || '').toLowerCase();
+        const user = (m.created_by || '').toLowerCase();
+        const ref = (m.reference || '').toLowerCase();
+        const reg = (m.register_name || '').toLowerCase();
+        const pm = (m.payment_method || '').toLowerCase();
+        const amt = String(m.amount);
+        return concept.includes(q) || user.includes(q) || ref.includes(q) || reg.includes(q) || pm.includes(q) || amt.includes(q);
+      });
+    }
+
+    return list;
+  }, [sessionMovements, historyFilterType, searchTerm]);
 
   const sessionTotals = useMemo(() => {
+    // Para calcular ingresos directos reales sin inflar por ventas a crédito aún pendientes de cobro
     const totalIngresos = sessionMovements
-      .filter(m => m.type === 'Ingreso')
+      .filter(m => {
+        if (m.type !== 'Ingreso') return false;
+        const pm = (m.payment_method || '').toLowerCase();
+        if (pm.includes('créd') || pm.includes('cred')) return false;
+        return true;
+      })
       .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
     const totalEgresos = sessionMovements
       .filter(m => m.type === 'Egreso')
       .reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
     const net = totalIngresos - totalEgresos;
+
     return {
       ingresos: totalIngresos,
       egresos: totalEgresos,
@@ -749,8 +890,8 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
           ) : (
             /* TAB HISTORIAL DE MOVIMIENTOS - DISEÑO LIMPIO Y COMPLETO */
             <div className="space-y-3">
-              {/* Barra Resumen Compacta con Botón de Imprimir */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800">
+              {/* Barra Resumen Compacta con Botón de Actualizar y Reporte */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800">
                 <div className="flex items-center gap-3 sm:gap-4 text-xs">
                   <div>
                     <span className="text-[10px] text-gray-400 font-bold block uppercase">Ingresos</span>
@@ -774,18 +915,35 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handlePrintSessionSummary}
-                  disabled={sessionMovements.length === 0}
-                  className="px-3 py-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40"
-                >
-                  <PrinterIcon className="w-3.5 h-3.5" />
-                  <span>Reporte</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsRefreshing(true);
+                      await loadMovements();
+                      setIsRefreshing(false);
+                    }}
+                    disabled={isRefreshing}
+                    title="Actualizar todos los movimientos desde el servidor y cajas"
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <ArrowPathIcon className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
+                    <span>{isRefreshing ? 'Cargando...' : 'Actualizar'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintSessionSummary}
+                    disabled={sessionMovements.length === 0}
+                    className="px-3 py-1.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-gray-900 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    <PrinterIcon className="w-3.5 h-3.5" />
+                    <span>Reporte</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Selector de Período Temporal */}
+              {/* Selector de Período Temporal: Hoy, Turno Actual, Todo el Histórico */}
               <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-2xl gap-1">
                 <button
                   type="button"
@@ -808,6 +966,17 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   }`}
                 >
                   Turno Actual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeScope('all')}
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all cursor-pointer text-center ${
+                    timeScope === 'all'
+                      ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 font-bold'
+                  }`}
+                >
+                  Todo el Histórico
                 </button>
               </div>
 
@@ -838,87 +1007,163 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   </button>
                 </div>
 
-                <div className="flex items-center gap-1 bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl text-[11px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setUserScope('all')}
-                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                      userScope === 'all'
-                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
-                    }`}
-                  >
-                    Ver todos ({allSessionMovements.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUserScope('mine')}
-                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                      userScope === 'mine'
-                        ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
-                    }`}
-                  >
-                    Mis movimientos ({mySessionMovementsCount})
-                  </button>
-                </div>
-              </div>
-
-              {/* Filtros simples de 3 opciones */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold">
-                  {(['Todos', 'Ingreso', 'Egreso'] as const).map(tab => (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 bg-[#e8e7e3] dark:bg-[#222222] p-1 rounded-xl text-[11px] font-bold">
                     <button
-                      key={tab}
                       type="button"
-                      onClick={() => setHistoryFilterType(tab)}
-                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                        historyFilterType === tab
+                      onClick={() => {
+                        setUserScope('all');
+                        setSelectedUserFilter('todos');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        userScope === 'all' && selectedUserFilter === 'todos'
                           ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
                           : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
                       }`}
                     >
-                      {tab === 'Todos' ? 'Todos' : (tab === 'Ingreso' ? 'Ingresos' : 'Egresos')}
+                      Todos ({allSessionMovements.length})
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserScope('mine');
+                        setSelectedUserFilter('todos');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        userScope === 'mine'
+                          ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                          : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                      }`}
+                    >
+                      Míos ({mySessionMovementsCount})
+                    </button>
+                  </div>
+
+                  {userScope === 'all' && availableUsers.length > 1 && (
+                    <select
+                      value={selectedUserFilter}
+                      onChange={(e) => setSelectedUserFilter(e.target.value)}
+                      className="px-2 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-[11px] font-bold text-gray-800 dark:text-zinc-200 outline-none cursor-pointer"
+                    >
+                      <option value="todos">Todos los usuarios</option>
+                      {availableUsers.map(user => (
+                        <option key={user} value={user}>
+                          {user}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* Buscador y Filtro por Categorías */}
+              <div className="space-y-2">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por concepto, cajero, referencia, caja, método, monto..."
+                    className="w-full pl-9 pr-8 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-xs font-medium text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
 
-                <span className="text-[11px] text-gray-400 font-bold">
-                  {filteredSessionMovements.length} {filteredSessionMovements.length === 1 ? 'registro' : 'registros'}
-                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex bg-[#f4f3f1] dark:bg-[#222222] p-1 rounded-xl gap-1 text-[11px] font-bold overflow-x-auto max-w-full">
+                    {(['Todos', 'Ventas', 'Abonos', 'Financ', 'Ingreso', 'Egreso'] as const).map(tab => {
+                      const labelMap: Record<string, string> = {
+                        'Todos': 'Todos',
+                        'Ventas': 'Ventas POS',
+                        'Abonos': 'Abonos Fact.',
+                        'Financ': 'Financiamientos',
+                        'Ingreso': 'Ingresos',
+                        'Egreso': 'Egresos'
+                      };
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setHistoryFilterType(tab)}
+                          className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                            historyFilterType === tab
+                              ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-xs font-black'
+                              : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400'
+                          }`}
+                        >
+                          {labelMap[tab]}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <span className="text-[11px] text-gray-400 font-bold shrink-0">
+                    {filteredSessionMovements.length} {filteredSessionMovements.length === 1 ? 'registro' : 'registros'}
+                  </span>
+                </div>
               </div>
 
               {/* Lista simple de Movimientos */}
-              <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[46vh] overflow-y-auto pr-1">
                 {filteredSessionMovements.length === 0 ? (
                   <div className="py-12 text-center text-gray-400 dark:text-zinc-500">
                     <p className="text-xs font-bold">
-                      {userScope === 'mine'
+                      {searchTerm
+                        ? `No se encontraron movimientos para "${searchTerm}".`
+                        : userScope === 'mine'
                         ? 'No tienes movimientos propios registrados en este período.'
-                        : `No hay movimientos registrados en ${timeScope === 'today' ? 'el día de hoy.' : 'este turno.'}`}
+                        : `No hay movimientos registrados en ${timeScope === 'today' ? 'el día de hoy.' : timeScope === 'shift' ? 'este turno.' : 'el histórico.'}`}
                     </p>
-                    {timeScope === 'shift' && (
+                    {timeScope !== 'all' && (
                       <button
                         type="button"
-                        onClick={() => setTimeScope('today')}
+                        onClick={() => setTimeScope('all')}
                         className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer block mx-auto"
                       >
-                        Ver todos los movimientos de hoy (Día completo)
+                        Ver todo el histórico de movimientos
                       </button>
                     )}
                     {userScope === 'mine' && allSessionMovements.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => setUserScope('all')}
-                        className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer block mx-auto"
+                        onClick={() => {
+                          setUserScope('all');
+                          setSelectedUserFilter('todos');
+                        }}
+                        className="mt-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer block mx-auto"
                       >
-                        Ver todos los movimientos ({allSessionMovements.length})
+                        Ver movimientos de todos los usuarios ({allSessionMovements.length})
                       </button>
                     )}
                   </div>
                 ) : (
                   filteredSessionMovements.map((mov) => {
                     const isIngreso = mov.type === 'Ingreso';
+                    const isSale = mov.id.startsWith('inv_');
+                    const isAbono = mov.id.startsWith('abono_');
+                    const isFinancing = mov.id.startsWith('fin_');
+                    const isManual = !isSale && !isAbono && !isFinancing;
+
+                    let badgeText = isSale ? 'Venta POS' : isFinancing ? 'Financ.' : isAbono ? 'Abono Factura' : (isIngreso ? 'Ingreso' : 'Egreso');
+                    let badgeColor = isSale 
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                      : isFinancing
+                      ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+                      : isAbono
+                      ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
+                      : isIngreso
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
+
                     return (
                       <div
                         key={mov.id}
@@ -927,11 +1172,18 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isIngreso ? 'bg-emerald-500' : 'bg-[#ED1C24]'}`} />
                           <div className="min-w-0">
-                            <p className="text-xs font-black text-gray-900 dark:text-white truncate">
-                              {mov.concept}
-                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${badgeColor}`}>
+                                {badgeText}
+                              </span>
+                              <p className="text-xs font-black text-gray-900 dark:text-white truncate">
+                                {mov.concept}
+                              </p>
+                            </div>
                             <p className="text-[10px] text-gray-400 dark:text-zinc-500 mt-0.5">
-                              {mov.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : mov.payment_method}
+                              <span className="font-semibold text-gray-600 dark:text-zinc-300">
+                                {mov.payment_method === 'Tarjeta' ? 'Tarjeta de Crédito' : mov.payment_method}
+                              </span>
                               {mov.bank_account_name ? ` • ${mov.bank_account_name}` : ''}
                               {mov.reference ? ` • Ref: ${mov.reference}` : ''}
                               {mov.created_at ? (
@@ -949,8 +1201,16 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                               {mov.created_by && (
                                 <>
                                   {' • '}
-                                  <span className="font-bold text-gray-700 dark:text-zinc-300">
+                                  <span className="font-bold text-gray-800 dark:text-zinc-200">
                                     Por: {mov.created_by}
+                                  </span>
+                                </>
+                              )}
+                              {mov.register_name && (
+                                <>
+                                  {' • '}
+                                  <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                                    {mov.register_name}
                                   </span>
                                 </>
                               )}
@@ -974,14 +1234,16 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                             <PrinterIcon className="w-4 h-4" />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => setMovementToDelete(mov)}
-                            title="Eliminar movimiento"
-                            className="p-1.5 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-all cursor-pointer"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
+                          {isManual && (
+                            <button
+                              type="button"
+                              onClick={() => setMovementToDelete(mov)}
+                              title="Eliminar movimiento manual"
+                              className="p-1.5 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-all cursor-pointer"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
