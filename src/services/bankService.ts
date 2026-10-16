@@ -441,13 +441,21 @@ export const calculateBankAccountsSummary = (
 
   const accountsWithBalances: BankAccountWithBalance[] = accounts.map(acc => {
     // Filtrar transacciones para esta cuenta bancaria
-    const accountTxs = transactions.filter(t => 
-      t.bank_account_id !== 'caja-general' && (
-        t.bank_account_id === acc.id || 
-        t.bank_account_name.toLowerCase().includes(acc.bankName.toLowerCase()) ||
-        acc.bankName.toLowerCase().includes(t.bank_account_name.toLowerCase())
-      )
-    );
+    const accountTxs = transactions.filter(t => {
+      if (t.bank_account_id === 'caja-general') return false;
+      if (t.bank_account_id === acc.id) return true;
+      if (t.bank_account_name && acc.accountNumber && t.concept?.includes(acc.accountNumber)) return true;
+      const firstWithThisBankName = accounts.find(a => 
+        a.bankName.toLowerCase().trim() === acc.bankName.toLowerCase().trim()
+      );
+      if (firstWithThisBankName?.id === acc.id) {
+        return (
+          t.bank_account_name.toLowerCase().includes(acc.bankName.toLowerCase()) ||
+          acc.bankName.toLowerCase().includes(t.bank_account_name.toLowerCase())
+        );
+      }
+      return false;
+    });
 
     let totalDeposits = 0;
     let totalWithdrawals = 0;
