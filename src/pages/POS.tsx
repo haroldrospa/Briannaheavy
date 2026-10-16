@@ -2264,6 +2264,51 @@ export default function POS() {
     };
   }, [addToCart]); // addToCart is stable (useCallback + no deps)
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshNotification, setRefreshNotification] = useState<string | null>(null);
+
+  const refreshPosData = useCallback(async (showFeedback = true) => {
+    setIsRefreshing(true);
+    try {
+      const [invRes, custRes, invsRes] = await Promise.allSettled([
+        fetchInventory(true),
+        fetchCustomers(true),
+        fetchInvoices(true)
+      ]);
+
+      let count = 0;
+      if (invRes.status === 'fulfilled' && invRes.value) {
+        setDbProducts(invRes.value.map(mapInventoryItemToProduct));
+        count = invRes.value.length;
+      }
+      if (custRes.status === 'fulfilled' && custRes.value) {
+        setDbClients(custRes.value.map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
+          rnc: c.document_id,
+        })));
+      }
+      if (invsRes.status === 'fulfilled' && invsRes.value) {
+        setSessionSales(filterInvoicesByShift(invsRes.value.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+        setActiveQuotationsCount(getActiveQuotationsCount());
+      }
+
+      if (showFeedback) {
+        setRefreshNotification(`Catálogo y datos sincronizados (${count} artículos)`);
+        setTimeout(() => setRefreshNotification(null), 3000);
+      }
+    } catch (err) {
+      console.warn('Error loading POS data from Supabase:', err);
+      if (showFeedback) {
+        setRefreshNotification('Error al sincronizar con el servidor');
+        setTimeout(() => setRefreshNotification(null), 3000);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeRegister, currentUserName]);
+
   useEffect(() => {
     // 1. Instant local load (0ms UI latency)
     const localInv = getLocalStorageInventory();
@@ -2287,34 +2332,7 @@ export default function POS() {
     }
 
     // 2. Async background sync with Supabase
-    const loadPosData = async () => {
-      try {
-        const [invRes, custRes, invsRes] = await Promise.allSettled([
-          fetchInventory(true),
-          fetchCustomers(true),
-          fetchInvoices(true)
-        ]);
-
-        if (invRes.status === 'fulfilled' && invRes.value) {
-          setDbProducts(invRes.value.map(mapInventoryItemToProduct));
-        }
-        if (custRes.status === 'fulfilled' && custRes.value) {
-          setDbClients(custRes.value.map(c => ({
-            id: c.id,
-            name: c.name,
-            type: c.document_id && c.document_id.includes('-') && c.document_id.length > 11 ? 'Empresarial' : 'Físico',
-            rnc: c.document_id,
-          })));
-        }
-        if (invsRes.status === 'fulfilled' && invsRes.value) {
-          setSessionSales(filterInvoicesByShift(invsRes.value.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
-          setActiveQuotationsCount(getActiveQuotationsCount());
-        }
-      } catch (err) {
-        console.warn('Error loading POS data from Supabase:', err);
-      }
-    };
-    loadPosData();
+    refreshPosData(false);
 
     let invDebounce: ReturnType<typeof setTimeout> | null = null;
     const handleInventoryUpdate = () => {
@@ -3216,6 +3234,18 @@ export default function POS() {
             </Link>
           )}
 
+          {/* Direct Access to Actualizar */}
+          <button
+            type="button"
+            onClick={() => refreshPosData(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold transition-all cursor-pointer border border-zinc-200/70 dark:border-zinc-800 shadow-2xs whitespace-nowrap disabled:opacity-60"
+            title="Actualizar catálogo, clientes y ventas desde el servidor"
+          >
+            <ArrowPathIcon className={`h-4 w-4 text-[#ED1C24] stroke-[2.2] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden xl:inline">Actualizar</span>
+          </button>
+
           {/* User Profile Badge */}
           <div 
             className="flex items-center gap-1.5 sm:gap-2 bg-zinc-100 dark:bg-zinc-900 px-2 sm:px-2.5 py-1 rounded-xl border border-zinc-200/70 dark:border-zinc-800 shadow-2xs"
@@ -3396,6 +3426,18 @@ export default function POS() {
 
             {/* Catalog Controls: Sort & View Mode Switcher */}
             <div className="flex items-center gap-2 ml-auto shrink-0">
+              {/* Actualizar Catálogo */}
+              <button
+                type="button"
+                onClick={() => refreshPosData(true)}
+                disabled={isRefreshing}
+                className="flex items-center gap-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold rounded-xl px-2.5 py-1.5 outline-none cursor-pointer focus:ring-2 focus:ring-[#ED1C24]/30 shadow-2xs transition-all disabled:opacity-60"
+                title="Actualizar productos y stock en tiempo real"
+              >
+                <ArrowPathIcon className={`w-3.5 h-3.5 text-[#ED1C24] ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Actualizar</span>
+              </button>
+
               {/* Sort Selector */}
               <select
                 value={sortBy}
@@ -4360,6 +4402,21 @@ export default function POS() {
         />,
         document.body
       )}
+
+      {/* Toast Notification de Actualización */}
+      <AnimatePresence>
+        {refreshNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-5 right-5 z-[9999] flex items-center gap-2.5 bg-gray-900/95 dark:bg-zinc-800/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md border border-gray-700/50 text-xs font-bold pointer-events-none"
+          >
+            <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0 stroke-[2.5]" />
+            <span>{refreshNotification}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

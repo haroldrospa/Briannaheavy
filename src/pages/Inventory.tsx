@@ -11,7 +11,8 @@ import {
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import ItemModal from '../components/inventory/ItemModal';
 import BarcodePrintModal from '../components/inventory/BarcodePrintModal';
@@ -37,6 +38,7 @@ export default function Inventory() {
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [isBulkPrintOpen, setIsBulkPrintOpen] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const pageSize = 50;
 
   // Debounce search — filteredInventory useMemo only fires 120ms after user stops typing
@@ -45,8 +47,8 @@ export default function Inventory() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  const loadData = async () => {
-    const data = await fetchInventory();
+  const loadData = async (force = false) => {
+    const data = await fetchInventory(force);
     setInventory(data);
   };
 
@@ -240,6 +242,27 @@ export default function Inventory() {
         
         {/* Action Buttons Bar */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Botón Actualizar */}
+          <motion.button 
+            whileHover={{ scale: 1.02 }} 
+            whileTap={{ scale: 0.98 }}
+            type="button"
+            onClick={async () => {
+              setIsRefreshing(true);
+              try {
+                await loadData(true);
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
+            disabled={isRefreshing}
+            className="flex items-center justify-center gap-1.5 bg-white dark:bg-zinc-800/90 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 font-bold px-3 sm:px-3.5 py-2 rounded-full border border-gray-200/90 dark:border-zinc-700 shadow-2xs transition-all cursor-pointer text-xs disabled:opacity-60"
+            title="Recargar inventario desde la base de datos"
+          >
+            <ArrowPathIcon className={`h-3.5 w-3.5 text-[#ED1C24] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Actualizar</span>
+          </motion.button>
+
           {/* Botón Importar */}
           <motion.button 
             whileHover={{ scale: 1.02 }} 

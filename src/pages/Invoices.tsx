@@ -13,7 +13,8 @@ import {
   BoltIcon,
   PrinterIcon,
   EyeIcon,
-  ReceiptRefundIcon
+  ReceiptRefundIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import QRCode from '../components/ui/QRCode';
 import LetterInvoice from '../components/ui/LetterInvoice';
@@ -139,6 +140,7 @@ export default function Invoices() {
   const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [creditNoteInvoice, setCreditNoteInvoice] = useState<Invoice | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadData = async (force = false) => {
     try {
@@ -280,6 +282,26 @@ export default function Invoices() {
           <p className="text-sm font-medium text-gray-500 dark:text-zinc-400 mt-1">
             Historial de Facturación Electrónica (DGII e-CF) y Comprobantes Internos
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={async () => {
+              setIsRefreshing(true);
+              try {
+                await loadData(true);
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#121318] border border-gray-200/80 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-200 text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            title="Recargar facturas desde la base de datos"
+          >
+            <ArrowPathIcon className={`h-4 w-4 text-[#ED1C24] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Actualizar</span>
+          </button>
         </div>
       </motion.div>
 
