@@ -79,6 +79,10 @@ const formatRD = (amount: number = 0): string => {
   return `RD$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const formatUSD = (amount: number = 0): string => {
+  return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+};
+
 export const parseSafeDate = (d?: string | Date): Date => {
   if (!d) return new Date();
   if (d instanceof Date) return d;
@@ -169,6 +173,12 @@ export default function LetterInvoice({
 
   const isCotizacion = (ncf && ncf.startsWith('CT')) || (invoiceNumber && invoiceNumber.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
   const isEcf = !isCotizacion && !isAbono && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
+
+  const isUsd = paidCurrency === 'USD' || lastPayment?.currency === 'USD';
+  const effectiveRate = (exchangeRate && exchangeRate > 0)
+    ? exchangeRate
+    : (totalUsd && totalUsd > 0 && total > 0 ? (total / totalUsd) : 58.5);
+  const resolvedTotalUsd = totalUsd !== undefined ? totalUsd : (effectiveRate > 0 ? total / effectiveRate : 0);
 
   const getDocumentTypeName = () => {
     if (isAbono) return 'COMPROBANTE OFICIAL DE ABONO A FACTURA';
@@ -376,7 +386,7 @@ export default function LetterInvoice({
               <span className="font-mono font-bold">{transferReference}</span>
             </p>
           )}
-          {!isCotizacion && (paidCurrency === 'USD' ? (
+          {!isCotizacion && (isUsd ? (
             <>
               <p className="text-zinc-700">
                 <strong className="text-zinc-900 font-semibold">Moneda de Pago:</strong>{' '}
@@ -388,12 +398,10 @@ export default function LetterInvoice({
                   <span className="font-mono font-semibold">1 USD = RD$ {exchangeRate.toFixed(2)}</span>
                 </p>
               )}
-              {totalUsd !== undefined && (
-                <p className="text-zinc-700">
-                  <strong className="text-zinc-900 font-semibold">Total en USD:</strong>{' '}
-                  <span className="font-mono font-bold text-emerald-800">$ {totalUsd.toFixed(2)} USD</span>
-                </p>
-              )}
+              <p className="text-zinc-700">
+                <strong className="text-zinc-900 font-semibold">Total en USD:</strong>{' '}
+                <span className="font-mono font-bold text-emerald-800">$ {resolvedTotalUsd.toFixed(2)} USD</span>
+              </p>
               {receivedAmountUsd !== undefined && (
                 <p className="text-zinc-700">
                   <strong className="text-zinc-900 font-semibold">Efectivo Recibido (USD):</strong>{' '}
@@ -449,10 +457,17 @@ export default function LetterInvoice({
               </span>
             </div>
             <div className="text-right">
-              <span className="text-[9px] font-bold text-zinc-500 uppercase block">Monto Abonado</span>
+              <span className="text-[9px] font-bold text-zinc-500 uppercase block">{isUsd ? 'Monto Abonado (USD)' : 'Monto Abonado'}</span>
               <span className="font-mono font-black text-emerald-700 text-sm">
-                {formatRD(lastPayment?.amount || total)}
+                {isUsd 
+                  ? formatUSD(lastPayment?.amountUsd ?? (totalUsd !== undefined ? totalUsd : (lastPayment?.amount ? lastPayment.amount / effectiveRate : total / effectiveRate)))
+                  : formatRD(lastPayment?.amount || total)}
               </span>
+              {isUsd && (
+                <span className="text-[10px] text-zinc-500 font-mono block">
+                  ≈ {formatRD(lastPayment?.amount || total)}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -466,15 +481,19 @@ export default function LetterInvoice({
               <th className="py-2.5 px-2 w-12 text-center">Ítem</th>
               <th className="py-2.5 px-2 w-16 text-center">Cant.</th>
               <th className="py-2.5 px-2">Descripción del Producto / Servicio</th>
-              <th className="py-2.5 px-2 w-28 text-right">Precio Unit.</th>
-              <th className="py-2.5 px-2 w-24 text-right">ITBIS (18%)</th>
-              <th className="py-2.5 px-2 w-32 text-right">Total</th>
+              <th className="py-2.5 px-2 w-32 text-right">{isUsd ? 'Precio Unit. (USD)' : 'Precio Unit.'}</th>
+              <th className="py-2.5 px-2 w-28 text-right">{isUsd ? 'ITBIS (18%) (USD)' : 'ITBIS (18%)'}</th>
+              <th className="py-2.5 px-2 w-36 text-right">{isUsd ? 'Total (USD)' : 'Total'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 text-xs">
             {items && items.length > 0 ? (
               items.map((item, idx) => {
                 const itemItbis = taxAmount > 0 ? (item.total_price - (item.total_price / 1.18)) : 0;
+                const unitPriceUsd = effectiveRate > 0 ? (item.unit_price / effectiveRate) : 0;
+                const itemTotalUsd = effectiveRate > 0 ? (item.total_price / effectiveRate) : 0;
+                const itemItbisUsd = effectiveRate > 0 ? (itemItbis / effectiveRate) : 0;
+
                 return (
                   <tr key={idx} className="hover:bg-zinc-50/50">
                     <td className="py-2.5 px-2 text-center font-mono text-zinc-500">{idx + 1}</td>
@@ -485,13 +504,38 @@ export default function LetterInvoice({
                       {item.description}
                     </td>
                     <td className="py-2.5 px-2 text-right font-mono text-zinc-800">
-                      {formatRD(item.unit_price)}
+                      {isUsd ? (
+                        <>
+                          <div className="font-bold text-zinc-900">{formatUSD(unitPriceUsd)}</div>
+                          <div className="text-[10px] text-zinc-400 font-normal">≈ {formatRD(item.unit_price)}</div>
+                        </>
+                      ) : (
+                        formatRD(item.unit_price)
+                      )}
                     </td>
                     <td className="py-2.5 px-2 text-right font-mono text-zinc-600">
-                      {taxAmount > 0 ? formatRD(itemItbis) : 'Exento'}
+                      {taxAmount > 0 ? (
+                        isUsd ? (
+                          <>
+                            <div className="font-bold text-zinc-800">{formatUSD(itemItbisUsd)}</div>
+                            <div className="text-[10px] text-zinc-400 font-normal">≈ {formatRD(itemItbis)}</div>
+                          </>
+                        ) : (
+                          formatRD(itemItbis)
+                        )
+                      ) : (
+                        'Exento'
+                      )}
                     </td>
                     <td className="py-2.5 px-2 text-right font-mono font-bold text-zinc-950">
-                      {formatRD(item.total_price)}
+                      {isUsd ? (
+                        <>
+                          <div className="font-black text-zinc-950">{formatUSD(itemTotalUsd)}</div>
+                          <div className="text-[10px] text-zinc-500 font-normal">≈ {formatRD(item.total_price)}</div>
+                        </>
+                      ) : (
+                        formatRD(item.total_price)
+                      )}
                     </td>
                   </tr>
                 );
@@ -513,7 +557,9 @@ export default function LetterInvoice({
           <div className="bg-zinc-100 px-3.5 py-2 border-b border-zinc-200 font-black text-zinc-800 text-[11px] uppercase tracking-wider flex justify-between items-center">
             <span>Historial de Abonos / Pagos Aplicados ({paymentsHistory.length})</span>
             <span className="font-mono text-zinc-700 font-bold">
-              Total Abonado: {formatRD(paymentsHistory.reduce((acc, p) => acc + (p.amount || 0), 0))}
+              Total Abonado: {isUsd 
+                ? formatUSD(paymentsHistory.reduce((acc, p) => acc + (p.amountUsd ?? ((p.amount || 0) / effectiveRate)), 0))
+                : formatRD(paymentsHistory.reduce((acc, p) => acc + (p.amount || 0), 0))}
             </span>
           </div>
           <table className="w-full text-left border-collapse">
@@ -527,17 +573,28 @@ export default function LetterInvoice({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 text-[11px]">
-              {paymentsHistory.map((p, idx) => (
-                <tr key={idx} className="hover:bg-zinc-50/50">
-                  <td className="py-1.5 px-3 font-medium text-zinc-700">{formatSafeReadableDate(p.date)}</td>
-                  <td className="py-1.5 px-3 font-medium text-zinc-900">{p.method}</td>
-                  <td className="py-1.5 px-3 font-mono text-zinc-600">{p.reference || '—'}</td>
-                  <td className="py-1.5 px-3 text-zinc-600">{p.cashier || 'Cajero'}</td>
-                  <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
-                    {formatRD(p.amount)}
-                  </td>
-                </tr>
-              ))}
+              {paymentsHistory.map((p, idx) => {
+                const isPaymentUsd = p.currency === 'USD' || (p.amountUsd !== undefined && p.amountUsd > 0) || isUsd;
+                const pUsd = p.amountUsd !== undefined ? p.amountUsd : (effectiveRate > 0 ? (p.amount || 0) / effectiveRate : 0);
+                return (
+                  <tr key={idx} className="hover:bg-zinc-50/50">
+                    <td className="py-1.5 px-3 font-medium text-zinc-700">{formatSafeReadableDate(p.date)}</td>
+                    <td className="py-1.5 px-3 font-medium text-zinc-900">{p.method}{p.currency ? ` (${p.currency})` : ''}</td>
+                    <td className="py-1.5 px-3 font-mono text-zinc-600">{p.reference || '—'}</td>
+                    <td className="py-1.5 px-3 text-zinc-600">{p.cashier || 'Cajero'}</td>
+                    <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      {isPaymentUsd ? (
+                        <>
+                          <div>{formatUSD(pUsd)}</div>
+                          <div className="text-[9px] text-zinc-400 font-normal">≈ {formatRD(p.amount)}</div>
+                        </>
+                      ) : (
+                        formatRD(p.amount)
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -595,51 +652,79 @@ export default function LetterInvoice({
           {isAbono ? (
             <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
               <div className="flex justify-between text-zinc-600 font-medium">
-                <span>Monto Facturado en este Abono:</span>
-                <span className="font-mono text-zinc-900 font-bold">{formatRD(total)}</span>
+                <span>{isUsd ? 'Monto en este Abono (USD):' : 'Monto Facturado en este Abono:'}</span>
+                <span className="font-mono text-zinc-900 font-bold">
+                  {isUsd ? formatUSD(resolvedTotalUsd) : formatRD(total)}
+                </span>
               </div>
               <div className="flex justify-between text-zinc-600 font-medium">
-                <span>Balance Anterior de la Cuenta:</span>
-                <span className="font-mono text-zinc-700 font-bold">{formatRD(effectivePrevBalance)}</span>
+                <span>{isUsd ? 'Balance Anterior (USD):' : 'Balance Anterior de la Cuenta:'}</span>
+                <span className="font-mono text-zinc-700 font-bold">
+                  {isUsd ? formatUSD(effectivePrevBalance / effectiveRate) : formatRD(effectivePrevBalance)}
+                </span>
               </div>
               <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
-                <span>Total Aplicado a Cuenta:</span>
-                <span className="font-mono text-emerald-700 font-black">-{formatRD(total)}</span>
+                <span>{isUsd ? 'Total Aplicado a Cuenta (USD):' : 'Total Aplicado a Cuenta:'}</span>
+                <span className="font-mono text-emerald-700 font-black">
+                  -{isUsd ? formatUSD(resolvedTotalUsd) : formatRD(total)}
+                </span>
               </div>
               <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
-                <span>Saldo Pendiente Restante:</span>
+                <span>{isUsd ? 'Saldo Pendiente (USD):' : 'Saldo Pendiente Restante:'}</span>
                 <span className={`font-mono font-black ${effectiveNewBalance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatRD(Math.max(0, effectiveNewBalance))}
+                  {isUsd ? formatUSD(Math.max(0, effectiveNewBalance / effectiveRate)) : formatRD(Math.max(0, effectiveNewBalance))}
                 </span>
               </div>
             </div>
           ) : (
             <div className="space-y-1.5 p-3 bg-zinc-50 rounded-2xl border border-zinc-200">
               <div className="flex justify-between text-zinc-600 font-medium">
-                <span>Subtotal Gravado:</span>
-                <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
+                <span>{isUsd ? 'Subtotal Gravado (USD):' : 'Subtotal Gravado:'}</span>
+                <span className="font-mono text-zinc-900 font-bold">
+                  {isUsd ? formatUSD(subtotal / effectiveRate) : formatRD(subtotal)}
+                </span>
               </div>
+              {isUsd && (
+                <div className="flex justify-between text-[10px] text-zinc-400 font-mono -mt-1 pb-0.5">
+                  <span>Equiv. Subtotal Pesos:</span>
+                  <span>{formatRD(subtotal)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-zinc-600 font-medium">
-                <span>ITBIS (18%):</span>
-                <span className="font-mono text-zinc-900 font-bold">{formatRD(taxAmount)}</span>
+                <span>{isUsd ? 'ITBIS (18%) (USD):' : 'ITBIS (18%):'}</span>
+                <span className="font-mono text-zinc-900 font-bold">
+                  {taxAmount > 0 
+                    ? (isUsd ? formatUSD(taxAmount / effectiveRate) : formatRD(taxAmount))
+                    : 'Exento'}
+                </span>
               </div>
+              {isUsd && taxAmount > 0 && (
+                <div className="flex justify-between text-[10px] text-zinc-400 font-mono -mt-1 pb-0.5">
+                  <span>Equiv. ITBIS Pesos:</span>
+                  <span>{formatRD(taxAmount)}</span>
+                </div>
+              )}
               {taxAmount === 0 && (
                 <div className="flex justify-between text-zinc-600 font-medium">
-                  <span>Monto Exento:</span>
-                  <span className="font-mono text-zinc-900 font-bold">{formatRD(subtotal)}</span>
+                  <span>{isUsd ? 'Monto Exento (USD):' : 'Monto Exento:'}</span>
+                  <span className="font-mono text-zinc-900 font-bold">
+                    {isUsd ? formatUSD(subtotal / effectiveRate) : formatRD(subtotal)}
+                  </span>
                 </div>
               )}
               {paidAmount !== undefined && (
                 <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
-                  <span>Total Abonado / Pagado:</span>
-                  <span className="font-mono text-emerald-700 font-black">{formatRD(paidAmount)}</span>
+                  <span>{isUsd ? 'Total Abonado / Pagado (USD):' : 'Total Abonado / Pagado:'}</span>
+                  <span className="font-mono text-emerald-700 font-black">
+                    {isUsd ? formatUSD(paidAmount / effectiveRate) : formatRD(paidAmount)}
+                  </span>
                 </div>
               )}
               {balance !== undefined && (
                 <div className="flex justify-between text-zinc-900 font-bold pt-1 border-t border-zinc-200">
-                  <span>Saldo Pendiente:</span>
+                  <span>{isUsd ? 'Saldo Pendiente (USD):' : 'Saldo Pendiente:'}</span>
                   <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {formatRD(Math.max(0, balance))}
+                    {isUsd ? formatUSD(Math.max(0, balance / effectiveRate)) : formatRD(Math.max(0, balance))}
                   </span>
                 </div>
               )}
@@ -650,23 +735,23 @@ export default function LetterInvoice({
             <div className="p-3.5 rounded-2xl flex justify-between items-center shadow-md bg-emerald-950 text-white">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 block">
-                  Total Abonado en este Comprobante
+                  {isUsd ? 'Total Abonado en este Comprobante (USD)' : 'Total Abonado en este Comprobante'}
                 </span>
                 <span className="text-xl font-black font-mono tracking-tight text-white">
-                  {formatRD(total)}
+                  {isUsd ? formatUSD(resolvedTotalUsd) : formatRD(total)}
                 </span>
                 <span className="text-[11px] text-emerald-200 font-mono block mt-0.5">
-                  Saldo Restante: {formatRD(Math.max(0, effectiveNewBalance))}
+                  Saldo Restante: {isUsd ? formatUSD(Math.max(0, effectiveNewBalance / effectiveRate)) : formatRD(Math.max(0, effectiveNewBalance))}
                 </span>
-                {paidCurrency === 'USD' && totalUsd !== undefined && (
-                  <span className="text-xs font-bold text-emerald-300 font-mono block mt-0.5">
-                    ≈ $ {totalUsd.toFixed(2)} USD
+                {isUsd && (
+                  <span className="text-[10px] text-emerald-300 font-mono block mt-0.5">
+                    Equivalente en Pesos: {formatRD(total)} (Tasa: RD$ {effectiveRate.toFixed(2)})
                   </span>
                 )}
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
-                  ABONO APLICADO
+                  {isUsd ? 'ABONO EN USD' : 'ABONO APLICADO'}
                 </span>
                 <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${
                   effectiveNewBalance <= 0.01 ? 'text-emerald-400' : 'text-amber-400'
@@ -682,28 +767,43 @@ export default function LetterInvoice({
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">
                   {isCotizacion 
-                    ? 'Total Cotizado' 
+                    ? (isUsd ? 'Total Cotizado (USD)' : 'Total Cotizado') 
                     : (balance !== undefined && balance > 0.01 
-                        ? 'Saldo Pendiente' 
-                        : (balance !== undefined && balance <= 0.01 ? 'Total Factura (Saldada)' : 'Total a Pagar'))}
+                        ? (isUsd ? 'Saldo Pendiente (USD)' : 'Saldo Pendiente') 
+                        : (balance !== undefined && balance <= 0.01 ? (isUsd ? 'Total Factura Saldada (USD)' : 'Total Factura (Saldada)') : (isUsd ? 'Total a Pagar (USD)' : 'Total a Pagar')))}
                 </span>
-                <span className="text-lg font-black font-mono tracking-tight text-white">
-                  {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
+                <span className="text-xl font-black font-mono tracking-tight text-white">
+                  {isUsd 
+                    ? formatUSD(balance !== undefined && balance > 0.01 ? balance / effectiveRate : resolvedTotalUsd)
+                    : formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
                 </span>
-                {balance !== undefined && balance > 0.01 && (
-                  <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">
-                    Monto Original: {formatRD(total)} {paidAmount ? `• Abonado: ${formatRD(paidAmount)}` : ''}
-                  </span>
-                )}
-                {paidCurrency === 'USD' && totalUsd !== undefined && (
-                  <span className="text-xs font-bold text-emerald-400 font-mono block mt-0.5">
-                    ≈ $ {(balance !== undefined && balance > 0.01 && exchangeRate ? (balance / exchangeRate).toFixed(2) : totalUsd.toFixed(2))} USD
-                  </span>
+                {isUsd ? (
+                  <div className="text-[11px] text-zinc-300 font-mono block mt-1 space-y-0.5">
+                    <p>
+                      <strong className="text-zinc-200">Equivalente en Pesos:</strong>{' '}
+                      <span className="text-emerald-400 font-bold">
+                        {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
+                      </span>
+                    </p>
+                    {exchangeRate && (
+                      <p className="text-[10px] text-zinc-400">
+                        Tasa aplicada: 1 USD = RD$ {exchangeRate.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  balance !== undefined && balance > 0.01 && (
+                    <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">
+                      Monto Original: {formatRD(total)} {paidAmount ? `• Abonado: ${formatRD(paidAmount)}` : ''}
+                    </span>
+                  )
                 )}
               </div>
               <div className="text-right">
-                <span className="text-[10px] font-black bg-red-600 text-white px-2 py-1 rounded-lg uppercase tracking-wider">
-                  {paidCurrency === 'USD' ? 'USD / DOP' : 'DOP'}
+                <span className={`text-[10px] font-black text-white px-2.5 py-1 rounded-lg uppercase tracking-wider ${
+                  isUsd ? 'bg-emerald-600' : 'bg-red-600'
+                }`}>
+                  {isUsd ? 'USD' : 'DOP'}
                 </span>
                 {balance !== undefined && (
                   <span className={`block mt-1 text-[10px] font-black uppercase tracking-wider ${

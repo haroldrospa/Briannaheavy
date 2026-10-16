@@ -45,6 +45,11 @@ export interface Invoice {
   bank_account_id?: string;
   bank_account_name?: string;
   transfer_reference?: string;
+  paid_currency?: 'DOP' | 'USD';
+  exchange_rate?: number;
+  received_amount_usd?: number;
+  change_amount_usd?: number;
+  total_usd?: number;
 }
 
 export const formatInvoiceNumber = (num?: string): string => {
@@ -421,6 +426,11 @@ export const createInvoice = async (
           bank_account_id: invoiceData.bank_account_id,
           bank_account_name: invoiceData.bank_account_name,
           transfer_reference: invoiceData.transfer_reference,
+          paid_currency: invoiceData.paid_currency,
+          exchange_rate: invoiceData.exchange_rate,
+          received_amount_usd: invoiceData.received_amount_usd,
+          change_amount_usd: invoiceData.change_amount_usd,
+          total_usd: invoiceData.total_usd,
         };
 
         const currentList = getLocalStorageInvoices();

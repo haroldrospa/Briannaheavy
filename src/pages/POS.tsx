@@ -2856,6 +2856,11 @@ export default function POS() {
           total: total,
           subtotal: subtotal,
           tax_amount: tax,
+          paidCurrency,
+          exchangeRate,
+          receivedAmountUsd: numRecUsd,
+          changeAmountUsd: changeUsd,
+          totalUsd: totalUsdVal,
           items: cart.map(item => ({
             description: item.product.name,
             quantity: item.quantity,
@@ -2959,6 +2964,11 @@ export default function POS() {
         ecf_track_id: ecfRes?.trackId || lastEcfData?.trackId,
         ecf_qr_url: ecfRes?.qrCodeUrl || lastEcfData?.qrCodeUrl,
         ecf_dgii_status: isElectronic ? 'Aceptado' : (internalDocType === 'CT' ? 'Cotización' : 'Emitido Localmente'),
+        paid_currency: paidCurrency,
+        exchange_rate: exchangeRate,
+        received_amount_usd: numRecUsd,
+        change_amount_usd: changeUsd,
+        total_usd: totalUsdVal,
       };
 
       // Fire & forget background sync
@@ -4115,11 +4125,18 @@ export default function POS() {
               {/* Amount Hero Section */}
               <div className="mt-3.5 mb-2 text-center">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                  Monto Facturado
+                  {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' ? 'Monto Facturado (USD)' : 'Monto Facturado'}
                 </div>
                 <div className="text-3xl font-black tracking-tight text-gray-900 dark:text-white mt-0.5 font-mono">
-                  RD$ {(lastCompletedSale?.total ?? total).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD'
+                    ? `$ ${(lastCompletedSale.lastPaymentInfo.totalUsd || ((lastCompletedSale?.total ?? total) / (lastCompletedSale.lastPaymentInfo.exchangeRate || 60))).toFixed(2)} USD`
+                    : `RD$ ${(lastCompletedSale?.total ?? total).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
+                {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' && (
+                  <div className="text-xs text-gray-500 dark:text-zinc-400 font-mono mt-0.5">
+                    Equiv: RD$ {(lastCompletedSale?.total ?? total).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • Tasa: RD$ {lastCompletedSale.lastPaymentInfo.exchangeRate?.toFixed(2)}
+                  </div>
+                )}
                 
                 {/* Payment & Credit Pill */}
                 <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 dark:bg-zinc-800/80 text-gray-700 dark:text-zinc-300 border border-gray-200/60 dark:border-zinc-700/60">
@@ -4133,14 +4150,6 @@ export default function POS() {
                     <span className="text-gray-400 dark:text-zinc-500 font-normal">• Vence {lastCompletedSale.dueDate}</span>
                   )}
                 </div>
-
-                {/* USD Payment notice */}
-                {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' && (
-                  <div className="mt-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
-                    <span>💵 ${(lastCompletedSale.lastPaymentInfo.totalUsd || ((lastCompletedSale?.total ?? total) / (lastCompletedSale.lastPaymentInfo.exchangeRate || 60))).toFixed(2)} USD</span>
-                    <span className="text-[10px] text-gray-400 font-normal">(Tasa: RD$ {lastCompletedSale.lastPaymentInfo.exchangeRate?.toFixed(2)})</span>
-                  </div>
-                )}
               </div>
 
               {/* Modern Minimalist Receipt Details Card */}

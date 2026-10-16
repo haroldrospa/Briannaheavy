@@ -30,6 +30,11 @@ export interface SessionSale {
   cashier?: string;
   cashier_name?: string;
   items?: { description: string; quantity: number; unit_price: number; total_price: number }[];
+  paidCurrency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+  receivedAmountUsd?: number;
+  changeAmountUsd?: number;
+  totalUsd?: number;
 }
 
 interface SessionSalesModalProps {
@@ -619,6 +624,11 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                 total={selectedSaleToPrint.total}
                 securityCode="1B19B3"
                 isPrintOnly={true}
+                paidCurrency={selectedSaleToPrint.paidCurrency}
+                exchangeRate={selectedSaleToPrint.exchangeRate}
+                receivedAmountUsd={selectedSaleToPrint.receivedAmountUsd}
+                changeAmountUsd={selectedSaleToPrint.changeAmountUsd}
+                totalUsd={selectedSaleToPrint.totalUsd}
               />,
               document.body
             )}

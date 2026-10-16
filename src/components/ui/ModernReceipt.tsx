@@ -163,6 +163,12 @@ export default function ModernReceipt({
   const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
   const docTitle = isEcf ? 'FACTURA ELECTRÓNICA' : (isCotizacion ? 'COTIZACIÓN' : 'FACTURA INTERNA');
 
+  const isUsd = paidCurrency === 'USD' || lastPayment?.currency === 'USD';
+  const effectiveRate = (exchangeRate && exchangeRate > 0)
+    ? exchangeRate
+    : (totalUsd && totalUsd > 0 && total > 0 ? (total / totalUsd) : 58.5);
+  const resolvedTotalUsd = totalUsd !== undefined ? totalUsd : (effectiveRate > 0 ? total / effectiveRate : 0);
+
   return (
     <div 
       className={`${isPrintOnly ? 'hidden print:block' : ''} printable-receipt receipt-size-${activeFontSize} receipt-width-${activePaperWidth} bg-white text-black font-sans leading-snug ${is58mm ? 'p-2 max-w-[270px]' : 'p-3 max-w-[360px]'} w-full mx-auto selection:bg-none ${className}`}
@@ -281,33 +287,44 @@ export default function ModernReceipt({
           className="flex justify-between font-black border-b-2 border-black pb-1.5 mb-2 uppercase text-black tracking-wider"
           style={{ fontSize: '0.8em' }}
         >
-          <span>PRODUCTO / CANT.</span>
-          <span>TOTAL</span>
+          <span>{isUsd ? 'PRODUCTO / CANT. (USD)' : 'PRODUCTO / CANT.'}</span>
+          <span>{isUsd ? 'TOTAL (USD)' : 'TOTAL'}</span>
         </div>
         <div className="divide-y divide-zinc-200">
           {items && items.length > 0 ? (
-            items.map((item, idx) => (
-              <div key={idx} className="py-2 flex justify-between items-start" style={{ fontSize: '0.88em' }}>
-                <div className="pr-2 flex-1">
-                  <p className="font-bold text-black leading-tight flex items-baseline gap-1.5">
-                    <span className="bg-zinc-100 border border-zinc-200 text-black font-black font-mono px-1.5 py-0.5 rounded text-[0.9em]">
-                      {item.quantity}x
-                    </span> 
-                    <span>{item.description}</span>
-                  </p>
-                  <p className="text-zinc-500 font-mono mt-0.5 pl-6" style={{ fontSize: '0.82em' }}>
-                    {formatRD(item.unit_price)} c/u
-                  </p>
+            items.map((item, idx) => {
+              const unitPriceUsd = effectiveRate > 0 ? (item.unit_price / effectiveRate) : 0;
+              const totalPriceUsd = effectiveRate > 0 ? (item.total_price / effectiveRate) : 0;
+              return (
+                <div key={idx} className="py-2 flex justify-between items-start" style={{ fontSize: '0.88em' }}>
+                  <div className="pr-2 flex-1">
+                    <p className="font-bold text-black leading-tight flex items-baseline gap-1.5">
+                      <span className="bg-zinc-100 border border-zinc-200 text-black font-black font-mono px-1.5 py-0.5 rounded text-[0.9em]">
+                        {item.quantity}x
+                      </span> 
+                      <span>{item.description}</span>
+                    </p>
+                    <p className="text-zinc-500 font-mono mt-0.5 pl-6" style={{ fontSize: '0.82em' }}>
+                      {isUsd ? `${formatUSD(unitPriceUsd)} c/u (≈ ${formatRD(item.unit_price)})` : `${formatRD(item.unit_price)} c/u`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono font-black text-black whitespace-nowrap pt-0.5 block" style={{ fontSize: '0.96em' }}>
+                      {isUsd ? formatUSD(totalPriceUsd) : formatRD(item.total_price)}
+                    </span>
+                    {isUsd && (
+                      <span className="text-[0.78em] text-zinc-500 font-mono block">
+                        ≈ {formatRD(item.total_price)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="font-mono font-black text-black text-right whitespace-nowrap pt-0.5" style={{ fontSize: '0.96em' }}>
-                  {formatRD(item.total_price)}
-                </span>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="py-2 flex justify-between items-start" style={{ fontSize: '0.88em' }}>
               <p className="font-bold text-black">{isCotizacion ? 'Cotización General' : 'Venta General'}</p>
-              <span className="font-mono font-black text-black">{formatRD(total)}</span>
+              <span className="font-mono font-black text-black">{isUsd ? formatUSD(resolvedTotalUsd) : formatRD(total)}</span>
             </div>
           )}
         </div>
@@ -318,13 +335,25 @@ export default function ModernReceipt({
         {activeConfig.showTaxBreakdown && (
           <div className="bg-white rounded-xl p-2.5 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.82em' }}>
             <div className="flex justify-between font-medium">
-              <span>Subtotal:</span>
-              <span className="font-mono font-bold text-black">{formatRD(subtotal)}</span>
+              <span>{isUsd ? 'Subtotal (USD):' : 'Subtotal:'}</span>
+              <span className="font-mono font-bold text-black">{isUsd ? formatUSD(subtotal / effectiveRate) : formatRD(subtotal)}</span>
             </div>
+            {isUsd && (
+              <div className="flex justify-between text-[0.78em] text-zinc-500 font-mono -mt-0.5">
+                <span>Equiv. Subtotal Pesos:</span>
+                <span>{formatRD(subtotal)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-medium">
-              <span>ITBIS (18%):</span>
-              <span className="font-mono font-bold text-black">{formatRD(taxAmount)}</span>
+              <span>{isUsd ? 'ITBIS (18%) (USD):' : 'ITBIS (18%):'}</span>
+              <span className="font-mono font-bold text-black">{isUsd ? formatUSD(taxAmount / effectiveRate) : formatRD(taxAmount)}</span>
             </div>
+            {isUsd && taxAmount > 0 && (
+              <div className="flex justify-between text-[0.78em] text-zinc-500 font-mono -mt-0.5">
+                <span>Equiv. ITBIS Pesos:</span>
+                <span>{formatRD(taxAmount)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -334,21 +363,36 @@ export default function ModernReceipt({
         >
           <div className="flex justify-between items-center">
             <span className="font-black uppercase tracking-wider text-black" style={{ fontSize: '0.85em' }}>
-              {isCotizacion ? 'TOTAL COTIZACIÓN' : (balance !== undefined && balance > 0.01 ? 'SALDO PENDIENTE' : 'TOTAL FACTURA')}
+              {isCotizacion 
+                ? (isUsd ? 'TOTAL COTIZACIÓN (USD)' : 'TOTAL COTIZACIÓN') 
+                : (balance !== undefined && balance > 0.01 
+                    ? (isUsd ? 'SALDO PENDIENTE (USD)' : 'SALDO PENDIENTE') 
+                    : (isUsd ? 'TOTAL FACTURA (USD)' : 'TOTAL FACTURA'))}
             </span>
             <span className="font-mono font-black tracking-tight text-black" style={{ fontSize: '1.25em' }}>
-              {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
+              {isUsd 
+                ? formatUSD(balance !== undefined && balance > 0.01 ? balance / effectiveRate : resolvedTotalUsd)
+                : formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
             </span>
           </div>
 
-          {balance !== undefined && balance > 0.01 && (
-            <div className="flex justify-between text-zinc-500 font-mono text-[0.75em]">
-              <span>Monto Total Factura:</span>
-              <span>{formatRD(total)}</span>
+          {isUsd ? (
+            <div className="flex justify-between items-center pt-1 border-t border-zinc-200 text-zinc-600 font-mono" style={{ fontSize: '0.8em' }}>
+              <span>Equiv. Pesos (Tasa {effectiveRate ? `RD$ ${effectiveRate.toFixed(2)}` : ''}):</span>
+              <strong className="text-black font-black">
+                {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
+              </strong>
             </div>
+          ) : (
+            (balance !== undefined && balance > 0.01 && (
+              <div className="flex justify-between text-zinc-500 font-mono text-[0.75em]">
+                <span>Monto Total Factura:</span>
+                <span>{formatRD(total)}</span>
+              </div>
+            ))
           )}
 
-          {(paidCurrency === 'USD' || (exchangeRate && exchangeRate > 0)) && (
+          {!isUsd && (exchangeRate && exchangeRate > 0) && (
             <div className="flex justify-between items-center pt-1 border-t border-zinc-200 text-zinc-600 font-mono" style={{ fontSize: '0.8em' }}>
               <span>Equiv. USD (Tasa {exchangeRate ? `RD$ ${exchangeRate.toFixed(2)}` : ''}):</span>
               <strong className="text-black font-black">
@@ -363,15 +407,15 @@ export default function ModernReceipt({
           <div className="bg-white rounded-xl p-2.5 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.82em' }}>
             {paidAmount !== undefined && (
               <div className="flex justify-between font-medium text-emerald-800">
-                <span>Total Abonado / Pagado:</span>
-                <span className="font-mono font-bold">{formatRD(paidAmount)}</span>
+                <span>{isUsd ? 'Total Abonado / Pagado (USD):' : 'Total Abonado / Pagado:'}</span>
+                <span className="font-mono font-bold">{isUsd ? formatUSD(paidAmount / effectiveRate) : formatRD(paidAmount)}</span>
               </div>
             )}
             {balance !== undefined && (
               <div className="flex justify-between font-bold border-t border-zinc-200 pt-1 text-black">
-                <span>Saldo Pendiente:</span>
+                <span>{isUsd ? 'Saldo Pendiente (USD):' : 'Saldo Pendiente:'}</span>
                 <span className={`font-mono font-black ${balance <= 0.01 ? 'text-emerald-700' : 'text-red-600'}`}>
-                  {formatRD(Math.max(0, balance))}
+                  {isUsd ? formatUSD(Math.max(0, balance / effectiveRate)) : formatRD(Math.max(0, balance))}
                 </span>
               </div>
             )}
@@ -386,12 +430,12 @@ export default function ModernReceipt({
                 {lastPayment.receiptNumber ? `Recibo #${lastPayment.receiptNumber}` : 'Comprobante de Abono'}
               </span>
               <span className="font-mono font-black text-emerald-800" style={{ fontSize: '1.05em' }}>
-                {formatRD(lastPayment.amount)}
+                {isUsd ? formatUSD(lastPayment.amountUsd ?? (lastPayment.amount / effectiveRate)) : formatRD(lastPayment.amount)}
               </span>
             </div>
             <div className="flex justify-between text-zinc-600 pt-0.5">
               <span>Método:</span>
-              <strong className="text-black">{lastPayment.method || 'Efectivo'}</strong>
+              <strong className="text-black">{lastPayment.method || 'Efectivo'}{lastPayment.currency ? ` (${lastPayment.currency})` : ''}</strong>
             </div>
             {lastPayment.reference && (
               <div className="flex justify-between text-zinc-600">
@@ -402,7 +446,7 @@ export default function ModernReceipt({
             {lastPayment.newBalance !== undefined && (
               <div className="flex justify-between text-zinc-700 border-t border-emerald-200 pt-0.5">
                 <span>Nuevo Saldo:</span>
-                <strong className="font-mono text-black">{formatRD(lastPayment.newBalance)}</strong>
+                <strong className="font-mono text-black">{isUsd ? formatUSD(lastPayment.newBalance / effectiveRate) : formatRD(lastPayment.newBalance)}</strong>
               </div>
             )}
           </div>

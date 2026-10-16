@@ -97,6 +97,14 @@ export default class ErrorBoundary extends Component<Props, State> {
                   ? 'El sistema se ha actualizado en el servidor con nuevas mejoras. Se requiere actualizar la pantalla para cargar los módulos más recientes.'
                   : 'Ocurrió un error temporal al cargar la vista. Puedes recargar la aplicación para continuar.'}
               </p>
+              {this.state.error?.message && !this.state.isChunkError && (
+                <details className="mt-2 text-left bg-gray-50 dark:bg-zinc-800/60 p-2.5 rounded-xl border border-gray-200 dark:border-zinc-700/60 text-[11px] text-gray-600 dark:text-zinc-300">
+                  <summary className="cursor-pointer font-bold text-gray-700 dark:text-zinc-200">Detalles del error</summary>
+                  <pre className="mt-1 font-mono text-[10px] whitespace-pre-wrap break-all text-red-600 dark:text-red-400">
+                    {this.state.error.message}
+                  </pre>
+                </details>
+              )}
             </div>
 
             <div className="pt-2 flex flex-col gap-2.5">

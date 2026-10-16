@@ -987,9 +987,19 @@ export default function Invoices() {
                     <span className="font-mono">${(viewingInvoice.tax_amount || (viewingInvoice.total_amount - viewingInvoice.total_amount / 1.18)).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm font-black border-t border-gray-200 dark:border-zinc-800 pt-1.5 text-gray-900 dark:text-white">
-                    <span>Total Factura:</span>
-                    <span className="font-mono">RD$ {viewingInvoice.total_amount.toFixed(2)}</span>
+                    <span>{viewingInvoice.paid_currency === 'USD' ? 'Total Factura (USD):' : 'Total Factura:'}</span>
+                    <span className="font-mono">
+                      {viewingInvoice.paid_currency === 'USD'
+                        ? `$ ${(viewingInvoice.total_usd ?? (viewingInvoice.exchange_rate ? viewingInvoice.total_amount / viewingInvoice.exchange_rate : viewingInvoice.total_amount)).toFixed(2)} USD`
+                        : `RD$ ${viewingInvoice.total_amount.toFixed(2)}`}
+                    </span>
                   </div>
+                  {viewingInvoice.paid_currency === 'USD' && (
+                    <div className="flex justify-between text-xs text-gray-400 font-mono">
+                      <span>Equivalente en Pesos:</span>
+                      <span>RD$ {viewingInvoice.total_amount.toFixed(2)}</span>
+                    </div>
+                  )}
                   {Boolean((viewingInvoice as any).paid_amount && Number((viewingInvoice as any).paid_amount) > 0) && (
                     <div className="flex justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400 pt-1 border-t border-gray-200/50 dark:border-zinc-800">
                       <span>Total Abonado:</span>
@@ -1098,6 +1108,11 @@ export default function Invoices() {
           qrCodeUrl={viewingInvoice.ecf_qr_url}
           trackId={viewingInvoice.ecf_track_id}
           isPrintOnly={true}
+          paidCurrency={viewingInvoice.paid_currency}
+          exchangeRate={viewingInvoice.exchange_rate}
+          receivedAmountUsd={viewingInvoice.received_amount_usd}
+          changeAmountUsd={viewingInvoice.change_amount_usd}
+          totalUsd={viewingInvoice.total_usd}
         />,
         document.body
       )}
