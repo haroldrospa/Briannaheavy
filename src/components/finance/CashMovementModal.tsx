@@ -95,7 +95,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
               payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
               reference: p.reference,
               register_name: p.register_name || activeRegisterName,
-              created_by: p.cashier || 'Rosa Iris Peñalo',
+              created_by: p.cashier || (p as any).user_name || 'Sistema',
               created_at: p.date || new Date().toISOString()
             });
           });

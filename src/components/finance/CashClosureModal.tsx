@@ -90,7 +90,7 @@ const getAbonosAsMovements = (invoicePayments: Record<string, any>, defaultRegis
           payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo'),
           reference: p.reference,
           register_name: p.register_name || defaultRegister,
-          created_by: p.cashier || 'Rosa Iris Peñalo',
+          created_by: p.cashier || (p as any).user_name || 'Sistema',
           created_at: p.date || new Date().toISOString()
         });
       });
@@ -178,7 +178,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('todos');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('mios');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -213,7 +213,7 @@ export default function CashClosureModal({
     setCashierName(loggedInUserName);
     setFilterMode('shift');
     setMovementsTimeScope('today');
-    setMovementTab('todos');
+    setMovementTab('mios');
     setCountMode('shift_only');
     const jennifer = adminNames.find(n => n.toLowerCase().includes('jennifer')) || 'Jennifer';
     setSupervisorName(jennifer);
@@ -223,16 +223,19 @@ export default function CashClosureModal({
     if (!isOpen) return;
 
     const regToLoad = selectedRegister === 'todas' ? 'Caja 1 - Repuestos' : selectedRegister;
-    const shift = getActiveShift(regToLoad);
+    const shift = getActiveShift(regToLoad, loggedInUserName);
     setActiveShift(shift);
 
     // Sincronizar en segundo plano con el último turno abierto registrado en Supabase
     fetchLatestOpenShift(regToLoad, loggedInUserName).then(remoteShift => {
       if (remoteShift) {
-        setActiveShift(remoteShift);
-        if (remoteShift.initial_fund !== undefined && !isNaN(remoteShift.initial_fund) && remoteShift.initial_fund >= 0) {
-          setInitialFund(remoteShift.initial_fund);
-          setTempFund(String(remoteShift.initial_fund));
+        // Solo aplicar si pertenece estrictamente al usuario logueado
+        if (!remoteShift.cashier_name || matchesCashierUser(remoteShift.cashier_name, loggedInUserName, loggedInUserEmail)) {
+          setActiveShift(remoteShift);
+          if (remoteShift.initial_fund !== undefined && !isNaN(remoteShift.initial_fund) && remoteShift.initial_fund >= 0) {
+            setInitialFund(remoteShift.initial_fund);
+            setTempFund(String(remoteShift.initial_fund));
+          }
         }
       }
     });
@@ -241,7 +244,7 @@ export default function CashClosureModal({
     setInitialFund(fund);
     setTempFund(String(fund));
     setCashierName(loggedInUserName);
-  }, [isOpen, selectedRegister, loggedInUserName]);
+  }, [isOpen, selectedRegister, loggedInUserName, loggedInUserEmail]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -487,25 +490,25 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // 1. TODOS los movimientos de la caja/turno (para mostrar a todos los usuarios con total visibilidad)
+  // 1. Movimientos de la caja/turno
   const allShiftMovements = useMemo(() => {
+    const effectiveCashier = (selectedCashierFilter === 'todos' || selectedCashierFilter === 'todas')
+      ? 'todos'
+      : (selectedCashierFilter || loggedInUserName || '').trim();
+
     return filterMovementsByShift(
       allMovements, 
       movementsTimeScope, 
       activeShift || undefined, 
       selectedRegister === 'todas' ? 'todas' : selectedRegister, 
-      'todos'
+      effectiveCashier
     );
-  }, [allMovements, movementsTimeScope, activeShift, selectedRegister]);
+  }, [allMovements, movementsTimeScope, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName]);
 
   // 2. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
   const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
   const scopedMovements = useMemo(() => {
-    const userMovs = allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
-    if (userMovs.length === 0 && allShiftMovements.length > 0) {
-      return allShiftMovements;
-    }
-    return userMovs;
+    return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
   }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
 
@@ -902,7 +905,7 @@ export default function CashClosureModal({
         difference: finalDiff,
         status,
         denominations: denomRecord,
-        movements: (scopedMovements && scopedMovements.length > 0) ? scopedMovements : (allShiftMovements || []),
+        movements: scopedMovements,
         notes: closureNotes,
       });
 
@@ -969,20 +972,15 @@ export default function CashClosureModal({
   const printVariance = savedClosure?.difference !== undefined ? Number(savedClosure.difference) : variance;
   const printStatus = savedClosure?.status || (Math.abs(printVariance) < 0.01 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
   const printNotes = savedClosure?.notes !== undefined ? savedClosure.notes : notes;
-  const printCashier = (savedClosure?.cashier_name && !savedClosure.cashier_name.toLowerCase().includes('harold'))
-    ? savedClosure.cashier_name
-    : (activeShift?.cashier_name || cashierName);
+  const printCashier = savedClosure?.cashier_name || cashierName || loggedInUserName;
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
   const printMovements = useMemo(() => {
-    if (savedClosure?.movements && savedClosure.movements.length > 0) {
+    if (savedClosure?.movements) {
       return savedClosure.movements;
     }
-    if (scopedMovements && scopedMovements.length > 0) {
-      return scopedMovements;
-    }
-    return allShiftMovements || [];
-  }, [savedClosure, scopedMovements, allShiftMovements]);
+    return scopedMovements;
+  }, [savedClosure, scopedMovements]);
 
   const printIngresos = useMemo(() => {
     return printMovements.filter(m => m.type === 'Ingreso');

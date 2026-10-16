@@ -4299,6 +4299,7 @@ export default function POS() {
           <CashClosureModal
             isOpen={isCashClosureOpen}
             defaultRegister={activeRegister}
+            defaultCashier={currentUserName}
             onClose={(didCloseShift) => {
               setIsCashClosureOpen(false);
               if (didCloseShift) {

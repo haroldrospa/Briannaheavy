@@ -136,7 +136,11 @@ export const setLastClosureTime = (registerName: string, timeIso = new Date().to
 
 export const DEFAULT_SHIFT_FUND = 0;
 
-export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift => {
+export const getActiveShift = (
+  registerName = 'Caja 1 - Repuestos',
+  cashierName?: string
+): ActiveShift => {
+  const currentCashier = cashierName || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
   const shiftKey = getShiftStorageKey(registerName);
   try {
     const raw = localStorage.getItem(shiftKey);
@@ -144,9 +148,11 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
       const parsed = JSON.parse(raw);
       if (parsed) {
         if (parsed.is_open) {
-          return parsed;
+          // Si el turno abierto guardado coincide con el cajero o no tiene cajero asignado, usarlo
+          if (!parsed.cashier_name || matchesCashierUser(parsed.cashier_name, currentCashier)) {
+            return parsed;
+          }
         }
-        return parsed;
       }
     }
   } catch (e) {
@@ -158,12 +164,11 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     const legacyRaw = localStorage.getItem('brianna_active_shift');
     if (legacyRaw) {
       const parsed = JSON.parse(legacyRaw);
-      if (parsed) {
-        if (parsed.is_open) {
+      if (parsed && parsed.is_open) {
+        if (!parsed.cashier_name || matchesCashierUser(parsed.cashier_name, currentCashier)) {
           parsed.register_name = registerName;
           return parsed;
         }
-        return parsed;
       }
     }
   } catch {}
@@ -187,7 +192,7 @@ export const getActiveShift = (registerName = 'Caja 1 - Repuestos'): ActiveShift
     register_name: registerName,
     opened_at: openedAtStr,
     initial_fund: (!isNaN(localFund) && localFund >= 0) ? localFund : 0,
-    cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
+    cashier_name: currentCashier,
     is_open: localFund > 0,
   };
 
@@ -277,7 +282,7 @@ export const fetchLatestOpenShift = async (
         .eq('status', 'Abierto')
         .order('opened_at', { ascending: false });
 
-      if (cashierName && !cashierName.toLowerCase().includes('admin') && !cashierName.toLowerCase().includes('harold')) {
+      if (cashierName && cashierName !== 'todos' && cashierName !== 'todas') {
         query = query.ilike('user_name', `%${cashierName}%`);
       }
 
@@ -292,8 +297,12 @@ export const fetchLatestOpenShift = async (
           cashier_name: row.user_name || cashierName || 'Cajero',
           is_open: true,
         };
-        const shiftKey = getShiftStorageKey(registerName);
-        localStorage.setItem(shiftKey, JSON.stringify(shift));
+        // Solo guardar en el shiftKey local si corresponde a este usuario
+        const currentLocalUser = typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '';
+        if (!currentLocalUser || matchesCashierUser(shift.cashier_name, currentLocalUser)) {
+          const shiftKey = getShiftStorageKey(registerName);
+          localStorage.setItem(shiftKey, JSON.stringify(shift));
+        }
         return shift;
       }
     } catch (err) {
