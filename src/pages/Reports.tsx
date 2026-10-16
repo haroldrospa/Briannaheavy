@@ -568,6 +568,39 @@ export default function Reports() {
 
   const selectedReportInfo = REPORT_TYPES.find(r => r.id === activeReport) || REPORT_TYPES[0];
 
+  const closureDetailMovements = useMemo(() => {
+    if (!selectedClosureForDetail) return [];
+    if (selectedClosureForDetail.movements && selectedClosureForDetail.movements.length > 0) {
+      return selectedClosureForDetail.movements;
+    }
+    if (selectedClosureForDetail.raw?.movements && selectedClosureForDetail.raw.movements.length > 0) {
+      return selectedClosureForDetail.raw.movements;
+    }
+    // Fallback con movimientos registrados en la misma caja y fecha
+    const cDate = selectedClosureForDetail.createdAt ? selectedClosureForDetail.createdAt.slice(0, 10) : selectedClosureForDetail.date;
+    const cReg = (selectedClosureForDetail.register || '').toLowerCase().trim();
+    const allMovs = dbData.movimientos_caja || [];
+    return allMovs.filter((m: any) => {
+      const mDate = m.date || (m.created_at ? m.created_at.slice(0, 10) : '');
+      const mReg = (m.register_name || m.register || '').toLowerCase().trim();
+      const dateMatches = mDate === cDate;
+      const regMatches = !cReg || cReg.includes('todas') || !mReg || mReg.includes(cReg) || cReg.includes(mReg);
+      return dateMatches && regMatches;
+    });
+  }, [selectedClosureForDetail, dbData.movimientos_caja]);
+
+  const closureIncomesTotal = useMemo(() => {
+    return closureDetailMovements
+      .filter((m: any) => m.type === 'Ingreso')
+      .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
+  }, [closureDetailMovements]);
+
+  const closureExpensesTotal = useMemo(() => {
+    return closureDetailMovements
+      .filter((m: any) => m.type === 'Egreso')
+      .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
+  }, [closureDetailMovements]);
+
   const reportData = useMemo(() => {
     let list: any[] = dbData[activeReport] || [];
 
@@ -2720,6 +2753,74 @@ export default function Reports() {
                 </div>
               </div>
 
+              {/* Sección de Movimientos Realizados en el Turno */}
+              <div className="p-5 rounded-2xl bg-gray-50/60 dark:bg-zinc-800/30 border border-gray-200/80 dark:border-zinc-800">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-xs font-black uppercase text-gray-900 dark:text-white tracking-wider flex items-center gap-2">
+                    <span>Movimientos Realizados en el Turno</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-zinc-200">
+                      {closureDetailMovements.length}
+                    </span>
+                  </h4>
+                  {closureDetailMovements.length > 0 && (
+                    <div className="flex items-center gap-3 text-xs font-mono font-bold">
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        In: +RD$ {closureIncomesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-rose-600 dark:text-rose-400">
+                        Out: -RD$ {closureExpensesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {closureDetailMovements.length === 0 ? (
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 italic text-center py-3">
+                    No se registraron movimientos extraordinarios en este turno.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 text-[10.5px] uppercase font-bold">
+                          <th className="py-2 px-2 text-center">Hora</th>
+                          <th className="py-2 px-2 text-center">Tipo</th>
+                          <th className="py-2 px-2">Método</th>
+                          <th className="py-2 px-2">Concepto / Ref</th>
+                          <th className="py-2 px-2 text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 font-medium">
+                        {closureDetailMovements.map((m: any, idx: number) => {
+                          const isIngreso = m.type === 'Ingreso';
+                          const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+                          const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo'));
+                          const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                          const ref = m.reference ? ` • Ref: ${m.reference}` : '';
+                          return (
+                            <tr key={m.id || idx} className="hover:bg-gray-100/50 dark:hover:bg-zinc-800/40">
+                              <td className="py-2 px-2 text-center font-mono text-[11px] text-gray-500 dark:text-zinc-400">{timeStr}</td>
+                              <td className="py-2 px-2 text-center font-bold text-[11px]">
+                                <span className={`px-2 py-0.5 rounded-full ${isIngreso ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'}`}>
+                                  {isIngreso ? 'Ingreso' : 'Egreso'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-2 text-gray-700 dark:text-zinc-300 text-xs">{method}</td>
+                              <td className="py-2 px-2 text-gray-900 dark:text-white font-semibold">
+                                {concept}{ref}
+                              </td>
+                              <td className={`py-2 px-2 text-right font-mono font-bold ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               {/* Observaciones si existen */}
               {selectedClosureForDetail.notes && (
                 <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 text-xs">
@@ -2940,6 +3041,59 @@ export default function Reports() {
               </div>
             </div>
           </div>
+
+          {/* Sección Dedicada: Todos los Movimientos Realizados en el Turno */}
+          {closureDetailMovements.length > 0 && (
+            <div className="mb-2">
+              <div className="flex items-center justify-between border-b border-black pb-0.5 mb-1">
+                <h3 className="text-[8px] font-black uppercase tracking-wider text-black">
+                  Movimientos Realizados en el Turno ({closureDetailMovements.length})
+                </h3>
+                <div className="text-[7.5px] font-mono font-bold flex items-center gap-2">
+                  <span className="text-emerald-800">Total Ingresos: +RD$ {closureIncomesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-rose-800">Total Egresos: -RD$ {closureExpensesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <table className="w-full text-left text-[7px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 text-black font-bold uppercase">
+                    <th className="p-0.5 px-1 border border-gray-300 w-12 text-center">Hora</th>
+                    <th className="p-0.5 px-1 border border-gray-300 w-14 text-center">Tipo</th>
+                    <th className="p-0.5 px-1 border border-gray-300 w-24">Método / Banco</th>
+                    <th className="p-0.5 px-1 border border-gray-300">Concepto / Detalle</th>
+                    <th className="p-0.5 px-1 border border-gray-300 text-right w-24">Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {closureDetailMovements.map((m: any, idx: number) => {
+                    const isIngreso = m.type === 'Ingreso';
+                    const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+                    const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo'));
+                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                    const ref = m.reference ? ` • Ref: ${m.reference}` : '';
+                    return (
+                      <tr key={m.id || idx} className="odd:bg-gray-50/50">
+                        <td className="p-0.5 px-1 border border-gray-300 text-center font-mono text-[6.5px] text-gray-700">{timeStr}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">
+                          <span className={isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
+                            {isIngreso ? '⊕ Ingreso' : '⊖ Egreso'}
+                          </span>
+                        </td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-gray-800 font-medium truncate max-w-[100px]">{method}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 font-semibold text-black">
+                          {concept}{ref}
+                        </td>
+                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${isIngreso ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Observations */}
           {selectedClosureForDetail.notes && (

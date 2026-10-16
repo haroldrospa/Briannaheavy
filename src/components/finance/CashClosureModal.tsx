@@ -501,7 +501,11 @@ export default function CashClosureModal({
   // 2. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
   const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
   const scopedMovements = useMemo(() => {
-    return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
+    const userMovs = allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
+    if (userMovs.length === 0 && allShiftMovements.length > 0) {
+      return allShiftMovements;
+    }
+    return userMovs;
   }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
 
@@ -898,7 +902,7 @@ export default function CashClosureModal({
         difference: finalDiff,
         status,
         denominations: denomRecord,
-        movements: scopedMovements,
+        movements: (scopedMovements && scopedMovements.length > 0) ? scopedMovements : (allShiftMovements || []),
         notes: closureNotes,
       });
 
@@ -971,8 +975,14 @@ export default function CashClosureModal({
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
   const printMovements = useMemo(() => {
-    return (savedClosure?.movements && savedClosure.movements.length > 0) ? savedClosure.movements : scopedMovements;
-  }, [savedClosure, scopedMovements]);
+    if (savedClosure?.movements && savedClosure.movements.length > 0) {
+      return savedClosure.movements;
+    }
+    if (scopedMovements && scopedMovements.length > 0) {
+      return scopedMovements;
+    }
+    return allShiftMovements || [];
+  }, [savedClosure, scopedMovements, allShiftMovements]);
 
   const printIngresos = useMemo(() => {
     return printMovements.filter(m => m.type === 'Ingreso');
@@ -2449,56 +2459,56 @@ Observaciones: ${printNotes || 'Sin observaciones'}
             </div>
           </div>
 
-          {/* Sección Dedicada: Movimientos Separados si existen */}
+          {/* Sección Dedicada: Todos los Movimientos Realizados en el Turno */}
           {printMovements.length > 0 && (
-            <div className="mb-1.5">
+            <div className="mb-2">
               <div className="flex items-center justify-between border-b border-black pb-0.5 mb-1">
                 <h3 className="text-[8px] font-black uppercase tracking-wider text-black">
-                  Movimientos Extra ({printMovements.length})
+                  Movimientos Realizados en el Turno ({printMovements.length})
                 </h3>
                 <div className="text-[7.5px] font-mono font-bold flex items-center gap-2">
-                  <span className="text-emerald-800">In: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-rose-800">Out: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-emerald-800">Total Ingresos: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-rose-800">Total Egresos: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 items-start">
-                {/* Ingresos */}
-                {printIngresos.length > 0 && (
-                  <div className="border border-emerald-300 rounded overflow-hidden">
-                    <table className="w-full text-left text-[7px] border-collapse bg-white">
-                      <tbody>
-                        {printIngresos.slice(0, 4).map(m => (
-                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0">
-                            <td className="p-0.5 px-1 truncate max-w-[120px] font-semibold">{m.concept || 'Ingreso'}</td>
-                            <td className="p-0.5 px-1 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
-                              +${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Egresos */}
-                {printEgresos.length > 0 && (
-                  <div className="border border-rose-300 rounded overflow-hidden">
-                    <table className="w-full text-left text-[7px] border-collapse bg-white">
-                      <tbody>
-                        {printEgresos.slice(0, 4).map(m => (
-                          <tr key={m.id} className="border-b border-gray-100 last:border-b-0">
-                            <td className="p-0.5 px-1 truncate max-w-[120px] font-semibold">{m.concept || 'Egreso'}</td>
-                            <td className="p-0.5 px-1 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
-                              -${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+              <table className="w-full text-left text-[7px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100 text-black font-bold uppercase">
+                    <th className="p-0.5 px-1 border border-gray-300 w-12 text-center">Hora</th>
+                    <th className="p-0.5 px-1 border border-gray-300 w-14 text-center">Tipo</th>
+                    <th className="p-0.5 px-1 border border-gray-300 w-24">Método / Banco</th>
+                    <th className="p-0.5 px-1 border border-gray-300">Concepto / Detalle</th>
+                    <th className="p-0.5 px-1 border border-gray-300 text-right w-24">Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printMovements.map((m, idx) => {
+                    const isIngreso = m.type === 'Ingreso';
+                    const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+                    const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : 'Efectivo');
+                    const concept = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                    const ref = m.reference ? ` • Ref: ${m.reference}` : '';
+                    return (
+                      <tr key={m.id || idx} className="odd:bg-gray-50/50">
+                        <td className="p-0.5 px-1 border border-gray-300 text-center font-mono text-[6.5px] text-gray-700">{timeStr}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">
+                          <span className={isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
+                            {isIngreso ? '⊕ Ingreso' : '⊖ Egreso'}
+                          </span>
+                        </td>
+                        <td className="p-0.5 px-1 border border-gray-300 text-gray-800 font-medium truncate max-w-[100px]">{method}</td>
+                        <td className="p-0.5 px-1 border border-gray-300 font-semibold text-black">
+                          {concept}{ref}
+                        </td>
+                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${isIngreso ? 'text-emerald-800' : 'text-rose-800'}`}>
+                          {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
 
