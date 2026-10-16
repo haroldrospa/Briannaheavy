@@ -490,27 +490,122 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // 1. Movimientos de la caja/turno
-  const allShiftMovements = useMemo(() => {
-    const effectiveCashier = (selectedCashierFilter === 'todos' || selectedCashierFilter === 'todas')
-      ? 'todos'
-      : (selectedCashierFilter || loggedInUserName || '').trim();
+  // 1. Facturas de todas las operaciones del período para visualización en historial
+  const allPeriodInvoices = useMemo(() => {
+    return filterInvoicesByShift(
+      allInvoices, 
+      movementsTimeScope, 
+      activeShift || undefined, 
+      selectedRegister === 'todas' ? 'todas' : selectedRegister, 
+      'todos'
+    );
+  }, [allInvoices, movementsTimeScope, activeShift, selectedRegister]);
 
+  // 2. Recibos de financiamiento del período para visualización
+  const allPeriodFinancingReceipts = useMemo(() => {
+    let list = allFinancingReceipts;
+    if (selectedRegister !== 'todas') {
+      list = list.filter(r => matchesRegister(selectedRegister, r.registerName));
+    }
+
+    if (movementsTimeScope === 'all') return list;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+    if (movementsTimeScope === 'today') {
+      return list.filter(r => {
+        const dateStr = r.createdAt || r.date;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) || (t >= startOfToday && t <= endOfToday);
+      });
+    }
+
+    const lastClosureTime = getLastClosureTime(selectedRegister);
+    if (activeShift && activeShift.opened_at) {
+      const shiftStartTime = Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime);
+      return list.filter(r => {
+        const dateStr = r.createdAt || r.date;
+        if (!dateStr) return true;
+        const t = new Date(dateStr).getTime();
+        return isNaN(t) || t >= shiftStartTime;
+      });
+    }
+
+    return list.filter(r => {
+      const dateStr = r.createdAt || r.date;
+      if (!dateStr) return true;
+      const t = new Date(dateStr).getTime();
+      return isNaN(t) || (t >= startOfToday && t <= endOfToday);
+    });
+  }, [allFinancingReceipts, movementsTimeScope, activeShift, selectedRegister]);
+
+  // 3. Cobros de crédito del período
+  const allPeriodCreditPayments = useMemo(() => {
+    const payments: Array<{ id: string; amount: number; method: string; cashier: string; date: string; invoiceNumber: string; customer: string }> = [];
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const lastClosureTime = getLastClosureTime(selectedRegister);
+    const shiftStartTime = activeShift?.opened_at 
+      ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) 
+      : Math.max(startOfToday, lastClosureTime);
+
+    allInvoices.forEach(inv => {
+      const hist = (inv as any).payments_history;
+      if (Array.isArray(hist) && hist.length > 0) {
+        hist.forEach(p => {
+          const pTime = p.date ? new Date(p.date).getTime() : 0;
+          if (movementsTimeScope === 'shift' && lastClosureTime > 0 && pTime > 0 && pTime <= lastClosureTime) {
+            return;
+          }
+          let matchesTime = false;
+          if (movementsTimeScope === 'all') matchesTime = true;
+          else if (movementsTimeScope === 'today') matchesTime = isNaN(pTime) || (pTime >= startOfToday && pTime <= endOfToday);
+          else matchesTime = isNaN(pTime) || pTime >= shiftStartTime;
+
+          if (!matchesTime) return;
+
+          const pReg = p.register_name || inv.register_name;
+          if (selectedRegister !== 'todas' && pReg) {
+            if (!matchesRegister(selectedRegister, pReg)) {
+              return;
+            }
+          }
+
+          payments.push({
+            id: p.id || `pay-${Math.random()}`,
+            amount: Number(p.amount) || 0,
+            method: p.method || 'Efectivo',
+            cashier: p.cashier || '',
+            date: p.date || '',
+            invoiceNumber: inv.invoice_number,
+            customer: inv.customer_name || 'Cliente'
+          });
+        });
+      }
+    });
+    return payments;
+  }, [allInvoices, movementsTimeScope, activeShift, selectedRegister]);
+
+  // 4. Movimientos manuales de la caja/turno para visualización amplia
+  const allShiftMovements = useMemo(() => {
     return filterMovementsByShift(
       allMovements, 
       movementsTimeScope, 
       activeShift || undefined, 
       selectedRegister === 'todas' ? 'todas' : selectedRegister, 
-      effectiveCashier
+      'todos'
     );
-  }, [allMovements, movementsTimeScope, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName]);
+  }, [allMovements, movementsTimeScope, activeShift, selectedRegister]);
 
-  // 2. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
+  // 5. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
   const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
   const scopedMovements = useMemo(() => {
     return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
   }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
-
 
   // Lista unificada que combina todas las Ventas (POS), Recibos de Financiamientos, Cobros a Crédito y Movimientos Manuales
   const unifiedShiftMovements = useMemo(() => {
@@ -536,13 +631,15 @@ export default function CashClosureModal({
     }> = [];
 
     // 1. Facturas directas (POS)
-    scopedInvoices.forEach(inv => {
+    allPeriodInvoices.forEach(inv => {
       const pm = (inv.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
       const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
       const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
       const isCash = !isCard && !isBank && !isCredit;
+      const author = inv.cashier_name || 'Sistema';
+      const isMine = matchesCashierUser(inv.cashier_name, effectiveClosureCashier, loggedInUserEmail);
 
       list.push({
         id: `inv-${inv.id || inv.invoice_number}`,
@@ -559,19 +656,25 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: 'Venta',
-        badgeColorClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+        isMine,
+        author,
+        badgeText: isMine ? 'Venta' : `Venta • ${author}`,
+        badgeColorClass: isMine 
+          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
       });
     });
 
     // 2. Recibos de financiamiento (Cuotas e Iniciales)
-    scopedFinancingReceipts.forEach(rc => {
+    allPeriodFinancingReceipts.forEach(rc => {
       const pm = (rc.paymentMethod || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
       const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
       const isCredit = false;
       const isCash = !isCard && !isBank;
+      const author = rc.cashierName || 'Sistema';
+      const isMine = matchesCashierUser(rc.cashierName, effectiveClosureCashier, loggedInUserEmail);
 
       list.push({
         id: `fin-${rc.id || rc.receiptNumber}`,
@@ -588,14 +691,18 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: 'Financ.',
-        badgeColorClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+        isMine,
+        author,
+        badgeText: isMine ? 'Financ.' : `Financ. • ${author}`,
+        badgeColorClass: isMine
+          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
       });
     });
 
     // 3. Cobros de facturas a crédito
     const seenCreditPaymentKeys = new Set<string>();
-    scopedCreditPayments.forEach(p => {
+    allPeriodCreditPayments.forEach(p => {
       const cleanKey = String(p.id).replace(/^pay_/, '').replace(/^abono_/, '');
       seenCreditPaymentKeys.add(cleanKey);
       const pm = (p.method || 'Efectivo').trim();
@@ -604,6 +711,8 @@ export default function CashClosureModal({
       const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
       const isCredit = false;
       const isCash = !isCard && !isBank;
+      const author = p.cashier || 'Sistema';
+      const isMine = matchesCashierUser(p.cashier, effectiveClosureCashier, loggedInUserEmail);
 
       list.push({
         id: `cpay-${p.id}`,
@@ -620,13 +729,16 @@ export default function CashClosureModal({
         isCard,
         isBank,
         isCredit,
-        badgeText: 'Cobro',
-        badgeColorClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
+        isMine,
+        author,
+        badgeText: isMine ? 'Cobro' : `Cobro • ${author}`,
+        badgeColorClass: isMine
+          ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
+          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
       });
     });
 
-    // 4. Movimientos manuales de caja (ingresos y egresos): se muestran TODOS los movimientos del turno a todos los usuarios,
-    // pero distinguiendo cuáles pertenecen al cuadre del cajero en sesión y cuáles a otros usuarios
+    // 4. Movimientos manuales de caja (ingresos y egresos)
     allShiftMovements.forEach(m => {
       if (m.id.startsWith('abono_')) {
         const cleanKey = m.id.replace(/^abono_/, '').replace(/^pay_/, '');
@@ -688,7 +800,7 @@ export default function CashClosureModal({
 
     // Ordenar cronológicamente descendente (más recientes primero)
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [scopedInvoices, scopedFinancingReceipts, scopedCreditPayments, allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
+  }, [allPeriodInvoices, allPeriodFinancingReceipts, allPeriodCreditPayments, allShiftMovements, effectiveClosureCashier, loggedInUserEmail, selectedRegister]);
 
   const unifiedMisMovimientos = useMemo(() => 
     unifiedShiftMovements.filter(m => m.isMine !== false),
@@ -905,7 +1017,7 @@ export default function CashClosureModal({
         difference: finalDiff,
         status,
         denominations: denomRecord,
-        movements: scopedMovements,
+        movements: unifiedMisMovimientos as any,
         notes: closureNotes,
       });
 
@@ -976,26 +1088,27 @@ export default function CashClosureModal({
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
   const printMovements = useMemo(() => {
-    if (savedClosure?.movements) {
+    if (savedClosure?.movements && savedClosure.movements.length > 0) {
       return savedClosure.movements;
     }
-    return scopedMovements;
-  }, [savedClosure, scopedMovements]);
+    return unifiedMisMovimientos;
+  }, [savedClosure, unifiedMisMovimientos]);
 
   const printIngresos = useMemo(() => {
-    return printMovements.filter(m => m.type === 'Ingreso');
+    return printMovements.filter((m: any) => m.type === 'Ingreso' && m.category !== 'venta' && m.category !== 'financiamiento' && m.category !== 'cobro');
   }, [printMovements]);
 
   const printEgresos = useMemo(() => {
-    return printMovements.filter(m => m.type === 'Egreso');
+    return printMovements.filter((m: any) => m.type === 'Egreso');
   }, [printMovements]);
 
 
-  const isMovementTransfer = (m: CashMovement) => {
-    const pm = (m.payment_method || '').toLowerCase().trim();
+  const isMovementTransfer = (m: any) => {
+    const pm = (m.paymentMethod || m.payment_method || '').toLowerCase().trim();
     const reasonLower = ((m as any).reason || '').toLowerCase();
     const conceptLower = (m.concept || '').toLowerCase();
     return (
+      Boolean(m.isBank) ||
       pm.includes('transferencia') || 
       pm.includes('transf') || 
       pm.includes('banco') ||
@@ -1635,28 +1748,28 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
                         <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Efectivo</span>
                         <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
-                          ${systemSales.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {systemSales.cash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
                         <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Tarjeta</span>
                         <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
-                          ${systemSales.card.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {systemSales.card.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
                         <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Transferencia</span>
                         <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
-                          ${systemSales.transfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {systemSales.transfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
 
                       <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
                         <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Crédito</span>
                         <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
-                          ${systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -1677,7 +1790,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           </span>
                         </div>
 
-                        {/* Selector de Período para Movimientos: Hoy vs Turno */}
+                        {/* Selector de Período para Movimientos: Hoy vs Turno vs Histórico */}
                         <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg text-[9.5px] font-bold border border-zinc-200/50 dark:border-zinc-700/50">
                           <button
                             type="button"
@@ -1700,6 +1813,17 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                             }`}
                           >
                             Turno Actual
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMovementsTimeScope('all')}
+                            className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
+                              movementsTimeScope === 'all'
+                                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-2xs font-black'
+                                : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 font-medium'
+                            }`}
+                          >
+                            Todo el Histórico
                           </button>
                         </div>
                       </div>
@@ -1881,7 +2005,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 <span className={`font-mono font-bold text-xs tracking-tight ${
                                   isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                                 } ${isExternalMovement ? 'opacity-65' : ''}`}>
-                                  {isIngreso ? '+' : '-'}${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  {isIngreso ? '+' : '-'}RD$ {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </span>
                                 {isExternalMovement && (
                                   <span className="block text-[7.5px] font-bold uppercase tracking-wider text-amber-600/90 dark:text-amber-400/90">
@@ -2481,18 +2605,26 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </tr>
                 </thead>
                 <tbody>
-                  {printMovements.map((m, idx) => {
+                  {printMovements.map((m: any, idx) => {
                     const isIngreso = m.type === 'Ingreso';
-                    const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                    const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : 'Efectivo');
-                    const concept = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                    const rawTime = m.createdAt || m.created_at || m.date;
+                    const timeStr = rawTime ? new Date(rawTime).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+                    const method = m.paymentMethod || m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : 'Efectivo');
+                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
                     const ref = m.reference ? ` • Ref: ${m.reference}` : '';
+                    
+                    let typeBadge = isIngreso ? '⊕ Ingreso' : '⊖ Egreso';
+                    if (m.category === 'venta') typeBadge = 'Venta POS';
+                    else if (m.category === 'financiamiento') typeBadge = 'Financ.';
+                    else if (m.category === 'cobro') typeBadge = 'Cobro';
+                    else if (m.categoryLabel) typeBadge = m.categoryLabel;
+
                     return (
                       <tr key={m.id || idx} className="odd:bg-gray-50/50">
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-mono text-[6.5px] text-gray-700">{timeStr}</td>
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">
                           <span className={isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
-                            {isIngreso ? '⊕ Ingreso' : '⊖ Egreso'}
+                            {typeBadge}
                           </span>
                         </td>
                         <td className="p-0.5 px-1 border border-gray-300 text-gray-800 font-medium truncate max-w-[100px]">{method}</td>

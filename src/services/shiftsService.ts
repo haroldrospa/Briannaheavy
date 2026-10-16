@@ -462,12 +462,13 @@ export const filterInvoicesByShift = (
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
 
   if (filterMode === 'today') {
     return list.filter(inv => {
       if (!inv.created_at) return true;
       const invTime = new Date(inv.created_at).getTime();
-      return isNaN(invTime) || invTime >= startOfToday;
+      return isNaN(invTime) || (invTime >= startOfToday && invTime <= endOfToday);
     });
   }
 
@@ -616,12 +617,13 @@ export const filterMovementsByShift = (
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
 
   if (filterMode === 'today') {
     return list.filter(m => {
       if (!m.created_at) return true;
       const mTime = new Date(m.created_at).getTime();
-      return isNaN(mTime) || mTime >= startOfToday;
+      return isNaN(mTime) || (mTime >= startOfToday && mTime <= endOfToday);
     });
   }
 
