@@ -7,6 +7,7 @@ import { fetchCashClosures } from './cashClosuresService';
 import { fetchCashMovements } from './cashMovementsService';
 import { fetchFinancings } from './financingService';
 import { fetchCreditNotes } from './creditNotesService';
+import { fetchLatestOpenShift } from './shiftsService';
 
 let isRealtimeInitialized = false;
 
@@ -22,8 +23,9 @@ export const initRealtimeSync = (): (() => void) => {
 
   // 1. Carga inicial en segundo plano diferida y escalonada (evita saturar el CPU/red en el arranque)
   const runBackgroundSync = () => {
-    // Primero solo configuraciones globales
+    // Primero configuraciones globales y estado del turno de caja compartida
     fetchAllSystemSettings();
+    fetchLatestOpenShift();
 
     // El resto se carga con un leve retraso para dar máxima prioridad a la pantalla activa
     setTimeout(() => {
@@ -137,6 +139,18 @@ export const initRealtimeSync = (): (() => void) => {
           window.dispatchEvent(new CustomEvent('brianna_cash_closures_updated'));
         } catch (err) {
           console.warn('Cash closures realtime error:', err);
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'cash_shifts' },
+      async () => {
+        try {
+          await fetchLatestOpenShift();
+          window.dispatchEvent(new Event('brianna_shift_updated'));
+        } catch (err) {
+          console.warn('Cash shifts realtime error:', err);
         }
       }
     )

@@ -470,7 +470,8 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice> & Reco
         'subtotal', 'tax_amount', 'total_amount', 'payment_method', 'cashier_name',
         'register_name', 'shift_id', 'status', 'created_at', 'is_electronic',
         'billing_mode', 'ecf_security_code', 'ecf_track_id', 'ecf_qr_url',
-        'ecf_dgii_status', 'credit_days', 'due_date'
+        'ecf_dgii_status', 'credit_days', 'due_date',
+        'paid_currency', 'exchange_rate', 'total_usd', 'received_amount_usd', 'change_amount_usd'
       ];
       const dbPayload: Record<string, any> = {};
       for (const [k, v] of Object.entries(updates)) {

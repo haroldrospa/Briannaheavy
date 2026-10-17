@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import CashMovementModal from '../components/finance/CashMovementModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
-import { isShiftOpen, getActiveShift, matchesCashierUser } from '../services/shiftsService';
+import { isShiftOpen, getActiveShift, matchesCashierUser, fetchLatestOpenShift } from '../services/shiftsService';
 import { getActiveRole } from '../utils/rolePermissions';
 import { 
   fetchFinancings, 
@@ -476,7 +476,7 @@ const formatPaymentDateToSpanish = (dateStr: string) => {
   return dateObj.toLocaleDateString('es-DO', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-const FINANCING_REGISTER = 'Caja Cobros & Financiamientos';
+const FINANCING_REGISTER = 'Caja 1 - Repuestos';
 
 export default function Financing() {
   const showAlert = useAlert();
@@ -508,16 +508,13 @@ export default function Financing() {
   const isAdmin = currentRole === 'Administrador';
   const [loggedInUserName, setLoggedInUserName] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado');
   const [loggedInUserEmail, setLoggedInUserEmail] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '');
-  const [movementUserScope, setMovementUserScope] = useState<'todos' | 'mi_usuario'>(() => (getActiveRole() === 'Administrador' ? 'todos' : 'mi_usuario'));
+  const [movementUserScope, setMovementUserScope] = useState<'todos' | 'mi_usuario'>('todos');
   const [selectedSpecificCashier, setSelectedSpecificCashier] = useState<string>('todos');
 
   useEffect(() => {
     const handleRoleUpdate = () => {
       const role = getActiveRole();
       setCurrentRole(role);
-      if (role !== 'Administrador') {
-        setMovementUserScope('mi_usuario');
-      }
     };
     const handleUserUpdate = () => {
       setLoggedInUserName((typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado');
@@ -531,9 +528,21 @@ export default function Financing() {
     };
   }, []);
 
-  const effectiveUserScope = isAdmin ? movementUserScope : 'mi_usuario';
+  const effectiveUserScope = movementUserScope;
 
   useEffect(() => {
+    const checkAndInitShift = async () => {
+      let open = isShiftOpen(FINANCING_REGISTER);
+      if (!open) {
+        const remote = await fetchLatestOpenShift(FINANCING_REGISTER);
+        if (remote && remote.is_open) {
+          open = true;
+        }
+      }
+      setIsShiftActive(open);
+    };
+    checkAndInitShift();
+
     const handleShiftUpdate = () => {
       setIsShiftActive(isShiftOpen(FINANCING_REGISTER));
     };
@@ -3715,58 +3724,51 @@ export default function Financing() {
           {/* Barra de Filtros secundarios & Acciones */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white dark:bg-[#1a1a1a] rounded-2xl border border-gray-100 dark:border-zinc-800">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Selector de alcance por usuario (Admin vs Usuario) */}
-              {isAdmin ? (
-                <div className="flex items-center gap-1.5">
-                  <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMovementUserScope('todos');
-                        setSelectedSpecificCashier('todos');
-                      }}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                        movementUserScope === 'todos' && selectedSpecificCashier === 'todos'
-                          ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <UserGroupIcon className="w-3.5 h-3.5" />
-                      <span>Todos los Usuarios</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovementUserScope('mi_usuario')}
-                      className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                        movementUserScope === 'mi_usuario'
-                          ? 'bg-[#ED1C24] text-white shadow-xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                    >
-                      <UserIcon className="w-3.5 h-3.5" />
-                      <span>Solo Mi Usuario</span>
-                    </button>
-                  </div>
+              {/* Selector de alcance por usuario */}
+              <div className="flex items-center gap-1.5">
+                <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl gap-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMovementUserScope('todos');
+                      setSelectedSpecificCashier('todos');
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      movementUserScope === 'todos' && selectedSpecificCashier === 'todos'
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <UserGroupIcon className="w-3.5 h-3.5" />
+                    <span>Todos los Usuarios</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMovementUserScope('mi_usuario')}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      movementUserScope === 'mi_usuario'
+                        ? 'bg-[#ED1C24] text-white shadow-xs font-black'
+                        : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <UserIcon className="w-3.5 h-3.5" />
+                    <span>Solo Mi Usuario</span>
+                  </button>
+                </div>
 
-                  {movementUserScope === 'todos' && uniqueCashiers.length > 0 && (
-                    <select
-                      value={selectedSpecificCashier}
-                      onChange={(e) => setSelectedSpecificCashier(e.target.value)}
-                      className="px-2.5 py-1 text-xs font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl border border-transparent focus:border-gray-300 dark:focus:border-zinc-700 outline-none cursor-pointer"
-                    >
-                      <option value="todos">Todos los Cajeros</option>
-                      {uniqueCashiers.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded-xl border border-blue-200/60 dark:border-blue-800/40 text-xs font-bold">
-                  <UserIcon className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Mis Registros: <strong className="font-black">{loggedInUserName}</strong></span>
-                </div>
-              )}
+                {movementUserScope === 'todos' && uniqueCashiers.length > 0 && (
+                  <select
+                    value={selectedSpecificCashier}
+                    onChange={(e) => setSelectedSpecificCashier(e.target.value)}
+                    className="px-2.5 py-1 text-xs font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl border border-transparent focus:border-gray-300 dark:focus:border-zinc-700 outline-none cursor-pointer"
+                  >
+                    <option value="todos">Todos los Cajeros</option>
+                    {uniqueCashiers.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
               <div className="h-4 w-px bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
 

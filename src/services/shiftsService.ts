@@ -1,6 +1,5 @@
 import type { Invoice } from './invoicesService';
 import type { CashMovement } from './cashMovementsService';
-import { getActiveRole } from '../utils/rolePermissions';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { saveRemoteSetting } from './settingsService';
 
@@ -14,22 +13,8 @@ export const CASH_REGISTERS = [
 export type CashRegisterName = typeof CASH_REGISTERS[number] | string;
 
 export const getCurrentUserRegister = (): string => {
-  const role = getActiveRole();
-  const userEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
-  const userName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
   const posRegister = typeof window !== 'undefined' ? localStorage.getItem('brianna_pos_register') : null;
-
   if (posRegister) return posRegister;
-
-  const emailLower = userEmail.toLowerCase();
-  const nameLower = userName.toLowerCase();
-
-  if (emailLower.includes('cajero2') || nameLower.includes('cajero 2') || nameLower.includes('caja 2')) {
-    return 'Caja 2 - Repuestos';
-  }
-  if (role === 'Oficina' && (emailLower.includes('finan') || nameLower.includes('finan'))) {
-    return 'Caja Cobros & Financiamientos';
-  }
   return 'Caja 1 - Repuestos';
 };
 
@@ -148,10 +133,8 @@ export const getActiveShift = (
       const parsed = JSON.parse(raw);
       if (parsed) {
         if (parsed.is_open) {
-          // Si el turno abierto guardado coincide con el cajero o no tiene cajero asignado, usarlo
-          if (!parsed.cashier_name || matchesCashierUser(parsed.cashier_name, currentCashier)) {
-            return parsed;
-          }
+          // En caja única, el turno abierto es compartido por todos los usuarios
+          return parsed;
         }
       }
     }
@@ -165,10 +148,8 @@ export const getActiveShift = (
     if (legacyRaw) {
       const parsed = JSON.parse(legacyRaw);
       if (parsed && parsed.is_open) {
-        if (!parsed.cashier_name || matchesCashierUser(parsed.cashier_name, currentCashier)) {
-          parsed.register_name = registerName;
-          return parsed;
-        }
+        parsed.register_name = registerName;
+        return parsed;
       }
     }
   } catch {}
@@ -272,19 +253,15 @@ export const openShift = (
 
 export const fetchLatestOpenShift = async (
   registerName = 'Caja 1 - Repuestos', 
-  cashierName?: string
+  _cashierName?: string
 ): Promise<ActiveShift | null> => {
   if (isSupabaseConfigured()) {
     try {
-      let query = supabase
+      const query = supabase
         .from('cash_shifts')
         .select('*')
         .eq('status', 'Abierto')
         .order('opened_at', { ascending: false });
-
-      if (cashierName && cashierName !== 'todos' && cashierName !== 'todas') {
-        query = query.ilike('user_name', `%${cashierName}%`);
-      }
 
       const { data, error } = await query.limit(1);
       if (!error && data && data.length > 0) {
@@ -294,16 +271,30 @@ export const fetchLatestOpenShift = async (
           register_name: registerName,
           opened_at: row.opened_at,
           initial_fund: Number(row.opening_amount || 0),
-          cashier_name: row.user_name || cashierName || 'Cajero',
+          cashier_name: row.user_name || 'Cajero',
           is_open: true,
         };
-        // Solo guardar en el shiftKey local si corresponde a este usuario
-        const currentLocalUser = typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '';
-        if (!currentLocalUser || matchesCashierUser(shift.cashier_name, currentLocalUser)) {
-          const shiftKey = getShiftStorageKey(registerName);
-          localStorage.setItem(shiftKey, JSON.stringify(shift));
-        }
+        const shiftKey = getShiftStorageKey(registerName);
+        const fundKey = getFundStorageKey(registerName);
+        localStorage.setItem(shiftKey, JSON.stringify(shift));
+        localStorage.setItem(fundKey, String(shift.initial_fund));
+        localStorage.setItem('brianna_active_shift', JSON.stringify(shift));
+        localStorage.setItem('brianna_initial_cash_fund', String(shift.initial_fund));
         return shift;
+      } else if (!error && (!data || data.length === 0)) {
+        // No hay turno abierto en el servidor: si localmente figuraba abierto, sincronizarlo a cerrado
+        const shiftKey = getShiftStorageKey(registerName);
+        const rawLocal = localStorage.getItem(shiftKey);
+        if (rawLocal) {
+          try {
+            const parsed = JSON.parse(rawLocal);
+            if (parsed && parsed.is_open) {
+              parsed.is_open = false;
+              localStorage.setItem(shiftKey, JSON.stringify(parsed));
+              localStorage.setItem('brianna_active_shift', JSON.stringify(parsed));
+            }
+          } catch {}
+        }
       }
     } catch (err) {
       console.warn('Error fetching latest open shift from Supabase:', err);
@@ -316,6 +307,8 @@ export const closeShift = (registerName = 'Caja 1 - Repuestos', _closureId?: str
   const nowIso = new Date().toISOString();
   setLastClosureTime(registerName, nowIso);
   setLastClosureTime('todas', nowIso);
+  setLastClosureTime('Caja Principal', nowIso);
+  setLastClosureTime('Caja Cobros & Financiamientos', nowIso);
 
   try {
     const shiftKey = getShiftStorageKey(registerName);
@@ -335,6 +328,14 @@ export const closeShift = (registerName = 'Caja 1 - Repuestos', _closureId?: str
     localStorage.setItem('brianna_active_shift', JSON.stringify(closedShift));
     localStorage.setItem('brianna_initial_cash_fund', '0');
 
+    // Limpiar también alias de cajas registradoras para sincronía total
+    ['caja_1___repuestos', 'caja_principal', 'caja_cobros___financiamientos', 'caja_2___repuestos'].forEach(alias => {
+      try {
+        localStorage.setItem(`brianna_shift_${alias}`, JSON.stringify(closedShift));
+        localStorage.setItem(`brianna_fund_${alias}`, '0');
+      } catch {}
+    });
+
     const lastClosedKey = `brianna_last_closed_${registerName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     localStorage.setItem(lastClosedKey, JSON.stringify(closedShift));
   } catch (e) {
@@ -351,6 +352,9 @@ export const closeShift = (registerName = 'Caja 1 - Repuestos', _closureId?: str
         const activeShiftsRaw = localStorage.getItem('brianna_active_shifts_map');
         const activeShifts = activeShiftsRaw ? JSON.parse(activeShiftsRaw) : {};
         delete activeShifts[registerName];
+        delete activeShifts['Caja Principal'];
+        delete activeShifts['Caja 1 - Repuestos'];
+        delete activeShifts['Caja Cobros & Financiamientos'];
         localStorage.setItem('brianna_active_shifts_map', JSON.stringify(activeShifts));
         await saveRemoteSetting('active_shifts', activeShifts);
       } catch (err) {
@@ -433,22 +437,20 @@ export const filterInvoicesByShift = (
   filterMode: 'shift' | 'today' | 'all' = 'shift',
   activeShift: ActiveShift = getActiveShift(),
   selectedRegister = 'todas',
-  selectedCashier = 'current_user'
+  selectedCashier = 'todos'
 ): Invoice[] => {
   // Excluir SIEMPRE las cotizaciones de cualquier cálculo de caja o ventas
   let list = (invoices || []).filter(inv => !isQuotationInvoice(inv));
 
-  const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  // Cada venta/cuadre es independiente por cajero: cada usuario sólo cuenta sus propias operaciones,
-  // salvo que se solicite explícitamente 'todos' / 'todas'
+  // En caja única compartida, todos los usuarios ven las facturas del turno activo por defecto ('todos')
   let effectiveCashier = selectedCashier;
-  if (effectiveCashier === 'current_user' || !effectiveCashier) {
-    effectiveCashier = currentUserName;
+  if (!effectiveCashier || effectiveCashier === 'current_user') {
+    effectiveCashier = 'todos';
   }
 
-  // 1. Filtrar por Cajera/Usuario si no se solicitó explícitamente ver 'todas' / 'todos'
+  // 1. Filtrar por Cajera/Usuario solo si se solicitó explícitamente un cajero puntual
   if (effectiveCashier !== 'todas' && effectiveCashier !== 'todos' && effectiveCashier.trim() !== '') {
     list = list.filter(inv => matchesCashierUser(inv.cashier_name, effectiveCashier, currentUserEmail));
   }
@@ -543,6 +545,7 @@ export const isMovementOfUser = (
 ): boolean => {
   const author = (movement.created_by || (movement as any).user_name || '').toLowerCase().trim();
   if (!userName && !userEmail) return true;
+  if (userName === 'todos' || userName === 'todas') return true;
   if (!author) {
     const meName = (userName || '').toLowerCase().trim();
     return meName.includes('harold') || meName.includes('admin');
@@ -590,15 +593,11 @@ export const filterMovementsByShift = (
 ): CashMovement[] => {
   let list = movements;
 
-  const currentRole = getActiveRole();
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
-  // 1. Filtrar por Cajero / Usuario
-  let effectiveCashier = selectedCashier;
-  if (currentRole !== 'Administrador' && currentUserName && selectedCashier !== 'todos') {
-    effectiveCashier = currentUserName;
-  }
+  // 1. En caja única, todos los movimientos de la caja son visibles y compartidos por defecto
+  let effectiveCashier = selectedCashier || 'todos';
 
   if (effectiveCashier !== 'todos' && effectiveCashier !== 'todas' && effectiveCashier.trim() !== '') {
     if (effectiveCashier === 'current_user' || effectiveCashier === 'mine') {

@@ -70,7 +70,7 @@ import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../ser
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
 import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
-import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift, isShiftOpen } from '../services/shiftsService';
+import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift, isShiftOpen, fetchLatestOpenShift } from '../services/shiftsService';
 
 const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {
   const dateObj = inv.created_at ? new Date(inv.created_at) : new Date();
@@ -2092,19 +2092,6 @@ export default function POS() {
   const [sortBy, setSortBy] = useState<'default' | 'name' | 'price_asc' | 'price_desc' | 'stock'>('default');
   const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
   const [activeRegister] = useState<string>(() => {
-    const role = getActiveRole();
-    const userEmail = (localStorage.getItem('brianna_user_email') || '').toLowerCase();
-    const userName = (localStorage.getItem('brianna_user_name') || '').toLowerCase();
-    
-    if (role === 'Repuestos') {
-      if (userEmail.includes('cajero2') || userName.includes('cajero 2') || userName.includes('caja 2')) {
-        return 'Caja 2 - Repuestos';
-      }
-      if (userEmail.includes('cobro') || userName.includes('cobro')) {
-        return 'Caja Cobros & Financiamientos';
-      }
-      return 'Caja 1 - Repuestos';
-    }
     return localStorage.getItem('brianna_pos_register') || 'Caja 1 - Repuestos';
   });
   const [currentUserName, setCurrentUserName] = useState<string>(() => {
@@ -2124,8 +2111,14 @@ export default function POS() {
     const handleQuotationsUpdate = () => {
       setActiveQuotationsCount(getActiveQuotationsCount());
     };
-    const checkShift = () => {
-      const open = isShiftOpen(activeRegister);
+    const checkShift = async () => {
+      let open = isShiftOpen(activeRegister);
+      if (!open) {
+        const remote = await fetchLatestOpenShift(activeRegister);
+        if (remote && remote.is_open) {
+          open = true;
+        }
+      }
       setIsShiftActive(open);
       if (!open) {
         setIsOpenShiftModalOpen(true);
@@ -2290,7 +2283,7 @@ export default function POS() {
         })));
       }
       if (invsRes.status === 'fulfilled' && invsRes.value) {
-        setSessionSales(filterInvoicesByShift(invsRes.value.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+        setSessionSales(filterInvoicesByShift(invsRes.value.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, 'todos').map(mapInvoiceToSessionSale));
         setActiveQuotationsCount(getActiveQuotationsCount());
       }
 
@@ -2328,7 +2321,7 @@ export default function POS() {
 
     const localInvs = getLocalStorageInvoices();
     if (localInvs) {
-      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+      setSessionSales(filterInvoicesByShift(localInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, 'todos').map(mapInvoiceToSessionSale));
     }
 
     // 2. Async background sync with Supabase
@@ -2367,7 +2360,7 @@ export default function POS() {
       invsDebounce = setTimeout(() => {
         const currentInvs = getLocalStorageInvoices();
         if (currentInvs) {
-          setSessionSales(filterInvoicesByShift(currentInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, currentUserName).map(mapInvoiceToSessionSale));
+          setSessionSales(filterInvoicesByShift(currentInvs.filter(i => !isQuotationInvoice(i)), 'shift', getActiveShift(activeRegister), activeRegister, 'todos').map(mapInvoiceToSessionSale));
           setActiveQuotationsCount(getActiveQuotationsCount());
         }
       }, 200);

@@ -21,7 +21,7 @@ import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, c
 import LetterInvoice from '../components/ui/LetterInvoice';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
-import { isShiftOpen, getCurrentUserRegister } from '../services/shiftsService';
+import { isShiftOpen, getCurrentUserRegister, fetchLatestOpenShift } from '../services/shiftsService';
 import { getActiveRole } from '../utils/rolePermissions';
 import { getNextReceiptNumber } from '../utils/sequenceStorage';
 import { getExchangeRate, EXCHANGE_RATE_EVENT } from '../utils/exchangeRate';
@@ -502,6 +502,31 @@ export default function Cobros() {
       ? Number(matchedInv.tax_amount)
       : (item.totalAmount - subtotal);
 
+    // Determinar si la factura o sus abonos se realizaron en USD
+    const payments = item.paymentsHistory || [];
+    const usdPayments = payments.filter(p => p.currency === 'USD' || (Number(p.amountUsd) > 0) || (p.method && p.method.includes('USD')));
+    const totalUsdPaid = usdPayments.reduce((acc, p) => acc + (Number(p.amountUsd) || (p.exchangeRate ? Number(p.amount) / Number(p.exchangeRate) : 0)), 0);
+    const lastUsdPayment = usdPayments.length > 0 ? usdPayments[usdPayments.length - 1] : undefined;
+
+    const historicalRate = lastUsdPayment?.exchangeRate || 
+      (lastUsdPayment?.amountUsd && Number(lastUsdPayment.amount) > 0 ? Number(lastUsdPayment.amount) / Number(lastUsdPayment.amountUsd) : undefined) ||
+      (matchedInv as any)?.exchange_rate || 
+      (matchedInv as any)?.exchangeRate;
+
+    const resolvedInvoiceTotalUsd = (matchedInv as any)?.total_usd || 
+      (matchedInv as any)?.totalUsd || 
+      (totalUsdPaid > 0 && item.balance <= 0.01 ? totalUsdPaid : undefined) ||
+      (lastUsdPayment?.amountUsd && Math.abs(item.totalAmount - lastUsdPayment.amount) < 1 ? Number(lastUsdPayment.amountUsd) : undefined) ||
+      (historicalRate && historicalRate > 0 ? Math.round((item.totalAmount / historicalRate) * 100) / 100 : undefined);
+
+    const isInvoiceUsd = Boolean(
+      (matchedInv as any)?.paid_currency === 'USD' ||
+      (matchedInv as any)?.paidCurrency === 'USD' ||
+      lastPay?.currency === 'USD' ||
+      (lastPay?.amountUsd && Number(lastPay.amountUsd) > 0) ||
+      usdPayments.length > 0
+    );
+
     const invoiceForPrint = {
       ...(matchedInv || {}),
       id: item.invoice_id,
@@ -523,12 +548,21 @@ export default function Cobros() {
       tax_amount: taxAmount,
       paid_amount: item.paidAmount,
       balance: item.balance,
-      payments_history: item.paymentsHistory,
+      payments_history: payments.map(p => ({
+        ...p,
+        amountUsd: p.amountUsd !== undefined ? Number(p.amountUsd) : (p.currency === 'USD' && p.exchangeRate ? Number(p.amount) / Number(p.exchangeRate) : undefined),
+        exchangeRate: p.exchangeRate || (p.amountUsd && Number(p.amountUsd) > 0 ? Number(p.amount) / Number(p.amountUsd) : historicalRate)
+      })),
+      paidCurrency: isInvoiceUsd ? 'USD' : ((matchedInv as any)?.paid_currency || (matchedInv as any)?.paidCurrency || 'DOP'),
+      exchangeRate: historicalRate,
+      totalUsd: resolvedInvoiceTotalUsd,
+      receivedAmountUsd: resolvedInvoiceTotalUsd,
       lastPayment: lastPay ? {
         receiptNumber: lastPay.reference || (lastPay as any).receiptNumber,
-        amount: lastPay.amount,
-        amountUsd: lastPay.amountUsd,
+        amount: Number(lastPay.amount),
+        amountUsd: lastPay.amountUsd !== undefined ? Number(lastPay.amountUsd) : (lastPay.currency === 'USD' && historicalRate ? Number(lastPay.amount) / historicalRate : undefined),
         currency: lastPay.currency,
+        exchangeRate: lastPay.exchangeRate || (lastPay.amountUsd ? Number(lastPay.amount) / Number(lastPay.amountUsd) : historicalRate),
         date: lastPay.date,
         method: lastPay.method,
         reference: lastPay.reference,
@@ -594,13 +628,22 @@ export default function Cobros() {
   };
 
   useEffect(() => {
-    const reg = getCurrentUserRegister();
-    setActiveRegister(reg);
-    const open = isShiftOpen(reg);
-    setIsShiftActive(open);
-    if (!open) {
-      setIsOpenShiftModalOpen(true);
-    }
+    const checkAndInitShift = async () => {
+      const reg = getCurrentUserRegister();
+      setActiveRegister(reg);
+      let open = isShiftOpen(reg);
+      if (!open) {
+        const remote = await fetchLatestOpenShift(reg);
+        if (remote && remote.is_open) {
+          open = true;
+        }
+      }
+      setIsShiftActive(open);
+      if (!open) {
+        setIsOpenShiftModalOpen(true);
+      }
+    };
+    checkAndInitShift();
 
     const handleShiftUpdate = () => {
       const currentReg = getCurrentUserRegister();
@@ -786,6 +829,11 @@ export default function Cobros() {
         status: newBalance <= 0.01 ? 'Pagada' : 'Pendiente',
         balance: newBalance,
         paid_amount: (selectedReceivable.paidAmount || 0) + amount,
+        ...(paymentCurrency === 'USD' ? {
+          paid_currency: 'USD',
+          exchange_rate: exchangeRate || 60,
+          total_usd: (amountUsd && selectedReceivable.totalAmount === amount) ? amountUsd : (exchangeRate ? Math.round((selectedReceivable.totalAmount / exchangeRate) * 100) / 100 : undefined)
+        } : {}),
         ...( { payments_history: updatedHistory } as any)
       });
     } catch (err) {
@@ -2981,7 +3029,12 @@ export default function Cobros() {
                         <td className="py-1 px-2.5">{pay.method}</td>
                         <td className="py-1 px-2.5 font-mono text-[9px]">{pay.reference || 'N/A'}</td>
                         <td className="py-1 px-2.5 text-right font-mono font-bold text-emerald-700">
-                          RD$ {Number(pay.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          <div>RD$ {Number(pay.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</div>
+                          {(pay.amountUsd || pay.currency === 'USD') && (
+                            <div className="text-[8px] font-normal text-gray-500">
+                              ${Number(pay.amountUsd || (pay.exchangeRate ? Number(pay.amount) / pay.exchangeRate : 0)).toFixed(2)} USD
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

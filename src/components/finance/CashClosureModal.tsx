@@ -114,7 +114,7 @@ export default function CashClosureModal({
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
   const [movementsTimeScope, setMovementsTimeScope] = useState<'today' | 'shift' | 'all'>('today');
-  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>(() => loggedInUserName);
+  const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('todos');
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
   const [allMovements, setAllMovements] = useState<CashMovement[]>(() => {
@@ -177,7 +177,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ingreso' | 'egreso'>('mios');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ingreso' | 'egreso'>('todos');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -208,11 +208,11 @@ export default function CashClosureModal({
     if (defaultRegister && defaultRegister !== selectedRegister) {
       setSelectedRegister(defaultRegister);
     }
-    setSelectedCashierFilter(loggedInUserName);
+    setSelectedCashierFilter('todos');
     setCashierName(loggedInUserName);
     setFilterMode('shift');
     setMovementsTimeScope('today');
-    setMovementTab('mios');
+    setMovementTab('todos');
     setCountMode('shift_only');
     const jennifer = adminNames.find(n => n.toLowerCase().includes('jennifer')) || 'Jennifer';
     setSupervisorName(jennifer);
@@ -222,19 +222,16 @@ export default function CashClosureModal({
     if (!isOpen) return;
 
     const regToLoad = selectedRegister === 'todas' ? 'Caja 1 - Repuestos' : selectedRegister;
-    const shift = getActiveShift(regToLoad, loggedInUserName);
+    const shift = getActiveShift(regToLoad);
     setActiveShift(shift);
 
     // Sincronizar en segundo plano con el último turno abierto registrado en Supabase
-    fetchLatestOpenShift(regToLoad, loggedInUserName).then(remoteShift => {
+    fetchLatestOpenShift(regToLoad).then(remoteShift => {
       if (remoteShift) {
-        // Solo aplicar si pertenece estrictamente al usuario logueado
-        if (!remoteShift.cashier_name || matchesCashierUser(remoteShift.cashier_name, loggedInUserName, loggedInUserEmail)) {
-          setActiveShift(remoteShift);
-          if (remoteShift.initial_fund !== undefined && !isNaN(remoteShift.initial_fund) && remoteShift.initial_fund >= 0) {
-            setInitialFund(remoteShift.initial_fund);
-            setTempFund(String(remoteShift.initial_fund));
-          }
+        setActiveShift(remoteShift);
+        if (remoteShift.initial_fund !== undefined && !isNaN(remoteShift.initial_fund) && remoteShift.initial_fund >= 0) {
+          setInitialFund(remoteShift.initial_fund);
+          setTempFund(String(remoteShift.initial_fund));
         }
       }
     });
@@ -363,21 +360,12 @@ export default function CashClosureModal({
     );
   }, [allInvoices, filterMode, activeShift, selectedRegister, loggedInUserName, selectedCashierFilter]);
 
-  // Filtrar recibos de financiamientos por Caja, Turno/Fecha y Cajero
+  // Filtrar recibos de financiamientos por Turno/Fecha y Cajero
   const scopedFinancingReceipts = useMemo(() => {
-    // Si la caja seleccionada es sólo Caja 1 o Caja 2 (repuestos), los recibos de financiamiento pertenecen a Caja Cobros
-    const isCobrosRegister = selectedRegister === 'todas' || 
-      selectedRegister.toLowerCase().includes('cobro') || 
-      selectedRegister.toLowerCase().includes('finanza');
-
-    if (!isCobrosRegister) {
-      return [];
-    }
-
     let list = allFinancingReceipts;
 
-    // Filtrar por cajero estricto: cada usuario/cajero cierra única y exclusivamente sus propias operaciones
-    const effectiveCashier = (loggedInUserName || selectedCashierFilter || '').trim();
+    // Filtrar por cajero si se solicitó explícitamente uno puntual
+    const effectiveCashier = (selectedCashierFilter || '').trim();
     if (effectiveCashier && effectiveCashier !== 'todos' && effectiveCashier !== 'todas') {
       const cLower = effectiveCashier.toLowerCase();
       list = list.filter(r => {
@@ -427,7 +415,7 @@ export default function CashClosureModal({
       const t = new Date(dateStr).getTime();
       return isNaN(t) || t >= startOfToday;
     });
-  }, [allFinancingReceipts, filterMode, activeShift, selectedRegister, selectedCashierFilter, isAdmin, loggedInUserName]);
+  }, [allFinancingReceipts, filterMode, activeShift, selectedRegister, selectedCashierFilter]);
 
   // Filtrar abonos/cobros a facturas a crédito (registrados desde el módulo Cobros o POS)
   const scopedCreditPayments = useMemo(() => {
@@ -439,8 +427,7 @@ export default function CashClosureModal({
       ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) 
       : Math.max(startOfToday, lastClosureTime);
 
-    // Filtrar cobros de crédito por cajero estricto
-    const effectiveCashier = (loggedInUserName || selectedCashierFilter || '').trim();
+    const effectiveCashier = (selectedCashierFilter || '').trim();
 
     allInvoices.forEach(inv => {
       const hist = (inv as any).payments_history;
@@ -484,7 +471,7 @@ export default function CashClosureModal({
       }
     });
     return payments;
-  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, loggedInUserName, loggedInUserEmail]);
+  }, [allInvoices, filterMode, activeShift, selectedRegister, selectedCashierFilter, loggedInUserEmail]);
 
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
@@ -496,15 +483,18 @@ export default function CashClosureModal({
       movementsTimeScope, 
       activeShift || undefined, 
       selectedRegister === 'todas' ? 'todas' : selectedRegister, 
-      'todos'
+      selectedCashierFilter || 'todos'
     );
-  }, [allMovements, movementsTimeScope, activeShift, selectedRegister]);
+  }, [allMovements, movementsTimeScope, activeShift, selectedRegister, selectedCashierFilter]);
 
-  // 5. Movimientos propios del cajero que SÓLO le suman o restan al cuadre de esta sesión
-  const effectiveClosureCashier = (loggedInUserName || selectedCashierFilter || '').trim();
+  // 5. Movimientos que le suman o restan al cuadre de esta sesión (en caja única compartida, todos los movimientos del turno)
   const scopedMovements = useMemo(() => {
-    return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
-  }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
+    const effectiveClosureCashier = (selectedCashierFilter || '').trim();
+    if (effectiveClosureCashier && effectiveClosureCashier !== 'todos' && effectiveClosureCashier !== 'todas') {
+      return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
+    }
+    return allShiftMovements;
+  }, [allShiftMovements, selectedCashierFilter, loggedInUserEmail]);
 
   // Lista unificada de movimientos de caja (Ingresos y Egresos manuales)
   const unifiedShiftMovements = useMemo(() => {
@@ -543,14 +533,16 @@ export default function CashClosureModal({
       const lastClosureTime = getLastClosureTime(selectedRegister);
       const mTime = m.created_at ? new Date(m.created_at).getTime() : 0;
       const isFromCurrentShift = lastClosureTime <= 0 || isNaN(mTime) || mTime > lastClosureTime;
-      const isMine = isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail) && isFromCurrentShift;
+      const isMine = (selectedCashierFilter === 'todos' || isMovementOfUser(m, selectedCashierFilter, loggedInUserEmail)) && isFromCurrentShift;
       const author = m.created_by || (m as any).user_name || '';
 
       const conceptText = m.concept || (m as any).reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
       const isAbono = m.id.startsWith('abono_') || conceptText.toLowerCase().includes('abono');
       const baseBadge = isAbono ? 'Cobro Factura' : (isCard ? 'Tarjeta' : isBank ? 'Transferencia' : (isIngreso ? 'Ingreso' : 'Retiro'));
       const badgeAuthor = author || 'Otro';
-      const badgeLabel = isMine ? baseBadge : (!isFromCurrentShift ? `${baseBadge} • Turno ant.` : `${baseBadge} • ${badgeAuthor}`);
+      const badgeLabel = selectedCashierFilter === 'todos'
+        ? (author ? `${baseBadge} • ${badgeAuthor}` : baseBadge)
+        : (isMine ? baseBadge : (!isFromCurrentShift ? `${baseBadge} • Turno ant.` : `${baseBadge} • ${badgeAuthor}`));
 
       list.push({
         id: `mov-${m.id}`,
@@ -584,7 +576,7 @@ export default function CashClosureModal({
 
     // Ordenar cronológicamente descendente (más recientes primero)
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail, selectedRegister]);
+  }, [allShiftMovements, selectedCashierFilter, loggedInUserEmail, selectedRegister]);
 
   const unifiedMisMovimientos = useMemo(() => 
     unifiedShiftMovements.filter(m => m.isMine !== false),
@@ -606,18 +598,18 @@ export default function CashClosureModal({
     return unifiedShiftMovements;
   }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedIngresos, unifiedEgresos]);
 
-  // Totales de entradas y salidas que suman estrictamente al cuadre actual (excluyendo movimientos de otros usuarios)
+  // Totales de entradas y salidas que suman estrictamente al cuadre actual (en caja única, todas las de la sesión)
   const quadreInflowsAmount = useMemo(() => {
     return unifiedIngresos
-      .filter(m => m.isMine !== false)
+      .filter(m => m.isMine !== false || selectedCashierFilter === 'todos')
       .reduce((sum, m) => sum + m.amount, 0);
-  }, [unifiedIngresos]);
+  }, [unifiedIngresos, selectedCashierFilter]);
 
   const quadreOutflowsAmount = useMemo(() => {
     return unifiedEgresos
-      .filter(m => m.isMine !== false)
+      .filter(m => m.isMine !== false || selectedCashierFilter === 'todos')
       .reduce((sum, m) => sum + m.amount, 0);
-  }, [unifiedEgresos]);
+  }, [unifiedEgresos, selectedCashierFilter]);
 
   const totalInflowsAmount = useMemo(() => {
     return unifiedIngresos.reduce((sum, m) => sum + m.amount, 0);
@@ -796,7 +788,7 @@ export default function CashClosureModal({
         difference: finalDiff,
         status,
         denominations: denomRecord,
-        movements: unifiedMisMovimientos as any,
+        movements: (selectedCashierFilter === 'todos' ? unifiedShiftMovements : unifiedMisMovimientos) as any,
         notes: closureNotes,
       });
 
@@ -870,8 +862,8 @@ export default function CashClosureModal({
     if (savedClosure?.movements && savedClosure.movements.length > 0) {
       return savedClosure.movements;
     }
-    return unifiedMisMovimientos;
-  }, [savedClosure, unifiedMisMovimientos]);
+    return selectedCashierFilter === 'todos' ? unifiedShiftMovements : unifiedMisMovimientos;
+  }, [savedClosure, unifiedShiftMovements, unifiedMisMovimientos, selectedCashierFilter]);
 
   const printIngresos = useMemo(() => {
     return printMovements.filter((m: any) => m.type === 'Ingreso' && m.category !== 'venta' && m.category !== 'financiamiento' && m.category !== 'cobro');

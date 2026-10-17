@@ -51,6 +51,7 @@ export interface LetterInvoiceProps {
     amount: number;
     amountUsd?: number;
     currency?: 'DOP' | 'USD';
+    exchangeRate?: number;
     date?: string;
     method?: string;
     reference?: string;
@@ -174,11 +175,66 @@ export default function LetterInvoice({
   const isCotizacion = (ncf && ncf.startsWith('CT')) || (invoiceNumber && invoiceNumber.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
   const isEcf = !isCotizacion && !isAbono && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
 
-  const isUsd = paidCurrency === 'USD' || lastPayment?.currency === 'USD';
-  const effectiveRate = (exchangeRate && exchangeRate > 0)
-    ? exchangeRate
-    : (totalUsd && totalUsd > 0 && total > 0 ? (total / totalUsd) : 58.5);
-  const resolvedTotalUsd = totalUsd !== undefined ? totalUsd : (effectiveRate > 0 ? total / effectiveRate : 0);
+  // 1. Detect if this document is in USD
+  const hasUsdPayment = (paymentsHistory || []).some(
+    p => p.currency === 'USD' || (p.amountUsd !== undefined && Number(p.amountUsd) > 0) || (p.method && p.method.includes('USD'))
+  );
+  const isUsd = paidCurrency === 'USD' || 
+    lastPayment?.currency === 'USD' || 
+    (lastPayment?.amountUsd !== undefined && Number(lastPayment.amountUsd) > 0) || 
+    (totalUsd !== undefined && Number(totalUsd) > 0) ||
+    hasUsdPayment;
+
+  // 2. Historical USD payments from history
+  const historyUsdPayments = (paymentsHistory || []).filter(
+    p => p.currency === 'USD' || (p.amountUsd !== undefined && Number(p.amountUsd) > 0) || (p.exchangeRate && Number(p.exchangeRate) > 0) || (p.method && p.method.includes('USD'))
+  );
+  const lastHistoryUsd = historyUsdPayments.length > 0 ? historyUsdPayments[historyUsdPayments.length - 1] : undefined;
+
+  // 3. Last payment exchange rate
+  const lastPaymentRate = (lastPayment?.exchangeRate && Number(lastPayment.exchangeRate) > 0)
+    ? Number(lastPayment.exchangeRate)
+    : (lastPayment?.amountUsd && Number(lastPayment.amountUsd) > 0 && lastPayment?.amount
+      ? Number(lastPayment.amount) / Number(lastPayment.amountUsd)
+      : undefined);
+
+  // 4. Rate from history
+  const historyRate = (lastHistoryUsd?.exchangeRate && Number(lastHistoryUsd.exchangeRate) > 0)
+    ? Number(lastHistoryUsd.exchangeRate)
+    : (lastHistoryUsd?.amountUsd && Number(lastHistoryUsd.amountUsd) > 0 && lastHistoryUsd?.amount
+      ? Number(lastHistoryUsd.amount) / Number(lastHistoryUsd.amountUsd)
+      : undefined);
+
+  // 5. Rate from totalUsd prop
+  const rateFromTotalUsd = (totalUsd && totalUsd > 0 && total > 0) ? (total / totalUsd) : undefined;
+
+  // 6. Effective historical rate (never let later changes to exchangeRate mutate historical USD totals!)
+  const effectiveRate = (rateFromTotalUsd && rateFromTotalUsd > 0)
+    ? rateFromTotalUsd
+    : (lastPaymentRate && lastPaymentRate > 0)
+      ? lastPaymentRate
+      : (historyRate && historyRate > 0)
+        ? historyRate
+        : (exchangeRate && exchangeRate > 0)
+          ? exchangeRate
+          : 58.5;
+
+  // 7. Total USD from history
+  const totalUsdFromHistory = historyUsdPayments.reduce((sum, p) => {
+    const val = p.amountUsd !== undefined && Number(p.amountUsd) > 0
+      ? Number(p.amountUsd)
+      : (p.exchangeRate ? Number(p.amount) / Number(p.exchangeRate) : (effectiveRate > 0 ? Number(p.amount) / effectiveRate : 0));
+    return sum + val;
+  }, 0);
+
+  // 8. Resolved Total USD
+  const resolvedTotalUsd = (totalUsd !== undefined && totalUsd > 0)
+    ? totalUsd
+    : (isAbono && lastPayment?.amountUsd !== undefined && Number(lastPayment.amountUsd) > 0)
+      ? Number(lastPayment.amountUsd)
+      : (totalUsdFromHistory > 0 && (balance === undefined || balance <= 0.01))
+        ? totalUsdFromHistory
+        : (effectiveRate > 0 ? Math.round((total / effectiveRate) * 100) / 100 : 0);
 
   const getDocumentTypeName = () => {
     if (isAbono) return 'COMPROBANTE OFICIAL DE ABONO A FACTURA';
@@ -392,10 +448,10 @@ export default function LetterInvoice({
                 <strong className="text-zinc-900 font-semibold">Moneda de Pago:</strong>{' '}
                 <span className="font-bold text-emerald-700">Dólares Estadounidenses (USD)</span>
               </p>
-              {exchangeRate && (
+              {effectiveRate && (
                 <p className="text-zinc-700">
                   <strong className="text-zinc-900 font-semibold">Tasa de Cambio:</strong>{' '}
-                  <span className="font-mono font-semibold">1 USD = RD$ {exchangeRate.toFixed(2)}</span>
+                  <span className="font-mono font-semibold">1 USD = RD$ {effectiveRate.toFixed(2)}</span>
                 </p>
               )}
               <p className="text-zinc-700">
@@ -412,9 +468,9 @@ export default function LetterInvoice({
                 <p className="text-zinc-700">
                   <strong className="text-zinc-900 font-semibold">Cambio Devuelto:</strong>{' '}
                   <span className="font-mono font-bold text-emerald-700">$ {changeAmountUsd.toFixed(2)} USD</span>
-                  {exchangeRate && (
+                  {effectiveRate && (
                     <span className="text-xs text-zinc-500 font-mono ml-1">
-                      (≈ {formatRD(changeAmountUsd * exchangeRate)})
+                      (≈ {formatRD(changeAmountUsd * effectiveRate)})
                     </span>
                   )}
                 </p>
@@ -490,8 +546,13 @@ export default function LetterInvoice({
             {items && items.length > 0 ? (
               items.map((item, idx) => {
                 const itemItbis = taxAmount > 0 ? (item.total_price - (item.total_price / 1.18)) : 0;
-                const unitPriceUsd = effectiveRate > 0 ? (item.unit_price / effectiveRate) : 0;
-                const itemTotalUsd = effectiveRate > 0 ? (item.total_price / effectiveRate) : 0;
+                const isSingleMatchingItem = items.length === 1 && total > 0 && Math.abs(item.total_price - total) < 0.05 && resolvedTotalUsd > 0;
+                const itemTotalUsd = isSingleMatchingItem
+                  ? resolvedTotalUsd
+                  : (effectiveRate > 0 ? (item.total_price / effectiveRate) : 0);
+                const unitPriceUsd = (item.quantity === 1 && isSingleMatchingItem)
+                  ? resolvedTotalUsd
+                  : (effectiveRate > 0 ? (item.unit_price / effectiveRate) : 0);
                 const itemItbisUsd = effectiveRate > 0 ? (itemItbis / effectiveRate) : 0;
 
                 return (
@@ -558,7 +619,7 @@ export default function LetterInvoice({
             <span>Historial de Abonos / Pagos Aplicados ({paymentsHistory.length})</span>
             <span className="font-mono text-zinc-700 font-bold">
               Total Abonado: {isUsd 
-                ? formatUSD(paymentsHistory.reduce((acc, p) => acc + (p.amountUsd ?? ((p.amount || 0) / effectiveRate)), 0))
+                ? formatUSD(paymentsHistory.reduce((acc, p) => acc + (p.amountUsd !== undefined && Number(p.amountUsd) > 0 ? Number(p.amountUsd) : (p.exchangeRate ? Number(p.amount) / Number(p.exchangeRate) : ((p.amount || 0) / effectiveRate))), 0))
                 : formatRD(paymentsHistory.reduce((acc, p) => acc + (p.amount || 0), 0))}
             </span>
           </div>
@@ -574,12 +635,20 @@ export default function LetterInvoice({
             </thead>
             <tbody className="divide-y divide-zinc-200 text-[11px]">
               {paymentsHistory.map((p, idx) => {
-                const isPaymentUsd = p.currency === 'USD' || (p.amountUsd !== undefined && p.amountUsd > 0) || isUsd;
-                const pUsd = p.amountUsd !== undefined ? p.amountUsd : (effectiveRate > 0 ? (p.amount || 0) / effectiveRate : 0);
+                const isPaymentUsd = p.currency === 'USD' || (p.amountUsd !== undefined && Number(p.amountUsd) > 0) || (p.method && p.method.includes('USD')) || isUsd;
+                const pRate = (p.exchangeRate && Number(p.exchangeRate) > 0)
+                  ? Number(p.exchangeRate)
+                  : (p.amountUsd && Number(p.amountUsd) > 0 && p.amount ? Number(p.amount) / Number(p.amountUsd) : effectiveRate);
+                const pUsd = p.amountUsd !== undefined && Number(p.amountUsd) > 0
+                  ? Number(p.amountUsd)
+                  : (pRate > 0 ? (Number(p.amount) || 0) / pRate : 0);
+
+                const rawMethod = p.method || 'Abono';
+                const cleanMethod = rawMethod + (p.currency && !rawMethod.includes(p.currency) ? ` (${p.currency})` : '');
                 return (
                   <tr key={idx} className="hover:bg-zinc-50/50">
                     <td className="py-1.5 px-3 font-medium text-zinc-700">{formatSafeReadableDate(p.date)}</td>
-                    <td className="py-1.5 px-3 font-medium text-zinc-900">{p.method}{p.currency ? ` (${p.currency})` : ''}</td>
+                    <td className="py-1.5 px-3 font-medium text-zinc-900">{cleanMethod}</td>
                     <td className="py-1.5 px-3 font-mono text-zinc-600">{p.reference || '—'}</td>
                     <td className="py-1.5 px-3 text-zinc-600">{p.cashier || 'Cajero'}</td>
                     <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
@@ -681,7 +750,9 @@ export default function LetterInvoice({
               <div className="flex justify-between text-zinc-600 font-medium">
                 <span>{isUsd ? 'Subtotal Gravado (USD):' : 'Subtotal Gravado:'}</span>
                 <span className="font-mono text-zinc-900 font-bold">
-                  {isUsd ? formatUSD(subtotal / effectiveRate) : formatRD(subtotal)}
+                  {isUsd 
+                    ? formatUSD(taxAmount === 0 && Math.abs(subtotal - total) < 0.05 && resolvedTotalUsd > 0 ? resolvedTotalUsd : subtotal / effectiveRate) 
+                    : formatRD(subtotal)}
                 </span>
               </div>
               {isUsd && (
@@ -708,7 +779,9 @@ export default function LetterInvoice({
                 <div className="flex justify-between text-zinc-600 font-medium">
                   <span>{isUsd ? 'Monto Exento (USD):' : 'Monto Exento:'}</span>
                   <span className="font-mono text-zinc-900 font-bold">
-                    {isUsd ? formatUSD(subtotal / effectiveRate) : formatRD(subtotal)}
+                    {isUsd 
+                      ? formatUSD(Math.abs(subtotal - total) < 0.05 && resolvedTotalUsd > 0 ? resolvedTotalUsd : subtotal / effectiveRate) 
+                      : formatRD(subtotal)}
                   </span>
                 </div>
               )}
@@ -716,7 +789,9 @@ export default function LetterInvoice({
                 <div className="flex justify-between text-zinc-700 font-semibold pt-1 border-t border-zinc-200">
                   <span>{isUsd ? 'Total Abonado / Pagado (USD):' : 'Total Abonado / Pagado:'}</span>
                   <span className="font-mono text-emerald-700 font-black">
-                    {isUsd ? formatUSD(paidAmount / effectiveRate) : formatRD(paidAmount)}
+                    {isUsd 
+                      ? formatUSD(balance !== undefined && balance <= 0.01 && resolvedTotalUsd > 0 ? resolvedTotalUsd : paidAmount / effectiveRate) 
+                      : formatRD(paidAmount)}
                   </span>
                 </div>
               )}
@@ -785,9 +860,9 @@ export default function LetterInvoice({
                         {formatRD(balance !== undefined && balance > 0.01 ? balance : total)}
                       </span>
                     </p>
-                    {exchangeRate && (
+                    {effectiveRate && (
                       <p className="text-[10px] text-zinc-400">
-                        Tasa aplicada: 1 USD = RD$ {exchangeRate.toFixed(2)}
+                        Tasa aplicada: 1 USD = RD$ {effectiveRate.toFixed(2)}
                       </p>
                     )}
                   </div>
