@@ -19,7 +19,6 @@ import {
   ClockIcon,
   LockClosedIcon,
   DocumentTextIcon,
-  ShoppingCartIcon,
   ArrowUpRightIcon,
   ArrowDownLeftIcon,
   CreditCardIcon,
@@ -178,7 +177,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ventas' | 'ingreso' | 'egreso'>('mios');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ingreso' | 'egreso'>('mios');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -490,107 +489,7 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // 1. Facturas de todas las operaciones del período para visualización en historial
-  const allPeriodInvoices = useMemo(() => {
-    return filterInvoicesByShift(
-      allInvoices, 
-      movementsTimeScope, 
-      activeShift || undefined, 
-      selectedRegister === 'todas' ? 'todas' : selectedRegister, 
-      'todos'
-    );
-  }, [allInvoices, movementsTimeScope, activeShift, selectedRegister]);
-
-  // 2. Recibos de financiamiento del período para visualización
-  const allPeriodFinancingReceipts = useMemo(() => {
-    let list = allFinancingReceipts;
-    if (selectedRegister !== 'todas') {
-      list = list.filter(r => matchesRegister(selectedRegister, r.registerName));
-    }
-
-    if (movementsTimeScope === 'all') return list;
-
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-
-    if (movementsTimeScope === 'today') {
-      return list.filter(r => {
-        const dateStr = r.createdAt || r.date;
-        if (!dateStr) return true;
-        const t = new Date(dateStr).getTime();
-        return isNaN(t) || (t >= startOfToday && t <= endOfToday);
-      });
-    }
-
-    const lastClosureTime = getLastClosureTime(selectedRegister);
-    if (activeShift && activeShift.opened_at) {
-      const shiftStartTime = Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime);
-      return list.filter(r => {
-        const dateStr = r.createdAt || r.date;
-        if (!dateStr) return true;
-        const t = new Date(dateStr).getTime();
-        return isNaN(t) || t >= shiftStartTime;
-      });
-    }
-
-    return list.filter(r => {
-      const dateStr = r.createdAt || r.date;
-      if (!dateStr) return true;
-      const t = new Date(dateStr).getTime();
-      return isNaN(t) || (t >= startOfToday && t <= endOfToday);
-    });
-  }, [allFinancingReceipts, movementsTimeScope, activeShift, selectedRegister]);
-
-  // 3. Cobros de crédito del período
-  const allPeriodCreditPayments = useMemo(() => {
-    const payments: Array<{ id: string; amount: number; method: string; cashier: string; date: string; invoiceNumber: string; customer: string }> = [];
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-    const lastClosureTime = getLastClosureTime(selectedRegister);
-    const shiftStartTime = activeShift?.opened_at 
-      ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) 
-      : Math.max(startOfToday, lastClosureTime);
-
-    allInvoices.forEach(inv => {
-      const hist = (inv as any).payments_history;
-      if (Array.isArray(hist) && hist.length > 0) {
-        hist.forEach(p => {
-          const pTime = p.date ? new Date(p.date).getTime() : 0;
-          if (movementsTimeScope === 'shift' && lastClosureTime > 0 && pTime > 0 && pTime <= lastClosureTime) {
-            return;
-          }
-          let matchesTime = false;
-          if (movementsTimeScope === 'all') matchesTime = true;
-          else if (movementsTimeScope === 'today') matchesTime = isNaN(pTime) || (pTime >= startOfToday && pTime <= endOfToday);
-          else matchesTime = isNaN(pTime) || pTime >= shiftStartTime;
-
-          if (!matchesTime) return;
-
-          const pReg = p.register_name || inv.register_name;
-          if (selectedRegister !== 'todas' && pReg) {
-            if (!matchesRegister(selectedRegister, pReg)) {
-              return;
-            }
-          }
-
-          payments.push({
-            id: p.id || `pay-${Math.random()}`,
-            amount: Number(p.amount) || 0,
-            method: p.method || 'Efectivo',
-            cashier: p.cashier || '',
-            date: p.date || '',
-            invoiceNumber: inv.invoice_number,
-            customer: inv.customer_name || 'Cliente'
-          });
-        });
-      }
-    });
-    return payments;
-  }, [allInvoices, movementsTimeScope, activeShift, selectedRegister]);
-
-  // 4. Movimientos manuales de la caja/turno para visualización amplia
+  // Movimientos de la caja/turno para visualización amplia (Ingresos y Egresos)
   const allShiftMovements = useMemo(() => {
     return filterMovementsByShift(
       allMovements, 
@@ -607,12 +506,12 @@ export default function CashClosureModal({
     return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
   }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail]);
 
-  // Lista unificada que combina todas las Ventas (POS), Recibos de Financiamientos, Cobros a Crédito y Movimientos Manuales
+  // Lista unificada de movimientos de caja (Ingresos y Egresos manuales)
   const unifiedShiftMovements = useMemo(() => {
     const list: Array<{
       id: string;
       type: 'Ingreso' | 'Egreso';
-      category: 'venta' | 'financiamiento' | 'cobro' | 'ingreso_manual' | 'egreso_manual';
+      category: 'ingreso_manual' | 'egreso_manual' | 'cobro';
       categoryLabel: string;
       concept: string;
       customer?: string;
@@ -630,123 +529,8 @@ export default function CashClosureModal({
       badgeColorClass: string;
     }> = [];
 
-    // 1. Facturas directas (POS)
-    allPeriodInvoices.forEach(inv => {
-      const pm = (inv.payment_method || 'Efectivo').trim();
-      const pmLower = pm.toLowerCase();
-      const isCard = pmLower.includes('tarjeta');
-      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
-      const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
-      const isCash = !isCard && !isBank && !isCredit;
-      const author = inv.cashier_name || 'Sistema';
-      const isMine = matchesCashierUser(inv.cashier_name, effectiveClosureCashier, loggedInUserEmail);
-
-      list.push({
-        id: `inv-${inv.id || inv.invoice_number}`,
-        type: 'Ingreso',
-        category: 'venta',
-        categoryLabel: 'Venta',
-        concept: `Fac. #${inv.invoice_number || 'N/A'}${inv.customer_name ? ` • ${inv.customer_name}` : ''}`,
-        customer: inv.customer_name || 'Consumidor Final',
-        amount: Number(inv.total_amount) || 0,
-        paymentMethod: pm,
-        createdAt: inv.created_at || new Date().toISOString(),
-        reference: inv.ncf || inv.invoice_number,
-        isCash,
-        isCard,
-        isBank,
-        isCredit,
-        isMine,
-        author,
-        badgeText: isMine ? 'Venta' : `Venta • ${author}`,
-        badgeColorClass: isMine 
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
-      });
-    });
-
-    // 2. Recibos de financiamiento (Cuotas e Iniciales)
-    allPeriodFinancingReceipts.forEach(rc => {
-      const pm = (rc.paymentMethod || 'Efectivo').trim();
-      const pmLower = pm.toLowerCase();
-      const isCard = pmLower.includes('tarjeta');
-      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
-      const isCredit = false;
-      const isCash = !isCard && !isBank;
-      const author = rc.cashierName || 'Sistema';
-      const isMine = matchesCashierUser(rc.cashierName, effectiveClosureCashier, loggedInUserEmail);
-
-      list.push({
-        id: `fin-${rc.id || rc.receiptNumber}`,
-        type: 'Ingreso',
-        category: 'financiamiento',
-        categoryLabel: 'Financiamiento',
-        concept: `Abono Cuota • Rec. #${rc.receiptNumber || 'N/A'}${rc.customerName ? ` • ${rc.customerName}` : ''}`,
-        customer: rc.customerName || 'Cliente',
-        amount: Number(rc.totalPaid) || 0,
-        paymentMethod: pm,
-        createdAt: rc.createdAt || rc.date || new Date().toISOString(),
-        reference: rc.receiptNumber,
-        isCash,
-        isCard,
-        isBank,
-        isCredit,
-        isMine,
-        author,
-        badgeText: isMine ? 'Financ.' : `Financ. • ${author}`,
-        badgeColorClass: isMine
-          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
-          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
-      });
-    });
-
-    // 3. Cobros de facturas a crédito
-    const seenCreditPaymentKeys = new Set<string>();
-    allPeriodCreditPayments.forEach(p => {
-      const cleanKey = String(p.id).replace(/^pay_/, '').replace(/^abono_/, '');
-      seenCreditPaymentKeys.add(cleanKey);
-      const pm = (p.method || 'Efectivo').trim();
-      const pmLower = pm.toLowerCase();
-      const isCard = pmLower.includes('tarjeta');
-      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
-      const isCredit = false;
-      const isCash = !isCard && !isBank;
-      const author = p.cashier || 'Sistema';
-      const isMine = matchesCashierUser(p.cashier, effectiveClosureCashier, loggedInUserEmail);
-
-      list.push({
-        id: `cpay-${p.id}`,
-        type: 'Ingreso',
-        category: 'cobro',
-        categoryLabel: 'Cobro Crédito',
-        concept: `Cobro Factura • #${p.invoiceNumber || 'N/A'}${p.customer ? ` • ${p.customer}` : ''}`,
-        customer: p.customer || 'Cliente',
-        amount: Number(p.amount) || 0,
-        paymentMethod: pm,
-        createdAt: p.date || new Date().toISOString(),
-        reference: p.invoiceNumber,
-        isCash,
-        isCard,
-        isBank,
-        isCredit,
-        isMine,
-        author,
-        badgeText: isMine ? 'Cobro' : `Cobro • ${author}`,
-        badgeColorClass: isMine
-          ? 'bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300'
-          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
-      });
-    });
-
-    // 4. Movimientos manuales de caja (ingresos y egresos)
+    // Movimientos de caja (ingresos y egresos)
     allShiftMovements.forEach(m => {
-      if (m.id.startsWith('abono_')) {
-        const cleanKey = m.id.replace(/^abono_/, '').replace(/^pay_/, '');
-        if (seenCreditPaymentKeys.has(cleanKey)) {
-          return;
-        }
-      }
-
       const isIngreso = m.type === 'Ingreso';
       const pm = (m.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
@@ -800,14 +584,10 @@ export default function CashClosureModal({
 
     // Ordenar cronológicamente descendente (más recientes primero)
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [allPeriodInvoices, allPeriodFinancingReceipts, allPeriodCreditPayments, allShiftMovements, effectiveClosureCashier, loggedInUserEmail, selectedRegister]);
+  }, [allShiftMovements, effectiveClosureCashier, loggedInUserEmail, selectedRegister]);
 
   const unifiedMisMovimientos = useMemo(() => 
     unifiedShiftMovements.filter(m => m.isMine !== false),
-    [unifiedShiftMovements]
-  );
-  const unifiedVentas = useMemo(() => 
-    unifiedShiftMovements.filter(m => m.category === 'venta' || m.category === 'financiamiento' || m.category === 'cobro'),
     [unifiedShiftMovements]
   );
   const unifiedIngresos = useMemo(() => 
@@ -821,11 +601,10 @@ export default function CashClosureModal({
 
   const displayedMovements = useMemo(() => {
     if (movementTab === 'mios') return unifiedMisMovimientos;
-    if (movementTab === 'ventas') return unifiedVentas;
     if (movementTab === 'ingreso') return unifiedIngresos;
     if (movementTab === 'egreso') return unifiedEgresos;
     return unifiedShiftMovements;
-  }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedVentas, unifiedIngresos, unifiedEgresos]);
+  }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedIngresos, unifiedEgresos]);
 
   // Totales de entradas y salidas que suman estrictamente al cuadre actual (excluyendo movimientos de otros usuarios)
   const quadreInflowsAmount = useMemo(() => {
@@ -1882,19 +1661,6 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                       <button
                         type="button"
-                        onClick={() => setMovementTab('ventas')}
-                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
-                          movementTab === 'ventas' 
-                            ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-2xs font-bold border border-zinc-200/50 dark:border-zinc-700/50' 
-                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
-                        }`}
-                      >
-                        <span>Ventas</span>
-                        <span className="text-[9px] opacity-60 font-mono">({unifiedVentas.length})</span>
-                      </button>
-
-                      <button
-                        type="button"
                         onClick={() => setMovementTab('ingreso')}
                         className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                           movementTab === 'ingreso' 
@@ -1924,21 +1690,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-center text-[11px] font-medium text-zinc-400">
                         {movementTab === 'mios'
                           ? 'No tienes movimientos propios en este turno'
-                          : movementTab === 'ventas'
-                          ? 'Sin ventas registradas en este turno'
                           : movementTab === 'ingreso'
                           ? 'Sin ingresos registrados en este turno'
                           : movementTab === 'egreso'
                           ? 'Sin egresos registrados en este turno'
-                          : 'Sin ventas ni movimientos registrados en este turno'}
+                          : 'Sin ingresos ni egresos registrados en este turno'}
                       </div>
                     ) : (
                       <div className="space-y-1 max-h-28 sm:max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                         {displayedMovements.map(m => {
                           const isIngreso = m.type === 'Ingreso';
                           const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
-                          const isVenta = m.category === 'venta';
-                          const isCobro = m.category === 'cobro' || m.category === 'financiamiento';
+                          const isCobro = m.category === 'cobro';
 
                           return (
                             <div 
@@ -1952,17 +1715,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               <div className="flex items-center gap-2 min-w-0">
                                 {/* Modern Icon Box */}
                                 <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
-                                  isVenta
-                                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40'
-                                    : isCobro
+                                  isCobro
                                     ? 'bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-100 dark:border-teal-900/40'
                                     : isIngreso
                                     ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40'
                                     : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
                                 }`}>
-                                  {isVenta ? (
-                                    <ShoppingCartIcon className="w-3.5 h-3.5" />
-                                  ) : isCobro ? (
+                                  {isCobro ? (
                                     <CreditCardIcon className="w-3.5 h-3.5" />
                                   ) : isIngreso ? (
                                     <ArrowDownLeftIcon className="w-3.5 h-3.5" />
