@@ -501,13 +501,15 @@ export default function CashClosureModal({
     const list: Array<{
       id: string;
       type: 'Ingreso' | 'Egreso';
-      category: 'ingreso_manual' | 'egreso_manual' | 'cobro';
+      category: 'ingreso_manual' | 'egreso_manual' | 'cobro' | 'venta';
       categoryLabel: string;
       concept: string;
       customer?: string;
       amount: number;
       paymentMethod: string;
+      payment_method?: string;
       createdAt: string;
+      created_at?: string;
       reference?: string;
       isCash: boolean;
       isCard: boolean;
@@ -574,9 +576,47 @@ export default function CashClosureModal({
       });
     });
 
+    // Facturas y Ventas del turno (para mostrar junto a los movimientos)
+    scopedInvoices.forEach(inv => {
+      const pm = (inv.payment_method || 'Efectivo').trim();
+      const pmLower = pm.toLowerCase();
+      const isCard = pmLower.includes('tarjeta');
+      const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+      const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
+      const isCash = !isCard && !isBank && !isCredit;
+      const author = inv.cashier_name || (inv as any).created_by || '';
+
+      const invNumber = inv.invoice_number || inv.id || '';
+      const customer = inv.customer_name || 'Consumidor Final';
+      const conceptText = `Factura #${invNumber} - ${customer}`;
+
+      list.push({
+        id: `inv-${inv.id || invNumber}`,
+        type: 'Ingreso',
+        category: 'venta' as any,
+        categoryLabel: 'Venta POS',
+        concept: conceptText,
+        customer,
+        amount: Number(inv.total_amount) || 0,
+        paymentMethod: pm,
+        payment_method: pm,
+        createdAt: inv.created_at || (inv as any).date || new Date().toISOString(),
+        created_at: inv.created_at || (inv as any).date || new Date().toISOString(),
+        reference: inv.ncf || invNumber,
+        isCash,
+        isCard,
+        isBank,
+        isCredit,
+        isMine: true,
+        author,
+        badgeText: `Venta • ${pm}`,
+        badgeColorClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+      });
+    });
+
     // Ordenar cronológicamente descendente (más recientes primero)
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [allShiftMovements, selectedCashierFilter, loggedInUserEmail, selectedRegister]);
+  }, [allShiftMovements, scopedInvoices, selectedCashierFilter, loggedInUserEmail, selectedRegister]);
 
   const unifiedMisMovimientos = useMemo(() => 
     unifiedShiftMovements.filter(m => m.isMine !== false),
@@ -738,6 +778,25 @@ export default function CashClosureModal({
     setCounts({});
   };
 
+  // Auto-completar desglose físico con el efectivo esperado exacto (Cuadre Perfecto 1-clic)
+  const handleAutoFillExactCash = () => {
+    const target = Math.round(targetExpectedCash);
+    if (target <= 0) {
+      setCounts({});
+      return;
+    }
+    let remaining = target;
+    const newCounts: Record<number, number> = {};
+    for (const den of DENOMINATIONS) {
+      if (remaining >= den.value) {
+        const qty = Math.floor(remaining / den.value);
+        newCounts[den.value] = qty;
+        remaining -= qty * den.value;
+      }
+    }
+    setCounts(newCounts);
+  };
+
   // Guardar fondo inicial editado para esta caja
   const handleSaveInitialFund = () => {
     const parsed = parseFloat(tempFund);
@@ -753,13 +812,41 @@ export default function CashClosureModal({
   const handleFinalizeClosure = async () => {
     setIsSavingClosure(true);
     try {
-      const finalDiff = Math.abs(variance) < 0.01 ? 0 : variance;
-      const status: 'Cuadrado' | 'Sobrante' | 'Faltante' = 
+      let finalCounts = { ...counts };
+      let finalPhysicalCash = physicalCashTotal;
+      let finalDiff = Math.abs(variance) < 0.01 ? 0 : variance;
+      let status: 'Cuadrado' | 'Sobrante' | 'Faltante' = 
         finalDiff === 0 ? 'Cuadrado' : finalDiff > 0 ? 'Sobrante' : 'Faltante';
+
+      // Protección contra falsos faltantes: Si el usuario no desglosó billetes pero hay efectivo esperado
+      if (finalPhysicalCash === 0 && targetExpectedCash > 0) {
+        const confirmExact = window.confirm(
+          `No has ingresado el conteo de billetes en caja.\n\n¿Deseas cerrar el turno con CUADRE EXACTO por RD$ ${targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}?\n\n- Clic en "Aceptar" para Cuadre Perfecto (RD$ 0.00 diferencia).\n- Clic en "Cancelar" para regresar y contar los billetes.`
+        );
+        if (!confirmExact) {
+          setIsSavingClosure(false);
+          return;
+        }
+
+        // Auto-llenar desglose para cuadre exacto
+        let remaining = Math.round(targetExpectedCash);
+        finalCounts = {};
+        for (const den of DENOMINATIONS) {
+          if (remaining >= den.value) {
+            const qty = Math.floor(remaining / den.value);
+            finalCounts[den.value] = qty;
+            remaining -= qty * den.value;
+          }
+        }
+        setCounts(finalCounts);
+        finalPhysicalCash = targetExpectedCash;
+        finalDiff = 0;
+        status = 'Cuadrado';
+      }
 
       const denomRecord: Record<string, number> = {};
       DENOMINATIONS.forEach(d => {
-        denomRecord[String(d.value)] = counts[d.value] || 0;
+        denomRecord[String(d.value)] = finalCounts[d.value] || 0;
       });
 
       const actualRegName = selectedRegister === 'todas' ? 'Caja Consolidada' : selectedRegister;
@@ -784,7 +871,7 @@ export default function CashClosureModal({
         cash_movements_in: cashMovementsTotals.ingresos,
         cash_movements_out: cashMovementsTotals.egresos,
         expected_cash: expectedToSave,
-        counted_cash: physicalCashTotal,
+        counted_cash: finalPhysicalCash,
         difference: finalDiff,
         status,
         denominations: denomRecord,
@@ -852,18 +939,55 @@ export default function CashClosureModal({
   const printPhysicalCash = (savedClosure?.counted_cash !== undefined && Number(savedClosure.counted_cash) > 0)
     ? Number(savedClosure.counted_cash)
     : (physicalCashTotal > 0 ? physicalCashTotal : printExpectedCash);
-  const printVariance = savedClosure?.difference !== undefined ? Number(savedClosure.difference) : variance;
-  const printStatus = savedClosure?.status || (Math.abs(printVariance) < 0.01 ? 'Cuadrado' : printVariance > 0 ? 'Sobrante' : 'Faltante');
+  
+  // Garantizar consistencia matemática absoluta entre Contado y Esperado
+  const isPrintExactlyBalanced = Math.abs(printPhysicalCash - printExpectedCash) < 0.01;
+  const printVariance = isPrintExactlyBalanced 
+    ? 0 
+    : (savedClosure?.difference !== undefined ? Number(savedClosure.difference) : (printPhysicalCash - printExpectedCash));
+  const printStatus = isPrintExactlyBalanced || Math.abs(printVariance) < 0.01
+    ? 'Cuadrado'
+    : (savedClosure?.status || (printVariance > 0 ? 'Sobrante' : 'Faltante'));
   const printNotes = savedClosure?.notes !== undefined ? savedClosure.notes : notes;
   const printCashier = savedClosure?.cashier_name || cashierName || loggedInUserName;
   const printSupervisor = savedClosure?.supervisor_name || supervisorName;
 
   const printMovements = useMemo(() => {
-    if (savedClosure?.movements && savedClosure.movements.length > 0) {
-      return savedClosure.movements;
+    let base: any[] = (savedClosure?.movements && savedClosure.movements.length > 0)
+      ? [...savedClosure.movements]
+      : (selectedCashierFilter === 'todos' ? [...unifiedShiftMovements] : [...unifiedMisMovimientos]);
+
+    // Si el cierre guardado no tenía las ventas del turno, incorporarlas
+    const hasSales = base.some((m: any) => m.category === 'venta' || String(m.concept || '').toLowerCase().includes('factura #'));
+    if (!hasSales && scopedInvoices.length > 0) {
+      scopedInvoices.forEach(inv => {
+        const pm = (inv.payment_method || 'Efectivo').trim();
+        const invNumber = inv.invoice_number || inv.id || '';
+        const customer = inv.customer_name || 'Consumidor Final';
+        const dateStr = inv.created_at || (inv as any).date || new Date().toISOString();
+        base.push({
+          id: `inv-${inv.id || invNumber}`,
+          type: 'Ingreso',
+          category: 'venta' as any,
+          categoryLabel: 'Venta POS',
+          concept: `Factura #${invNumber} - ${customer}`,
+          customer,
+          amount: Number(inv.total_amount) || 0,
+          paymentMethod: pm,
+          payment_method: pm,
+          createdAt: dateStr,
+          created_at: dateStr,
+          reference: inv.ncf || invNumber,
+          isCash: pm.toLowerCase() === 'efectivo',
+          isCard: pm.toLowerCase().includes('tarjeta'),
+          isBank: pm.toLowerCase().includes('transferencia'),
+          isCredit: pm.toLowerCase().includes('crédito')
+        });
+      });
     }
-    return selectedCashierFilter === 'todos' ? unifiedShiftMovements : unifiedMisMovimientos;
-  }, [savedClosure, unifiedShiftMovements, unifiedMisMovimientos, selectedCashierFilter]);
+
+    return base.sort((a: any, b: any) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
+  }, [savedClosure, unifiedShiftMovements, unifiedMisMovimientos, scopedInvoices, selectedCashierFilter]);
 
   const printIngresos = useMemo(() => {
     return printMovements.filter((m: any) => m.type === 'Ingreso' && m.category !== 'venta' && m.category !== 'financiamiento' && m.category !== 'cobro');
@@ -1319,7 +1443,16 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <BanknotesIcon className="h-3.5 w-3.5 text-zinc-500" />
                       Conteo Físico ({selectedRegister === 'todas' ? 'Todas' : selectedRegister.split(' - ')[0]})
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleAutoFillExactCash}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[10.5px] font-black transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                        title="Auto-completar desglose con el monto esperado para Cuadre Perfecto"
+                      >
+                        <CheckCircleIcon className="h-3 w-3 stroke-[2.5]" />
+                        <span>Cuadre Exacto</span>
+                      </button>
                       <button
                         type="button"
                         onClick={handleResetCounts}
@@ -2332,16 +2465,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
             </div>
           </div>
 
-          {/* Sección Dedicada: Todos los Movimientos Realizados en el Turno */}
+          {/* Sección Dedicada: Ventas y Movimientos Realizados en el Turno */}
           {printMovements.length > 0 && (
             <div className="mb-2">
               <div className="flex items-center justify-between border-b border-black pb-0.5 mb-1">
                 <h3 className="text-[8px] font-black uppercase tracking-wider text-black">
-                  Movimientos Realizados en el Turno ({printMovements.length})
+                  Ventas y Movimientos Realizados en el Turno ({printMovements.length})
                 </h3>
                 <div className="text-[7.5px] font-mono font-bold flex items-center gap-2">
-                  <span className="text-emerald-800">Total Ingresos: +RD$ {printTotalIngresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                  <span className="text-rose-800">Total Egresos: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-emerald-800">Total Facturado/Cobrado: RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  {printTotalEgresos > 0 && (
+                    <span className="text-rose-800">Total Egresos: -RD$ {printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  )}
                 </div>
               </div>
 

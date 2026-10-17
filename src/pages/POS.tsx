@@ -138,7 +138,17 @@ type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
 // ─── Rich Catalog Showcase Components ─────────────────────────────────────────
 
 // 1. Vista de Catálogo (Cuadrícula enriquecida)
-const CatalogProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+const CatalogProductCard = memo(({ 
+  product, 
+  onAdd,
+  currency = 'DOP',
+  exchangeRate = 60
+}: { 
+  product: any; 
+  onAdd: (p: any) => void;
+  currency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+}) => {
   const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
 
   const stockBadge = useMemo(() => {
@@ -227,10 +237,19 @@ const CatalogProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: 
         {/* Price & Action Button */}
         <div className="pt-2 border-t border-gray-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">Precio</span>
-            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
-              RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+              {currency === 'USD' ? 'Precio (USD)' : 'Precio'}
             </span>
+            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
+              {currency === 'USD'
+                ? `$ ${(product.price / (exchangeRate || 60)).toFixed(2)} USD`
+                : `RD$ ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
+            </span>
+            {currency === 'USD' && (
+              <span className="text-[9.5px] font-mono text-gray-400 dark:text-zinc-500">
+                ≈ RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
 
           <button
@@ -247,7 +266,17 @@ const CatalogProductCard = memo(({ product, onAdd }: { product: any; onAdd: (p: 
 });
 
 // 2. Vista de Lista / Tabla Rápida
-const CatalogProductListItem = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+const CatalogProductListItem = memo(({ 
+  product, 
+  onAdd,
+  currency = 'DOP',
+  exchangeRate = 60
+}: { 
+  product: any; 
+  onAdd: (p: any) => void;
+  currency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+}) => {
   const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
 
   return (
@@ -304,9 +333,18 @@ const CatalogProductListItem = memo(({ product, onAdd }: { product: any; onAdd: 
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono">
-          RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-        </span>
+        <div className="text-right">
+          <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono block">
+            {currency === 'USD'
+              ? `$ ${(product.price / (exchangeRate || 60)).toFixed(2)} USD`
+              : `RD$ ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
+          </span>
+          {currency === 'USD' && (
+            <span className="text-[9.5px] font-mono text-gray-400 dark:text-zinc-500 block -mt-0.5">
+              ≈ RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-gray-900 dark:bg-zinc-800 text-white text-xs font-black group-hover:bg-[#ED1C24] transition-colors"
@@ -319,7 +357,17 @@ const CatalogProductListItem = memo(({ product, onAdd }: { product: any; onAdd: 
 });
 
 // 3. Vista Compacta (Malla de Mosaicos)
-const CatalogProductCompactCard = memo(({ product, onAdd }: { product: any; onAdd: (p: any) => void }) => {
+const CatalogProductCompactCard = memo(({ 
+  product, 
+  onAdd,
+  currency = 'DOP',
+  exchangeRate = 60
+}: { 
+  product: any; 
+  onAdd: (p: any) => void;
+  currency?: 'DOP' | 'USD';
+  exchangeRate?: number;
+}) => {
   const handleClick = useCallback(() => onAdd(product), [product, onAdd]);
   return (
     <div
@@ -345,7 +393,9 @@ const CatalogProductCompactCard = memo(({ product, onAdd }: { product: any; onAd
         </p>
         <div className="mt-1 flex items-center justify-between">
           <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
-            RD$ {product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            {currency === 'USD'
+              ? `$ ${(product.price / (exchangeRate || 60)).toFixed(2)}`
+              : `RD$ ${product.price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
           </span>
           <PlusIcon className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#ED1C24]" />
         </div>
@@ -1078,7 +1128,8 @@ const CheckoutModal = memo(({
   onOpenSelectClient,
   onClearClient,
   onCompleteSale,
-  isTransmitting
+  isTransmitting,
+  initialCurrency = 'DOP'
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -1103,6 +1154,7 @@ const CheckoutModal = memo(({
     changeUsd?: number;
   }) => Promise<void>;
   isTransmitting: boolean;
+  initialCurrency?: 'DOP' | 'USD';
 }) => {
   const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');
   const [electronicDocType, setElectronicDocType] = useState<'E31' | 'E32' | 'E45' | 'E46'>('E32');
@@ -1116,7 +1168,7 @@ const CheckoutModal = memo(({
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
 
   // Currency & Exchange Rate State
-  const [paidCurrency, setPaidCurrency] = useState<'DOP' | 'USD'>('DOP');
+  const [paidCurrency, setPaidCurrency] = useState<'DOP' | 'USD'>(initialCurrency || 'DOP');
   const [currentExchangeRate, setCurrentExchangeRate] = useState<number>(getExchangeRate);
   const [amountReceivedUsd, setAmountReceivedUsd] = useState<string>(() => {
     const rate = getExchangeRate() || 60;
@@ -1154,6 +1206,7 @@ const CheckoutModal = memo(({
 
   useEffect(() => {
     if (isOpen) {
+      setPaidCurrency(initialCurrency || 'DOP');
       setAmountReceived(total.toFixed(2));
       const rate = currentExchangeRate || 60;
       setAmountReceivedUsd((total / rate).toFixed(2));
@@ -1164,7 +1217,7 @@ const CheckoutModal = memo(({
       }
       setCreditDays(15);
     }
-  }, [isOpen, total, currentExchangeRate]);
+  }, [isOpen, total, currentExchangeRate, initialCurrency]);
 
   const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
 
@@ -2103,6 +2156,7 @@ export default function POS() {
   const [activeQuotationId, setActiveQuotationId] = useState<string | null>(null);
   const [isShiftActive, setIsShiftActive] = useState<boolean>(() => isShiftOpen(activeRegister));
   const [posExchangeRate, setPosExchangeRate] = useState<number>(getExchangeRate);
+  const [cartCurrency, setCartCurrency] = useState<'DOP' | 'USD'>('DOP');
 
   useEffect(() => {
     const handleUserUpdate = () => {
@@ -3536,7 +3590,13 @@ export default function POS() {
               {viewMode === 'catalog' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5">
                   {visibleProducts.map((product: any) => (
-                    <CatalogProductCard key={product.id} product={product} onAdd={addToCart} />
+                    <CatalogProductCard 
+                      key={product.id} 
+                      product={product} 
+                      onAdd={addToCart} 
+                      currency={cartCurrency} 
+                      exchangeRate={posExchangeRate} 
+                    />
                   ))}
                 </div>
               )}
@@ -3544,7 +3604,13 @@ export default function POS() {
               {viewMode === 'compact' && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                   {visibleProducts.map((product: any) => (
-                    <CatalogProductCompactCard key={product.id} product={product} onAdd={addToCart} />
+                    <CatalogProductCompactCard 
+                      key={product.id} 
+                      product={product} 
+                      onAdd={addToCart} 
+                      currency={cartCurrency} 
+                      exchangeRate={posExchangeRate} 
+                    />
                   ))}
                 </div>
               )}
@@ -3552,7 +3618,13 @@ export default function POS() {
               {viewMode === 'list' && (
                 <div className="flex flex-col space-y-2.5">
                   {visibleProducts.map((product: any) => (
-                    <CatalogProductListItem key={product.id} product={product} onAdd={addToCart} />
+                    <CatalogProductListItem 
+                      key={product.id} 
+                      product={product} 
+                      onAdd={addToCart} 
+                      currency={cartCurrency} 
+                      exchangeRate={posExchangeRate} 
+                    />
                   ))}
                 </div>
               )}
@@ -3575,24 +3647,67 @@ export default function POS() {
 
       {/* Cart Sidebar */}
       <div className={`w-full md:w-[350px] lg:w-[380px] xl:w-[420px] flex-col bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-zinc-800 rounded-2xl md:rounded-3xl shadow-sm overflow-hidden relative z-10 shrink-0 ${mobileTab === 'catalog' ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-4 sm:p-6 pb-3 sm:pb-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 sm:p-3 bg-gray-100 dark:bg-zinc-800 rounded-2xl">
-              <UserIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-900 dark:text-white" />
+        {/* Cart Sidebar Header */}
+        <div className="p-4 sm:p-5 pb-3 sm:pb-3.5 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-zinc-800 flex flex-col gap-2.5 relative z-10">
+          {/* Fila 1: Cliente Actual */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="p-2 sm:p-2.5 bg-gray-100 dark:bg-zinc-800 rounded-2xl">
+                <UserIcon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-900 dark:text-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider mb-0.5">Cliente Actual</p>
+                <h2 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white truncate max-w-[130px] sm:max-w-[170px] tracking-tight">
+                  {selectedClient ? selectedClient.name : 'Venta de Contado'}
+                </h2>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider mb-0.5">Cliente Actual</p>
-              <h2 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white truncate max-w-[140px] sm:max-w-[180px] tracking-tight">
-                {selectedClient ? selectedClient.name : 'Venta de Contado'}
-              </h2>
+            <button 
+              onClick={() => setIsClientModalOpen(true)}
+              className="text-xs text-gray-800 dark:text-zinc-200 bg-[#f4f3f1] dark:bg-[#222222] hover:bg-gray-200 dark:hover:bg-zinc-700 px-3.5 py-1.5 rounded-full font-black transition-all cursor-pointer shadow-2xs"
+            >
+              {selectedClient ? 'Cambiar' : 'Asignar'}
+            </button>
+          </div>
+
+          {/* Fila 2: Selector de Moneda (DOP / USD) */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-zinc-800/80">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                Moneda:
+              </span>
+              {cartCurrency === 'USD' && (
+                <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-800/60">
+                  Tasa: RD$ {posExchangeRate.toFixed(2)}
+                </span>
+              )}
+            </div>
+
+            <div className="inline-flex bg-gray-100 dark:bg-zinc-800/90 p-0.5 rounded-xl border border-gray-200/80 dark:border-zinc-700/80 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setCartCurrency('DOP')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  cartCurrency === 'DOP'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200'
+                }`}
+              >
+                RD$ DOP
+              </button>
+              <button
+                type="button"
+                onClick={() => setCartCurrency('USD')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${
+                  cartCurrency === 'USD'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200'
+                }`}
+              >
+                $ USD
+              </button>
             </div>
           </div>
-          <button 
-            onClick={() => setIsClientModalOpen(true)}
-            className="text-xs text-gray-800 dark:text-zinc-200 bg-[#f4f3f1] dark:bg-[#222222] hover:bg-gray-200 dark:hover:bg-zinc-700 px-4 py-2 rounded-full font-black transition-all cursor-pointer"
-          >
-            {selectedClient ? 'Cambiar' : 'Asignar'}
-          </button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-3 sm:pt-4">
@@ -3641,9 +3756,18 @@ export default function POS() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight">
-                          RD$ {calculateItemTotal(item).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white font-mono tracking-tight block">
+                            {cartCurrency === 'USD'
+                              ? `$ ${(calculateItemTotal(item) / (posExchangeRate || 60)).toFixed(2)} USD`
+                              : `RD$ ${calculateItemTotal(item).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          </span>
+                          {cartCurrency === 'USD' && (
+                            <span className="text-[10px] text-gray-400 font-mono block">
+                              ≈ RD$ {calculateItemTotal(item).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </div>
                         <button 
                           type="button"
                           onClick={() => removeFromCart(item.product.id)} 
@@ -3708,7 +3832,11 @@ export default function POS() {
                         title="Clic para modificar el precio de este producto"
                       >
                         <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-sans">c/u:</span>
-                        <span>RD$ {item.product.price.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>
+                          {cartCurrency === 'USD'
+                            ? `$ ${(item.product.price / (posExchangeRate || 60)).toFixed(2)}`
+                            : `RD$ ${item.product.price.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        </span>
                         <PencilSquareIcon className="w-3.5 h-3.5 opacity-70 ml-0.5" />
                       </button>
 
@@ -3873,7 +4001,11 @@ export default function POS() {
             <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
               <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">Subtotal</span>
-                <span className="font-black text-gray-900 dark:text-white font-mono">RD$ {subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="font-black text-gray-900 dark:text-white font-mono">
+                  {cartCurrency === 'USD'
+                    ? `$ ${(subtotal / (posExchangeRate || 60)).toFixed(2)} USD`
+                    : `RD$ ${subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                </span>
               </div>
 
               {/* Descuento Global Panel */}
@@ -3902,8 +4034,10 @@ export default function POS() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-black text-green-600 dark:text-green-400 font-mono">
-                          -{globalDiscountType === '%' ? `${globalDiscount}%` : `RD$ ${globalDiscount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                          <span className="text-[10px] sm:text-xs text-gray-400 font-medium ml-1">(-RD$ {globalDiscountAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+                          -{globalDiscountType === '%' ? `${globalDiscount}%` : cartCurrency === 'USD' ? `$ ${(globalDiscount / (posExchangeRate || 60)).toFixed(2)} USD` : `RD$ ${globalDiscount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                          <span className="text-[10px] sm:text-xs text-gray-400 font-medium ml-1">
+                            ({cartCurrency === 'USD' ? `-$ ${(globalDiscountAmount / (posExchangeRate || 60)).toFixed(2)} USD` : `-RD$ ${globalDiscountAmount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`})
+                          </span>
                         </span>
                         <button 
                           onClick={() => {
@@ -3969,26 +4103,43 @@ export default function POS() {
 
               <div className="flex justify-between text-xs sm:text-sm text-gray-600 dark:text-zinc-400">
                 <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500">ITBIS (18%)</span>
-                <span className="font-black text-gray-900 dark:text-white font-mono">RD$ {tax.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="font-black text-gray-900 dark:text-white font-mono">
+                  {cartCurrency === 'USD'
+                    ? `$ ${(tax / (posExchangeRate || 60)).toFixed(2)} USD`
+                    : `RD$ ${tax.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                </span>
               </div>
             </div>
             <div className="flex justify-between items-center pt-3 sm:pt-4 border-t border-gray-200 dark:border-zinc-700">
               <div className="flex flex-col">
-                <span className="text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-wider">Total Factura</span>
+                <span className="text-[10px] sm:text-xs font-black text-gray-500 uppercase tracking-wider">
+                  Total Factura {cartCurrency === 'USD' ? '(USD)' : ''}
+                </span>
                 <span className="text-[9px] sm:text-[10px] text-gray-400 font-medium">Impuestos incluidos</span>
               </div>
               <div className="flex flex-col items-end">
                 <div className={`flex items-baseline whitespace-nowrap ${total > 0 ? 'text-[#ED1C24]' : 'text-gray-900 dark:text-white'}`}>
-                  <span className="text-xs sm:text-sm font-black font-mono mr-1.5 opacity-80 select-none">RD$</span>
-                  <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight">
-                    {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="text-xs sm:text-sm font-black font-mono mr-1.5 opacity-80 select-none">
+                    {cartCurrency === 'USD' ? '$' : 'RD$'}
                   </span>
+                  <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight">
+                    {cartCurrency === 'USD'
+                      ? (total / (posExchangeRate || 60)).toFixed(2)
+                      : total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  {cartCurrency === 'USD' && (
+                    <span className="text-xs font-black font-mono ml-1.5 text-emerald-600 dark:text-emerald-400">
+                      USD
+                    </span>
+                  )}
                 </div>
                 {total > 0 && (
                   <div className="inline-flex items-center gap-1.5 mt-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70 shadow-2xs">
                     <CurrencyDollarIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
                     <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 font-mono">
-                      {(total / (posExchangeRate || 60)).toFixed(2)} <span className="text-[10px] font-bold opacity-80">USD</span>
+                      {cartCurrency === 'USD'
+                        ? `≈ RD$ ${total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : `${(total / (posExchangeRate || 60)).toFixed(2)} USD`}
                     </span>
                   </div>
                 )}
@@ -4025,10 +4176,20 @@ export default function POS() {
                 {cart.length}
               </div>
               <div>
-                <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider block">Total Factura</span>
+                <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-black uppercase tracking-wider block">
+                  Total Factura {cartCurrency === 'USD' ? '(USD)' : ''}
+                </span>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">RD$ {total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  <span className="text-[10px] font-bold text-emerald-400 dark:text-emerald-600 font-mono">≈ ${(total / (posExchangeRate || 60)).toFixed(2)} USD</span>
+                  <span className="text-sm font-black text-white dark:text-zinc-900 font-mono">
+                    {cartCurrency === 'USD'
+                      ? `$ ${(total / (posExchangeRate || 60)).toFixed(2)} USD`
+                      : `RD$ ${total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-400 dark:text-emerald-600 font-mono">
+                    {cartCurrency === 'USD'
+                      ? `≈ RD$ ${total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `≈ $ ${(total / (posExchangeRate || 60)).toFixed(2)} USD`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -4107,6 +4268,7 @@ export default function POS() {
         onClearClient={() => setSelectedClient(null)}
         onCompleteSale={completeSale}
         isTransmitting={isTransmitting}
+        initialCurrency={cartCurrency}
       />
 
       {/* Success Checkout Modal */}
