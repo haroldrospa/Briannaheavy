@@ -163,7 +163,7 @@ export default function ModernReceipt({
   const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
   const docTitle = isEcf ? 'FACTURA ELECTRÓNICA' : (isCotizacion ? 'COTIZACIÓN' : 'FACTURA INTERNA');
 
-  const isUsd = paidCurrency === 'USD' || lastPayment?.currency === 'USD';
+  const isUsd = paidCurrency === 'USD' || (paidCurrency !== 'DOP' && lastPayment?.currency === 'USD');
   const effectiveRate = (exchangeRate && exchangeRate > 0)
     ? exchangeRate
     : (totalUsd && totalUsd > 0 && total > 0 ? (total / totalUsd) : 58.5);

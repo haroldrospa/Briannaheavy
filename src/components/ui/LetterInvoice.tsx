@@ -177,13 +177,14 @@ export default function LetterInvoice({
 
   // 1. Detect if this document is in USD
   const hasUsdPayment = (paymentsHistory || []).some(
-    p => p.currency === 'USD' || (p.amountUsd !== undefined && Number(p.amountUsd) > 0) || (p.method && p.method.includes('USD'))
+    p => p.currency === 'USD' || (p.amountUsd !== undefined && Number(p.amountUsd) > 0 && p.currency !== 'DOP') || (p.method && p.method.includes('USD'))
   );
   const isUsd = paidCurrency === 'USD' || 
-    lastPayment?.currency === 'USD' || 
-    (lastPayment?.amountUsd !== undefined && Number(lastPayment.amountUsd) > 0) || 
-    (totalUsd !== undefined && Number(totalUsd) > 0) ||
-    hasUsdPayment;
+    (paidCurrency !== 'DOP' && (
+      lastPayment?.currency === 'USD' || 
+      (lastPayment?.amountUsd !== undefined && Number(lastPayment.amountUsd) > 0 && lastPayment?.currency !== 'DOP') || 
+      hasUsdPayment
+    ));
 
   // 2. Historical USD payments from history
   const historyUsdPayments = (paymentsHistory || []).filter(

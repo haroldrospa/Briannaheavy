@@ -45,6 +45,7 @@ export interface Quotation {
   billed_invoice_number?: string;
   billed_at?: string;
   cashier_name?: string;
+  currency?: 'DOP' | 'USD';
 }
 
 const QUOTATIONS_STORAGE_KEY = 'brianna_quotations';
@@ -147,7 +148,8 @@ export const fetchQuotations = (): Quotation[] => {
           created_at: createdDate,
           expires_at: expiresDate,
           status: 'Vigente',
-          cashier_name: inv.cashier_name || 'Cajero POS'
+          cashier_name: inv.cashier_name || 'Cajero POS',
+          currency: inv.paid_currency || 'DOP'
         });
       }
     });
@@ -199,6 +201,7 @@ export const createQuotation = (data: {
   total_amount: number;
   notes?: string;
   cashier_name?: string;
+  currency?: 'DOP' | 'USD';
 }): Quotation => {
   const currentList = fetchQuotations();
   
@@ -231,7 +234,8 @@ export const createQuotation = (data: {
     created_at,
     expires_at,
     status: 'Vigente',
-    cashier_name: data.cashier_name || localStorage.getItem('brianna_user_name') || 'Harold Rosado'
+    cashier_name: data.cashier_name || localStorage.getItem('brianna_user_name') || 'Harold Rosado',
+    currency: data.currency || 'DOP'
   };
 
   const updated = [newQuotation, ...currentList.filter(q => q.quotation_number !== num)];

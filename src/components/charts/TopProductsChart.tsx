@@ -104,9 +104,9 @@ export default function TopProductsChart() {
             <p className="font-semibold text-gray-600 dark:text-zinc-400">Sin datos aún</p>
           </div>
         ) : (
-          topProducts.map((prod) => (
+          topProducts.map((prod, idx) => (
             <div 
-              key={prod.name}
+              key={`${prod.name}-${idx}`}
               className="p-3 rounded-2xl bg-gray-50/50 dark:bg-zinc-900/40 hover:bg-gray-100/60 dark:hover:bg-zinc-800/50 border border-gray-100/70 dark:border-zinc-800/60 transition-all group"
             >
               <div className="flex items-center justify-between gap-3 mb-2">

@@ -2791,8 +2791,9 @@ export default function POS() {
 
     const numRec = parseFloat(amountReceived) || total;
     const chg = (paymentMethod === 'Efectivo' && numRec > total) ? (numRec - total) : 0;
-    const numRecUsd = amountReceivedUsd ? parseFloat(amountReceivedUsd) : undefined;
-    const totalUsdVal = total / (exchangeRate || 60);
+    const isPayingUsd = paidCurrency === 'USD';
+    const numRecUsd = isPayingUsd && amountReceivedUsd ? parseFloat(amountReceivedUsd) : undefined;
+    const totalUsdVal = isPayingUsd ? total / (exchangeRate || 60) : undefined;
 
     setLastPaymentInfo({
       receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
@@ -2805,7 +2806,7 @@ export default function POS() {
       paidCurrency,
       exchangeRate,
       receivedAmountUsd: numRecUsd,
-      changeAmountUsd: changeUsd,
+      changeAmountUsd: isPayingUsd ? changeUsd : undefined,
       totalUsd: totalUsdVal,
     });
 
@@ -2970,7 +2971,7 @@ export default function POS() {
           paidCurrency,
           exchangeRate,
           receivedAmountUsd: numRecUsd,
-          changeAmountUsd: changeUsd,
+          changeAmountUsd: isPayingUsd ? changeUsd : undefined,
           totalUsd: totalUsdVal,
         },
         lastEcfData: ecfRes || (internalDocType === 'CT' ? {
@@ -3032,7 +3033,7 @@ export default function POS() {
         paid_currency: paidCurrency,
         exchange_rate: exchangeRate,
         received_amount_usd: numRecUsd,
-        change_amount_usd: changeUsd,
+        change_amount_usd: isPayingUsd ? changeUsd : undefined,
         total_usd: totalUsdVal,
       };
 
@@ -3094,7 +3095,8 @@ export default function POS() {
               tax_amount: tax,
               total_amount: total,
               notes: 'Cotización emitida desde POS',
-              cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado'
+              cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
+              currency: paidCurrency
             });
             setActiveQuotationsCount(getActiveQuotationsCount());
             window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
@@ -3131,23 +3133,52 @@ export default function POS() {
   };
 
   const handleLoadQuotationIntoPOS = useCallback((quotation: Quotation) => {
+    if (!quotation || !Array.isArray(quotation.items) || quotation.items.length === 0) {
+      showAlert({
+        title: 'Cotización Vacía',
+        description: 'La cotización seleccionada no contiene artículos para cargar.',
+        variant: 'warning'
+      });
+      return;
+    }
+
     // 1. Convert quotation items to cart
     const newCart = quotation.items.map(it => {
-      const matched = dbProducts.find(p => String(p.id) === String(it.product.id) || p.part_number === it.product.part_number);
-      const productObj = matched || {
-        id: it.product.id,
-        name: it.product.name,
-        price: it.unitPrice,
-        stock: it.product.stock ?? 999,
-        category: it.product.category || 'Piezas',
-        part_number: it.product.part_number || '',
-        barcode: it.product.barcode || '',
-        image_url: it.product.image_url || ''
+      const itProd = it.product || (it as any);
+      const targetId = String(itProd?.id || (it as any).item_id || (it as any).product_id || '').trim();
+      const targetPartNumber = (itProd?.part_number || (it as any).part_number || '').trim();
+      const targetBarcode = (itProd?.barcode || (it as any).barcode || '').trim();
+      const targetName = (itProd?.name || (it as any).description || '').trim().toLowerCase();
+
+      // Find in dbProducts strictly with non-empty attributes (never match empty strings!)
+      const matched = dbProducts.find(p => {
+        if (targetId && String(p.id) === targetId) return true;
+        if (targetPartNumber && p.part_number && p.part_number.trim().toLowerCase() === targetPartNumber.toLowerCase()) return true;
+        if (targetBarcode && p.barcode && p.barcode.trim().toLowerCase() === targetBarcode.toLowerCase()) return true;
+        if (targetName && p.name && p.name.trim().toLowerCase() === targetName) return true;
+        return false;
+      });
+
+      const unitPrice = Number(it.unitPrice ?? itProd?.price ?? (it as any).unit_price ?? 0);
+
+      const productObj = matched ? {
+        ...matched,
+        price: unitPrice > 0 ? unitPrice : matched.price,
+        originalPrice: matched.price
+      } : {
+        id: targetId || `cot-item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: itProd?.name || (it as any).description || 'Artículo cotizado',
+        price: unitPrice,
+        stock: itProd?.stock ?? 999,
+        category: itProd?.category || 'Piezas',
+        part_number: targetPartNumber,
+        barcode: targetBarcode,
+        image_url: itProd?.image_url || ''
       };
 
       return {
         product: productObj,
-        quantity: it.quantity,
+        quantity: Math.max(1, Number(it.quantity) || 1),
         discount: it.discount || 0,
         discountType: it.discountType || '%'
       };
@@ -3155,24 +3186,44 @@ export default function POS() {
 
     setCart(newCart);
 
-    // 2. Set customer
-    if (quotation.customer) {
+    // 2. Set cart currency to match the quotation (or DOP by default)
+    setCartCurrency(quotation.currency || 'DOP');
+
+    // 3. Set customer
+    if (quotation.customer && quotation.customer.name) {
       setSelectedClient({
         id: quotation.customer.id || '',
         name: quotation.customer.name,
-        rnc: quotation.customer.rnc || '',
+        rnc: quotation.customer.rnc || quotation.customer_rnc || '',
         phone: quotation.customer.phone || '',
         email: quotation.customer.email || '',
         address: quotation.customer.address || '',
         credit_limit: 0,
         current_debt: 0
       });
+    } else if (quotation.customer_name) {
+      setSelectedClient({
+        id: '',
+        name: quotation.customer_name,
+        rnc: quotation.customer_rnc || '',
+        phone: '',
+        email: '',
+        address: '',
+        credit_limit: 0,
+        current_debt: 0
+      });
+    } else {
+      setSelectedClient(null);
     }
 
+    // 4. Set document mode ready to invoice
+    setBillingMode('internal');
+    setInternalDocType('FAC-INT');
     setActiveQuotationId(quotation.id);
+
     showAlert({
       title: '✓ Cotización Cargada al POS',
-      description: `La cotización ${quotation.quotation_number} (${quotation.items.length} repuestos) se cargó al carrito. Lista para cobrar o facturar.`,
+      description: `La cotización ${quotation.quotation_number} (${newCart.length} ${newCart.length === 1 ? 'artículo' : 'artículos'}) se cargó al carrito con éxito.`,
       variant: 'success'
     });
   }, [dbProducts, showAlert]);
