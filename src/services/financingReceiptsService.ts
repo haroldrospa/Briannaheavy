@@ -48,6 +48,40 @@ export interface FinancingPaymentReceipt {
 }
 
 const STORAGE_KEY = 'brianna_financing_receipts';
+const DELETED_RECEIPTS_KEY = 'brianna_deleted_financing_receipts';
+
+export const getDeletedReceiptIds = (): Set<string> => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(DELETED_RECEIPTS_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(String));
+    }
+  } catch {}
+  return new Set();
+};
+
+export const addDeletedReceiptId = (idOrNumber: string): void => {
+  if (!idOrNumber) return;
+  try {
+    const set = getDeletedReceiptIds();
+    set.add(String(idOrNumber).trim());
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DELETED_RECEIPTS_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+};
+
+export const isReceiptDeleted = (target: FinancingPaymentReceipt | string | null | undefined): boolean => {
+  if (!target) return false;
+  const set = getDeletedReceiptIds();
+  if (typeof target === 'string') {
+    return set.has(target.trim());
+  }
+  const hasIdMatch = Boolean(target.id && set.has(String(target.id).trim()));
+  const hasNumMatch = Boolean(target.receiptNumber && set.has(String(target.receiptNumber).trim()));
+  return hasIdMatch || hasNumMatch;
+};
 
 const toDbRow = (r: FinancingPaymentReceipt) => ({
   id: r.id,
@@ -125,9 +159,16 @@ export function getStoredReceipts(): FinancingPaymentReceipt[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      const deletedIds = getDeletedReceiptIds();
       const activeUser = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
       let hasUpdate = false;
+      const cleanList: FinancingPaymentReceipt[] = [];
       parsed.forEach(r => {
+        if (!r) return;
+        if ((r.id && deletedIds.has(String(r.id))) || (r.receiptNumber && deletedIds.has(String(r.receiptNumber)))) {
+          hasUpdate = true;
+          return;
+        }
         if (!r.registerName || r.registerName.toLowerCase().includes('carlos mendoza')) {
           r.registerName = 'Caja Cobros & Financiamientos';
           hasUpdate = true;
@@ -136,11 +177,12 @@ export function getStoredReceipts(): FinancingPaymentReceipt[] {
           r.cashierName = activeUser;
           hasUpdate = true;
         }
+        cleanList.push(r);
       });
       if (hasUpdate && typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
       }
-      return parsed;
+      return cleanList;
     }
     return [];
   } catch (err) {
@@ -264,6 +306,21 @@ export async function fetchReceiptsFromSupabase(): Promise<FinancingPaymentRecei
   try {
     let remoteReceipts: FinancingPaymentReceipt[] = [];
 
+    // Intento 0: Consultar lista de recibos eliminados en system_settings para actualizar la lista negra local
+    try {
+      const { data: delSetting } = await supabase
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'deleted_financing_receipts')
+        .maybeSingle();
+
+      if (delSetting?.value && Array.isArray(delSetting.value)) {
+        delSetting.value.forEach((d: string) => addDeletedReceiptId(d));
+      }
+    } catch (e) {
+      console.warn('Error reading deleted_financing_receipts from system_settings:', e);
+    }
+
     // Intento 1: Consultar la tabla dedicada `financing_receipts` si está disponible
     if (hasDedicatedTable) {
       try {
@@ -297,18 +354,28 @@ export async function fetchReceiptsFromSupabase(): Promise<FinancingPaymentRecei
       }
     }
 
-    // Combinar con los recibos locales para no perder ninguno creado offline
-    const localReceipts = getStoredReceipts();
+    const deletedIds = getDeletedReceiptIds();
+    const isDeleted = (r: FinancingPaymentReceipt) => {
+      if (!r) return true;
+      return (
+        (r.id && deletedIds.has(String(r.id))) ||
+        (r.receiptNumber && deletedIds.has(String(r.receiptNumber)))
+      );
+    };
+
+    // Combinar con los recibos locales para no perder ninguno creado offline, descartando eliminados
+    const localReceipts = getStoredReceipts().filter(r => !isDeleted(r));
+    const cleanRemote = remoteReceipts.filter(r => !isDeleted(r));
     const map = new Map<string, FinancingPaymentReceipt>();
 
     // Primero los locales
     localReceipts.forEach(r => {
-      if (r && r.id) map.set(r.id, r);
+      if (r && r.id && !isDeleted(r)) map.set(r.id, r);
     });
 
     // Luego los remotos (tienen prioridad)
-    remoteReceipts.forEach(r => {
-      if (r && r.id) map.set(r.id, r);
+    cleanRemote.forEach(r => {
+      if (r && r.id && !isDeleted(r)) map.set(r.id, r);
     });
 
     const merged = Array.from(map.values()).sort(
@@ -325,7 +392,7 @@ export async function fetchReceiptsFromSupabase(): Promise<FinancingPaymentRecei
     }
 
     // Si había recibos locales no sincronizados en Supabase, subirlos ahora
-    if (localReceipts.length > remoteReceipts.length) {
+    if (localReceipts.length > cleanRemote.length) {
       syncAllFinancingReceiptsToSupabase(merged).catch(() => {});
     }
 
@@ -340,6 +407,7 @@ export async function fetchReceiptsFromSupabase(): Promise<FinancingPaymentRecei
 
 export function saveReceipt(receipt: FinancingPaymentReceipt, emitEvent = true): void {
   try {
+    if (isReceiptDeleted(receipt)) return;
     const all = getStoredReceipts();
     // Prevent duplicate receipts with the same ID or receiptNumber
     const filtered = all.filter(r => r.id !== receipt.id && r.receiptNumber !== receipt.receiptNumber);
@@ -475,8 +543,10 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
 
   // Check if down payment exists and needs an initial payment receipt
   const downPaymentAmt = Number(financing.down_payment || financing.downPayment || 0);
-  const hasDownPaymentReceipt = existingReceipts.some(r => r.paymentType === 'inicial' || r.id === `rec-down-${targetId}`);
-  if (downPaymentAmt > 0 && !hasDownPaymentReceipt) {
+  const downId = `rec-down-${targetId}`;
+  const isDownDeleted = isReceiptDeleted(downId);
+  const hasDownPaymentReceipt = existingReceipts.some(r => r.paymentType === 'inicial' || r.id === downId);
+  if (downPaymentAmt > 0 && !hasDownPaymentReceipt && !isDownDeleted) {
     const pDate = financing.start_date || financing.startDate || financing.created_at || new Date().toISOString();
     const formattedDate = new Date(pDate).toLocaleDateString('es-DO', {
       year: 'numeric',
@@ -486,7 +556,7 @@ export function getOrReconstructReceiptsForFinancing(financing: any, emitEvent =
     const year = new Date(pDate).getFullYear() || new Date().getFullYear();
     const recNum = `REC-${year}-INI-${String(existingReceipts.length + 1).padStart(3, '0')}`;
     const downReceipt: FinancingPaymentReceipt = {
-      id: `rec-down-${targetId}`,
+      id: downId,
       receiptNumber: recNum,
       financingId: targetId,
       date: formattedDate,
@@ -532,9 +602,12 @@ export async function deleteFinancingReceipt(receiptIdOrNumber: string): Promise
   const target = String(receiptIdOrNumber || '').trim();
   if (!target) return false;
 
+  addDeletedReceiptId(target);
+  const deletedIds = getDeletedReceiptIds();
+
   // 1. Eliminar de LocalStorage
   const all = getStoredReceipts();
-  const filtered = all.filter(r => r.id !== target && r.receiptNumber !== target);
+  const filtered = all.filter(r => r.id !== target && r.receiptNumber !== target && !deletedIds.has(String(r.id)) && !deletedIds.has(String(r.receiptNumber)));
   const wasRemoved = filtered.length !== all.length;
 
   if (typeof window !== 'undefined') {
@@ -557,6 +630,13 @@ export async function deleteFinancingReceipt(receiptIdOrNumber: string): Promise
       await supabase.from('system_settings').upsert({
         key: 'financing_receipts',
         value: filtered,
+        updated_at: new Date().toISOString(),
+      });
+
+      // Actualizar lista de eliminados en system_settings
+      await supabase.from('system_settings').upsert({
+        key: 'deleted_financing_receipts',
+        value: Array.from(deletedIds),
         updated_at: new Date().toISOString(),
       });
     } catch (err) {
