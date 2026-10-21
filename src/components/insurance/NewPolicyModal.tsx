@@ -5,8 +5,7 @@ import {
   TruckIcon, 
   UserIcon, 
   CalendarDaysIcon, 
-  CheckCircleIcon,
-  SparklesIcon
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import { 
   createInsurancePolicy, 
@@ -411,7 +410,6 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
               </div>
               {realCustomers.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
-                  <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
                   <select
                     onChange={handleSelectRealCustomer}
                     defaultValue=""
@@ -477,7 +475,6 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
               </div>
               {realVehicles.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
-                  <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
                   <select
                     onChange={handleSelectRealVehicle}
                     defaultValue=""

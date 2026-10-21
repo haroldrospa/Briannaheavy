@@ -15,7 +15,6 @@ import {
   KeyIcon,
   EyeIcon,
   EyeSlashIcon,
-  SparklesIcon
 } from '@heroicons/react/24/outline';
 import { 
   fetchUsers, 
@@ -456,7 +455,7 @@ export default function Users() {
                       onClick={() => generateRandomPassword(true)}
                       className="text-[11px] font-bold text-[#ED1C24] hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <SparklesIcon className="w-3.5 h-3.5" />
+                      <KeyIcon className="w-3.5 h-3.5" />
                       Generar clave
                     </button>
                   </div>
@@ -572,7 +571,7 @@ export default function Users() {
                       onClick={() => generateRandomPassword(false)}
                       className="text-[11px] font-bold text-[#ED1C24] hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <SparklesIcon className="w-3.5 h-3.5" />
+                      <KeyIcon className="w-3.5 h-3.5" />
                       Generar clave
                     </button>
                   </div>

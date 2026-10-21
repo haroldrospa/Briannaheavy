@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useTheme } from '../../contexts/ThemeContext';
-import { WrenchScrewdriverIcon, TruckIcon, Cog6ToothIcon, TagIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { WrenchScrewdriverIcon, TruckIcon, Cog6ToothIcon, TagIcon } from '@heroicons/react/24/outline';
 
 const data = [
   { 
@@ -69,8 +69,7 @@ export default function PaymentMethodsChart() {
             Distribución de ventas del período
           </p>
         </div>
-        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-2.5 py-1 rounded-full border border-red-200/60 dark:border-red-900/40">
-          <SparklesIcon className="h-3 w-3" />
+        <span className="inline-flex items-center text-[10px] font-black uppercase text-[#ED1C24] bg-red-50 dark:bg-red-950/60 px-2.5 py-1 rounded-full border border-red-200/60 dark:border-red-900/40">
           <span>Ventas</span>
         </span>
       </div>

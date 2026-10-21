@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { XMarkIcon, PrinterIcon, TagIcon, AdjustmentsHorizontalIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PrinterIcon, TagIcon, AdjustmentsHorizontalIcon, EyeIcon } from '@heroicons/react/24/outline';
 import BarcodeLabel, { type LabelSizePreset } from './BarcodeLabel';
 import { getInvoiceCustomConfig } from '../../utils/receiptSettings';
 
@@ -288,7 +288,7 @@ export default function BarcodePrintModal({ isOpen, item, onClose }: BarcodePrin
             <div className="lg:col-span-6 flex flex-col items-center justify-center p-5 bg-zinc-100 dark:bg-zinc-950/80 rounded-3xl border border-gray-200 dark:border-zinc-800/80">
               <div className="w-full flex items-center justify-between mb-3 text-xs">
                 <span className="font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight flex items-center gap-1.5">
-                  <SparklesIcon className="w-4 h-4 text-amber-500" />
+                  <EyeIcon className="w-4 h-4 text-gray-500" />
                   <span>Previsualización en Tiempo Real</span>
                 </span>
                 <span className="font-mono text-gray-500 dark:text-zinc-400 font-bold">

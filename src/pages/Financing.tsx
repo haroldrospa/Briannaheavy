@@ -6,7 +6,7 @@ import {
   IdentificationIcon, ShieldCheckIcon, ClockIcon, TableCellsIcon, 
   TruckIcon, ExclamationTriangleIcon, PencilSquareIcon, TrashIcon,
   CheckIcon, ArrowsRightLeftIcon, ArrowDownCircleIcon, ArrowUpCircleIcon, BuildingLibraryIcon,
-  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, SparklesIcon, ArrowPathIcon,
+  LockClosedIcon, EyeIcon, EyeSlashIcon, CameraIcon, PhotoIcon, ArrowPathIcon,
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -5799,7 +5799,7 @@ export default function Financing() {
                                             : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-gray-300'
                                         }`}
                                       >
-                                        <SparklesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <ArrowDownCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                         <span>Abonar a Capital</span>
                                       </button>
 

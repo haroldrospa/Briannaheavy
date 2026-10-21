@@ -6,7 +6,7 @@ import {
   PrinterIcon, 
   TagIcon, 
   AdjustmentsHorizontalIcon, 
-  SparklesIcon, 
+  EyeIcon, 
   TrashIcon, 
   PhotoIcon,
   ChevronLeftIcon,
@@ -391,7 +391,7 @@ export default function BulkBarcodePrintModal({
               <div>
                 <div className="w-full flex items-center justify-between mb-3 text-xs">
                   <span className="font-black text-gray-700 dark:text-zinc-300 uppercase tracking-tight flex items-center gap-1.5">
-                    <SparklesIcon className="w-4 h-4 text-amber-500" />
+                    <EyeIcon className="w-4 h-4 text-gray-500" />
                     <span>Previsualización</span>
                   </span>
                   {selectedItems.length > 1 && (

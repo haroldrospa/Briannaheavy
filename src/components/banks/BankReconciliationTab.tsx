@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowUpTrayIcon,
-  SparklesIcon,
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
@@ -495,7 +494,6 @@ export default function BankReconciliationTab({
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
               title="Conciliar automáticamente movimientos coincidentes"
             >
-              <SparklesIcon className="w-3.5 h-3.5" />
               <span>Auto-Conciliar</span>
             </button>
 
@@ -841,7 +839,6 @@ export default function BankReconciliationTab({
                       onClick={handlePopulateFromBooks}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
                     >
-                      <SparklesIcon className="w-3.5 h-3.5" />
                       <span>Cargar desde Libros ({periodBookTransactions.length})</span>
                     </button>
                   )}
