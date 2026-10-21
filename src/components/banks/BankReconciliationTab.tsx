@@ -3,13 +3,11 @@ import {
   ArrowUpTrayIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ExclamationTriangleIcon,
   PrinterIcon,
   ArrowDownTrayIcon,
   PlusIcon,
   TrashIcon,
   CheckIcon,
-  DocumentMagnifyingGlassIcon,
   ArrowsRightLeftIcon,
   InformationCircleIcon
 } from '@heroicons/react/24/outline';
