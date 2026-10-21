@@ -22,7 +22,8 @@ import {
   ArrowUpRightIcon,
   ArrowDownLeftIcon,
   CreditCardIcon,
-  UserIcon
+  UserIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
@@ -1971,118 +1972,199 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                   {/* Status / Reconciliation & Supervisor Unified Bar */}
                   {physicalCashTotal === 0 && targetExpectedCash > 0 ? (
-                    <div className="p-2 sm:p-2.5 rounded-xl border bg-amber-50/80 border-amber-200/80 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ClockIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="p-2 sm:px-3.5 sm:py-2.5 rounded-2xl border border-amber-300/80 dark:border-amber-500/30 bg-gradient-to-r from-amber-50/90 via-amber-50/40 to-orange-50/20 dark:from-amber-950/40 dark:via-zinc-900 dark:to-zinc-900 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/25 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
+                          <ClockIcon className="h-4 w-4" />
+                        </div>
                         <div className="min-w-0">
-                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
-                            Pendiente Conteo Físico
-                          </span>
-                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-bold text-amber-950 dark:text-amber-200 tracking-wide">
+                              Pendiente Conteo Físico
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 uppercase">
+                              En espera
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate mt-0.5">
                             {effectiveCountMode === 'shift_only' && initialFund > 0
-                              ? `Fondo de RD$ ${initialFund.toLocaleString('es-DO')} en gaveta. Cuenta recaudación.`
-                              : 'Ingresa billetes y monedas para cuadrar'}
-                          </span>
+                              ? `Fondo de RD$ ${initialFund.toLocaleString('es-DO')} apartado en gaveta. Ingresa el efectivo del turno.`
+                              : 'Ingresa billetes y monedas en el panel izquierdo para cuadrar'}
+                          </p>
                         </div>
                       </div>
+
                       <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-                        <div className="text-right">
-                          <span className="text-[8.5px] block opacity-75 uppercase">Esperado</span>
-                          <span className="text-xs font-bold font-mono">
+                        <div className="text-right px-2.5 py-1 rounded-xl bg-white/80 dark:bg-zinc-800/80 border border-amber-200/60 dark:border-zinc-700/60 shadow-2xs">
+                          <span className="text-[8.5px] font-bold block uppercase tracking-wider text-zinc-400 dark:text-zinc-500 leading-none">
+                            Esperado Turno
+                          </span>
+                          <span className="text-xs font-black font-mono text-zinc-900 dark:text-zinc-100 mt-0.5 block leading-tight">
                             RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-amber-200/60 dark:border-amber-800/60">
-                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
-                          <select
-                            value={supervisorName}
-                            onChange={(e) => setSupervisorName(e.target.value)}
-                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
-                          >
-                            {adminNames.map(name => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
+
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800 px-2.5 py-1.5 rounded-xl border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xs">
+                          <UserIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0">Superv:</span>
+                          <div className="relative flex items-center">
+                            <select
+                              value={supervisorName}
+                              onChange={(e) => setSupervisorName(e.target.value)}
+                              className="appearance-none bg-transparent pr-4 text-[11px] font-bold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+                            >
+                              {adminNames.map(name => (
+                                <option key={name} value={name} className="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">{name}</option>
+                              ))}
+                            </select>
+                            <ChevronDownIcon className="w-3 h-3 text-zinc-400 absolute right-0 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
                     </div>
                   ) : targetExpectedCash < 0 ? (
-                    <div className="p-2 sm:p-2.5 rounded-xl border bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <div className="p-2 sm:px-3.5 sm:py-2.5 rounded-2xl border border-rose-300/80 dark:border-rose-500/30 bg-gradient-to-r from-rose-50/90 via-rose-50/40 to-red-50/20 dark:from-rose-950/40 dark:via-zinc-900 dark:to-zinc-900 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-rose-500/15 dark:bg-rose-500/20 border border-rose-500/25 flex items-center justify-center shrink-0 text-rose-600 dark:text-rose-400">
+                          <ExclamationTriangleIcon className="h-4 w-4" />
+                        </div>
                         <div className="min-w-0">
-                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
-                            Alerta: Efectivo Teórico Negativo
-                          </span>
-                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
-                            Retiros superan fondo de caja
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-bold text-rose-950 dark:text-rose-200 tracking-wide">
+                              Alerta: Efectivo Teórico Negativo
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-200/60 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 uppercase">
+                              Desbalance
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate mt-0.5">
+                            Los egresos y retiros registrados superan el fondo disponible en caja
+                          </p>
                         </div>
                       </div>
+
                       <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-                        <span className="text-xs font-bold font-mono">
-                          RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
-                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-rose-200/60 dark:border-rose-800/60">
-                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
-                          <select
-                            value={supervisorName}
-                            onChange={(e) => setSupervisorName(e.target.value)}
-                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
-                          >
-                            {adminNames.map(name => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
+                        <div className="text-right px-2.5 py-1 rounded-xl bg-white/80 dark:bg-zinc-800/80 border border-rose-200/60 dark:border-zinc-700/60 shadow-2xs">
+                          <span className="text-[8.5px] font-bold block uppercase tracking-wider text-rose-500/80 dark:text-rose-400 leading-none">
+                            Diferencia
+                          </span>
+                          <span className="text-xs font-black font-mono text-rose-600 dark:text-rose-400 mt-0.5 block leading-tight">
+                            RD$ {targetExpectedCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800 px-2.5 py-1.5 rounded-xl border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xs">
+                          <UserIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0">Superv:</span>
+                          <div className="relative flex items-center">
+                            <select
+                              value={supervisorName}
+                              onChange={(e) => setSupervisorName(e.target.value)}
+                              className="appearance-none bg-transparent pr-4 text-[11px] font-bold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+                            >
+                              {adminNames.map(name => (
+                                <option key={name} value={name} className="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">{name}</option>
+                              ))}
+                            </select>
+                            <ChevronDownIcon className="w-3 h-3 text-zinc-400 absolute right-0 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className={`p-2 sm:p-2.5 rounded-xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 ${
+                    <div className={`p-2 sm:px-3.5 sm:py-2.5 rounded-2xl border shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 ${
                       variance === 0 
-                        ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300'
+                        ? 'border-emerald-300/80 dark:border-emerald-500/30 bg-gradient-to-r from-emerald-50/90 via-emerald-50/40 to-teal-50/20 dark:from-emerald-950/40 dark:via-zinc-900 dark:to-zinc-900'
                         : variance > 0
-                        ? 'bg-blue-50/80 border-blue-200/80 text-blue-900 dark:bg-blue-950/30 dark:border-blue-800/60 dark:text-blue-300'
-                        : 'bg-rose-50/80 border-rose-200/80 text-rose-900 dark:bg-rose-950/30 dark:border-rose-800/60 dark:text-rose-300'
+                        ? 'border-blue-300/80 dark:border-blue-500/30 bg-gradient-to-r from-blue-50/90 via-blue-50/40 to-indigo-50/20 dark:from-blue-950/40 dark:via-zinc-900 dark:to-zinc-900'
+                        : 'border-rose-300/80 dark:border-rose-500/30 bg-gradient-to-r from-rose-50/90 via-rose-50/40 to-red-50/20 dark:from-rose-950/40 dark:via-zinc-900 dark:to-zinc-900'
                     }`}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        {variance >= 0 ? (
-                          <CheckCircleIcon className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <ExclamationTriangleIcon className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                        )}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                          variance >= 0
+                            ? variance === 0
+                              ? 'bg-emerald-500/15 dark:bg-emerald-500/20 border-emerald-500/25 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-blue-500/15 dark:bg-blue-500/20 border-blue-500/25 text-blue-600 dark:text-blue-400'
+                            : 'bg-rose-500/15 dark:bg-rose-500/20 border-rose-500/25 text-rose-600 dark:text-rose-400'
+                        }`}>
+                          {variance >= 0 ? (
+                            <CheckCircleIcon className="h-4 w-4" />
+                          ) : (
+                            <ExclamationTriangleIcon className="h-4 w-4" />
+                          )}
+                        </div>
                         <div className="min-w-0">
-                          <span className="text-[11px] uppercase font-bold tracking-wider block truncate">
-                            {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
-                          </span>
-                          <span className="text-[9.5px] opacity-75 block font-medium truncate">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[11px] font-bold tracking-wide ${
+                              variance === 0 
+                                ? 'text-emerald-950 dark:text-emerald-200' 
+                                : variance > 0 
+                                ? 'text-blue-950 dark:text-blue-200' 
+                                : 'text-rose-950 dark:text-rose-200'
+                            }`}>
+                              {variance === 0 ? 'Cuadre Perfecto' : variance > 0 ? 'Sobrante en Caja' : 'Faltante en Caja'}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                              variance === 0
+                                ? 'bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+                                : variance > 0
+                                ? 'bg-blue-200/60 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300'
+                                : 'bg-rose-200/60 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300'
+                            }`}>
+                              {variance === 0 ? 'Exacto' : variance > 0 ? 'Sobrante' : 'Diferencia'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate mt-0.5">
                             {variance === 0 
                               ? (isMatchWithFund && effectiveCountMode === 'shift_only'
-                                  ? 'Coincide con gaveta completa'
+                                  ? 'El conteo físico coincide con gaveta completa'
                                   : effectiveCountMode === 'shift_only' && initialFund > 0
-                                  ? 'Turno cuadrado (fondo intacto)'
-                                  : 'Efectivo coincide exactamente')
+                                  ? 'Turno cuadrado exactamente (fondo en gaveta intacto)'
+                                  : 'El efectivo físico coincide exactamente con el sistema')
                               : variance > 0 
-                              ? 'Hay más dinero del esperado' 
-                              : 'Falta dinero según el sistema'}
-                          </span>
+                              ? 'Hay más dinero físico en caja del esperado por el sistema' 
+                              : 'Falta efectivo físico según los registros del sistema'}
+                          </p>
                         </div>
                       </div>
+
                       <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-                        <span className="text-xs font-bold font-mono">
-                          RD$ {variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
-                        <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 px-2 py-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60">
-                          <span className="text-[9.5px] font-semibold text-zinc-600 dark:text-zinc-400">Superv:</span>
-                          <select
-                            value={supervisorName}
-                            onChange={(e) => setSupervisorName(e.target.value)}
-                            className="bg-transparent text-[11px] font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
-                          >
-                            {adminNames.map(name => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                          </select>
+                        <div className={`text-right px-2.5 py-1 rounded-xl bg-white/80 dark:bg-zinc-800/80 border shadow-2xs ${
+                          variance === 0
+                            ? 'border-emerald-200/60 dark:border-zinc-700/60'
+                            : variance > 0
+                            ? 'border-blue-200/60 dark:border-zinc-700/60'
+                            : 'border-rose-200/60 dark:border-zinc-700/60'
+                        }`}>
+                          <span className="text-[8.5px] font-bold block uppercase tracking-wider text-zinc-400 dark:text-zinc-500 leading-none">
+                            {variance === 0 ? 'Diferencia' : variance > 0 ? 'Monto Sobrante' : 'Monto Faltante'}
+                          </span>
+                          <span className={`text-xs font-black font-mono mt-0.5 block leading-tight ${
+                            variance === 0 
+                              ? 'text-emerald-600 dark:text-emerald-400' 
+                              : variance > 0 
+                              ? 'text-blue-600 dark:text-blue-400' 
+                              : 'text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {variance === 0 ? 'RD$ 0.00' : `${variance > 0 ? '+' : ''}RD$ ${variance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-800 px-2.5 py-1.5 rounded-xl border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xs">
+                          <UserIcon className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+                          <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0">Superv:</span>
+                          <div className="relative flex items-center">
+                            <select
+                              value={supervisorName}
+                              onChange={(e) => setSupervisorName(e.target.value)}
+                              className="appearance-none bg-transparent pr-4 text-[11px] font-bold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+                            >
+                              {adminNames.map(name => (
+                                <option key={name} value={name} className="bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">{name}</option>
+                              ))}
+                            </select>
+                            <ChevronDownIcon className="w-3 h-3 text-zinc-400 absolute right-0 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
                     </div>
