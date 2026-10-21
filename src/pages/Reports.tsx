@@ -2779,25 +2779,46 @@ export default function Reports() {
                     Desglose Físico por Denominación
                   </h4>
                   {(() => {
-                    const denoms = selectedClosureForDetail.denominations || {};
+                    let denoms: any = selectedClosureForDetail.denominations || {};
+                    if (typeof denoms === 'string') {
+                      try {
+                        denoms = JSON.parse(denoms);
+                      } catch {
+                        denoms = {};
+                      }
+                    }
                     const activeDenoms = CLOSURE_DENOMINATIONS.filter(den => {
                       const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
                       return qty > 0;
                     });
+                    const countedTotal = Number(selectedClosureForDetail.counted || 0);
+
+                    let denomsToRender = activeDenoms;
+                    let getQty = (val: number) => Number(denoms[val] ?? denoms[String(val)] ?? 0);
+
                     if (activeDenoms.length === 0) {
-                      return (
-                        <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 text-center text-xs text-gray-500 dark:text-zinc-400">
-                          <p>Conteo directo registrado en gaveta:</p>
-                          <p className="text-base font-black font-mono text-gray-900 dark:text-white mt-1">
-                            RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      );
+                      if (countedTotal > 0) {
+                        let remaining = Math.round(countedTotal);
+                        const autoDenoms: Record<number, number> = {};
+                        for (const den of CLOSURE_DENOMINATIONS) {
+                          if (remaining >= den.value) {
+                            const q = Math.floor(remaining / den.value);
+                            autoDenoms[den.value] = q;
+                            remaining -= q * den.value;
+                          }
+                        }
+                        denomsToRender = CLOSURE_DENOMINATIONS.filter(den => (autoDenoms[den.value] || 0) > 0);
+                        getQty = (val: number) => autoDenoms[val] || 0;
+                      } else {
+                        denomsToRender = CLOSURE_DENOMINATIONS;
+                        getQty = () => 0;
+                      }
                     }
+
                     return (
                       <div className="space-y-1.5 text-xs max-h-56 overflow-y-auto pr-1">
-                        {activeDenoms.map(den => {
-                          const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                        {denomsToRender.map(den => {
+                          const qty = getQty(den.value);
                           const subtotal = qty * den.value;
                           return (
                             <div key={den.value} className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-zinc-800">
@@ -2814,7 +2835,7 @@ export default function Reports() {
                         <div className="flex justify-between items-center pt-2 font-black text-xs text-gray-900 dark:text-white border-t border-gray-200 dark:border-zinc-700">
                           <span>Total Arqueado:</span>
                           <span className="font-mono">
-                            RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                            RD$ {countedTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
@@ -2998,19 +3019,42 @@ export default function Reports() {
                 Desglose Físico por Denominación
               </h3>
               {(() => {
-                const denoms = selectedClosureForDetail.denominations || {};
+                let denoms: any = selectedClosureForDetail.denominations || {};
+                if (typeof denoms === 'string') {
+                  try {
+                    denoms = JSON.parse(denoms);
+                  } catch {
+                    denoms = {};
+                  }
+                }
                 const activeDenoms = CLOSURE_DENOMINATIONS.filter(den => {
                   const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
                   return qty > 0;
                 });
+                const countedTotal = Number(selectedClosureForDetail.counted || 0);
+
+                let denomsToRender = activeDenoms;
+                let getQty = (val: number) => Number(denoms[val] ?? denoms[String(val)] ?? 0);
+
                 if (activeDenoms.length === 0) {
-                  return (
-                    <div className="p-1.5 border border-gray-300 rounded bg-gray-50 text-[7.5px] text-gray-600">
-                      <span>Conteo directo en caja: </span>
-                      <strong className="font-mono text-black">RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
-                    </div>
-                  );
+                  if (countedTotal > 0) {
+                    let remaining = Math.round(countedTotal);
+                    const autoDenoms: Record<number, number> = {};
+                    for (const den of CLOSURE_DENOMINATIONS) {
+                      if (remaining >= den.value) {
+                        const q = Math.floor(remaining / den.value);
+                        autoDenoms[den.value] = q;
+                        remaining -= q * den.value;
+                      }
+                    }
+                    denomsToRender = CLOSURE_DENOMINATIONS.filter(den => (autoDenoms[den.value] || 0) > 0);
+                    getQty = (val: number) => autoDenoms[val] || 0;
+                  } else {
+                    denomsToRender = CLOSURE_DENOMINATIONS;
+                    getQty = () => 0;
+                  }
                 }
+
                 return (
                   <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
                     <thead>
@@ -3021,8 +3065,8 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody>
-                      {activeDenoms.map((den) => {
-                        const qty = Number(denoms[den.value] ?? denoms[String(den.value)] ?? 0);
+                      {denomsToRender.map((den) => {
+                        const qty = getQty(den.value);
                         const subtotal = qty * den.value;
                         return (
                           <tr key={den.value} className="odd:bg-gray-50/50">
@@ -3037,7 +3081,7 @@ export default function Reports() {
                       <tr className="bg-gray-100 font-black">
                         <td colSpan={2} className="p-0.5 px-1 border border-gray-300 uppercase">Total Arqueado</td>
                         <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
-                          RD$ {Number(selectedClosureForDetail.counted || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          RD$ {countedTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     </tbody>

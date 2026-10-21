@@ -1079,11 +1079,54 @@ export default function CashClosureModal({
     return printEgresosTransfer.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
   }, [printEgresosTransfer]);
 
-  const getPrintDenominationQty = (val: number): number => {
-    if (savedClosure?.denominations) {
-      return Number(savedClosure.denominations[String(val)] ?? savedClosure.denominations[val] ?? 0);
+  // Desglose físico automático inteligente si no se han desglosado billetes de forma manual
+  const computedAutoDenoms = useMemo(() => {
+    let remaining = Math.round(printPhysicalCash);
+    if (remaining <= 0) return {};
+    const result: Record<number, number> = {};
+    for (const den of DENOMINATIONS) {
+      if (remaining >= den.value) {
+        const qty = Math.floor(remaining / den.value);
+        result[den.value] = qty;
+        remaining -= qty * den.value;
+      }
     }
-    return Number(counts[val] || 0);
+    return result;
+  }, [printPhysicalCash]);
+
+  const getPrintDenominationQty = (val: number): number => {
+    // 1. Revisar si hay denominaciones en el cierre guardado
+    let savedDenoms: any = savedClosure?.denominations;
+    if (typeof savedDenoms === 'string') {
+      try {
+        savedDenoms = JSON.parse(savedDenoms);
+      } catch {
+        savedDenoms = null;
+      }
+    }
+    if (savedDenoms && typeof savedDenoms === 'object') {
+      const q = Number(savedDenoms[String(val)] ?? savedDenoms[val] ?? 0);
+      if (!isNaN(q) && q > 0) return q;
+    }
+
+    // 2. Revisar si hay conteo manual en vivo en los inputs del modal
+    const liveQty = Number(counts[val] ?? (counts as any)[String(val)] ?? 0);
+    if (!isNaN(liveQty) && liveQty > 0) return liveQty;
+
+    // 3. Si no hay ningún conteo manual registrado en ninguna denominación, auto-desglosar el efectivo físico
+    const hasAnyManual = DENOMINATIONS.some(d => {
+      const sq = savedDenoms && typeof savedDenoms === 'object'
+        ? Number(savedDenoms[String(d.value)] ?? savedDenoms[d.value] ?? 0)
+        : 0;
+      const lq = Number(counts[d.value] ?? (counts as any)[String(d.value)] ?? 0);
+      return (!isNaN(sq) && sq > 0) || (!isNaN(lq) && lq > 0);
+    });
+
+    if (!hasAnyManual && computedAutoDenoms[val]) {
+      return computedAutoDenoms[val];
+    }
+
+    return 0;
   };
 
   const generateReportText = () => {
@@ -1126,6 +1169,13 @@ ${printIngresos.length > 0 ? printIngresos.map(m => `  + ${m.concept || 'Ingreso
 --- DETALLE EGRESOS / GASTOS (${printEgresos.length}) ---
 • Total Egresos: -RD$ ${printTotalEgresos.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 ${printEgresos.length > 0 ? printEgresos.map(m => `  - ${m.concept || 'Egreso'}: RD$ ${Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`).join('\n') : '  (Sin egresos)'}
+
+--- DESGLOSE FÍSICO POR DENOMINACIÓN ---
+${DENOMINATIONS.map(d => {
+  const q = getPrintDenominationQty(d.value);
+  return q > 0 ? `• ${d.label}: ${q} unid. = RD$ ${(q * d.value).toLocaleString('es-DO')}` : null;
+}).filter(Boolean).join('\n') || '• Total arqueado: RD$ ' + printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• TOTAL ARQUEADO: RD$ ${printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 
 --------------------------------------------------
 • Modo de Arqueo: ${effectiveCountMode === 'shift_only' && initialFund > 0 ? 'Solo Efectivo del Turno (Fondo en gaveta)' : 'Gaveta Completa con Fondo'}
@@ -2440,14 +2490,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               </h3>
               {(() => {
                 const activeDenoms = DENOMINATIONS.filter(den => getPrintDenominationQty(den.value) > 0);
-                if (activeDenoms.length === 0) {
-                  return (
-                    <div className="p-1.5 border border-gray-300 rounded bg-gray-50 text-[7.5px] text-gray-600">
-                      <span>Conteo directo en caja: </span>
-                      <strong className="font-mono text-black">RD$ {printPhysicalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
-                    </div>
-                  );
-                }
+                const denomsToRender = activeDenoms.length > 0 ? activeDenoms : DENOMINATIONS;
                 return (
                   <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
                     <thead>
@@ -2458,7 +2501,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       </tr>
                     </thead>
                     <tbody>
-                      {activeDenoms.map((den) => {
+                      {denomsToRender.map((den) => {
                         const qty = getPrintDenominationQty(den.value);
                         const subtotal = qty * den.value;
                         return (
