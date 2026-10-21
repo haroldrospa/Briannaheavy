@@ -66,12 +66,82 @@ export const markInvoicesAsClosed = (ids: (string | undefined)[]): void => {
   }
 };
 
+const CLOSED_MOVEMENTS_KEY = 'brianna_closed_movement_ids';
+
+export const getClosedMovementIds = (): Set<string> => {
+  const set = new Set<string>();
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(CLOSED_MOVEMENTS_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(id => {
+          if (id) {
+            const clean = String(id).replace(/^mov-/, '').trim();
+            set.add(clean);
+            set.add(`mov-${clean}`);
+          }
+        });
+      }
+    }
+  } catch {}
+
+  // Auto-cargar también todos los movimientos guardados en cierres históricos de caja
+  try {
+    const rawClosures = typeof window !== 'undefined' ? localStorage.getItem('brianna_cash_closures') : null;
+    if (rawClosures) {
+      const closures = JSON.parse(rawClosures);
+      if (Array.isArray(closures)) {
+        closures.forEach((c: any) => {
+          if (c.movements && Array.isArray(c.movements)) {
+            c.movements.forEach((m: any) => {
+              if (m && m.id) {
+                const clean = String(m.id).replace(/^mov-/, '').trim();
+                set.add(clean);
+                set.add(`mov-${clean}`);
+              }
+            });
+          }
+        });
+      }
+    }
+  } catch {}
+
+  return set;
+};
+
+export const markMovementsAsClosed = (ids: (string | undefined)[]): void => {
+  try {
+    const currentSet = getClosedMovementIds();
+    ids.forEach(id => {
+      if (id) {
+        const clean = String(id).replace(/^mov-/, '').trim();
+        currentSet.add(clean);
+        currentSet.add(`mov-${clean}`);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CLOSED_MOVEMENTS_KEY, JSON.stringify(Array.from(currentSet)));
+    }
+  } catch (e) {
+    console.warn('Error saving closed movement ids:', e);
+  }
+};
+
 export const getLastClosureTime = (registerName: string): number => {
   const sanitized = registerName.toLowerCase().replace(/[^a-z0-9]/g, '_');
   try {
     const t = localStorage.getItem(`brianna_last_closure_time_${sanitized}`);
     if (t) {
       const parsed = new Date(t).getTime();
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch {}
+
+  try {
+    const tGen = localStorage.getItem('brianna_last_closure_time_todas');
+    if (tGen) {
+      const parsed = new Date(tGen).getTime();
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
   } catch {}
@@ -89,22 +159,25 @@ export const getLastClosureTime = (registerName: string): number => {
     }
   } catch {}
 
-  // Fallback: check if there is an existing cash closure in local storage
+  // Fallback: check if there is an existing cash closure in local storage (tomar el más reciente)
   try {
     const rawClosures = localStorage.getItem('brianna_cash_closures');
     if (rawClosures) {
       const closures = JSON.parse(rawClosures);
       if (Array.isArray(closures) && closures.length > 0) {
         const regLower = registerName.toLowerCase().trim();
-        const match = closures.find((c: any) => {
-          if (regLower === 'todas') return true;
-          const cReg = (c.register_name || '').toLowerCase().trim();
-          return cReg.includes(regLower) || regLower.includes(cReg);
+        let latestTime = 0;
+        closures.forEach((c: any) => {
+          if (regLower !== 'todas') {
+            const cReg = (c.register_name || '').toLowerCase().trim();
+            if (!cReg.includes(regLower) && !regLower.includes(cReg)) return;
+          }
+          if (c && c.created_at) {
+            const time = new Date(c.created_at).getTime();
+            if (!isNaN(time) && time > latestTime) latestTime = time;
+          }
         });
-        if (match && match.created_at) {
-          const time = new Date(match.created_at).getTime();
-          if (!isNaN(time) && time > 0) return time;
-        }
+        if (latestTime > 0) return latestTime;
       }
     }
   } catch {}
@@ -587,11 +660,11 @@ export const isMovementOfUser = (
 export const filterMovementsByShift = (
   movements: CashMovement[],
   filterMode: 'shift' | 'today' | 'all' = 'shift',
-  _activeShift: ActiveShift = getActiveShift(),
+  activeShift?: ActiveShift,
   selectedRegister = 'todas',
   selectedCashier = 'todos'
 ): CashMovement[] => {
-  let list = movements;
+  let list = movements || [];
 
   const currentUserName = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || '';
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
@@ -627,13 +700,33 @@ export const filterMovementsByShift = (
   }
 
   // filterMode === 'shift'
-  // Si hubo un cierre previo en esta caja, excluir movimientos creados antes o durante ese cierre
+  // Si hubo un cierre previo en esta caja o el turno activo tiene fecha de apertura,
+  // excluir movimientos creados antes o durante ese cierre y movimientos de turnos pasados
+  const closedMovementIds = getClosedMovementIds();
   const lastClosureTime = getLastClosureTime(selectedRegister);
+  const effectiveShift = activeShift || getActiveShift(selectedRegister);
+  const shiftStartTime = effectiveShift && effectiveShift.opened_at
+    ? Math.max(new Date(effectiveShift.opened_at).getTime(), lastClosureTime)
+    : lastClosureTime;
+
   list = list.filter(m => {
+    if (!m) return false;
+    const mId = String(m.id || '');
+    const cleanId = mId.replace(/^mov-/, '').trim();
+    // Excluir si ya fue cerrado en un arqueo previo
+    if (closedMovementIds.has(mId) || closedMovementIds.has(cleanId)) {
+      return false;
+    }
     if (!m.created_at) return true;
     const mTime = new Date(m.created_at).getTime();
     if (isNaN(mTime)) return true;
-    if (lastClosureTime > 0 && mTime <= lastClosureTime) return false;
+    // Excluir movimientos creados antes de la apertura del turno o antes del último cierre
+    if (shiftStartTime > 0 && mTime < shiftStartTime) {
+      return false;
+    }
+    if (lastClosureTime > 0 && mTime <= lastClosureTime) {
+      return false;
+    }
     return mTime >= startOfToday;
   });
 

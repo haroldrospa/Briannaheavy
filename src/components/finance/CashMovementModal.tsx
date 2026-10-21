@@ -67,7 +67,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   // con la opción de filtrar por 'Mis movimientos' ('mine')
   const [userScope, setUserScope] = useState<'mine' | 'all'>('all');
   // Alcance temporal: 'today' (Hoy día completo), 'shift' (Turno actual), 'all' (Todo el Histórico)
-  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('today');
+  const [timeScope, setTimeScope] = useState<'today' | 'shift' | 'all'>('shift');
   // Alcance de caja: 'todas' (Todas las cajas registradoras) o 'current' (Solo la caja activa)
   const [registerScope, setRegisterScope] = useState<'todas' | 'current'>('todas');
 

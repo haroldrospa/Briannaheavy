@@ -39,6 +39,7 @@ import {
   filterMovementsByShift,
   isMovementOfUser,
   markInvoicesAsClosed,
+  markMovementsAsClosed,
   setLastClosureTime,
   getLastClosureTime,
   matchesCashierUser,
@@ -113,7 +114,7 @@ export default function CashClosureModal({
   const [selectedRegister, setSelectedRegister] = useState<string>(defaultRegister);
   const [activeShift, setActiveShift] = useState<ActiveShift | null>(null);
   const [filterMode, setFilterMode] = useState<'shift' | 'today' | 'all'>('shift');
-  const [movementsTimeScope, setMovementsTimeScope] = useState<'today' | 'shift' | 'all'>('today');
+  const [movementsTimeScope, setMovementsTimeScope] = useState<'today' | 'shift' | 'all'>('shift');
   const [selectedCashierFilter, setSelectedCashierFilter] = useState<string>('todos');
 
   const [allInvoices, setAllInvoices] = useState<Invoice[]>(() => getLocalStorageInvoices());
@@ -476,7 +477,18 @@ export default function CashClosureModal({
   // Total documentos procesados en este turno/filtro (facturas POS + recibos financiamiento + cobros crédito)
   const totalDocsCount = scopedInvoices.length + scopedFinancingReceipts.length + scopedCreditPayments.length;
 
-  // Movimientos de la caja/turno para visualización amplia (Ingresos y Egresos)
+  // Movimientos estrictos de este TURNO para el cálculo contable de la caja (nunca contaminados por pestañas históricas)
+  const shiftOnlyMovements = useMemo(() => {
+    return filterMovementsByShift(
+      allMovements, 
+      'shift', 
+      activeShift || undefined, 
+      selectedRegister === 'todas' ? 'todas' : selectedRegister, 
+      selectedCashierFilter || 'todos'
+    );
+  }, [allMovements, activeShift, selectedRegister, selectedCashierFilter]);
+
+  // Movimientos según la pestaña activa ('shift' | 'today' | 'all') para la visualización en lista
   const allShiftMovements = useMemo(() => {
     return filterMovementsByShift(
       allMovements, 
@@ -487,14 +499,14 @@ export default function CashClosureModal({
     );
   }, [allMovements, movementsTimeScope, activeShift, selectedRegister, selectedCashierFilter]);
 
-  // 5. Movimientos que le suman o restan al cuadre de esta sesión (en caja única compartida, todos los movimientos del turno)
+  // 5. Movimientos que le suman o restan al cuadre de esta sesión (SIEMPRE estrictos del turno activo)
   const scopedMovements = useMemo(() => {
     const effectiveClosureCashier = (selectedCashierFilter || '').trim();
     if (effectiveClosureCashier && effectiveClosureCashier !== 'todos' && effectiveClosureCashier !== 'todas') {
-      return allShiftMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
+      return shiftOnlyMovements.filter(m => isMovementOfUser(m, effectiveClosureCashier, loggedInUserEmail));
     }
-    return allShiftMovements;
-  }, [allShiftMovements, selectedCashierFilter, loggedInUserEmail]);
+    return shiftOnlyMovements;
+  }, [shiftOnlyMovements, selectedCashierFilter, loggedInUserEmail]);
 
   // Lista unificada de movimientos de caja (Ingresos y Egresos manuales)
   const unifiedShiftMovements = useMemo(() => {
@@ -533,8 +545,9 @@ export default function CashClosureModal({
       const isCash = !isCard && !isBank;
 
       const lastClosureTime = getLastClosureTime(selectedRegister);
+      const shiftStartTime = activeShift?.opened_at ? Math.max(new Date(activeShift.opened_at).getTime(), lastClosureTime) : lastClosureTime;
       const mTime = m.created_at ? new Date(m.created_at).getTime() : 0;
-      const isFromCurrentShift = lastClosureTime <= 0 || isNaN(mTime) || mTime > lastClosureTime;
+      const isFromCurrentShift = shiftStartTime <= 0 || isNaN(mTime) || mTime >= shiftStartTime;
       const isMine = (selectedCashierFilter === 'todos' || isMovementOfUser(m, selectedCashierFilter, loggedInUserEmail)) && isFromCurrentShift;
       const author = m.created_by || (m as any).user_name || '';
 
@@ -880,8 +893,9 @@ export default function CashClosureModal({
       });
 
       setSavedClosure(closure);
-      // Marcar facturas de este arqueo como cerradas de forma permanente
+      // Marcar facturas y movimientos de este arqueo como cerrados de forma permanente
       markInvoicesAsClosed(scopedInvoices.map(i => i.id || i.invoice_number));
+      markMovementsAsClosed(scopedMovements.map(m => m.id));
       setLastClosureTime(actualRegName, closure.created_at);
       setLastClosureTime('todas', closure.created_at);
       // Cerrar el turno de esta caja
