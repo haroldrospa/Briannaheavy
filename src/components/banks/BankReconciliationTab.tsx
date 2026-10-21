@@ -453,22 +453,34 @@ export default function BankReconciliationTab({
         </div>
       )}
 
-      {/* 1. Barra Superior de Control y Configuración */}
-      <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-4 print:hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-              <ArrowsRightLeftIcon className="w-5 h-5 text-[#ED1C24]" />
-              <span>Conciliación Bancaria Mensual</span>
-            </h2>
-            <p className="text-xs text-gray-500 dark:text-zinc-400">
-              Compara el extracto oficial del banco contra los registros internos de Brianna Heavy Equipment y cuadra diferencias.
-            </p>
+      {/* 1. Barra Superior Minimalista de Control y Configuración */}
+      <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3.5 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] flex items-center justify-center shrink-0">
+              <ArrowsRightLeftIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span>Conciliación Bancaria</span>
+                {summary.isBalanced ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                    Cuadrado
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+                    Diferencia: RD$ {Math.abs(summary.difference).toLocaleString('es-DO', { maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-zinc-400">
+                {selectedAccount.bankName} • {period}
+              </p>
+            </div>
           </div>
 
-          {/* Botones de Acción Principales */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Input oculto de Excel */}
+          {/* Botones de Acción Agrupados y Minimalistas */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <input
               type="file"
               ref={fileInputRef}
@@ -479,49 +491,41 @@ export default function BankReconciliationTab({
 
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-            >
-              <ArrowUpTrayIcon className={`w-4 h-4 ${isUploading ? 'animate-bounce' : ''}`} />
-              <span>{isUploading ? 'Procesando...' : 'Subir Extracto (Excel/CSV)'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsManualLineModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>Renglón Manual</span>
-            </button>
-
-            {periodBookTransactions.length > 0 && (
-              <button
-                type="button"
-                onClick={handlePopulateFromBooks}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                title="Cargar automáticamente el extracto con los movimientos de libros de este período"
-              >
-                <SparklesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Utilizar estos datos ({periodBookTransactions.length})</span>
-              </button>
-            )}
-
-            <button
-              type="button"
               onClick={handleRunAutoMatch}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white rounded-xl text-xs font-black shadow-xs hover:shadow transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="Conciliar automáticamente movimientos coincidentes"
             >
-              <SparklesIcon className="w-4 h-4 stroke-[2.5]" />
+              <SparklesIcon className="w-3.5 h-3.5" />
               <span>Auto-Conciliar</span>
             </button>
 
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+            >
+              <ArrowUpTrayIcon className={`w-3.5 h-3.5 ${isUploading ? 'animate-bounce' : ''}`} />
+              <span>{isUploading ? 'Subiendo...' : 'Subir Extracto'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsManualLineModalOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+              title="Agregar renglón manual al extracto"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+              <span>Manual</span>
+            </button>
+
+            <div className="h-4 w-[1px] bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
+
+            <button
+              type="button"
               onClick={handleExportExcel}
-              className="p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-emerald-700 dark:text-emerald-400 rounded-xl transition-all cursor-pointer shadow-2xs"
-              title="Exportar a Excel (.xlsx)"
+              className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+              title="Exportar a Excel"
             >
               <ArrowDownTrayIcon className="w-4 h-4" />
             </button>
@@ -529,8 +533,8 @@ export default function BankReconciliationTab({
             <button
               type="button"
               onClick={handlePrint}
-              className="p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer shadow-2xs"
-              title="Imprimir Acta de Conciliación"
+              className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+              title="Imprimir Acta"
             >
               <PrinterIcon className="w-4 h-4" />
             </button>
@@ -538,25 +542,24 @@ export default function BankReconciliationTab({
             <button
               type="button"
               onClick={handleClearReconciliation}
-              className="p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 text-gray-400 rounded-xl transition-all cursor-pointer shadow-2xs"
-              title="Reiniciar Conciliación de este período"
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+              title="Reiniciar conciliación"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Selectores de Cuenta, Mes y Saldos de Extracto */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-gray-100 dark:border-zinc-800/80">
-          {/* Cuenta Bancaria */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 tracking-wider">
-              Cuenta a Conciliar
+        {/* Parámetros de Selección y Saldos */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-gray-100 dark:border-zinc-800/80 text-xs">
+          <div>
+            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
+              Cuenta
             </label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs font-bold rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs"
             >
               {bankAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
@@ -566,27 +569,24 @@ export default function BankReconciliationTab({
             </select>
           </div>
 
-          {/* Período Mes/Año */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 tracking-wider">
-              Mes / Período
+          <div>
+            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
+              Período
             </label>
             <input
               type="month"
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs font-bold rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs"
             />
           </div>
 
-          {/* Saldo Inicial según Extracto */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 tracking-wider flex items-center justify-between">
-              <span>Saldo Inicial Extracto</span>
-              <span className="text-gray-400 lowercase font-normal">(del banco)</span>
+          <div>
+            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
+              Saldo Inicial Extracto
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">RD$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono">RD$</span>
               <input
                 type="number"
                 step="0.01"
@@ -597,19 +597,17 @@ export default function BankReconciliationTab({
                   setOpeningBalance(val);
                   handleAutoSave(statementLines, reconciledBookTxIds, val, closingBalance);
                 }}
-                className="w-full pl-10 pr-3 py-1.5 text-xs font-bold rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
+                className="w-full pl-9 pr-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-mono text-xs focus:border-red-500 outline-none"
               />
             </div>
           </div>
 
-          {/* Saldo Final según Extracto */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-gray-400 dark:text-zinc-500 tracking-wider flex items-center justify-between">
-              <span>Saldo Final Extracto</span>
-              <span className="text-gray-400 lowercase font-normal">(del banco)</span>
+          <div>
+            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
+              Saldo Final Extracto
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">RD$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono">RD$</span>
               <input
                 type="number"
                 step="0.01"
@@ -620,116 +618,101 @@ export default function BankReconciliationTab({
                   setClosingBalance(val);
                   handleAutoSave(statementLines, reconciledBookTxIds, openingBalance, val);
                 }}
-                className="w-full pl-10 pr-3 py-1.5 text-xs font-bold rounded-xl border border-gray-200 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-800/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 outline-none"
+                className="w-full pl-9 pr-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-mono text-xs focus:border-red-500 outline-none"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Tarjetas de Cuadre Financiero (KPIs en Tiempo Real) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 print:hidden">
-        {/* Saldo en Libros (Brianna) */}
-        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Saldo Libros (Brianna)
+      {/* 2. Tarjetas de Cuadre Financiero (KPIs Minimalistas) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 print:hidden">
+        {/* Saldo Libros */}
+        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+              Saldo en Libros
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+            <span className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
               {periodBookTransactions.length} txs
             </span>
           </div>
-          <p className="text-base sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
+          <p className="text-base sm:text-lg font-bold font-mono text-gray-900 dark:text-white">
             RD$ {summary.bookCalculatedBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500">
-            +{summary.bookTotalIncome.toLocaleString('es-DO', { maximumFractionDigits: 0 })} | -{summary.bookTotalExpense.toLocaleString('es-DO', { maximumFractionDigits: 0 })}
           </p>
         </div>
 
-        {/* Saldo Extracto (Banco) */}
-        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              Saldo Final Extracto
+        {/* Saldo Extracto */}
+        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+              Extracto Banco
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400">
+            <span className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
               {statementLines.length} filas
             </span>
           </div>
-          <p className="text-base sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
+          <p className="text-base sm:text-lg font-bold font-mono text-gray-900 dark:text-white">
             RD$ {summary.statementClosingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500">
-            {selectedAccount.bankName}
           </p>
         </div>
 
-        {/* En Tránsito (Pendientes) */}
-        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+        {/* En Tránsito */}
+        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
               Partidas en Tránsito
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+            <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-semibold">
               {periodBookTransactions.length - reconciledBookTxIds.length} pend.
             </span>
           </div>
-          <p className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
+          <p className="text-base sm:text-lg font-bold font-mono text-amber-600 dark:text-amber-400">
             RD$ {(summary.unreconciledBookIncome - summary.unreconciledBookExpense).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-zinc-500">
-            Depósitos: +{summary.unreconciledBookIncome.toLocaleString('es-DO', { maximumFractionDigits: 0 })} | Pagos: -{summary.unreconciledBookExpense.toLocaleString('es-DO', { maximumFractionDigits: 0 })}
           </p>
         </div>
 
-        {/* Descuadre / Estado de Conciliación */}
-        <div className={`p-4 rounded-2xl border shadow-2xs space-y-1 ${
+        {/* Estado / Cuadre */}
+        <div className={`p-3.5 rounded-2xl border shadow-2xs ${
           summary.isBalanced
-            ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60'
-            : 'bg-red-50/50 dark:bg-red-950/20 border-red-200 dark:border-red-800/60'
+            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+            : 'bg-red-50/40 dark:bg-red-950/20 border-red-200/80 dark:border-red-900/40'
         }`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
               Estado de Cuadre
             </span>
-            {summary.isBalanced ? (
-              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-600 text-white">
-                <CheckCircleIcon className="w-3.5 h-3.5" />
-                CUADRADO
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-black bg-red-600 text-white">
-                <ExclamationTriangleIcon className="w-3.5 h-3.5" />
-                DESCUADRE
-              </span>
-            )}
+            <span className={`text-[10px] font-bold ${
+              summary.isBalanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+            }`}>
+              {summary.isBalanced ? '✓ Cuadrado' : 'Descuadre'}
+            </span>
           </div>
-          <p className={`text-base sm:text-xl font-black tracking-tight ${
+          <p className={`text-base sm:text-lg font-bold font-mono ${
             summary.isBalanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
           }`}>
             RD$ {summary.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-[10px] text-gray-500 dark:text-zinc-400">
-            {summary.isBalanced ? 'Libros y banco coinciden exactamente' : 'Diferencia por identificar o conciliar'}
           </p>
         </div>
       </div>
 
       {/* 3. Panel Comparativo de Dos Columnas: Libros vs Extracto Bancario */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4 print:hidden">
         {/* COLUMNA IZQUIERDA: MOVIMIENTOS EN LIBROS (BRIANNA HEAVY) */}
         <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-              <h3 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                1. Registros en Libros (Brianna)
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Registros en Libros
               </h3>
+              <span className="text-[10px] font-mono font-medium text-gray-400">
+                ({visibleBookTransactions.length})
+              </span>
             </div>
 
-            {/* Filtro: Todos / Conciliados / Pendientes */}
-            <div className="flex bg-gray-100 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-bold">
+            {/* Filtro: Todos / En Tránsito / Conciliados */}
+            <div className="flex bg-gray-100 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-medium">
               {(['all', 'pending', 'reconciled'] as const).map(f => (
                 <button
                   key={f}
@@ -737,7 +720,7 @@ export default function BankReconciliationTab({
                   onClick={() => setFilterBooks(f)}
                   className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
                     filterBooks === f
-                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-2xs font-black'
+                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-2xs font-bold'
                       : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
@@ -747,15 +730,11 @@ export default function BankReconciliationTab({
             </div>
           </div>
 
-          <p className="text-[11px] text-gray-500 dark:text-zinc-400">
-            Marca las transacciones que ya se reflejan en el extracto del banco.
-          </p>
-
           {/* Lista de Libros */}
-          <div className="max-h-[500px] overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-[520px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-100 dark:divide-zinc-800/60">
             {visibleBookTransactions.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-xs">
-                No hay movimientos registrados en libros para {selectedAccount.bankName} en {period}.
+              <div className="p-8 text-center text-gray-400 text-xs">
+                No hay movimientos registrados para este período.
               </div>
             ) : (
               visibleBookTransactions.map(tx => {
@@ -766,53 +745,47 @@ export default function BankReconciliationTab({
                   <div
                     key={tx.id}
                     onClick={() => handleToggleBookTx(tx.id)}
-                    className={`p-3 rounded-xl border text-xs transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                    className={`pt-2 pb-2 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 ${
                       isReconciled
-                        ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50'
-                        : 'bg-white dark:bg-zinc-900/60 border-gray-200 dark:border-zinc-800 hover:border-gray-300'
+                        ? 'bg-emerald-50/30 dark:bg-emerald-950/20'
+                        : 'hover:bg-gray-50/80 dark:hover:bg-zinc-800/40'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 ${
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0 ${
                         isReconciled
                           ? 'bg-emerald-600 border-emerald-600 text-white'
-                          : 'border-gray-300 dark:border-zinc-700 hover:border-gray-400'
+                          : 'border-gray-300 dark:border-zinc-700'
                       }`}>
-                        {isReconciled && <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />}
+                        {isReconciled && <CheckIcon className="w-3 h-3 stroke-[3]" />}
                       </div>
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
-                            isIncome ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300'
-                          }`}>
-                            {isIncome ? 'Entrada' : 'Salida'}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-bold">
-                            {tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : ''}
-                          </span>
-                          {tx.reference && (
-                            <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 px-1 rounded truncate max-w-[100px]">
-                              Ref: {tx.reference}
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-bold text-gray-900 dark:text-white truncate mt-0.5">
+                        <p className="font-semibold text-xs text-gray-900 dark:text-white truncate">
                           {tx.concept}
                         </p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
+                          <span>{tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : ''}</span>
+                          {tx.reference && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono truncate max-w-[120px]">Ref: {tx.reference}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p className={`font-black text-xs sm:text-sm ${
+                      <p className={`font-bold font-mono text-xs ${
                         isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-white'
                       }`}>
                         {isIncome ? '+' : '-'}RD$ {Number(tx.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </p>
-                      <span className={`text-[9px] font-black uppercase ${
+                      <span className={`text-[9.5px] font-medium ${
                         isReconciled ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'
                       }`}>
-                        {isReconciled ? 'Conciliado' : 'En Tránsito'}
+                        {isReconciled ? 'Conciliado' : 'En tránsito'}
                       </span>
                     </div>
                   </div>
@@ -826,14 +799,17 @@ export default function BankReconciliationTab({
         <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
-              <h3 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                2. Extracto Bancario ({selectedAccount.bankName})
+              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+              <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Extracto Bancario
               </h3>
+              <span className="text-[10px] font-mono font-medium text-gray-400">
+                ({visibleStatementLines.length})
+              </span>
             </div>
 
-            {/* Filtro: Todos / Conciliados / Pendientes */}
-            <div className="flex bg-gray-100 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-bold">
+            {/* Filtro: Todos / No Registrados / Conciliados */}
+            <div className="flex bg-gray-100 dark:bg-zinc-800 p-0.5 rounded-lg text-[10px] font-medium">
               {(['all', 'pending', 'reconciled'] as const).map(f => (
                 <button
                   key={f}
@@ -841,7 +817,7 @@ export default function BankReconciliationTab({
                   onClick={() => setFilterStatement(f)}
                   className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
                     filterStatement === f
-                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-2xs font-black'
+                      ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-2xs font-bold'
                       : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
                   }`}
                 >
@@ -851,49 +827,40 @@ export default function BankReconciliationTab({
             </div>
           </div>
 
-          <p className="text-[11px] text-gray-500 dark:text-zinc-400">
-            Movimientos emitidos por el banco. Si detectas un cargo o depósito no registrado, agrégalo a libros con un clic.
-          </p>
-
           {/* Lista de Extracto */}
-          <div className="max-h-[500px] overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-[520px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-100 dark:divide-zinc-800/60">
             {visibleStatementLines.length === 0 ? (
-              <div className="p-8 text-center text-gray-400 border border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-xs space-y-3">
-                <DocumentMagnifyingGlassIcon className="w-8 h-8 mx-auto text-gray-300 dark:text-zinc-600" />
-                <p>No se ha cargado el extracto de {selectedAccount.bankName} para este período.</p>
-                <div className="flex flex-col items-center gap-2 pt-1">
+              <div className="py-12 px-4 text-center text-xs space-y-3">
+                <p className="text-gray-400 dark:text-zinc-500">
+                  No hay movimientos cargados en el extracto para este período.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                   {periodBookTransactions.length > 0 && (
                     <button
                       type="button"
                       onClick={handlePopulateFromBooks}
-                      className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
                     >
-                      <SparklesIcon className="w-4 h-4" />
-                      <span>⚡ Utilizar estos {periodBookTransactions.length} movimientos en el extracto</span>
+                      <SparklesIcon className="w-3.5 h-3.5" />
+                      <span>Cargar desde Libros ({periodBookTransactions.length})</span>
                     </button>
                   )}
-                  <div className="flex justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-[#ED1C24] text-white rounded-lg text-xs font-bold hover:bg-red-700 transition cursor-pointer"
-                    >
-                      Subir Excel o CSV
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsManualLineModalOpen(true)}
-                      className="px-3 py-1.5 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-lg text-xs font-bold hover:bg-gray-200 transition cursor-pointer"
-                    >
-                      + Renglón Manual
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-medium transition-all cursor-pointer text-xs"
+                  >
+                    <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                    <span>Subir Excel o CSV</span>
+                  </button>
+                </div>
+                <div>
                   <a
                     href="/Extracto_Banco_Popular_Octubre_2026.xlsx"
                     download="Extracto_Banco_Popular_Octubre_2026.xlsx"
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center justify-center gap-1 font-bold pt-1"
+                    className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1"
                   >
-                    <span>📥 Descargar plantilla Excel real de Banco Popular para subir</span>
+                    <span>Descargar plantilla de ejemplo</span>
                   </a>
                 </div>
               </div>
@@ -905,80 +872,74 @@ export default function BankReconciliationTab({
                 return (
                   <div
                     key={line.id}
-                    className={`p-3 rounded-xl border text-xs transition-all flex items-center justify-between gap-3 ${
+                    className={`pt-2 pb-2 px-2 rounded-xl transition-all flex items-center justify-between gap-3 ${
                       isReconciled
-                        ? 'bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/50'
-                        : 'bg-white dark:bg-zinc-900/60 border-gray-200 dark:border-zinc-800'
+                        ? 'bg-purple-50/30 dark:bg-purple-950/20'
+                        : 'hover:bg-gray-50/80 dark:hover:bg-zinc-800/40'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <button
                         type="button"
                         onClick={() => handleToggleStatementLine(line.id)}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all shrink-0 cursor-pointer ${
+                        className={`w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0 cursor-pointer ${
                           isReconciled
                             ? 'bg-purple-600 border-purple-600 text-white'
                             : 'border-gray-300 dark:border-zinc-700 hover:border-purple-500'
                         }`}
                         title="Marcar / Desmarcar como conciliado"
                       >
-                        {isReconciled && <CheckIcon className="w-3.5 h-3.5 stroke-[3]" />}
+                        {isReconciled && <CheckIcon className="w-3 h-3 stroke-[3]" />}
                       </button>
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
-                            isIncome ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
-                          }`}>
-                            {isIncome ? 'Crédito' : 'Débito'}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-bold">{line.date}</span>
-                          {line.reference && (
-                            <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 px-1 rounded truncate max-w-[100px]">
-                              Ref: {line.reference}
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-bold text-gray-900 dark:text-white truncate mt-0.5">
+                        <p className="font-semibold text-xs text-gray-900 dark:text-white truncate">
                           {line.concept}
                         </p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
+                          <span>{line.date}</span>
+                          {line.reference && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono truncate max-w-[120px]">Ref: {line.reference}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
                       <div className="text-right">
-                        <p className={`font-black text-xs sm:text-sm ${
+                        <p className={`font-bold font-mono text-xs ${
                           isIncome ? 'text-purple-600 dark:text-purple-400' : 'text-gray-900 dark:text-white'
                         }`}>
                           {isIncome ? '+' : '-'}RD$ {line.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </p>
-                        <span className={`text-[9px] font-black uppercase ${
+                        <span className={`text-[9.5px] font-medium ${
                           isReconciled ? 'text-purple-600 dark:text-purple-400' : 'text-rose-500'
                         }`}>
                           {isReconciled ? 'Conciliado' : 'No registrado'}
                         </span>
                       </div>
 
-                      {/* Botón "+ Registrar en Libros" si no está conciliado */}
                       {!isReconciled && (
                         <button
                           type="button"
                           onClick={() => handleRegisterStatementLineInBooks(line)}
-                          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black shadow-2xs transition-all cursor-pointer whitespace-nowrap"
-                          title="Registrar automáticamente este movimiento en los libros de la empresa"
+                          className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                          title="Registrar en libros"
                         >
-                          + Registrar
+                          + Libros
                         </button>
                       )}
 
-                      {/* Botón Eliminar fila manual del extracto */}
                       <button
                         type="button"
                         onClick={() => handleDeleteStatementLine(line.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                        title="Eliminar este renglón del extracto"
+                        className="p-1 text-gray-300 hover:text-red-500 transition-colors cursor-pointer"
+                        title="Eliminar del extracto"
                       >
-                        <TrashIcon className="w-3.5 h-3.5" />
+                        <TrashIcon className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
