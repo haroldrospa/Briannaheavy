@@ -287,3 +287,67 @@ export const deleteCashMovement = async (id: string): Promise<boolean> => {
 
   return true;
 };
+
+/**
+ * Actualiza un movimiento de caja existente (tanto en almacenamiento local como en Supabase)
+ */
+export const updateCashMovement = async (id: string, updates: Partial<CashMovement>): Promise<CashMovement | null> => {
+  if (!id) return null;
+  const cleanId = String(id).replace(/^mov-/, '').trim();
+
+  const current = getLocalStorageMovements();
+  let updatedMov: CashMovement | null = null;
+  const updatedList = current.map(m => {
+    const mId = String(m?.id || '');
+    const mClean = mId.replace(/^mov-/, '').trim();
+    if (mId === id || mId === cleanId || mClean === cleanId) {
+      updatedMov = { ...m, ...updates };
+      return updatedMov;
+    }
+    return m;
+  });
+
+  if (updatedMov) {
+    saveLocalStorageMovements(updatedList);
+  }
+
+  // Actualizar en Supabase si está disponible
+  if (isSupabaseConfigured()) {
+    try {
+      const dbPayload: Record<string, any> = {};
+      if (updates.type !== undefined) dbPayload.type = updates.type;
+      if (updates.amount !== undefined) dbPayload.amount = Number(updates.amount) || 0;
+      if (updates.created_at !== undefined) dbPayload.created_at = updates.created_at;
+      if (updates.created_by !== undefined) dbPayload.user_name = updates.created_by;
+      if (updates.register_name !== undefined) dbPayload.register_name = updates.register_name;
+
+      if (
+        updates.concept !== undefined ||
+        updates.payment_method !== undefined ||
+        updates.bank_account_name !== undefined ||
+        updates.reference !== undefined
+      ) {
+        const target = updatedMov || updates;
+        const formattedReason = [
+          target.concept,
+          target.payment_method === 'Tarjeta' ? '[Tarjeta de Crédito]' : '',
+          target.bank_account_name ? `(Banco: ${target.bank_account_name})` : '',
+          target.reference ? `[Ref: ${target.reference}]` : '',
+          target.register_name ? `[${target.register_name}]` : ''
+        ].filter(Boolean).join(' ');
+        dbPayload.reason = formattedReason;
+      }
+
+      await supabase.from('cash_movements').update(dbPayload).eq('id', cleanId);
+    } catch (err) {
+      console.warn('Error al actualizar movimiento en Supabase:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_cash_movements_changed', { detail: updatedMov }));
+    window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: updatedMov }));
+  }
+
+  return updatedMov;
+};

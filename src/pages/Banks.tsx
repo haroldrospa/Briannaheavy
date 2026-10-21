@@ -14,13 +14,15 @@ import {
   ExclamationTriangleIcon,
   ArrowsRightLeftIcon,
   ChevronDownIcon,
-  XMarkIcon
+  XMarkIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
 import { 
   fetchAllBankTransactions, 
   calculateBankAccountsSummary, 
   deleteBankTransaction,
+  updateBankTransaction,
   CASH_ACCOUNT,
   type BankTransaction 
 } from '../services/bankService';
@@ -45,6 +47,88 @@ export default function Banks() {
   const [transactionToDelete, setTransactionToDelete] = useState<BankTransaction | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
+  const [transactionToEdit, setTransactionToEdit] = useState<BankTransaction | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [editForm, setEditForm] = useState<{
+    concept: string;
+    amount: string;
+    type: 'Ingreso' | 'Egreso';
+    bank_account_id: string;
+    reference: string;
+    date: string;
+    created_by: string;
+  }>({
+    concept: '',
+    amount: '',
+    type: 'Egreso',
+    bank_account_id: 'caja-general',
+    reference: '',
+    date: '',
+    created_by: '',
+  });
+
+  useEffect(() => {
+    if (transactionToEdit) {
+      const d = new Date(transactionToEdit.date);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const formattedDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+      setEditForm({
+        concept: transactionToEdit.concept || '',
+        amount: String(transactionToEdit.amount || ''),
+        type: transactionToEdit.type || 'Egreso',
+        bank_account_id: transactionToEdit.bank_account_id || (bankAccounts[0]?.id || 'caja-general'),
+        reference: transactionToEdit.reference || '',
+        date: formattedDateStr,
+        created_by: transactionToEdit.created_by || '',
+      });
+    }
+  }, [transactionToEdit, bankAccounts]);
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transactionToEdit || isSavingEdit) return;
+
+    const parsedAmount = parseFloat(editForm.amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert('Por favor ingrese un monto válido mayor a 0');
+      return;
+    }
+    if (!editForm.concept.trim()) {
+      alert('Por favor ingrese un concepto');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const selectedAccount = editForm.bank_account_id === 'caja-general' 
+        ? CASH_ACCOUNT 
+        : bankAccounts.find(b => b.id === editForm.bank_account_id) || bankAccounts[0];
+
+      const success = await updateBankTransaction(transactionToEdit, {
+        concept: editForm.concept.trim(),
+        amount: parsedAmount,
+        type: editForm.type,
+        reference: editForm.reference.trim(),
+        bank_account_id: selectedAccount.id,
+        bank_account_name: selectedAccount.bankName,
+        payment_method: selectedAccount.id === 'caja-general' ? 'Efectivo' : 'Transferencia',
+        date: editForm.date ? new Date(editForm.date).toISOString() : transactionToEdit.date,
+        created_by: editForm.created_by.trim() || undefined,
+      });
+
+      if (success) {
+        setDeleteFeedback(`Se actualizó correctamente el movimiento "${editForm.concept.trim()}".`);
+        setTransactionToEdit(null);
+        await loadData();
+        setTimeout(() => setDeleteFeedback(null), 4000);
+      }
+    } catch (err) {
+      console.error('Error al actualizar movimiento:', err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Control para mostrar u ocultar la cuadrícula de cuentas (para evitar ruido visual)
   const [showAccounts, setShowAccounts] = useState<boolean>(() => {
@@ -844,16 +928,26 @@ export default function Banks() {
                             <span className="font-medium text-[11px]">{tx.created_by || 'Cajero'}</span>
                           </td>
 
-                          {/* Acción: Eliminar */}
+                          {/* Acción: Editar y Eliminar */}
                           <td className="py-3 px-3 whitespace-nowrap text-center print:hidden">
-                            <button
-                              type="button"
-                              onClick={() => setTransactionToDelete(tx)}
-                              title="Eliminar movimiento"
-                              className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer opacity-70 hover:opacity-100"
-                            >
-                              <TrashIcon className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setTransactionToEdit(tx)}
+                                title="Editar movimiento"
+                                className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-all cursor-pointer opacity-80 hover:opacity-100"
+                              >
+                                <PencilSquareIcon className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTransactionToDelete(tx)}
+                                title="Eliminar movimiento"
+                                className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer opacity-80 hover:opacity-100"
+                              >
+                                <TrashIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -864,6 +958,198 @@ export default function Banks() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Modal de Edición de Movimiento */}
+      {transactionToEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                  <PencilSquareIcon className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                    Editar Movimiento
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Modifica los datos del registro bancario o de caja
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransactionToEdit(null)}
+                className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              {/* Selector Tipo: Ingreso / Egreso */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Tipo de Movimiento
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm(prev => ({ ...prev, type: 'Ingreso' }))}
+                    className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      editForm.type === 'Ingreso'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-white'
+                    }`}
+                  >
+                    <ArrowDownCircleIcon className="w-4 h-4" />
+                    <span>Ingreso (+)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm(prev => ({ ...prev, type: 'Egreso' }))}
+                    className={`py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      editForm.type === 'Egreso'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-white'
+                    }`}
+                  >
+                    <ArrowUpCircleIcon className="w-4 h-4" />
+                    <span>Egreso (-)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Monto */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Monto (RD$)
+                </label>
+                <div className="relative flex items-center bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-[#ED1C24]/30">
+                  <span className="text-sm font-mono font-bold text-zinc-400 mr-2">RD$</span>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editForm.amount}
+                    onChange={e => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full bg-transparent text-sm font-mono font-bold text-zinc-900 dark:text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Concepto / Detalle */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Concepto / Detalle
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.concept}
+                  onChange={e => setEditForm(prev => ({ ...prev, concept: e.target.value }))}
+                  placeholder="Ej: Pago de cuota camión, combustible, etc."
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                />
+              </div>
+
+              {/* Cuenta Bancaria o Caja */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Cuenta / Origen
+                </label>
+                <select
+                  value={editForm.bank_account_id}
+                  onChange={e => setEditForm(prev => ({ ...prev, bank_account_id: e.target.value }))}
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 dark:text-white outline-none cursor-pointer focus:ring-2 focus:ring-[#ED1C24]/30"
+                >
+                  <option value="caja-general">Caja General (Efectivo)</option>
+                  {bankAccounts.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.bankName} - {b.accountNumber} ({b.accountType || b.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Fila Doble: Referencia y Fecha */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Referencia */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                    Número de Referencia
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.reference}
+                    onChange={e => setEditForm(prev => ({ ...prev, reference: e.target.value }))}
+                    placeholder="Opcional (Nº transferencia)"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono font-semibold text-zinc-900 dark:text-white outline-none uppercase focus:ring-2 focus:ring-[#ED1C24]/30"
+                  />
+                </div>
+
+                {/* Fecha y Hora */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                    Fecha y Hora
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.date}
+                    onChange={e => setEditForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Responsable */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Responsable / Autor
+                </label>
+                <input
+                  type="text"
+                  value={editForm.created_by}
+                  onChange={e => setEditForm(prev => ({ ...prev, created_by: e.target.value }))}
+                  placeholder="Nombre de la persona"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                />
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setTransactionToEdit(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-[#ED1C24] hover:bg-red-700 shadow-md shadow-red-600/20 active:scale-[0.99] transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon className="w-4 h-4 stroke-[2.5]" />
+                      <span>Guardar Cambios</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal de Confirmación de Eliminación */}

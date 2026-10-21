@@ -1,6 +1,6 @@
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
-import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, type CashMovement } from './cashMovementsService';
-import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, type Invoice } from './invoicesService';
+import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, updateCashMovement, type CashMovement } from './cashMovementsService';
+import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, updateInvoice, type Invoice } from './invoicesService';
 import { getStoredReceipts } from './financingReceiptsService';
 import { getLocalInvoicePayments } from './invoicePaymentsService';
 
@@ -560,6 +560,90 @@ export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolea
       window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
     }
     return success;
+  }
+
+  return false;
+};
+
+/**
+ * Actualiza los datos de una transacción bancaria o movimiento de fondos
+ */
+export const updateBankTransaction = async (
+  tx: BankTransaction,
+  updates: {
+    concept?: string;
+    amount?: number;
+    type?: 'Ingreso' | 'Egreso';
+    reference?: string;
+    bank_account_id?: string;
+    bank_account_name?: string;
+    payment_method?: string;
+    date?: string;
+    category?: any;
+    created_by?: string;
+  }
+): Promise<boolean> => {
+  if (!tx || !tx.id) return false;
+
+  // 1. Si es un movimiento de efectivo o transferencia de caja
+  if (tx.source_type === 'cash_movement' || tx.id.startsWith('mov-')) {
+    const movId = tx.source_id || tx.id.replace(/^mov-/, '');
+    await updateCashMovement(movId, {
+      concept: updates.concept !== undefined ? updates.concept : tx.concept,
+      amount: updates.amount !== undefined ? updates.amount : tx.amount,
+      type: updates.type !== undefined ? updates.type : tx.type,
+      reference: updates.reference !== undefined ? updates.reference : tx.reference,
+      bank_account_id: updates.bank_account_id !== undefined ? updates.bank_account_id : tx.bank_account_id,
+      bank_account_name: updates.bank_account_name !== undefined ? updates.bank_account_name : tx.bank_account_name,
+      payment_method: updates.payment_method !== undefined ? updates.payment_method : tx.payment_method,
+      created_at: updates.date !== undefined ? updates.date : tx.date,
+      created_by: updates.created_by !== undefined ? updates.created_by : tx.created_by,
+    });
+    return true;
+  }
+
+  // 2. Si es una transacción bancaria manual directa
+  if (tx.source_type === 'manual_bank' || tx.id.startsWith('btx-')) {
+    const current = getManualBankTransactions();
+    const updated = current.map(t => {
+      if (t.id === tx.id || t.id === tx.source_id) {
+        return {
+          ...t,
+          ...updates,
+          concept: updates.concept !== undefined ? updates.concept : t.concept,
+          amount: updates.amount !== undefined ? updates.amount : t.amount,
+          type: updates.type !== undefined ? updates.type : t.type,
+          reference: updates.reference !== undefined ? updates.reference : t.reference,
+          bank_account_id: updates.bank_account_id !== undefined ? updates.bank_account_id : t.bank_account_id,
+          bank_account_name: updates.bank_account_name !== undefined ? updates.bank_account_name : t.bank_account_name,
+          payment_method: updates.payment_method !== undefined ? updates.payment_method : t.payment_method,
+          date: updates.date !== undefined ? updates.date : t.date,
+          created_by: updates.created_by !== undefined ? updates.created_by : t.created_by,
+        };
+      }
+      return t;
+    });
+    saveManualBankTransactions(updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+    }
+    return true;
+  }
+
+  // 3. Si es una factura de venta
+  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
+    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
+    await updateInvoice(invId, {
+      total_amount: updates.amount !== undefined ? updates.amount : tx.amount,
+      transfer_reference: updates.reference !== undefined ? updates.reference : tx.reference,
+      bank_account_id: updates.bank_account_id !== undefined ? updates.bank_account_id : tx.bank_account_id,
+      bank_account_name: updates.bank_account_name !== undefined ? updates.bank_account_name : tx.bank_account_name,
+      payment_method: updates.payment_method !== undefined ? updates.payment_method : tx.payment_method,
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+    }
+    return true;
   }
 
   return false;

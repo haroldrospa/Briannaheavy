@@ -1110,6 +1110,7 @@ export default function Invoices() {
           customerName={viewingInvoice.customer_name}
           customerRnc={viewingInvoice.customer_rnc || ''}
           paymentMethod={viewingInvoice.payment_method || 'Efectivo'}
+          mixedPayments={viewingInvoice.mixed_payments}
           creditDays={viewingInvoice.credit_days}
           dueDate={viewingInvoice.due_date}
           cashierName={viewingInvoice.cashier_name || 'Cajero POS'}

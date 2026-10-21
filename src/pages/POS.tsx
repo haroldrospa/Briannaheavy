@@ -39,7 +39,8 @@ import {
   SquaresPlusIcon,
   LockClosedIcon,
   CurrencyDollarIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ArrowsRightLeftIcon
 } from '@heroicons/react/24/outline';
 import QuotationsModal from '../components/pos/QuotationsModal';
 import { 
@@ -132,7 +133,17 @@ const playBeep = () => {
 };
 
 
-type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito';
+export type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito' | 'Mixto';
+
+export interface MixedPaymentEntry {
+  method: 'Efectivo' | 'Tarjeta' | 'Transferencia';
+  amount: number;
+  reference?: string;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  receivedAmount?: number;
+  changeAmount?: number;
+}
 
 // ─── Rich Catalog Showcase Components ─────────────────────────────────────────
 
@@ -1151,6 +1162,7 @@ const CheckoutModal = memo(({
     exchangeRate?: number;
     amountReceivedUsd?: string;
     changeUsd?: number;
+    mixedPayments?: MixedPaymentEntry[];
   }) => Promise<void>;
   isTransmitting: boolean;
   initialCurrency?: 'DOP' | 'USD';
@@ -1165,6 +1177,14 @@ const CheckoutModal = memo(({
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>(getCompanyBankAccounts);
   const [selectedBankId, setSelectedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  // Mixed Payment State
+  const [mixedCash, setMixedCash] = useState<string>('');
+  const [mixedCashReceived, setMixedCashReceived] = useState<string>('');
+  const [mixedCard, setMixedCard] = useState<string>('');
+  const [mixedTransfer, setMixedTransfer] = useState<string>('');
+  const [mixedTransferRef, setMixedTransferRef] = useState<string>('');
+  const [mixedBankId, setMixedBankId] = useState<string>(() => (getCompanyBankAccounts()[0]?.id || ''));
 
   // Currency & Exchange Rate State
   const [paidCurrency, setPaidCurrency] = useState<'DOP' | 'USD'>(initialCurrency || 'DOP');
@@ -1215,6 +1235,12 @@ const CheckoutModal = memo(({
         setSelectedBankId(accs[0].id);
       }
       setCreditDays(15);
+      setMixedCash('');
+      setMixedCashReceived('');
+      setMixedCard('');
+      setMixedTransfer('');
+      setMixedTransferRef('');
+      if (accs.length > 0) setMixedBankId(accs[0].id);
     }
   }, [isOpen, total, currentExchangeRate, initialCurrency]);
 
@@ -1249,13 +1275,27 @@ const CheckoutModal = memo(({
   const equivalentDop = Math.round(numReceivedUsd * currentExchangeRate * 100) / 100;
   const changeUsd = (paymentMethod === 'Efectivo' && numReceivedUsd > totalUsd) ? (numReceivedUsd - totalUsd) : 0;
   const changeDopFromUsd = Math.round(changeUsd * currentExchangeRate * 100) / 100;
+
+  // Mixed Payment Derived Math
+  const targetTotal = paidCurrency === 'USD' ? totalUsd : total;
+  const curSymbol = paidCurrency === 'USD' ? 'US$' : 'RD$';
+  const numMixedCash = parseFloat(mixedCash) || 0;
+  const numMixedCard = parseFloat(mixedCard) || 0;
+  const numMixedTransfer = parseFloat(mixedTransfer) || 0;
+  const numMixedCashReceived = parseFloat(mixedCashReceived) || 0;
+  const totalMixedAssigned = Math.round((numMixedCash + numMixedCard + numMixedTransfer) * 100) / 100;
+  const mixedDifference = Math.round((targetTotal - totalMixedAssigned) * 100) / 100;
+  const isMixedExact = Math.abs(mixedDifference) <= 0.05 && totalMixedAssigned > 0;
+  const mixedCashChange = (numMixedCashReceived > numMixedCash) ? Math.round((numMixedCashReceived - numMixedCash) * 100) / 100 : 0;
+  const isMixedValid = isMixedExact;
   
   const isPaymentValid = isCotizacion ? true : (
     (paymentMethod === 'Efectivo' 
       ? (paidCurrency === 'USD' ? numReceivedUsd >= totalUsd : numReceived >= total) 
       : true) &&
     (paymentMethod === 'Transferencia' ? transferReference.trim().length > 0 : true) &&
-    (paymentMethod === 'Crédito' ? !!selectedClient : true)
+    (paymentMethod === 'Crédito' ? !!selectedClient : true) &&
+    (paymentMethod === 'Mixto' ? isMixedValid : true)
   );
 
   const needsClient = !isCotizacion && (
@@ -1313,6 +1353,51 @@ const CheckoutModal = memo(({
     e.preventDefault();
     if (!canEmit) return;
     const chosenBank = bankAccounts.find(a => a.id === selectedBankId) || bankAccounts[0];
+
+    if (paymentMethod === 'Mixto') {
+      const chosenMixedBank = bankAccounts.find(a => a.id === mixedBankId) || bankAccounts[0];
+      const mixedEntries: MixedPaymentEntry[] = [];
+      if (numMixedCash > 0) {
+        mixedEntries.push({
+          method: 'Efectivo',
+          amount: paidCurrency === 'USD' ? Math.round(numMixedCash * currentExchangeRate * 100) / 100 : numMixedCash,
+          receivedAmount: numMixedCashReceived > 0 ? (paidCurrency === 'USD' ? Math.round(numMixedCashReceived * currentExchangeRate * 100) / 100 : numMixedCashReceived) : undefined,
+          changeAmount: mixedCashChange > 0 ? (paidCurrency === 'USD' ? Math.round(mixedCashChange * currentExchangeRate * 100) / 100 : mixedCashChange) : undefined
+        });
+      }
+      if (numMixedCard > 0) {
+        mixedEntries.push({
+          method: 'Tarjeta',
+          amount: paidCurrency === 'USD' ? Math.round(numMixedCard * currentExchangeRate * 100) / 100 : numMixedCard
+        });
+      }
+      if (numMixedTransfer > 0) {
+        mixedEntries.push({
+          method: 'Transferencia',
+          amount: paidCurrency === 'USD' ? Math.round(numMixedTransfer * currentExchangeRate * 100) / 100 : numMixedTransfer,
+          reference: mixedTransferRef,
+          bankAccountId: chosenMixedBank?.id,
+          bankAccountName: chosenMixedBank?.bankName
+        });
+      }
+
+      onCompleteSale({
+        billingMode,
+        electronicDocType,
+        internalDocType,
+        paymentMethod: 'Mixto',
+        amountReceived: isCotizacion ? total.toFixed(2) : (paidCurrency === 'USD' ? equivalentDop.toFixed(2) : total.toFixed(2)),
+        transferReference: mixedTransferRef,
+        bankAccountId: chosenMixedBank?.id,
+        bankAccountName: chosenMixedBank?.bankName,
+        paidCurrency,
+        exchangeRate: currentExchangeRate,
+        amountReceivedUsd: paidCurrency === 'USD' ? amountReceivedUsd : undefined,
+        changeUsd: paidCurrency === 'USD' && mixedCashChange > 0 ? mixedCashChange : undefined,
+        mixedPayments: mixedEntries
+      });
+      return;
+    }
     onCompleteSale({
       billingMode,
       electronicDocType,
@@ -1648,12 +1733,13 @@ const CheckoutModal = memo(({
                 <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
                   3. Método de Pago
                 </span>
-                <div className="grid grid-cols-4 gap-1 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800/80 p-1 rounded-xl">
+                <div className="grid grid-cols-5 gap-1 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800/80 p-1 rounded-xl">
                   {([
                     { id: 'Efectivo', label: 'Efectivo', icon: BanknotesIcon },
                     { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCardIcon },
                     { id: 'Transferencia', label: 'Transf.', icon: BuildingLibraryIcon },
                     { id: 'Crédito', label: 'Crédito', icon: UserIcon },
+                    { id: 'Mixto', label: 'Mixto', icon: ArrowsRightLeftIcon },
                   ] as const).map((m) => {
                     const isActive = paymentMethod === m.id;
                     const Icon = m.icon;
@@ -1990,6 +2076,142 @@ const CheckoutModal = memo(({
                   </div>
                 </div>
               )}
+
+              {/* 5. Pago Mixto: Minimalista y Compacto */}
+              {paymentMethod === 'Mixto' && (
+                <div className="space-y-2 pt-0.5 animate-in fade-in zoom-in-95 duration-100">
+                  {/* Barra compacta de Total y Estado */}
+                  <div className="flex items-center justify-between px-3.5 py-2 bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 rounded-xl text-xs">
+                    <span className="font-semibold text-gray-500 dark:text-zinc-400">
+                      Total: <strong className="font-mono text-gray-900 dark:text-white font-bold">{curSymbol} {targetTotal.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </span>
+
+                    {isMixedExact ? (
+                      <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                        <CheckCircleIcon className="w-4 h-4 stroke-[2.5]" />
+                        <span>Cubierto</span>
+                      </span>
+                    ) : mixedDifference > 0 ? (
+                      <span className="font-bold text-red-500 dark:text-red-400 text-xs">
+                        Falta: <strong className="font-mono font-black">{curSymbol} {mixedDifference.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                      </span>
+                    ) : (
+                      <span className="font-bold text-amber-500 dark:text-amber-400 text-xs">
+                        Sobra: <strong className="font-mono font-black">{curSymbol} {Math.abs(mixedDifference).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 3 Filas Simples: Efectivo, Tarjeta, Transferencia */}
+                  <div className="bg-gray-50 dark:bg-zinc-900/60 border border-gray-200/70 dark:border-zinc-800 rounded-xl p-2.5 space-y-2">
+                    {/* Efectivo */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 w-24 shrink-0 text-xs font-bold text-gray-700 dark:text-zinc-300">
+                        <BanknotesIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>Efectivo</span>
+                      </div>
+                      <div className="relative flex-1 flex items-center bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500/30">
+                        <span className="text-xs font-bold font-mono text-gray-400 select-none mr-1.5">{curSymbol}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={mixedCash}
+                          onChange={e => setMixedCash(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-transparent text-xs font-mono font-bold text-gray-900 dark:text-white outline-none"
+                        />
+                        {mixedDifference > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const avail = Math.max(0, Math.round((mixedDifference + numMixedCash) * 100) / 100);
+                              setMixedCash(avail > 0 ? avail.toFixed(2) : '');
+                            }}
+                            className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 ml-1 cursor-pointer"
+                          >
+                            Restante
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 w-24 shrink-0 text-xs font-bold text-gray-700 dark:text-zinc-300">
+                        <CreditCardIcon className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>Tarjeta</span>
+                      </div>
+                      <div className="relative flex-1 flex items-center bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-blue-500/30">
+                        <span className="text-xs font-bold font-mono text-gray-400 select-none mr-1.5">{curSymbol}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={mixedCard}
+                          onChange={e => setMixedCard(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-transparent text-xs font-mono font-bold text-gray-900 dark:text-white outline-none"
+                        />
+                        {mixedDifference > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const avail = Math.max(0, Math.round((mixedDifference + numMixedCard) * 100) / 100);
+                              setMixedCard(avail > 0 ? avail.toFixed(2) : '');
+                            }}
+                            className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0 ml-1 cursor-pointer"
+                          >
+                            Restante
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Transferencia */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 w-24 shrink-0 text-xs font-bold text-gray-700 dark:text-zinc-300">
+                        <BuildingLibraryIcon className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span>Transf.</span>
+                      </div>
+                      <div className="relative flex-1 flex items-center bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-purple-500/30">
+                        <span className="text-xs font-bold font-mono text-gray-400 select-none mr-1.5">{curSymbol}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={mixedTransfer}
+                          onChange={e => setMixedTransfer(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-transparent text-xs font-mono font-bold text-gray-900 dark:text-white outline-none"
+                        />
+                        {mixedDifference > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const avail = Math.max(0, Math.round((mixedDifference + numMixedTransfer) * 100) / 100);
+                              setMixedTransfer(avail > 0 ? avail.toFixed(2) : '');
+                            }}
+                            className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline shrink-0 ml-1 cursor-pointer"
+                          >
+                            Restante
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Referencia de Transferencia (simple y compacta, solo si hay transferencia) */}
+                    {numMixedTransfer > 0 && (
+                      <div className="pt-1.5 border-t border-gray-200/60 dark:border-zinc-800">
+                        <input
+                          type="text"
+                          value={mixedTransferRef}
+                          onChange={e => setMixedTransferRef(e.target.value)}
+                          placeholder="Nº Referencia / Confirmación banco (opcional)"
+                          className="w-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg px-2.5 py-1 text-[11px] font-medium text-gray-900 dark:text-white outline-none uppercase placeholder:normal-case placeholder:text-gray-400 focus:ring-1 focus:ring-purple-500/40"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -2004,6 +2226,8 @@ const CheckoutModal = memo(({
                     ? 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
                     : paymentMethod === 'Crédito'
                     ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.99] shadow-amber-900/20'
+                    : paymentMethod === 'Mixto'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-[0.99] shadow-indigo-900/20'
                     : 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
                   : 'bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 cursor-not-allowed shadow-none'
               }`}
@@ -2021,9 +2245,13 @@ const CheckoutModal = memo(({
                       ? '📄 Guardar Cotización (CT)'
                       : (paymentMethod === 'Crédito'
                           ? `Emitir Factura a Crédito (${effectiveCreditDays} Días)`
-                          : (billingMode === 'electronic'
-                              ? `Emitir Factura Electrónica (${electronicDocType})`
-                              : `Emitir Factura Interna (${internalDocType})`))}
+                          : (paymentMethod === 'Mixto'
+                              ? (billingMode === 'electronic'
+                                  ? `Emitir Factura Electrónica (${electronicDocType}) - Mixto`
+                                  : `Emitir Factura Interna (${internalDocType}) - Mixto`)
+                              : (billingMode === 'electronic'
+                                  ? `Emitir Factura Electrónica (${electronicDocType})`
+                                  : `Emitir Factura Interna (${internalDocType})`)))}
                   </span>
                 </>
               )}
@@ -2564,6 +2792,7 @@ export default function POS() {
     receivedAmountUsd?: number;
     changeAmountUsd?: number;
     totalUsd?: number;
+    mixedPayments?: MixedPaymentEntry[];
   }>({});
   const [lastCompletedSale, setLastCompletedSale] = useState<{
     invoiceNumber: string;
@@ -2580,6 +2809,7 @@ export default function POS() {
     creditDays?: number;
     dueDate?: string;
     items: { description: string; quantity: number; unit_price: number; total_price: number }[];
+    mixedPayments?: MixedPaymentEntry[];
     lastPaymentInfo: { 
       receivedAmount?: number; 
       changeAmount?: number; 
@@ -2593,6 +2823,7 @@ export default function POS() {
       receivedAmountUsd?: number;
       changeAmountUsd?: number;
       totalUsd?: number;
+      mixedPayments?: MixedPaymentEntry[];
     };
     lastEcfData: ElectronicInvoiceResponse | null;
     date: Date;
@@ -2763,6 +2994,7 @@ export default function POS() {
     exchangeRate?: number;
     amountReceivedUsd?: string;
     changeUsd?: number;
+    mixedPayments?: MixedPaymentEntry[];
   }) => {
     if (isTransmitting) return;
 
@@ -2781,7 +3013,8 @@ export default function POS() {
       paidCurrency = 'DOP',
       exchangeRate = getExchangeRate(),
       amountReceivedUsd,
-      changeUsd
+      changeUsd,
+      mixedPayments
     } = saleParams;
     setBillingMode(billingMode);
     setElectronicDocType(electronicDocType);
@@ -2796,7 +3029,7 @@ export default function POS() {
 
     setLastPaymentInfo({
       receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
-      changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
+      changeAmount: paymentMethod === 'Efectivo' ? chg : (changeUsd ? changeUsd : undefined),
       transferReference: transferReference || undefined,
       bankAccountId: bankAccountId || undefined,
       bankAccountName: bankAccountName || undefined,
@@ -2807,6 +3040,7 @@ export default function POS() {
       receivedAmountUsd: numRecUsd,
       changeAmountUsd: isPayingUsd ? changeUsd : undefined,
       totalUsd: totalUsdVal,
+      mixedPayments,
     });
 
     try {
@@ -2959,9 +3193,10 @@ export default function POS() {
         creditDays: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
         dueDate: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         items: saleItems,
+        mixedPayments,
         lastPaymentInfo: {
           receivedAmount: paymentMethod === 'Efectivo' ? numRec : undefined,
-          changeAmount: paymentMethod === 'Efectivo' ? chg : undefined,
+          changeAmount: paymentMethod === 'Efectivo' ? chg : (changeUsd ? changeUsd : undefined),
           transferReference: transferReference || undefined,
           bankAccountId: bankAccountId || undefined,
           bankAccountName: bankAccountName || undefined,
@@ -2972,6 +3207,7 @@ export default function POS() {
           receivedAmountUsd: numRecUsd,
           changeAmountUsd: isPayingUsd ? changeUsd : undefined,
           totalUsd: totalUsdVal,
+          mixedPayments,
         },
         lastEcfData: ecfRes || (internalDocType === 'CT' ? {
           success: true,
@@ -3015,9 +3251,10 @@ export default function POS() {
         tax_amount: tax,
         total_amount: total,
         payment_method: internalDocType === 'CT' ? 'Cotización' : paymentMethod,
-        bank_account_id: paymentMethod === 'Transferencia' ? bankAccountId : undefined,
-        bank_account_name: paymentMethod === 'Transferencia' ? bankAccountName : undefined,
-        transfer_reference: paymentMethod === 'Transferencia' ? transferReference : undefined,
+        bank_account_id: paymentMethod === 'Transferencia' ? bankAccountId : (mixedPayments?.find(m => m.bankAccountId)?.bankAccountId || undefined),
+        bank_account_name: paymentMethod === 'Transferencia' ? bankAccountName : (mixedPayments?.find(m => m.bankAccountName)?.bankAccountName || undefined),
+        transfer_reference: paymentMethod === 'Transferencia' ? transferReference : (mixedPayments?.find(m => m.reference)?.reference || undefined),
+        mixed_payments: mixedPayments,
         credit_days: paymentMethod === 'Crédito' ? (creditDays || 15) : undefined,
         due_date: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
@@ -3041,7 +3278,7 @@ export default function POS() {
         try {
           if (internalDocType !== 'CT') {
             await createInvoice(invoicePayload, saleItems);
-            if (paymentMethod === 'Transferencia') {
+            if (paymentMethod === 'Transferencia' || mixedPayments?.some(m => m.method === 'Transferencia')) {
               window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
             }
             if (activeQuotationId) {
@@ -4387,16 +4624,52 @@ export default function POS() {
                 
                 {/* Payment Badge */}
                 <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700/80 shadow-2xs">
-                  <span className={`w-1.5 h-1.5 rounded-full ${lastCompletedSale?.paymentMethod === 'Crédito' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    lastCompletedSale?.paymentMethod === 'Crédito' 
+                      ? 'bg-amber-500' 
+                      : lastCompletedSale?.paymentMethod === 'Mixto' 
+                      ? 'bg-indigo-500' 
+                      : 'bg-emerald-500'
+                  }`} />
                   <span>
                     {lastCompletedSale?.paymentMethod === 'Crédito'
                       ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)`
+                      : lastCompletedSale?.paymentMethod === 'Mixto'
+                      ? 'Pago Mixto'
                       : (lastCompletedSale?.paymentMethod || paymentMethod)}
                   </span>
                   {lastCompletedSale?.paymentMethod === 'Crédito' && lastCompletedSale?.dueDate && (
                     <span className="text-zinc-400 dark:text-zinc-500 font-normal">• Vence {lastCompletedSale.dueDate}</span>
                   )}
                 </div>
+
+                {lastCompletedSale?.paymentMethod === 'Mixto' && (lastCompletedSale.mixedPayments || lastCompletedSale.lastPaymentInfo?.mixedPayments) && (
+                  <div className="bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 rounded-xl p-2.5 mt-2 mb-1 text-left space-y-1">
+                    <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider block">
+                      Desglose Pagado:
+                    </span>
+                    {(lastCompletedSale.mixedPayments || lastCompletedSale.lastPaymentInfo?.mixedPayments || []).map((p: any, idx: number) => (
+                      <div key={idx} className="flex justify-between text-xs">
+                        <span className="text-zinc-600 dark:text-zinc-400">
+                          {p.method}
+                          {p.bankAccountName ? ` (${p.bankAccountName})` : ''}
+                          {p.reference ? ` [Ref: ${p.reference}]` : ''}:
+                        </span>
+                        <strong className="font-mono text-zinc-900 dark:text-zinc-100">
+                          RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    ))}
+                    {(lastCompletedSale.lastPaymentInfo?.changeAmount ?? 0) > 0 && (
+                      <div className="flex justify-between text-xs pt-1 border-t border-indigo-200/60 dark:border-indigo-800/60 text-emerald-700 dark:text-emerald-400 font-bold">
+                        <span>Devuelta (Efectivo):</span>
+                        <strong className="font-mono">
+                          RD$ {Number(lastCompletedSale.lastPaymentInfo?.changeAmount).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Clean Key-Value Receipt Details List */}
@@ -4570,6 +4843,7 @@ export default function POS() {
           paymentMethod={lastCompletedSale?.paymentMethod || paymentMethod}
           creditDays={lastCompletedSale?.creditDays}
           dueDate={lastCompletedSale?.dueDate}
+          mixedPayments={lastCompletedSale?.mixedPayments || lastCompletedSale?.lastPaymentInfo?.mixedPayments}
           receivedAmount={lastCompletedSale?.lastPaymentInfo?.receivedAmount ?? lastPaymentInfo?.receivedAmount}
           changeAmount={lastCompletedSale?.lastPaymentInfo?.changeAmount ?? lastPaymentInfo?.changeAmount}
           transferReference={lastCompletedSale?.lastPaymentInfo?.transferReference ?? lastPaymentInfo?.transferReference}

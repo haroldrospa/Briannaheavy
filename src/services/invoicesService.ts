@@ -17,6 +17,16 @@ export interface InvoiceItem {
   total_price: number;
 }
 
+export interface MixedPaymentEntry {
+  method: 'Efectivo' | 'Tarjeta' | 'Transferencia';
+  amount: number;
+  reference?: string;
+  bank_account_id?: string;
+  bank_account_name?: string;
+  received_amount?: number;
+  change_amount?: number;
+}
+
 export interface Invoice {
   id: string;
   invoice_number: string;
@@ -50,6 +60,7 @@ export interface Invoice {
   received_amount_usd?: number;
   change_amount_usd?: number;
   total_usd?: number;
+  mixed_payments?: MixedPaymentEntry[];
 }
 
 export const formatInvoiceNumber = (num?: string): string => {
@@ -431,6 +442,7 @@ export const createInvoice = async (
           received_amount_usd: invoiceData.received_amount_usd,
           change_amount_usd: invoiceData.change_amount_usd,
           total_usd: invoiceData.total_usd,
+          mixed_payments: invoiceData.mixed_payments,
         };
 
         const currentList = getLocalStorageInvoices();

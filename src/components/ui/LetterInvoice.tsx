@@ -58,6 +58,14 @@ export interface LetterInvoiceProps {
     cashier?: string;
     newBalance?: number;
     previousBalance?: number;
+  mixedPayments?: {
+    method: string;
+    amount: number;
+    reference?: string;
+    bankAccountName?: string;
+    receivedAmount?: number;
+    changeAmount?: number;
+  }[];
   };
   paymentsHistory?: LetterInvoicePayment[];
   securityCode?: string;
@@ -73,6 +81,14 @@ export interface LetterInvoiceProps {
   isAbono?: boolean;
   affectedInvoiceNumber?: string;
   previousBalance?: number;
+  mixedPayments?: {
+    method: string;
+    amount: number;
+    reference?: string;
+    bankAccountName?: string;
+    receivedAmount?: number;
+    changeAmount?: number;
+  }[];
   newBalance?: number;
 }
 
@@ -148,6 +164,7 @@ export default function LetterInvoice({
   isAbono: isAbonoProp,
   affectedInvoiceNumber,
   previousBalance: propPreviousBalance,
+  mixedPayments,
   newBalance: propNewBalance,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
@@ -381,6 +398,27 @@ export default function LetterInvoice({
                     return d.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' });
                   })()}
                 </strong>
+              </div>
+            )}
+            {!isCotizacion && !isAbono && paymentMethod === 'Mixto' && mixedPayments && mixedPayments.length > 0 && (
+              <div className="pt-1.5 mt-1 border-t border-dashed border-zinc-200 text-[11px] space-y-1">
+                <span className="text-zinc-600 font-bold block text-[10px] uppercase tracking-wider">Desglose Pago Mixto:</span>
+                {mixedPayments.map((p, idx) => (
+                  <div key={idx} className="flex justify-between pl-1">
+                    <span className="text-zinc-600 font-medium">
+                      {p.method}
+                      {p.bankAccountName ? ` (${p.bankAccountName})` : ''}
+                      {p.reference ? ` [Ref: ${p.reference}]` : ''}:
+                    </span>
+                    <strong className="font-mono text-zinc-900">{formatRD(p.amount)}</strong>
+                  </div>
+                ))}
+                {changeAmount !== undefined && changeAmount > 0 && (
+                  <div className="flex justify-between pl-1 text-emerald-800 font-semibold border-t border-zinc-100 pt-0.5">
+                    <span>Devuelta (Efectivo):</span>
+                    <strong className="font-mono">{formatRD(changeAmount)}</strong>
+                  </div>
+                )}
               </div>
             )}
             {isEcf && (

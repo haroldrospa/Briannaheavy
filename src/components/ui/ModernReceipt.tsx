@@ -71,6 +71,14 @@ export interface ModernReceiptProps {
   receivedAmountUsd?: number;
   changeAmountUsd?: number;
   totalUsd?: number;
+  mixedPayments?: {
+    method: string;
+    amount: number;
+    reference?: string;
+    bankAccountName?: string;
+    receivedAmount?: number;
+    changeAmount?: number;
+  }[];
 }
 
 const formatRD = (amount: number = 0): string => {
@@ -133,6 +141,7 @@ export default function ModernReceipt({
   receivedAmountUsd,
   changeAmountUsd,
   totalUsd,
+  mixedPayments,
 }: ModernReceiptProps) {
   const activeConfig: InvoiceCustomConfig = {
     ...getInvoiceCustomConfig(),
@@ -530,6 +539,30 @@ export default function ModernReceipt({
               <div className="flex justify-between">
                 <span>Referencia:</span>
                 <span className="font-mono font-bold uppercase text-black">{transferReference}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isCotizacion && paymentMethod === 'Mixto' && mixedPayments && mixedPayments.length > 0 && (
+          <div className="bg-white rounded-xl p-2 border border-zinc-300 space-y-1 text-zinc-700" style={{ fontSize: '0.8em' }}>
+            <div className="flex justify-between font-bold text-black border-b border-zinc-200 pb-0.5">
+              <span>Desglose Pago Mixto:</span>
+            </div>
+            {mixedPayments.map((mp, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span>
+                  {mp.method}
+                  {mp.bankAccountName ? ` (${mp.bankAccountName})` : ''}
+                  {mp.reference ? ` [${mp.reference}]` : ''}:
+                </span>
+                <span className="font-mono font-bold text-black">{formatRD(mp.amount)}</span>
+              </div>
+            ))}
+            {changeAmount !== undefined && changeAmount > 0 && (
+              <div className="flex justify-between font-bold text-emerald-700 pt-0.5 border-t border-zinc-100">
+                <span>Devuelta (Efectivo):</span>
+                <span className="font-mono">{formatRD(changeAmount)}</span>
               </div>
             )}
           </div>

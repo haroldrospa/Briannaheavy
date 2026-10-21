@@ -681,7 +681,25 @@ export default function CashClosureModal({
     scopedInvoices.forEach(inv => {
       const amt = Number(inv.total_amount) || 0;
       const method = inv.payment_method;
-      if (method === 'Efectivo') cash += amt;
+      if (method === 'Mixto') {
+        const mpList = inv.mixed_payments || (() => {
+          if (inv.transfer_reference?.startsWith('[')) {
+            try { return JSON.parse(inv.transfer_reference); } catch {}
+          }
+          return null;
+        })();
+        if (Array.isArray(mpList) && mpList.length > 0) {
+          mpList.forEach((mp: any) => {
+            const mpAmt = Number(mp.amount) || 0;
+            if (mp.method === 'Efectivo') cash += mpAmt;
+            else if (mp.method === 'Tarjeta') card += mpAmt;
+            else if (mp.method === 'Transferencia') transfer += mpAmt;
+            else cash += mpAmt;
+          });
+        } else {
+          cash += amt;
+        }
+      } else if (method === 'Efectivo') cash += amt;
       else if (method === 'Tarjeta') card += amt;
       else if (method === 'Transferencia') transfer += amt;
       else if (method === 'Crédito') credit += amt;
@@ -1597,6 +1615,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                 inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
                                 inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
                                 inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
+                                inv.payment_method === 'Mixto' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' :
                                 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
                               }`}>
                                 {inv.payment_method || 'Efectivo'}
