@@ -9,7 +9,8 @@ import {
   TrashIcon,
   CheckIcon,
   ArrowsRightLeftIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import type { CompanyBankAccount } from '../../utils/receiptSettings';
 import { 
@@ -25,7 +26,8 @@ import {
   parseBankStatementFile,
   runAutoReconciliation,
   calculateReconciliationSummary,
-  exportReconciliationToExcel
+  exportReconciliationToExcel,
+  isBankTaxOrFeeLine
 } from '../../services/bankReconciliationService';
 import logo from '../../assets/logo.png';
 
@@ -58,6 +60,8 @@ export default function BankReconciliationTab({
   // Líneas del extracto y transacciones de libros conciliadas
   const [statementLines, setStatementLines] = useState<BankStatementLine[]>([]);
   const [reconciledBookTxIds, setReconciledBookTxIds] = useState<string[]>([]);
+  // Opción para no cobrar ni incluir impuestos bancarios (0.15% Ley 288-04 ni comisiones)
+  const [excludeBankTax, setExcludeBankTax] = useState<boolean>(true);
 
   // Estados de interfaz y retroalimentación
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -111,7 +115,12 @@ export default function BankReconciliationTab({
     if (saved) {
       setOpeningBalance(saved.openingBalance || 0);
       setClosingBalance(saved.closingBalance || 0);
-      setStatementLines(saved.statementLines || []);
+      const cleanLines = (saved.statementLines || []).filter(l => {
+        if (l.id?.startsWith('stmt-gen-com-')) return false;
+        if (excludeBankTax && isBankTaxOrFeeLine(l.concept, l.id)) return false;
+        return true;
+      });
+      setStatementLines(cleanLines);
       setReconciledBookTxIds(saved.reconciledBookTxIds || []);
     } else {
       // Sin conciliación previa para este período
@@ -120,7 +129,7 @@ export default function BankReconciliationTab({
       setStatementLines([]);
       setReconciledBookTxIds([]);
     }
-  }, [selectedAccount?.id, period]);
+  }, [selectedAccount?.id, period, excludeBankTax]);
 
   // Resumen financiero de conciliación en tiempo real
   const summary = useMemo(() => {
@@ -174,9 +183,18 @@ export default function BankReconciliationTab({
         return;
       }
 
-      setStatementLines(parsedLines);
-      handleAutoSave(parsedLines, reconciledBookTxIds, openingBalance, closingBalance);
-      showFeedback('success', `Se importaron ${parsedLines.length} movimientos del extracto bancario.`);
+      // Si excludeBankTax está activo, omitir cargos de impuesto bancario (0.15% Ley 288-04 y comisiones)
+      const finalLines = excludeBankTax
+        ? parsedLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id))
+        : parsedLines;
+      const omittedCount = parsedLines.length - finalLines.length;
+
+      setStatementLines(finalLines);
+      handleAutoSave(finalLines, reconciledBookTxIds, openingBalance, closingBalance);
+      showFeedback(
+        'success', 
+        `Se importaron ${finalLines.length} movimientos del extracto bancario${omittedCount > 0 ? ` (se omitieron ${omittedCount} cargos de impuestos del banco/0.15%)` : ''}.`
+      );
     } catch (err) {
       console.error('Error al procesar archivo:', err);
       showFeedback('error', 'Error al leer el archivo. Asegúrate de que sea un Excel (.xlsx) o CSV válido.');
@@ -217,7 +235,7 @@ export default function BankReconciliationTab({
       return;
     }
 
-    // Convertir las transacciones de libros a líneas del extracto del banco
+    // Convertir las transacciones de libros a líneas del extracto del banco (sin impuestos artificiales ni comisiones ficticias)
     const generatedLines: BankStatementLine[] = periodBookTransactions.map((tx, idx) => ({
       id: `stmt-gen-${tx.id || idx}-${Date.now()}`,
       date: tx.date ? tx.date.split('T')[0] : `${period}-01`,
@@ -228,22 +246,9 @@ export default function BankReconciliationTab({
       status: 'pending'
     }));
 
-    // Añadir además un cargo bancario típico (Comisión por manejo de cuenta) para ver diferencias por justificar
-    const commissionLine: BankStatementLine = {
-      id: `stmt-gen-com-${Date.now()}`,
-      date: `${period}-10`,
-      concept: 'COMISION MANEJO DE CUENTA MENSUAL',
-      reference: 'COM-POP-10',
-      type: 'Egreso',
-      amount: 175.00,
-      status: 'pending'
-    };
-
-    const allGenerated = [...generatedLines, commissionLine];
-
     // Saldos inicial y final coherentes
     const simulatedOpening = 500000;
-    const totalOut = generatedLines.filter(l => l.type === 'Egreso').reduce((s, l) => s + l.amount, 0) + commissionLine.amount;
+    const totalOut = generatedLines.filter(l => l.type === 'Egreso').reduce((s, l) => s + l.amount, 0);
     const totalIn = generatedLines.filter(l => l.type === 'Ingreso').reduce((s, l) => s + l.amount, 0);
     const simulatedClosing = simulatedOpening + totalIn - totalOut;
 
@@ -251,7 +256,7 @@ export default function BankReconciliationTab({
     setClosingBalance(simulatedClosing);
 
     // Auto-conciliar de inmediato
-    const autoMatchResult = runAutoReconciliation(periodBookTransactions, allGenerated, []);
+    const autoMatchResult = runAutoReconciliation(periodBookTransactions, generatedLines, []);
     setReconciledBookTxIds(autoMatchResult.reconciledBookIds);
     setStatementLines(autoMatchResult.updatedStatementLines);
 
@@ -485,6 +490,31 @@ export default function BankReconciliationTab({
               accept=".xlsx,.xls,.csv"
               className="hidden"
             />
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextVal = !excludeBankTax;
+                setExcludeBankTax(nextVal);
+                if (nextVal) {
+                  const cleaned = statementLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id));
+                  setStatementLines(cleaned);
+                  handleAutoSave(cleaned, reconciledBookTxIds, openingBalance, closingBalance);
+                  showFeedback('info', 'Impuesto bancario (0.15% y cargos) excluido de la conciliación.');
+                } else {
+                  showFeedback('info', 'Modo con impuesto bancario activado.');
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                excludeBankTax
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
+              }`}
+              title="Exclusión automática de impuestos bancarios (0.15% Ley 288-04 y comisiones)"
+            >
+              <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>{excludeBankTax ? 'Sin Impuesto Bancario' : 'Con Impuesto Bancario'}</span>
+            </button>
 
             <button
               type="button"

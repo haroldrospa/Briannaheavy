@@ -60,6 +60,30 @@ export interface ReconciliationSummary {
 const STORAGE_PREFIX = 'brianna_bank_reconciliation_';
 
 /**
+ * Detecta si un concepto o ID de movimiento corresponde a un impuesto bancario
+ * (ej: 0.15% Ley 288-04, DGII, retenciones o comisiones bancarias automáticas)
+ */
+export const isBankTaxOrFeeLine = (concept: string = '', id: string = ''): boolean => {
+  if (id && id.startsWith('stmt-gen-com-')) return true;
+  if (!concept) return false;
+  const lower = concept.toLowerCase();
+  return (
+    lower.includes('288-04') ||
+    lower.includes('0.15%') ||
+    lower.includes('0.15 %') ||
+    lower.includes('0.0015') ||
+    lower.includes('impuesto') ||
+    lower.includes('imp.') ||
+    lower.includes('comision') ||
+    lower.includes('comisión') ||
+    lower.includes('itbis') ||
+    lower.includes('retencion') ||
+    lower.includes('retención') ||
+    lower.includes('manejo de cuenta')
+  );
+};
+
+/**
  * Carga los datos de conciliación guardados para una cuenta y período específico
  */
 export const loadReconciliationData = (
@@ -70,7 +94,14 @@ export const loadReconciliationData = (
     const key = `${STORAGE_PREFIX}${bankAccountId}_${period}`;
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as BankReconciliationData;
+    const parsed = JSON.parse(raw) as BankReconciliationData;
+    // Limpiar comisiones o impuestos artificiales previamente inyectados
+    if (parsed && Array.isArray(parsed.statementLines)) {
+      parsed.statementLines = parsed.statementLines.filter(
+        l => !l.id?.startsWith('stmt-gen-com-')
+      );
+    }
+    return parsed;
   } catch (err) {
     console.error('Error al cargar datos de conciliación:', err);
     return null;
