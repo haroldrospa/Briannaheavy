@@ -5,13 +5,17 @@ import {
   TruckIcon, 
   UserIcon, 
   CalendarDaysIcon, 
-  CheckCircleIcon
+  CheckCircleIcon,
+  HeartIcon
 } from '@heroicons/react/24/outline';
 import { 
   createInsurancePolicy, 
   updateInsurancePolicy, 
+  LIFE_INSURANCE_COMPANIES,
+  VEHICLE_INSURANCE_COMPANIES,
   type InsurancePolicy, 
-  type InsuranceInstallment 
+  type InsuranceInstallment,
+  type PolicyCategory
 } from '../../services/insuranceService';
 import { fetchCustomers, type Customer } from '../../services/customersService';
 import { fetchInventory, type InventoryItem } from '../../services/inventoryService';
@@ -23,26 +27,22 @@ interface NewPolicyModalProps {
   policyToEdit?: InsurancePolicy | null;
 }
 
-const COMMON_COMPANIES = [
-  'Seguros Universal',
-  'Mapfre BHD Seguros',
-  'Monumental de Seguros',
-  'Humano Seguros',
-  'Seguros Pepín',
-  'Seguros Sura',
-  'La Colonial de Seguros',
-  'Seguros Reservas',
-  'General de Seguros',
-  'Angloamericana de Seguros'
-];
-
 export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdit }: NewPolicyModalProps) {
+  const [category, setCategory] = useState<PolicyCategory>('vehicular');
   const [insuranceCompany, setInsuranceCompany] = useState('');
   const [customCompany, setCustomCompany] = useState('');
   const [policyNumber, setPolicyNumber] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientDocument, setClientDocument] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+
+  // Seguro de Vida
+  const [insuredPersonName, setInsuredPersonName] = useState('');
+  const [insuredPersonDoc, setInsuredPersonDoc] = useState('');
+  const [insuredPersonBirthdate, setInsuredPersonBirthdate] = useState('');
+  const [coverageAmount, setCoverageAmount] = useState<number | ''>(1000000);
+  const [planName, setPlanName] = useState('Vida Entera / Cobertura Total');
+  const [beneficiaries, setBeneficiaries] = useState('');
 
   // Vehículo
   const [brand, setBrand] = useState('');
@@ -129,26 +129,56 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
     }
   };
 
+  const activeCompanies = useMemo(() => {
+    return category === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+  }, [category]);
+
+  const handleCategoryChange = (newCat: PolicyCategory) => {
+    setCategory(newCat);
+    const comps = newCat === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+    if (!comps.includes(insuranceCompany) && insuranceCompany !== 'Otra') {
+      setInsuranceCompany(comps[0]);
+    }
+  };
+
   useEffect(() => {
     if (policyToEdit) {
-      if (COMMON_COMPANIES.includes(policyToEdit.insurance_company)) {
+      const cat: PolicyCategory = policyToEdit.category === 'vida' ? 'vida' : 'vehicular';
+      setCategory(cat);
+      const comps = cat === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+
+      if (comps.includes(policyToEdit.insurance_company)) {
         setInsuranceCompany(policyToEdit.insurance_company);
         setCustomCompany('');
       } else {
         setInsuranceCompany('Otra');
         setCustomCompany(policyToEdit.insurance_company);
       }
+
       setPolicyNumber(policyToEdit.policy_number);
       setClientName(policyToEdit.client_name);
       setClientDocument(policyToEdit.client_document || '');
       setClientPhone(policyToEdit.client_phone || '');
-      setBrand(policyToEdit.vehicle.brand);
-      setModel(policyToEdit.vehicle.model);
-      setYear(String(policyToEdit.vehicle.year));
-      setPlate(policyToEdit.vehicle.plate);
-      setVin(policyToEdit.vehicle.vin);
-      setColor(policyToEdit.vehicle.color || '');
-      setVehicleType(policyToEdit.vehicle.type || 'Camión');
+
+      // Vida
+      setInsuredPersonName(policyToEdit.life_data?.insured_person_name || policyToEdit.client_name);
+      setInsuredPersonDoc(policyToEdit.life_data?.insured_person_document || policyToEdit.client_document || '');
+      setInsuredPersonBirthdate(policyToEdit.life_data?.insured_person_birthdate || '');
+      setCoverageAmount(policyToEdit.life_data?.coverage_amount || 1000000);
+      setPlanName(policyToEdit.life_data?.plan_name || 'Vida Entera / Cobertura Total');
+      setBeneficiaries(policyToEdit.life_data?.beneficiaries || '');
+
+      // Vehicular
+      if (policyToEdit.vehicle) {
+        setBrand(policyToEdit.vehicle.brand || '');
+        setModel(policyToEdit.vehicle.model || '');
+        setYear(String(policyToEdit.vehicle.year || new Date().getFullYear()));
+        setPlate(policyToEdit.vehicle.plate || '');
+        setVin(policyToEdit.vehicle.vin || '');
+        setColor(policyToEdit.vehicle.color || '');
+        setVehicleType(policyToEdit.vehicle.type || 'Camión');
+      }
+
       setStartDate(policyToEdit.start_date);
       setExpirationDate(policyToEdit.expiration_date);
       setAnnualPremium(policyToEdit.annual_premium);
@@ -163,12 +193,23 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setCurrency(policyToEdit.currency || 'DOP');
       setNotes(policyToEdit.notes || '');
     } else {
-      setInsuranceCompany(COMMON_COMPANIES[0]);
+      setCategory('vehicular');
+      setInsuranceCompany(VEHICLE_INSURANCE_COMPANIES[0]);
       setCustomCompany('');
       setPolicyNumber('');
       setClientName('');
       setClientDocument('');
       setClientPhone('');
+
+      // Vida
+      setInsuredPersonName('');
+      setInsuredPersonDoc('');
+      setInsuredPersonBirthdate('');
+      setCoverageAmount(1000000);
+      setPlanName('Vida Entera / Cobertura Total');
+      setBeneficiaries('');
+
+      // Vehicular
       setBrand('');
       setModel('');
       setYear(new Date().getFullYear().toString());
@@ -254,11 +295,15 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       return;
     }
     if (!clientName.trim()) {
-      alert('Por favor indica el nombre del cliente.');
+      alert('Por favor indica el nombre del cliente o contratante.');
       return;
     }
-    if (!plate.trim() && !vin.trim()) {
+    if (category === 'vehicular' && !plate.trim() && !vin.trim()) {
       alert('Por favor indica la Placa o el Número de Chasis (VIN) del vehículo.');
+      return;
+    }
+    if (category === 'vida' && !insuredPersonName.trim() && !clientName.trim()) {
+      alert('Por favor indica el nombre de la persona asegurada.');
       return;
     }
 
@@ -277,8 +322,9 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       }
 
       const finalPaymentPlan = paymentPlan === 'anual' ? 'anual' : (installmentsCount === 4 ? 'cuotas_4' : `cuotas_${installmentsCount}`);
-      const payload = {
+      const payload: Omit<InsurancePolicy, 'id' | 'created_at'> = {
         policy_number: policyNumber.trim().toUpperCase(),
+        category,
         insurance_company: finalCompany,
         client_name: clientName.trim(),
         client_document: clientDocument.trim() || undefined,
@@ -289,7 +335,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         installments: finalInstallments,
         start_date: startDate,
         expiration_date: expirationDate,
-        vehicle: {
+        vehicle: category === 'vehicular' ? {
           brand: brand.trim(),
           model: model.trim(),
           year: year.trim(),
@@ -297,7 +343,21 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
           vin: vin.trim().toUpperCase(),
           color: color.trim() || undefined,
           type: vehicleType
+        } : {
+          brand: 'Seguro de Vida',
+          model: planName.trim() || 'Póliza de Vida',
+          year: new Date().getFullYear().toString(),
+          plate: 'VIDA',
+          vin: 'VIDA'
         },
+        life_data: category === 'vida' ? {
+          insured_person_name: (insuredPersonName || clientName).trim(),
+          insured_person_document: (insuredPersonDoc || clientDocument).trim() || undefined,
+          insured_person_birthdate: insuredPersonBirthdate.trim() || undefined,
+          beneficiaries: beneficiaries.trim() || undefined,
+          coverage_amount: typeof coverageAmount === 'number' ? coverageAmount : undefined,
+          plan_name: planName.trim() || undefined,
+        } : undefined,
         notes: notes.trim() || undefined,
         status: 'activa' as const
       };
@@ -351,11 +411,44 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           
+          {/* Selector de Tipo de Seguro: Vehicular vs Vida */}
+          <div className="bg-gray-100 dark:bg-zinc-800/80 p-1.5 rounded-2xl flex items-center gap-1.5 border border-gray-200/80 dark:border-zinc-700/60 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => handleCategoryChange('vehicular')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                category === 'vehicular'
+                  ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+              }`}
+            >
+              <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+              <span>Seguro Vehicular / Maquinaria</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleCategoryChange('vida')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                category === 'vida'
+                  ? 'bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-xs border border-rose-200/60 dark:border-rose-900/40'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+              }`}
+            >
+              <HeartIcon className="w-4 h-4 text-rose-500 fill-rose-500/20" />
+              <span>Seguro de Vida</span>
+            </button>
+          </div>
+
           {/* SECCIÓN 1: Aseguradora y Póliza */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-              <ShieldCheckIcon className="w-4 h-4 text-[#ED1C24]" />
-              <span>1. Aseguradora & Póliza</span>
+              {category === 'vida' ? (
+                <HeartIcon className="w-4 h-4 text-rose-500" />
+              ) : (
+                <ShieldCheckIcon className="w-4 h-4 text-[#ED1C24]" />
+              )}
+              <span>1. Aseguradora & Póliza {category === 'vida' ? '(Seguro de Vida)' : '(Vehicular)'}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
@@ -368,7 +461,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                   required
                 >
-                  {COMMON_COMPANIES.map(comp => (
+                  {activeCompanies.map(comp => (
                     <option key={comp} value={comp}>{comp}</option>
                   ))}
                   <option value="Otra">Otra aseguradora...</option>
@@ -391,7 +484,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                 </label>
                 <input
                   type="text"
-                  placeholder="Ej: POL-2026-9810"
+                  placeholder={category === 'vida' ? 'Ej: VID-2026-0041' : 'Ej: POL-2026-9810'}
                   value={policyNumber}
                   onChange={(e) => setPolicyNumber(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -401,12 +494,12 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
             </div>
           </div>
 
-          {/* SECCIÓN 2: Cliente Asegurado */}
+          {/* SECCIÓN 2: Cliente / Contratante */}
           <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
                 <UserIcon className="w-4 h-4 text-[#ED1C24]" />
-                <span>2. Cliente Asegurado</span>
+                <span>2. Cliente / Titular Contratante</span>
               </div>
               {realCustomers.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
@@ -430,7 +523,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                 </label>
                 <input
                   type="text"
-                  placeholder="Ej: Juan Pérez / Transporte Royal"
+                  placeholder="Ej: Juan Pérez / Empresa SRL"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -466,132 +559,227 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
             </div>
           </div>
 
-          {/* SECCIÓN 3: Datos del Vehículo */}
-          <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-                <span>3. Datos del Vehículo Asegurado</span>
+          {/* SECCIÓN 3: Datos de Cobertura de Vida o Vehículo */}
+          {category === 'vida' ? (
+            <div className="space-y-3.5 pt-2 border-t border-gray-100 dark:border-zinc-800/60 bg-rose-50/30 dark:bg-rose-950/10 p-4 rounded-2xl border border-rose-100/70 dark:border-rose-900/30">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-rose-700 dark:text-rose-400">
+                <HeartIcon className="w-4 h-4 text-rose-500 fill-rose-500/20" />
+                <span>3. Datos de la Cobertura de Vida & Beneficiarios</span>
               </div>
-              {realVehicles.length > 0 && (
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Persona Asegurada *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nombre completo del asegurado"
+                    value={insuredPersonName || clientName}
+                    onChange={(e) => setInsuredPersonName(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Cédula / Documento Asegurado
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="001-XXXXXXX-X"
+                    value={insuredPersonDoc || clientDocument}
+                    onChange={(e) => setInsuredPersonDoc(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Fecha de Nacimiento / Edad
+                  </label>
+                  <input
+                    type="date"
+                    value={insuredPersonBirthdate}
+                    onChange={(e) => setInsuredPersonBirthdate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Suma Asegurada (Cobertura) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-gray-400">
+                      {currency === 'DOP' ? 'RD$' : 'US$'}
+                    </span>
+                    <input
+                      type="number"
+                      step="1000"
+                      placeholder="1000000"
+                      value={coverageAmount}
+                      onChange={(e) => setCoverageAmount(e.target.value ? parseFloat(e.target.value) : '')}
+                      className="w-full pl-12 pr-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-black text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Plan / Tipo de Cobertura
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Vida Entera, Término 10 Años, Accidentes Personales, Familiar..."
+                    value={planName}
+                    onChange={(e) => setPlanName(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                  />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Beneficiario(s) y Porcentajes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: María Santos (Esposa - 50%), Carlos Pérez (Hijo - 50%)"
+                    value={beneficiaries}
+                    onChange={(e) => setBeneficiaries(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
+                  <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                  <span>3. Datos del Vehículo Asegurado</span>
+                </div>
+                {realVehicles.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
+                    <select
+                      onChange={handleSelectRealVehicle}
+                      defaultValue=""
+                      className="text-[11px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-lg px-2 py-1 border border-gray-200 dark:border-zinc-700"
+                    >
+                      <option value="" disabled>Cargar vehículo del inventario...</option>
+                      {realVehicles.map(v => (
+                        <option key={v.id} value={v.id}>
+                          {v.brand || v.name} {v.model ? `(${v.model})` : ''} {v.vin ? `[VIN: ${v.vin}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Marca *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Mack, Freightliner..."
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Modelo *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Pinnacle, Cascadia..."
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Año
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="2022"
+                    value={year}
+                    onChange={(e) => setYear(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Tipo
+                  </label>
                   <select
-                    onChange={handleSelectRealVehicle}
-                    defaultValue=""
-                    className="text-[11px] font-bold bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-lg px-2 py-1 border border-gray-200 dark:border-zinc-700"
+                    value={vehicleType}
+                    onChange={(e) => setVehicleType(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                   >
-                    <option value="" disabled>Cargar vehículo del inventario...</option>
-                    {realVehicles.map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.brand || v.name} {v.model ? `(${v.model})` : ''} {v.vin ? `[VIN: ${v.vin}]` : ''}
-                      </option>
-                    ))}
+                    <option value="Camión">Camión</option>
+                    <option value="Cabezote">Cabezote</option>
+                    <option value="Volteo">Volteo</option>
+                    <option value="Remolque">Remolque</option>
+                    <option value="Camioneta">Camioneta</option>
+                    <option value="Jeepeta">Jeepeta / SUV</option>
+                    <option value="Equipo Pesado">Equipo Pesado</option>
                   </select>
                 </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Marca *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Mack, Freightliner..."
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                  required
-                />
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Modelo *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Pinnacle, Cascadia..."
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                  required
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Placa
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="L384910"
+                    value={plate}
+                    onChange={(e) => setPlate(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Año
-                </label>
-                <input
-                  type="number"
-                  placeholder="2022"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                />
-              </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Número de Chasis (VIN) *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="1M1AN07Y5NN012891"
+                    value={vin}
+                    onChange={(e) => setVin(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                    required
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Tipo
-                </label>
-                <select
-                  value={vehicleType}
-                  onChange={(e) => setVehicleType(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                >
-                  <option value="Camión">Camión</option>
-                  <option value="Cabezote">Cabezote</option>
-                  <option value="Volteo">Volteo</option>
-                  <option value="Remolque">Remolque</option>
-                  <option value="Camioneta">Camioneta</option>
-                  <option value="Jeepeta">Jeepeta / SUV</option>
-                  <option value="Equipo Pesado">Equipo Pesado</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Placa
-                </label>
-                <input
-                  type="text"
-                  placeholder="L384910"
-                  value={plate}
-                  onChange={(e) => setPlate(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Número de Chasis (VIN) *
-                </label>
-                <input
-                  type="text"
-                  placeholder="1M1AN07Y5NN012891"
-                  value={vin}
-                  onChange={(e) => setVin(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
-                  Color
-                </label>
-                <input
-                  type="text"
-                  placeholder="Blanco, Azul..."
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
-                />
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                    Color
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Blanco, Azul..."
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* SECCIÓN 4: Vigencia, Prima y Cuotas */}
           <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">

@@ -19,7 +19,7 @@ import {
 import QRCode from '../components/ui/QRCode';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, isAbonoInvoice, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import { matchesCashierUser } from '../services/shiftsService';
 
@@ -108,8 +108,8 @@ export function buildUnifiedInvoices(
   _rawFinancings: any[] = [],
   _rawReceipts: any[] = []
 ): Invoice[] {
-  // Facturas normales del POS (excluyendo cotizaciones)
-  const validPos = (rawInvoices || []).filter(inv => !isQuotationInvoice(inv));
+  // Facturas normales del POS (excluyendo cotizaciones y abonos)
+  const validPos = (rawInvoices || []).filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
   // Ordenar cronológicamente descendente de la fecha más reciente a la más antigua
   return sortUnifiedInvoices(validPos);
 }
@@ -211,7 +211,7 @@ export default function Invoices() {
 
   const filteredInvoices = useMemo(() => {
     const list = invoices.filter(inv => {
-      if (isQuotationInvoice(inv)) return false;
+      if (isQuotationInvoice(inv) || isAbonoInvoice(inv)) return false;
 
       // Solo filtrar por cajero si el usuario selecciona explícitamente la pestaña 'mis_facturas'
       if (salesScope === 'mis_facturas') {

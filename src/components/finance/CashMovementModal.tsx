@@ -18,7 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { createCashMovement, fetchCashMovements, deleteCashMovement, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
-import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, formatInvoiceNumber, type Invoice } from '../../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvoice, formatInvoiceNumber, type Invoice } from '../../services/invoicesService';
 import { fetchAllFinancingReceipts } from '../../services/financingReceiptsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
@@ -127,10 +127,13 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
 
       const salesAsMovements: CashMovement[] = [];
       (invoicesList || []).forEach(inv => {
-        if (isQuotationInvoice(inv)) return; // Excluir cotizaciones
+        if (isQuotationInvoice(inv) || isAbonoInvoice(inv)) return; // Excluir cotizaciones y abonos
         const pm = (inv.payment_method || 'Efectivo').trim();
         const pmLower = pm.toLowerCase();
         const isCredit = pmLower.includes('créd') || pmLower.includes('cred');
+        // Excluir ventas a crédito de los movimientos de flujo de caja ya que el dinero real entra al registrar los abonos
+        if (isCredit) return;
+
         const isCard = pmLower.includes('tarjeta');
         const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco') || pmLower.includes('usd');
 

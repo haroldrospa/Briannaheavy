@@ -20,7 +20,7 @@ import {
   CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
-import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvoice } from '../services/invoicesService';
 import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
@@ -630,6 +630,7 @@ export default function Reports() {
       const cReg = (selectedClosureForDetail.register || '').toLowerCase().trim();
       const rawInvoices = getLocalStorageInvoices();
       const matchingInvs = rawInvoices.filter((inv: any) => {
+        if (isAbonoInvoice(inv)) return false;
         const invDate = inv.created_at ? inv.created_at.slice(0, 10) : (inv.date ? inv.date.slice(0, 10) : '');
         const invReg = (inv.register_name || inv.register || 'caja principal').toLowerCase().trim();
         const dateMatch = !cDate || invDate === cDate;

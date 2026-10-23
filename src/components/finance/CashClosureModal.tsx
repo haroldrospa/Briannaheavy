@@ -25,7 +25,7 @@ import {
   UserIcon,
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
-import { fetchInvoices, getLocalStorageInvoices, type Invoice } from '../../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, isAbonoInvoice, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { createCashClosure, getLocalStorageCashClosures, type CashClosure } from '../../services/cashClosuresService';
@@ -592,12 +592,19 @@ export default function CashClosureModal({
 
     // Facturas y Ventas del turno (para mostrar junto a los movimientos)
     scopedInvoices.forEach(inv => {
+      if (isAbonoInvoice(inv)) return; // Excluir abonos ya que se procesan como movimientos de cobro
       const pm = (inv.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
       const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
       const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
       const isCash = !isCard && !isBank && !isCredit;
+
+      // Las ventas a crédito NO representan entradas directas de dinero en el momento de la venta.
+      // Los ingresos reales de esas facturas a crédito ingresan mediante sus respectivos Abonos/Cobros.
+      // Excluir ventas a crédito de los movimientos de ingresos de caja para evitar duplicar la factura y el monto.
+      if (isCredit) return;
+
       const author = inv.cashier_name || (inv as any).created_by || '';
 
       const invNumber = inv.invoice_number || inv.id || '';

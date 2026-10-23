@@ -6,7 +6,8 @@ import {
   UserIcon, 
   ExclamationTriangleIcon,
   PencilSquareIcon,
-  PrinterIcon
+  PrinterIcon,
+  HeartIcon
 } from '@heroicons/react/24/outline';
 import { 
   getDaysUntilExpiration, 
@@ -118,6 +119,13 @@ export default function PolicyDetailModal({
                   {policy.policy_number}
                 </h2>
                 <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                  policy.category === 'vida'
+                    ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                    : 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                }`}>
+                  {policy.category === 'vida' ? 'Seguro de Vida' : 'Seguro Vehicular'}
+                </span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
                   expirationStatus === 'vencido'
                     ? 'bg-red-600 text-white border-red-600 animate-pulse'
                     : expirationStatus === 'proximo_a_vencer'
@@ -172,45 +180,79 @@ export default function PolicyDetailModal({
                     : `⚠️ Alerta: Póliza próxima a vencer en ${daysRemaining} días`}
                 </p>
                 <p className="mt-0.5 opacity-90 font-medium">
-                  Fecha de vencimiento: <strong>{policy.expiration_date}</strong>. Recuerda gestionar la renovación con {policy.insurance_company} para evitar que el vehículo transite sin cobertura.
+                  Fecha de vencimiento: <strong>{policy.expiration_date}</strong>. Recuerda gestionar la renovación con {policy.insurance_company} para mantener la cobertura activa.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Ficha del Vehículo & Cliente */}
+          {/* Ficha del Bien Asegurado & Cliente */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
-            {/* Vehículo */}
-            <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2.5">
-              <div className="flex items-center gap-2 text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-                <span>Vehículo Asegurado</span>
+            {/* Seguro de Vida vs Vehículo */}
+            {policy.category === 'vida' ? (
+              <div className="bg-rose-50/40 dark:bg-rose-950/20 p-4 rounded-2xl border border-rose-100 dark:border-rose-900/40 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-black text-rose-700 dark:text-rose-400 uppercase tracking-wider">
+                  <HeartIcon className="w-4 h-4 text-rose-500 fill-rose-500/20" />
+                  <span>Cobertura de Vida</span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <p className="text-sm font-black text-gray-900 dark:text-white">
+                    {policy.life_data?.insured_person_name || policy.client_name}
+                  </p>
+                  <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
+                    <span className="font-medium text-gray-400">Suma Asegurada:</span>
+                    <span className="font-mono font-bold text-rose-600 dark:text-rose-400 bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
+                      {policy.currency || 'DOP'} {(policy.life_data?.coverage_amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
+                    <span className="font-medium text-gray-400">Plan / Cobertura:</span>
+                    <span className="font-semibold text-gray-800 dark:text-zinc-200">
+                      {policy.life_data?.plan_name || 'Vida General'}
+                    </span>
+                  </div>
+                  {policy.life_data?.beneficiaries && (
+                    <div className="pt-1 border-t border-rose-100 dark:border-rose-900/30 text-gray-600 dark:text-zinc-300">
+                      <span className="font-medium text-gray-400 block mb-0.5">Beneficiarios:</span>
+                      <p className="font-semibold text-[11px] text-gray-900 dark:text-zinc-100 leading-snug">
+                        {policy.life_data.beneficiaries}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-1 text-xs">
-                <p className="text-sm font-black text-gray-900 dark:text-white">
-                  {policy.vehicle.brand} {policy.vehicle.model} {policy.vehicle.year ? `(${policy.vehicle.year})` : ''}
-                </p>
-                <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-1">
-                  <span className="font-medium text-gray-400">Placa:</span>
-                  <span className="font-mono font-bold bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700">
-                    {policy.vehicle.plate || 'N/A'}
-                  </span>
+            ) : (
+              <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                  <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                  <span>Vehículo Asegurado</span>
                 </div>
-                <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
-                  <span className="font-medium text-gray-400">Chasis (VIN):</span>
-                  <span className="font-mono font-bold text-[11px] text-gray-900 dark:text-white truncate max-w-[180px]">
-                    {policy.vehicle.vin}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
-                  <span className="font-medium text-gray-400">Tipo / Color:</span>
-                  <span className="font-semibold text-gray-800 dark:text-zinc-200">
-                    {policy.vehicle.type || 'Camión'} {policy.vehicle.color ? `• ${policy.vehicle.color}` : ''}
-                  </span>
+                <div className="space-y-1 text-xs">
+                  <p className="text-sm font-black text-gray-900 dark:text-white">
+                    {policy.vehicle?.brand} {policy.vehicle?.model} {policy.vehicle?.year ? `(${policy.vehicle.year})` : ''}
+                  </p>
+                  <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-1">
+                    <span className="font-medium text-gray-400">Placa:</span>
+                    <span className="font-mono font-bold bg-white dark:bg-zinc-900 px-2 py-0.5 rounded-md border border-gray-200 dark:border-zinc-700">
+                      {policy.vehicle?.plate || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
+                    <span className="font-medium text-gray-400">Chasis (VIN):</span>
+                    <span className="font-mono font-bold text-[11px] text-gray-900 dark:text-white truncate max-w-[180px]">
+                      {policy.vehicle?.vin || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-600 dark:text-zinc-300 pt-0.5">
+                    <span className="font-medium text-gray-400">Tipo / Color:</span>
+                    <span className="font-semibold text-gray-800 dark:text-zinc-200">
+                      {policy.vehicle?.type || 'Camión'} {policy.vehicle?.color ? `• ${policy.vehicle.color}` : ''}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Cliente & Vigencia */}
             <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800 space-y-2.5">

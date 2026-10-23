@@ -17,7 +17,7 @@ import {
   ArrowDownCircleIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, createInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import CashClosureModal from '../components/finance/CashClosureModal';
 import OpenShiftModal from '../components/finance/OpenShiftModal';
@@ -60,7 +60,27 @@ export interface ReceivableItem {
 const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
   if (!invs || invs.length === 0) return [];
   
-  return invs
+  // Deduplicar facturas por id único y por NCF / Número
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const uniqueInvs: Invoice[] = [];
+
+  for (const inv of invs) {
+    if (!inv) continue;
+    const invId = String(inv.id || '').trim();
+    const invNum = String(inv.invoice_number || '').trim();
+    const ncf = String(inv.ncf || '').trim();
+    const uniqueKey = ncf.startsWith('INT-') ? ncf : (invNum ? `${invNum}_${inv.customer_rnc || ''}` : invId);
+
+    if (invId && seenIds.has(invId)) continue;
+    if (uniqueKey && seenKeys.has(uniqueKey)) continue;
+
+    if (invId) seenIds.add(invId);
+    if (uniqueKey) seenKeys.add(uniqueKey);
+    uniqueInvs.push(inv);
+  }
+
+  return uniqueInvs
     .filter(inv => inv.payment_method === 'Crédito' || inv.status === 'Crédito' || inv.status === 'Pendiente' || inv.status === 'Con Abono' || inv.status === 'Atrasado' || (inv as any).is_credit || (inv as any).balance > 0)
     .map((inv, idx) => {
       const totalAmount = inv.total_amount || 0;
@@ -93,13 +113,21 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
         ? inv.items.map(i => `${i.quantity > 1 ? `${i.quantity}x ` : ''}${i.description}`).join(', ') 
         : 'Repuestos & Mercancía POS');
 
+      let resolvedInvoice = inv.invoice_number;
+      if (inv.ncf && inv.ncf.startsWith('INT-')) {
+        const ncfSeq = inv.ncf.replace(/^INT-?/i, '');
+        if (ncfSeq && ncfSeq.length >= 4) {
+          resolvedInvoice = ncfSeq;
+        }
+      }
+
       return {
         id: inv.id || `rec_${idx + 1}`,
         invoice_id: inv.id,
         customer: inv.customer_name || 'Cliente POS',
         rnc: inv.customer_rnc || '000000000',
         phone: (inv as any).customer_phone || '',
-        invoice: inv.invoice_number,
+        invoice: resolvedInvoice,
         ncf: inv.ncf || 'INT-000000',
         items: itemsDesc,
         totalAmount,
@@ -781,13 +809,15 @@ export default function Cobros() {
       : now.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     const fullMethodLabel = paymentCurrency === 'USD' ? `${paymentMethod} (USD)` : paymentMethod;
+    const receiptNumber = getNextReceiptNumber();
+    const resolvedReference = (paymentReference || '').trim() || receiptNumber;
 
     const newPaymentRecord = {
       id: `pay_${Date.now()}`,
       date: paidIsoDate,
       amount,
       method: fullMethodLabel,
-      reference: paymentReference || undefined,
+      reference: resolvedReference,
       cashier: cashierName,
       currency: paymentCurrency,
       amountUsd,
@@ -841,7 +871,6 @@ export default function Cobros() {
     }
 
     // Prepare Receipt Voucher
-    const receiptNumber = getNextReceiptNumber();
     const paymentReceiptData = {
       receiptNumber,
       customer: selectedReceivable.customer,
@@ -856,7 +885,7 @@ export default function Cobros() {
       previousBalance,
       newBalance,
       method: fullMethodLabel,
-      reference: paymentReference,
+      reference: resolvedReference,
       cashier: cashierName
     };
     setLastPaymentReceipt(paymentReceiptData);
@@ -864,40 +893,10 @@ export default function Cobros() {
     const selInvClean = String(selectedReceivable.invoice || '').trim();
     const abonoCount = (selectedReceivable.paymentsHistory?.length || 0) + 1;
     const abonoInvoiceNum = abonoCount > 1 ? `ABO-${selInvClean}-${abonoCount}` : `ABO-${selInvClean}`;
-    const abonoNcf = `REC-${new Date().getFullYear()}-${String(receiptNumber).padStart(4, '0')}`;
+    const abonoNcf = receiptNumber.startsWith('REC-') ? receiptNumber : `REC-${new Date().getFullYear()}-${String(receiptNumber).padStart(4, '0')}`;
     const abonoItemDesc = `Abono a Factura a Crédito No. ${selInvClean} (Saldo Restante: RD$ ${newBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })})`;
 
-    // Crear la Factura Oficial de Abono en la tabla de facturas e items
-    try {
-      await createInvoice({
-        invoice_number: abonoInvoiceNum,
-        ncf: abonoNcf,
-        ncf_type: 'ABONO',
-        customer_name: selectedReceivable.customer,
-        customer_rnc: selectedReceivable.rnc || '',
-        subtotal: amount,
-        tax_amount: 0,
-        total_amount: amount,
-        payment_method: fullMethodLabel,
-        cashier_name: cashierName,
-        register_name: activeRegister,
-        status: 'Pagada (Abono)',
-        is_electronic: false,
-        billing_mode: 'internal',
-        transfer_reference: paymentReference || undefined
-      }, [
-        {
-          description: abonoItemDesc,
-          quantity: 1,
-          unit_price: amount,
-          total_price: amount
-        }
-      ]);
-    } catch (err) {
-      console.warn('Error saving abono invoice to invoices table:', err);
-    }
-
-    // Configurar Factura de Abono para Impresión Inmediata Oficial
+    // Configurar Factura de Abono para Impresión Inmediata Oficial (en memoria)
     setInvoiceToPrintLetter({
       id: `abo_${Date.now()}`,
       invoice_number: abonoInvoiceNum,
@@ -911,7 +910,7 @@ export default function Cobros() {
       customer_rnc: selectedReceivable.rnc,
       customer_phone: selectedReceivable.phone || '',
       payment_method: fullMethodLabel,
-      transfer_reference: paymentReference,
+      transfer_reference: resolvedReference,
       cashier_name: cashierName,
       total_amount: amount,
       subtotal: amount,

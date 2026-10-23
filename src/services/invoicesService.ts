@@ -69,7 +69,7 @@ export const formatInvoiceNumber = (num?: string): string => {
     const raw = num.replace(/\D/g, '') || '1';
     return `CT-${raw.padStart(6, '0')}`;
   }
-  if (num.startsWith('FIN-') || num.startsWith('REC-')) {
+  if (num.startsWith('FIN-') || num.startsWith('REC-') || num.startsWith('ABO-')) {
     return num;
   }
   const digits = num.replace(/^FAC(-INT|-E)?-?/i, '').replace(/\D/g, '');
@@ -77,6 +77,19 @@ export const formatInvoiceNumber = (num?: string): string => {
     return digits.length <= 6 ? digits.padStart(6, '0') : digits;
   }
   return num;
+};
+
+export const isAbonoInvoice = (inv: { invoice_number?: string; ncf?: string; ncf_type?: string; status?: string; id?: string } | null | undefined): boolean => {
+  if (!inv) return false;
+  const num = String(inv.invoice_number || inv.id || '').toUpperCase();
+  const ncfType = String(inv.ncf_type || '').toUpperCase();
+  const status = String(inv.status || '').toLowerCase();
+  return (
+    num.startsWith('ABO-') ||
+    ncfType === 'ABONO' ||
+    status === 'pagada (abono)' ||
+    status.includes('abono')
+  );
 };
 
 export const isQuotationInvoice = (inv: { invoice_number?: string; ncf?: string; ncf_type?: string; status?: string; payment_method?: string; id?: string } | null | undefined): boolean => {
@@ -107,7 +120,7 @@ let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
 export const getLocalStorageInvoices = (): Invoice[] => {
   const paymentsMap = getLocalInvoicePayments();
   if (inMemoryInvoices !== null) {
-    const filtered = inMemoryInvoices.filter(inv => !isQuotationInvoice(inv));
+    const filtered = inMemoryInvoices.filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
     return mergePaymentsIntoInvoices(filtered, paymentsMap);
   }
   try {
@@ -115,12 +128,38 @@ export const getLocalStorageInvoices = (): Invoice[] => {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      const filtered = parsed.filter(inv => !isQuotationInvoice(inv));
-      inMemoryInvoices = filtered;
-      if (filtered.length !== parsed.length) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+      const filtered = parsed.filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
+      
+      const seenIds = new Set<string>();
+      const seenKeys = new Set<string>();
+      const deduplicated: Invoice[] = [];
+      for (const inv of filtered) {
+        if (!inv) continue;
+        const invId = String(inv.id || '').trim();
+        const invNum = String(inv.invoice_number || '').trim();
+        const ncf = String(inv.ncf || '').trim();
+        const uniqueKey = ncf.startsWith('INT-') ? ncf : (invNum ? `${invNum}_${inv.billing_mode || ''}` : invId);
+
+        if (invId && seenIds.has(invId)) continue;
+        if (uniqueKey && seenKeys.has(uniqueKey)) continue;
+
+        if (invId) seenIds.add(invId);
+        if (uniqueKey) seenKeys.add(uniqueKey);
+
+        if (ncf.startsWith('INT-')) {
+          const ncfSeq = ncf.replace(/^INT-?/i, '');
+          if (ncfSeq && ncfSeq.length >= 4 && inv.invoice_number !== ncfSeq) {
+            inv.invoice_number = ncfSeq;
+          }
+        }
+        deduplicated.push(inv);
       }
-      return mergePaymentsIntoInvoices(filtered, paymentsMap);
+
+      inMemoryInvoices = deduplicated;
+      if (deduplicated.length !== parsed.length) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(deduplicated));
+      }
+      return mergePaymentsIntoInvoices(deduplicated, paymentsMap);
     }
     return [];
   } catch {
@@ -129,10 +168,38 @@ export const getLocalStorageInvoices = (): Invoice[] => {
 };
 
 export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
-  const filtered = (invoices || []).filter(inv => !isQuotationInvoice(inv));
-  inMemoryInvoices = filtered;
+  const filtered = (invoices || []).filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
+  
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const deduplicated: Invoice[] = [];
+
+  for (const inv of filtered) {
+    if (!inv) continue;
+    const invId = String(inv.id || '').trim();
+    const invNum = String(inv.invoice_number || '').trim();
+    const ncf = String(inv.ncf || '').trim();
+    const uniqueKey = ncf.startsWith('INT-') ? ncf : (invNum ? `${invNum}_${inv.billing_mode || ''}` : invId);
+
+    if (invId && seenIds.has(invId)) continue;
+    if (uniqueKey && seenKeys.has(uniqueKey)) continue;
+
+    if (invId) seenIds.add(invId);
+    if (uniqueKey) seenKeys.add(uniqueKey);
+
+    if (ncf.startsWith('INT-')) {
+      const ncfSeq = ncf.replace(/^INT-?/i, '');
+      if (ncfSeq && ncfSeq.length >= 4 && inv.invoice_number !== ncfSeq) {
+        inv.invoice_number = ncfSeq;
+      }
+    }
+
+    deduplicated.push(inv);
+  }
+
+  inMemoryInvoices = deduplicated;
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(deduplicated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
       window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
@@ -155,7 +222,7 @@ export const applyRealtimeInvoiceChange = (
   }
 
   if (newRecord?.id) {
-    if (isQuotationInvoice(newRecord)) return;
+    if (isQuotationInvoice(newRecord) || isAbonoInvoice(newRecord)) return;
     const paymentsMap = getLocalInvoicePayments();
     let updated: Invoice[];
     if (eventType === 'INSERT') {
@@ -178,18 +245,24 @@ export const applyRealtimeInvoiceChange = (
   }
 };
 
-const parseInternalSeqNum = (inv: { invoice_number?: string }): number | null => {
-  const num = String(inv.invoice_number || '').trim();
-  if (num.startsWith('CT-') || num.startsWith('FIN-') || num.startsWith('REC-')) {
-    return null;
-  }
-  const clean = num.replace(/^(INT|FAC-INT|FAC-E|FAC)-?/i, '').replace(/\D/g, '');
-  if (!clean) return null;
-  const parsed = parseInt(clean, 10);
-  if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
-    return parsed;
-  }
-  return null;
+const parseInternalSeqNum = (inv: { invoice_number?: string; ncf?: string }): number | null => {
+  let highest: number | null = null;
+  const check = (raw?: string) => {
+    if (!raw) return;
+    const str = String(raw).trim();
+    if (str.startsWith('CT-') || str.startsWith('FIN-') || str.startsWith('REC-') || str.startsWith('ABO-')) {
+      return;
+    }
+    const clean = str.replace(/^(INT|FAC-INT|FAC-E|FAC)-?/i, '').replace(/\D/g, '');
+    if (!clean) return;
+    const parsed = parseInt(clean, 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
+      if (highest === null || parsed > highest) highest = parsed;
+    }
+  };
+  check(inv.invoice_number);
+  check(inv.ncf);
+  return highest;
 };
 
 const parseCtSeqNum = (inv: { invoice_number?: string; ncf?: string }): number | null => {
@@ -229,10 +302,20 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
 
         if (!error && data) {
           const paymentsMap = await fetchRemoteInvoicePayments();
-          const supabaseInvoices = (data as Invoice[]).filter(inv => !isQuotationInvoice(inv));
+          const supabaseInvoices = (data as Invoice[]).filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
           const mergedInvoices = mergePaymentsIntoInvoices(supabaseInvoices, paymentsMap);
           lastInvoicesFetchTime = Date.now();
           saveLocalStorageInvoices(mergedInvoices);
+
+          // Asynchronously purge any existing dummy abono invoices from Supabase
+          const abonoInvs = (data as Invoice[]).filter(inv => isAbonoInvoice(inv));
+          if (abonoInvs.length > 0) {
+            for (const abInv of abonoInvs) {
+              if (abInv.id) {
+                deleteInvoice(abInv.id).catch(() => {});
+              }
+            }
+          }
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;

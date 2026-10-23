@@ -1,5 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+export type PolicyCategory = 'vehicular' | 'vida';
+
 export interface VehicleData {
   brand: string;
   model: string;
@@ -9,6 +11,34 @@ export interface VehicleData {
   color?: string;
   type?: string;
 }
+
+export interface LifeInsuranceData {
+  insured_person_name?: string;
+  insured_person_document?: string;
+  insured_person_birthdate?: string;
+  beneficiaries?: string; // Nombres de los beneficiarios y parentesco/porcentaje
+  coverage_amount?: number; // Suma asegurada / cobertura
+  plan_name?: string; // Plan contratado (ej. Vida Entera, Término, Salud/Vida)
+}
+
+export const LIFE_INSURANCE_COMPANIES = [
+  'One Alliance',
+  'La International',
+  'Humano'
+];
+
+export const VEHICLE_INSURANCE_COMPANIES = [
+  'Seguros Universal',
+  'Mapfre BHD Seguros',
+  'Monumental de Seguros',
+  'Humano Seguros',
+  'Seguros Pepín',
+  'Seguros Sura',
+  'La Colonial de Seguros',
+  'Seguros Reservas',
+  'General de Seguros',
+  'Angloamericana de Seguros'
+];
 
 export interface InsuranceInstallment {
   number: number;
@@ -23,17 +53,19 @@ export interface InsuranceInstallment {
 export interface InsurancePolicy {
   id: string;
   policy_number: string;
-  insurance_company: string; // Empresa aseguradora / que se está asegurando
+  category?: PolicyCategory; // 'vehicular' | 'vida' (default: 'vehicular')
+  insurance_company: string; // Empresa aseguradora
   client_name: string;
   client_document?: string; // Cédula o RNC
   client_phone?: string;
   annual_premium: number; // Prima anual
   currency?: 'DOP' | 'USD';
-  payment_plan: 'anual' | 'cuotas_4' | string; // Totalidad anual o en cuotas (cualquier cantidad)
+  payment_plan: 'anual' | 'cuotas_4' | string; // Totalidad anual o en cuotas
   installments: InsuranceInstallment[];
   start_date: string; // YYYY-MM-DD
-  expiration_date: string; // YYYY-MM-DD (1 año desde inicio o personalizado)
-  vehicle: VehicleData;
+  expiration_date: string; // YYYY-MM-DD
+  vehicle?: VehicleData;
+  life_data?: LifeInsuranceData;
   notes?: string;
   status?: 'activa' | 'cancelada';
   created_at: string;

@@ -472,6 +472,19 @@ export const isQuotationInvoice = (inv: Invoice | any): boolean => {
   );
 };
 
+export const isAbonoInvoice = (inv: Invoice | any): boolean => {
+  if (!inv) return false;
+  const num = String(inv.invoice_number || inv.id || '').toUpperCase();
+  const ncfType = String(inv.ncf_type || '').toUpperCase();
+  const status = String(inv.status || '').toLowerCase();
+  return (
+    num.startsWith('ABO-') ||
+    ncfType === 'ABONO' ||
+    status === 'pagada (abono)' ||
+    status.includes('abono')
+  );
+};
+
 // Función auxiliar para comparar cajero con el usuario en sesión
 export const matchesCashierUser = (
   invoiceCashier?: string, 
@@ -512,8 +525,8 @@ export const filterInvoicesByShift = (
   selectedRegister = 'todas',
   selectedCashier = 'todos'
 ): Invoice[] => {
-  // Excluir SIEMPRE las cotizaciones de cualquier cálculo de caja o ventas
-  let list = (invoices || []).filter(inv => !isQuotationInvoice(inv));
+  // Excluir SIEMPRE las cotizaciones y facturas de abono de cualquier cálculo de caja o ventas
+  let list = (invoices || []).filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
 
   const currentUserEmail = (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_email') : '') || '';
 
