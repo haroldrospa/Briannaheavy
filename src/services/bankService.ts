@@ -2,7 +2,8 @@ import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receip
 import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, updateCashMovement, type CashMovement } from './cashMovementsService';
 import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, updateInvoice, type Invoice } from './invoicesService';
 import { getStoredReceipts } from './financingReceiptsService';
-import { getLocalInvoicePayments } from './invoicePaymentsService';
+import { getLocalInvoicePayments, saveLocalInvoicePayments, deleteSingleInvoicePayment } from './invoicePaymentsService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface BankTransaction {
   id: string;
@@ -140,6 +141,27 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   allMovements.forEach(m => {
     const txId = `mov-${m.id}`;
     if (seenIds.has(txId)) return;
+
+    // Si el movimiento de caja hace referencia explícita a una factura específica, verificar si esa factura sigue existiendo
+    const conceptLower = (m.concept || '').toLowerCase();
+    const isInvoiceMove = conceptLower.includes('factura #') || conceptLower.includes('factura ');
+    if (isInvoiceMove && allInvoices.length > 0) {
+      const matchFactura = conceptLower.match(/factura\s*#?([0-9a-z-]+)/i);
+      const extractedNum = matchFactura ? matchFactura[1].trim() : '';
+      const cleanExtracted = extractedNum.replace(/^0+/, '');
+      if (extractedNum) {
+        const invExists = allInvoices.some(inv => {
+          const invNum = String(inv.invoice_number || '').trim().toLowerCase();
+          const invClean = invNum.replace(/^0+/, '');
+          return invNum === extractedNum.toLowerCase() || (cleanExtracted && invClean === cleanExtracted);
+        });
+        if (!invExists) {
+          // La factura fue eliminada; no incluir este movimiento en bancos
+          return;
+        }
+      }
+    }
+
     seenIds.add(txId);
 
     const pm = (m.payment_method || '').toLowerCase();
@@ -268,7 +290,39 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   // C2. Añadir abonos a facturas a crédito (cobros)
   try {
     const paymentsMap = getLocalInvoicePayments();
-    Object.values(paymentsMap).forEach(summary => {
+    let orphanFound = false;
+    const cleanedMap = { ...paymentsMap };
+
+    Object.entries(paymentsMap).forEach(([key, summary]) => {
+      const summaryInvNum = (summary.invoice_number || '').trim();
+      const cleanSummaryNum = summaryInvNum.replace(/^0+/, '');
+      const paddedSummaryNum = cleanSummaryNum ? cleanSummaryNum.padStart(6, '0') : '';
+
+      // Verificar si la factura padre existe en allInvoices
+      const invoiceExists = allInvoices.some(inv => {
+        const invIdStr = String(inv.id || '');
+        const invNumStr = String(inv.invoice_number || '').trim();
+        const invCleanNum = invNumStr.replace(/^0+/, '');
+        const invNcf = String(inv.ncf || '').trim();
+
+        const matchId = Boolean(summary.invoice_id && (invIdStr === String(summary.invoice_id) || key === invIdStr));
+        const matchNum = Boolean(
+          (summaryInvNum && (invNumStr === summaryInvNum || invNumStr === key)) ||
+          (cleanSummaryNum && (invCleanNum === cleanSummaryNum || key === cleanSummaryNum)) ||
+          (paddedSummaryNum && (invNumStr === paddedSummaryNum || key === paddedSummaryNum))
+        );
+        const matchNcf = Boolean(summary.ncf && invNcf && (invNcf === summary.ncf || key === invNcf));
+
+        return matchId || matchNum || matchNcf;
+      });
+
+      // Si la factura fue eliminada, descartar este abono de banco y purgarlo de la memoria
+      if (!invoiceExists) {
+        delete cleanedMap[key];
+        orphanFound = true;
+        return;
+      }
+
       if (Array.isArray(summary.payments_history)) {
         summary.payments_history.forEach(p => {
           const txId = `abono-${p.id}`;
@@ -305,6 +359,19 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
         });
       }
     });
+
+    if (orphanFound) {
+      saveLocalInvoicePayments(cleanedMap);
+      if (isSupabaseConfigured()) {
+        try {
+          await supabase.from('system_settings').upsert({
+            key: 'invoice_payments',
+            value: cleanedMap,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+        } catch {}
+      }
+    }
   } catch (err) {
     console.warn('Error adding invoice abonos to bank transactions:', err);
   }
@@ -531,7 +598,27 @@ export const calculateBankAccountsSummary = (
 export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolean> => {
   if (!tx || !tx.id) return false;
 
-  // 1. Si es un movimiento de efectivo o transferencia de caja
+  // 1. Si es un abono a factura de venta
+  if (tx.id.startsWith('abono-')) {
+    const paymentId = tx.source_id || tx.id.replace(/^abono-/, '');
+    const success = await deleteSingleInvoicePayment(paymentId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return success;
+  }
+
+  // 2. Si es una factura de venta (contado o crédito)
+  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
+    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
+    const success = await deleteInvoice(invId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return success;
+  }
+
+  // 3. Si es un movimiento de efectivo o transferencia de caja
   if (tx.source_type === 'cash_movement' || tx.id.startsWith('mov-')) {
     const movId = tx.source_id || tx.id.replace(/^mov-/, '');
     const success = await deleteCashMovement(movId);
@@ -541,7 +628,7 @@ export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolea
     return success;
   }
 
-  // 2. Si es una transacción bancaria manual directa
+  // 4. Si es una transacción bancaria manual directa
   if (tx.source_type === 'manual_bank' || tx.id.startsWith('btx-')) {
     const current = getManualBankTransactions();
     const updated = current.filter(t => t.id !== tx.id && t.id !== tx.source_id);
@@ -550,16 +637,6 @@ export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolea
       window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
     }
     return true;
-  }
-
-  // 3. Si es una factura de venta
-  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
-    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
-    const success = await deleteInvoice(invId);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
-    }
-    return success;
   }
 
   return false;

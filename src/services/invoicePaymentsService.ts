@@ -207,3 +207,133 @@ export const mergePaymentsIntoInvoices = (
     };
   });
 };
+
+/**
+ * Elimina por completo el registro de pagos/abonos de una factura eliminada
+ */
+export const deleteInvoicePayments = async (
+  invoiceId: string, 
+  invoiceNumber?: string, 
+  ncf?: string
+): Promise<void> => {
+  const currentPayments = { ...getLocalInvoicePayments() };
+  const cleanNum = invoiceNumber ? invoiceNumber.trim().replace(/^0+/, '') : '';
+  const paddedNum = cleanNum ? cleanNum.padStart(6, '0') : '';
+
+  let changed = false;
+  const keysToDelete: string[] = [];
+
+  Object.entries(currentPayments).forEach(([key, summary]) => {
+    const keyClean = key.replace(/^0+/, '');
+    const summaryNumClean = summary.invoice_number ? summary.invoice_number.replace(/^0+/, '') : '';
+
+    const matchId = Boolean(invoiceId && (key === invoiceId || summary.invoice_id === invoiceId));
+    const matchNum = Boolean(
+      (invoiceNumber && (key === invoiceNumber || summary.invoice_number === invoiceNumber)) ||
+      (cleanNum && (key === cleanNum || keyClean === cleanNum || summaryNumClean === cleanNum)) ||
+      (paddedNum && (key === paddedNum || summary.invoice_number === paddedNum))
+    );
+    const matchNcf = Boolean(ncf && (key === ncf || summary.ncf === ncf));
+
+    if (matchId || matchNum || matchNcf) {
+      keysToDelete.push(key);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    keysToDelete.forEach(k => {
+      delete currentPayments[k];
+    });
+
+    saveLocalInvoicePayments(currentPayments);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('system_settings').upsert({
+          key: 'invoice_payments',
+          value: currentPayments,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+      } catch (err) {
+        console.warn('Error eliminando pagos asociados a la factura en Supabase:', err);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(INVOICE_PAYMENTS_CHANGED_EVENT, { detail: currentPayments }));
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+    }
+  }
+};
+
+/**
+ * Elimina un abono específico por su payment ID y recalcula la factura
+ */
+export const deleteSingleInvoicePayment = async (paymentId: string): Promise<boolean> => {
+  if (!paymentId) return false;
+
+  const currentPayments = { ...getLocalInvoicePayments() };
+  let targetSummary: InvoicePaymentSummary | null = null;
+  const matchedKeys: string[] = [];
+
+  for (const [key, summary] of Object.entries(currentPayments)) {
+    if (summary.payments_history && summary.payments_history.some(p => p.id === paymentId)) {
+      if (!targetSummary) targetSummary = summary;
+      matchedKeys.push(key);
+    }
+  }
+
+  if (!targetSummary || matchedKeys.length === 0) {
+    return false;
+  }
+
+  // Filtrar el pago específico
+  const updatedHistory = (targetSummary.payments_history || []).filter(p => p.id !== paymentId);
+  const calculatedPaid = updatedHistory.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const totalAmount = Number(targetSummary.total_amount) || 0;
+  const newBalance = Math.max(0, totalAmount - calculatedPaid);
+  const newStatus = newBalance <= 0.01 ? 'Pagada' : (calculatedPaid > 0 ? 'Con Abono' : 'Pendiente');
+
+  const updatedSummary: InvoicePaymentSummary = {
+    ...targetSummary,
+    paid_amount: calculatedPaid,
+    balance: newBalance,
+    status: newStatus,
+    payments_history: updatedHistory,
+    updated_at: new Date().toISOString()
+  };
+
+  matchedKeys.forEach(k => {
+    currentPayments[k] = updatedSummary;
+  });
+
+  saveLocalInvoicePayments(currentPayments);
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('system_settings').upsert({
+        key: 'invoice_payments',
+        value: currentPayments,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+
+      if (targetSummary.invoice_id) {
+        await supabase.from('invoices').update({
+          status: newStatus === 'Pagada' ? 'Pagada' : 'Pendiente'
+        }).eq('id', targetSummary.invoice_id);
+      }
+    } catch (err) {
+      console.warn('Error al actualizar invoice_payments en Supabase tras borrar abono:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(INVOICE_PAYMENTS_CHANGED_EVENT, { detail: currentPayments }));
+    window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+    window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+  }
+
+  return true;
+};
+

@@ -4,8 +4,10 @@ import {
   mergePaymentsIntoInvoices, 
   getLocalInvoicePayments,
   saveLocalInvoicePayments,
+  deleteInvoicePayments,
   type InvoicePaymentSummary 
 } from './invoicePaymentsService';
+import { getLocalStorageMovements, deleteCashMovement } from './cashMovementsService';
 
 export interface InvoiceItem {
   id?: string;
@@ -664,35 +666,109 @@ export const updateInvoice = async (id: string, updates: Partial<Invoice> & Reco
 };
 
 export const deleteInvoice = async (idOrNumber: string): Promise<boolean> => {
+  if (!idOrNumber) return false;
+
+  const currentLocal = getLocalStorageInvoices();
+  // Buscar la factura completa en local para obtener id, invoice_number y ncf
+  let targetInvoice = currentLocal.find(inv => 
+    inv.id === idOrNumber || 
+    inv.invoice_number === idOrNumber || 
+    (inv.invoice_number && inv.invoice_number.replace(/^0+/, '') === idOrNumber.replace(/^0+/, ''))
+  );
+
+  let invoiceId = targetInvoice?.id || idOrNumber;
+  let invoiceNumber = targetInvoice?.invoice_number || idOrNumber;
+  let ncf = targetInvoice?.ncf || '';
+
   if (isSupabaseConfigured()) {
     try {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrNumber);
       
-      let invoiceId = idOrNumber;
-      if (!isUuid) {
-        const { data } = await supabase.from('invoices').select('id').eq('invoice_number', idOrNumber).maybeSingle();
-        if (data?.id) invoiceId = data.id;
+      if (!targetInvoice) {
+        const query = isUuid 
+          ? supabase.from('invoices').select('id, invoice_number, ncf').eq('id', idOrNumber).maybeSingle()
+          : supabase.from('invoices').select('id, invoice_number, ncf').eq('invoice_number', idOrNumber).maybeSingle();
+        const { data } = await query;
+        if (data) {
+          invoiceId = data.id || invoiceId;
+          invoiceNumber = data.invoice_number || invoiceNumber;
+          ncf = data.ncf || ncf;
+        }
       }
 
       await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId);
-      await supabase.from('invoices').delete().or(`id.eq.${invoiceId},invoice_number.eq.${idOrNumber}`);
-      
-      const current = getLocalStorageInvoices();
-      const filtered = current.filter(inv => inv.id !== invoiceId && inv.invoice_number !== idOrNumber);
-      saveLocalStorageInvoices(filtered);
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
-        window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
-        window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
-      }
-      return true;
+      await supabase.from('invoices').delete().or(`id.eq.${invoiceId},invoice_number.eq.${invoiceNumber}`);
     } catch (err) {
       console.warn('Error eliminando factura de Supabase:', err);
     }
   }
-  const current = getLocalStorageInvoices();
-  const filtered = current.filter(inv => inv.id !== idOrNumber && inv.invoice_number !== idOrNumber);
+
+  // 1. Eliminar de facturas locales
+  const cleanNum = invoiceNumber ? invoiceNumber.replace(/^0+/, '') : '';
+  const filtered = currentLocal.filter(inv => {
+    const invIdMatch = inv.id === invoiceId || inv.id === idOrNumber;
+    const invNumMatch = inv.invoice_number === invoiceNumber || inv.invoice_number === idOrNumber || (cleanNum && inv.invoice_number.replace(/^0+/, '') === cleanNum);
+    return !invIdMatch && !invNumMatch;
+  });
   saveLocalStorageInvoices(filtered);
+
+  // 2. Eliminar de pagos y abonos (invoice_payments) en local y Supabase
+  try {
+    await deleteInvoicePayments(invoiceId, invoiceNumber, ncf);
+  } catch (err) {
+    console.warn('Error eliminando pagos asociados a la factura:', err);
+  }
+
+  // 3. Eliminar movimientos de efectivo/caja asociados (tanto en local como en Supabase)
+  try {
+    const allMovs = getLocalStorageMovements();
+    const movsToDelete = allMovs.filter(m => {
+      const concept = (m.concept || '').toLowerCase();
+      const ref = (m.reference || '').trim();
+      const matchesNum = Boolean(invoiceNumber && (concept.includes(invoiceNumber.toLowerCase()) || ref === invoiceNumber));
+      const matchesClean = Boolean(cleanNum && (concept.includes(cleanNum.toLowerCase()) || ref === cleanNum));
+      const matchesNcf = Boolean(ncf && (concept.includes(ncf.toLowerCase()) || ref === ncf));
+      const matchesId = (m as any).invoice_id === invoiceId || (m as any).source_id === invoiceId;
+      return matchesNum || matchesClean || matchesNcf || matchesId;
+    });
+
+    for (const mov of movsToDelete) {
+      await deleteCashMovement(mov.id);
+    }
+  } catch (err) {
+    console.warn('Error eliminando movimientos de caja de la factura:', err);
+  }
+
+  // 4. Eliminar transacciones manuales de banco que apunten a esta factura
+  try {
+    const rawManual = typeof window !== 'undefined' ? localStorage.getItem('brianna_manual_bank_transactions') : null;
+    if (rawManual) {
+      const parsed = JSON.parse(rawManual);
+      if (Array.isArray(parsed)) {
+        const remaining = parsed.filter((t: any) => {
+          const concept = (t.concept || '').toLowerCase();
+          const ref = (t.reference || '').trim();
+          const matchesNum = Boolean(invoiceNumber && (concept.includes(invoiceNumber.toLowerCase()) || ref === invoiceNumber));
+          const matchesClean = Boolean(cleanNum && (concept.includes(cleanNum.toLowerCase()) || ref === cleanNum));
+          const matchesNcf = Boolean(ncf && (concept.includes(ncf.toLowerCase()) || ref === ncf));
+          const matchesId = t.source_id === invoiceId;
+          return !matchesNum && !matchesClean && !matchesNcf && !matchesId;
+        });
+        localStorage.setItem('brianna_manual_bank_transactions', JSON.stringify(remaining));
+      }
+    }
+  } catch (err) {
+    console.warn('Error eliminando transacciones bancarias manuales asociadas:', err);
+  }
+
+  // 5. Notificar a todas las vistas para actualización sincronizada e inmediata
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+    window.dispatchEvent(new CustomEvent('brianna_invoices_changed'));
+    window.dispatchEvent(new CustomEvent('brianna_quotations_updated'));
+    window.dispatchEvent(new CustomEvent('brianna_cash_movements_changed'));
+    window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+  }
+
   return true;
 };
