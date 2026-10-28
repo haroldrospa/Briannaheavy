@@ -476,12 +476,16 @@ export const isAbonoInvoice = (inv: Invoice | any): boolean => {
   if (!inv) return false;
   const num = String(inv.invoice_number || inv.id || '').toUpperCase();
   const ncfType = String(inv.ncf_type || '').toUpperCase();
-  const status = String(inv.status || '').toLowerCase();
+  const status = String(inv.status || '').toLowerCase().trim();
+
+  // Una factura real a crédito con saldo o abonos parciales ('Con Abono') NUNCA es un comprobante dummy de abono
+  if (status === 'con abono') return false;
+
   return (
     num.startsWith('ABO-') ||
     ncfType === 'ABONO' ||
     status === 'pagada (abono)' ||
-    status.includes('abono')
+    status === 'abono'
   );
 };
 

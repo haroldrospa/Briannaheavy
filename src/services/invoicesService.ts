@@ -85,12 +85,16 @@ export const isAbonoInvoice = (inv: { invoice_number?: string; ncf?: string; ncf
   if (!inv) return false;
   const num = String(inv.invoice_number || inv.id || '').toUpperCase();
   const ncfType = String(inv.ncf_type || '').toUpperCase();
-  const status = String(inv.status || '').toLowerCase();
+  const status = String(inv.status || '').toLowerCase().trim();
+
+  // Una factura real a crédito con saldo o abonos parciales ('Con Abono') NUNCA es un comprobante dummy de abono
+  if (status === 'con abono') return false;
+
   return (
     num.startsWith('ABO-') ||
     ncfType === 'ABONO' ||
     status === 'pagada (abono)' ||
-    status.includes('abono')
+    status === 'abono'
   );
 };
 
@@ -308,16 +312,6 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           const mergedInvoices = mergePaymentsIntoInvoices(supabaseInvoices, paymentsMap);
           lastInvoicesFetchTime = Date.now();
           saveLocalStorageInvoices(mergedInvoices);
-
-          // Asynchronously purge any existing dummy abono invoices from Supabase
-          const abonoInvs = (data as Invoice[]).filter(inv => isAbonoInvoice(inv));
-          if (abonoInvs.length > 0) {
-            for (const abInv of abonoInvs) {
-              if (abInv.id) {
-                deleteInvoice(abInv.id).catch(() => {});
-              }
-            }
-          }
 
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;

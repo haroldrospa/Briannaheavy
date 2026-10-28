@@ -145,7 +145,7 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
 export default function Cobros() {
   const [receivables, setReceivables] = useState<ReceivableItem[]>(() => mapInvoicesToReceivables(getLocalStorageInvoices()));
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pendiente' | 'Con Abono' | 'Atrasado' | 'Saldado'>('Todos');
+  const [statusFilter, setStatusFilter] = useState<'Pendientes' | 'Pendiente' | 'Atrasado' | 'Con Abono' | 'Al Día' | 'Saldado' | 'Todos'>('Pendientes');
   
   // Payment Modal State
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableItem | null>(null);
@@ -739,7 +739,22 @@ export default function Cobros() {
         item.ncf.toLowerCase().includes(q) ||
         item.items.toLowerCase().includes(q);
 
-      const matchesStatus = statusFilter === 'Todos' || item.status === statusFilter;
+      let matchesStatus = true;
+      if (statusFilter === 'Pendientes' || statusFilter === 'Pendiente') {
+        // Facturas pendientes por cobrar: incluye atrasadas, con abono o al día (todas con deuda activa)
+        matchesStatus = item.status !== 'Saldado' && item.balance > 0.01;
+      } else if (statusFilter === 'Atrasado') {
+        matchesStatus = item.status === 'Atrasado';
+      } else if (statusFilter === 'Con Abono') {
+        matchesStatus = item.status === 'Con Abono';
+      } else if (statusFilter === 'Al Día') {
+        matchesStatus = item.status === 'Pendiente';
+      } else if (statusFilter === 'Saldado') {
+        matchesStatus = item.status === 'Saldado' || item.balance <= 0.01;
+      } else if (statusFilter === 'Todos') {
+        matchesStatus = true;
+      }
+
       return matchesSearch && matchesStatus;
     });
   }, [receivables, searchQuery, statusFilter]);
@@ -753,6 +768,26 @@ export default function Cobros() {
 
     return { totalCartera, totalPendiente, clientesActivos, facturasVencidas };
   }, [receivables]);
+
+  // Conteo para las pestañas de filtro
+  const filterCounts = useMemo(() => {
+    const pendientes = receivables.filter(r => r.status !== 'Saldado' && r.balance > 0.01).length;
+    const atrasadas = receivables.filter(r => r.status === 'Atrasado').length;
+    const conAbono = receivables.filter(r => r.status === 'Con Abono').length;
+    const alDia = receivables.filter(r => r.status === 'Pendiente').length;
+    const saldadas = receivables.filter(r => r.status === 'Saldado' || r.balance <= 0.01).length;
+    const todos = receivables.length;
+    return { pendientes, atrasadas, conAbono, alDia, saldadas, todos };
+  }, [receivables]);
+
+  const filterTabs = useMemo(() => [
+    { id: 'Pendientes' as const, label: 'Pendientes', count: filterCounts.pendientes },
+    { id: 'Atrasado' as const, label: 'Atrasadas', count: filterCounts.atrasadas },
+    { id: 'Con Abono' as const, label: 'Con Abono', count: filterCounts.conAbono },
+    { id: 'Al Día' as const, label: 'Al Día', count: filterCounts.alDia },
+    { id: 'Saldado' as const, label: 'Saldadas', count: filterCounts.saldadas },
+    { id: 'Todos' as const, label: 'Todos', count: filterCounts.todos },
+  ], [filterCounts]);
 
   // Open Payment Modal
   const handleOpenPayment = (item: ReceivableItem) => {
@@ -1134,8 +1169,12 @@ export default function Cobros() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-        <div className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
-          <span className="text-[9.5px] sm:text-[10.5px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider block">
+        <div 
+          onClick={() => { setMainTab('receivables'); setStatusFilter('Todos'); }}
+          className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs cursor-pointer hover:border-gray-400 dark:hover:border-zinc-600 transition-all group"
+          title="Ver todas las facturas de repuestos a crédito"
+        >
+          <span className="text-[9.5px] sm:text-[10.5px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider block group-hover:text-gray-700 dark:group-hover:text-zinc-300 transition-colors">
             Total Cartera Repuestos
           </span>
           <p className="text-base sm:text-xl font-black text-gray-900 dark:text-white font-mono mt-0.5">
@@ -1143,7 +1182,11 @@ export default function Cobros() {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-red-200/60 dark:border-red-950/60 shadow-2xs">
+        <div 
+          onClick={() => { setMainTab('receivables'); setStatusFilter('Pendientes'); }}
+          className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-red-200/60 dark:border-red-950/60 shadow-2xs cursor-pointer hover:border-[#ED1C24] transition-all group"
+          title="Ver todas las facturas pendientes con saldo activo"
+        >
           <span className="text-[9.5px] sm:text-[10.5px] font-black text-[#ED1C24] uppercase tracking-wider block">
             Saldo Pendiente por Cobrar
           </span>
@@ -1161,8 +1204,12 @@ export default function Cobros() {
           </p>
         </div>
 
-        <div className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-amber-200/60 dark:border-amber-950/60 shadow-2xs">
-          <span className="text-[9.5px] sm:text-[10.5px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+        <div 
+          onClick={() => { setMainTab('receivables'); setStatusFilter('Atrasado'); }}
+          className="bg-white dark:bg-[#16171d] p-3 sm:p-3.5 rounded-2xl border border-amber-200/60 dark:border-amber-950/60 shadow-2xs cursor-pointer hover:border-amber-500 transition-all group"
+          title="Filtrar únicamente facturas vencidas o con atraso"
+        >
+          <span className="text-[9.5px] sm:text-[10.5px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block group-hover:text-amber-700 transition-colors">
             Facturas Vencidas / Atrasadas
           </span>
           <p className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 font-mono mt-0.5">
@@ -1227,21 +1274,31 @@ export default function Cobros() {
             </div>
 
             {/* Filter Pills */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-hide shrink-0">
-              {(['Todos', 'Pendiente', 'Con Abono', 'Atrasado', 'Saldado'] as const).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
-                    statusFilter === st
-                      ? 'bg-[#ED1C24] text-white shadow-2xs font-black'
-                      : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-hide shrink-0">
+              {filterTabs.map((tab) => {
+                const isActive = statusFilter === tab.id || (tab.id === 'Pendientes' && statusFilter === 'Pendiente');
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-[#ED1C24] text-white shadow-2xs font-black'
+                        : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-black ${
+                      isActive
+                        ? 'bg-white/25 text-white'
+                        : 'bg-gray-200/80 dark:bg-zinc-700/80 text-gray-700 dark:text-zinc-300'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

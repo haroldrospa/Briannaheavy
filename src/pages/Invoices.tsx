@@ -426,7 +426,7 @@ export default function Invoices() {
 
                       {/* Status Badge */}
                       {(() => {
-                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.status?.includes('Abono') || invoice.ncf_type === 'ABONO';
+                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.ncf_type === 'ABONO' || invoice.status === 'pagada (abono)' || invoice.status === 'abono';
                         if (isAbono) {
                           return (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40">
@@ -607,7 +607,7 @@ export default function Invoices() {
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       {(() => {
-                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.status?.includes('Abono') || invoice.ncf_type === 'ABONO';
+                        const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.ncf_type === 'ABONO' || invoice.status === 'pagada (abono)' || invoice.status === 'abono';
                         if (isAbono) {
                           return (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40">
@@ -1102,7 +1102,7 @@ export default function Invoices() {
         <LetterInvoice
           invoiceNumber={viewingInvoice.invoice_number}
           affectedInvoiceNumber={viewingInvoice.invoice_number?.startsWith('ABO-') ? viewingInvoice.invoice_number.replace(/^ABO-/, '').split('-')[0] : undefined}
-          isAbono={Boolean(viewingInvoice.invoice_number?.startsWith('ABO-') || viewingInvoice.status?.includes('Abono') || viewingInvoice.ncf_type === 'ABONO')}
+          isAbono={Boolean(viewingInvoice.invoice_number?.startsWith('ABO-') || viewingInvoice.ncf_type === 'ABONO' || viewingInvoice.status === 'pagada (abono)' || viewingInvoice.status === 'abono')}
           ncf={viewingInvoice.ncf || viewingInvoice.invoice_number}
           invoiceType={viewingInvoice.ncf_type || (viewingInvoice.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic'}
