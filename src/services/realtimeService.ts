@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { fetchInvoices, applyRealtimeInvoiceChange } from './invoicesService';
+import { fetchRemoteInvoicePayments } from './invoicePaymentsService';
 import { fetchInventory, applyRealtimeInventoryChange } from './inventoryService';
 import { fetchCustomers, applyRealtimeCustomerChange } from './customersService';
 import { fetchAllSystemSettings } from './settingsService';
@@ -54,9 +55,13 @@ export const initRealtimeSync = (): (() => void) => {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'invoices' },
-      (payload: any) => {
+      async (payload: any) => {
         try {
           applyRealtimeInvoiceChange(payload.eventType, payload.new, payload.old);
+          await fetchInvoices(true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+          }
         } catch (err) {
           console.warn('Invoices realtime error:', err);
         }
@@ -112,6 +117,12 @@ export const initRealtimeSync = (): (() => void) => {
       async () => {
         try {
           await fetchAllSystemSettings();
+          await fetchRemoteInvoicePayments();
+          await fetchInvoices(true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('brianna_invoices_updated'));
+            window.dispatchEvent(new CustomEvent('brianna_invoice_payments_updated'));
+          }
         } catch (err) {
           console.warn('Settings realtime error:', err);
         }

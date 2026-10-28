@@ -14,7 +14,8 @@ import {
   EyeIcon,
   DocumentTextIcon,
   ArrowsRightLeftIcon,
-  ArrowDownCircleIcon
+  ArrowDownCircleIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, type Invoice } from '../services/invoicesService';
@@ -697,19 +698,26 @@ export default function Cobros() {
     };
   }, []);
 
-  const loadData = useCallback(async () => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadData = useCallback(async (force = true) => {
     try {
-      const invs = await fetchInvoices(false);
+      setIsRefreshing(true);
+      const invs = await fetchInvoices(force);
       if (invs && invs.length > 0) {
         setReceivables(mapInvoicesToReceivables(invs));
       }
     } catch (e) {
       console.warn('Error loading receivables data:', e);
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    // Al entrar a Cuentas por Cobrar, forzar siempre la carga fresca desde Supabase
+    // para asegurar que todos los usuarios en cualquier dispositivo vean exactamente las mismas facturas y saldos
+    loadData(true);
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleUpdate = () => {
@@ -719,12 +727,27 @@ export default function Cobros() {
       }, 100);
     };
 
+    const handleFocus = () => {
+      loadData(true);
+    };
+
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadData(true);
+      }
+    };
+
     window.addEventListener('brianna_invoices_updated', handleUpdate);
     window.addEventListener('brianna_invoice_payments_updated', handleUpdate);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('brianna_invoices_updated', handleUpdate);
       window.removeEventListener('brianna_invoice_payments_updated', handleUpdate);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [loadData]);
 
@@ -1116,6 +1139,17 @@ export default function Cobros() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 text-xs font-bold transition-all border border-gray-200/80 dark:border-zinc-700 shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Sincronizar y recargar las cuentas por cobrar desde la nube en vivo"
+          >
+            <ArrowPathIcon className={`w-4 h-4 text-[#ED1C24] ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar</span>
+          </button>
+
           {isShiftActive || getActiveRole() === 'Administrador' ? (
             <button
               type="button"
