@@ -25,6 +25,33 @@ export interface BankReconciliationData {
   lastUpdated: string;
 }
 
+export interface BankReconciliationSettlement {
+  id: string;
+  settlementNumber: string;
+  bankAccountId: string;
+  bankAccountName: string;
+  bankAccountNumber?: string;
+  currency?: string;
+  period: string; // "2026-10"
+  createdAt: string; // ISO
+  createdBy: string;
+  openingBalance: number;
+  closingBalance: number;
+  summary: ReconciliationSummary;
+  matchedCount: number;
+  totalBookCount: number;
+  reconciledBookCount: number;
+  unreconciledBookCount: number;
+  totalStmtCount: number;
+  reconciledStmtCount: number;
+  unreconciledStmtCount: number;
+  isBalanced: boolean;
+  notes?: string;
+  bookTransactionsSnapshot: BankTransaction[];
+  statementLinesSnapshot: BankStatementLine[];
+  reconciledBookTxIds: string[];
+}
+
 export interface ReconciliationSummary {
   // Según Libros (Brianna Heavy)
   bookOpeningBalance: number;
@@ -132,6 +159,181 @@ export const clearReconciliationData = (bankAccountId: string, period: string): 
   } catch (err) {
     console.error('Error al limpiar datos de conciliación:', err);
   }
+};
+
+const SETTLEMENTS_STORAGE_KEY = 'brianna_bank_reconciliation_settlements';
+
+/**
+ * Obtiene el historial completo de cuadres de conciliación bancaria guardados
+ */
+export const getReconciliationSettlements = (): BankReconciliationSettlement[] => {
+  try {
+    const raw = localStorage.getItem(SETTLEMENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+  } catch (err) {
+    console.error('Error al cargar historial de cuadres de conciliación:', err);
+  }
+  return [];
+};
+
+/**
+ * Guarda o actualiza un cuadre de conciliación en el historial
+ */
+export const saveReconciliationSettlement = (settlement: BankReconciliationSettlement): void => {
+  try {
+    const history = getReconciliationSettlements();
+    const existingIndex = history.findIndex(h => h.id === settlement.id);
+    let updated: BankReconciliationSettlement[];
+    if (existingIndex >= 0) {
+      updated = [...history];
+      updated[existingIndex] = settlement;
+    } else {
+      updated = [settlement, ...history];
+    }
+    localStorage.setItem(SETTLEMENTS_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('brianna_reconciliation_settlements_updated', { detail: settlement }));
+  } catch (err) {
+    console.error('Error al guardar cuadre de conciliación en el historial:', err);
+  }
+};
+
+/**
+ * Elimina un registro de cuadre del historial
+ */
+export const deleteReconciliationSettlement = (id: string): void => {
+  try {
+    const history = getReconciliationSettlements();
+    const updated = history.filter(h => h.id !== id);
+    localStorage.setItem(SETTLEMENTS_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('brianna_reconciliation_settlements_updated', { detail: { id } }));
+  } catch (err) {
+    console.error('Error al eliminar cuadre de conciliación:', err);
+  }
+};
+
+/**
+ * Genera un código correlativo para el cuadre (ej: "CDR-202610-001")
+ */
+export const generateSettlementNumber = (period: string, _bankAccountName: string = ''): string => {
+  try {
+    const history = getReconciliationSettlements();
+    const cleanPeriod = period.replace(/[^0-9]/g, '');
+    const inPeriodCount = history.filter(h => h.period === period).length;
+    const nextSeq = String(inPeriodCount + 1).padStart(3, '0');
+    return `CDR-${cleanPeriod}-${nextSeq}`;
+  } catch {
+    return `CDR-${Date.now().toString().slice(-6)}`;
+  }
+};
+
+/**
+ * Obtiene el período del mes anterior a partir de "YYYY-MM" (ej: "2026-10" -> "2026-09")
+ */
+export const getPreviousPeriod = (period: string): string => {
+  if (!period || !period.includes('-')) return '';
+  const [yearStr, monthStr] = period.split('-');
+  let year = parseInt(yearStr, 10);
+  let month = parseInt(monthStr, 10) - 1;
+  if (month === 0) {
+    month = 12;
+    year -= 1;
+  }
+  return `${year}-${String(month).padStart(2, '0')}`;
+};
+
+/**
+ * Obtiene el período del mes siguiente a partir de "YYYY-MM" (ej: "2026-09" -> "2026-10")
+ */
+export const getNextPeriod = (period: string): string => {
+  if (!period || !period.includes('-')) return '';
+  const [yearStr, monthStr] = period.split('-');
+  let year = parseInt(yearStr, 10);
+  let month = parseInt(monthStr, 10) + 1;
+  if (month === 13) {
+    month = 1;
+    year += 1;
+  }
+  return `${year}-${String(month).padStart(2, '0')}`;
+};
+
+/**
+ * Busca el Saldo Final del mes anterior para usarlo como Saldo Inicial del mes actual
+ */
+export const getPreviousClosingBalance = (bankAccountId: string, currentPeriod: string): number | null => {
+  try {
+    const prevPeriod = getPreviousPeriod(currentPeriod);
+    if (!prevPeriod) return null;
+
+    // 1. Buscar en reconciliación guardada del mes anterior inmediato
+    const prevSaved = loadReconciliationData(bankAccountId, prevPeriod);
+    if (prevSaved && typeof prevSaved.closingBalance === 'number' && prevSaved.closingBalance !== 0) {
+      return prevSaved.closingBalance;
+    }
+
+    // 2. Buscar en el historial de cuadres guardados para ese mes
+    const settlements = getReconciliationSettlements();
+    const prevSettlement = settlements.find(s => s.bankAccountId === bankAccountId && s.period === prevPeriod);
+    if (prevSettlement && typeof prevSettlement.closingBalance === 'number' && prevSettlement.closingBalance !== 0) {
+      return prevSettlement.closingBalance;
+    }
+
+    // 3. Si no hay del mes inmediato, buscar el último cuadre cerrado anterior a este período
+    const priorSettlements = settlements
+      .filter(s => s.bankAccountId === bankAccountId && s.period < currentPeriod)
+      .sort((a, b) => b.period.localeCompare(a.period));
+    if (priorSettlements.length > 0 && typeof priorSettlements[0].closingBalance === 'number' && priorSettlements[0].closingBalance !== 0) {
+      return priorSettlements[0].closingBalance;
+    }
+  } catch (err) {
+    console.error('Error al obtener saldo del mes anterior:', err);
+  }
+  return null;
+};
+
+/**
+ * Obtiene el conjunto de IDs de transacciones de libros que YA fueron conciliadas
+ * en meses anteriores a `currentPeriod`. Esto permite que partidas en tránsito no conciliadas
+ * continúen apareciendo en la secuencia mensual hasta conciliarse.
+ */
+export const getAllPriorReconciledBookTxIds = (bankAccountId: string, currentPeriod: string): Set<string> => {
+  const priorReconciledIds = new Set<string>();
+
+  // 1. Revisar los cuadres cerrados en el historial
+  const settlements = getReconciliationSettlements();
+  settlements.forEach(s => {
+    if (s.bankAccountId === bankAccountId && s.period < currentPeriod) {
+      if (Array.isArray(s.reconciledBookTxIds)) {
+        s.reconciledBookTxIds.forEach(id => priorReconciledIds.add(id));
+      }
+    }
+  });
+
+  // 2. Revisar los datos guardados en localStorage para períodos anteriores
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(`${STORAGE_PREFIX}${bankAccountId}_`)) {
+        const p = key.replace(`${STORAGE_PREFIX}${bankAccountId}_`, '');
+        if (p < currentPeriod) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const data = JSON.parse(raw);
+            if (Array.isArray(data.reconciledBookTxIds)) {
+              data.reconciledBookTxIds.forEach((id: string) => priorReconciledIds.add(id));
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error al consultar transacciones conciliadas previas:', err);
+  }
+
+  return priorReconciledIds;
 };
 
 /**
@@ -472,7 +674,11 @@ export const calculateReconciliationSummary = (
   // Debe igualar el Saldo ajustado de Libros.
   const adjustedBookBalance = statementClosingBalance + unreconciledBookIncome - unreconciledBookExpense;
   const difference = Math.abs(adjustedBookBalance - bookCalculatedBalance);
-  const isBalanced = difference < 0.05;
+  
+  // Condición de cuadre: requiere que haya datos del extracto bancario y que la diferencia sea cero
+  const hasStatementData = statementLines.length > 0 || Math.abs(closingBalanceStmt) > 0 || Math.abs(openingBalanceStmt) > 0;
+  const hasReconciledItems = reconciledBookTxIds.length > 0 || (bookTransactions.length === 0 && statementLines.length === 0);
+  const isBalanced = hasStatementData && difference < 0.05 && (hasReconciledItems || bookTransactions.length === 0);
 
   return {
     bookOpeningBalance,
@@ -507,13 +713,15 @@ export const exportReconciliationToExcel = (
   summary: ReconciliationSummary,
   bookTransactions: BankTransaction[],
   statementLines: BankStatementLine[],
-  reconciledBookIds: string[]
+  reconciledBookIds: string[],
+  settlementNumber?: string
 ): void => {
   const reconciledSet = new Set(reconciledBookIds);
 
   // Hoja 1: Resumen de Conciliación
   const summaryData = [
     ['ACTA DE CONCILIACIÓN BANCARIA - BRIANNA HEAVY EQUIPMENT S.R.L.'],
+    ...(settlementNumber ? [['No. de Cuadre:', settlementNumber]] : []),
     ['Cuenta Bancaria:', bankName],
     ['Período:', period],
     ['Fecha de Generación:', new Date().toLocaleString('es-DO')],

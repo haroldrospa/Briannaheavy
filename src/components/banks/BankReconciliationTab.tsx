@@ -10,7 +10,13 @@ import {
   CheckIcon,
   ArrowsRightLeftIcon,
   InformationCircleIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  DocumentChartBarIcon,
+  BookmarkSquareIcon,
+  SparklesIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
 import type { CompanyBankAccount } from '../../utils/receiptSettings';
 import { 
@@ -20,15 +26,26 @@ import {
 import {
   type BankStatementLine,
   type BankReconciliationData,
+  type BankReconciliationSettlement,
   loadReconciliationData,
   saveReconciliationData,
   clearReconciliationData,
+  getReconciliationSettlements,
+  saveReconciliationSettlement,
+  deleteReconciliationSettlement,
+  generateSettlementNumber,
+  getPreviousPeriod,
+  getNextPeriod,
+  getPreviousClosingBalance,
+  getAllPriorReconciledBookTxIds,
   parseBankStatementFile,
   runAutoReconciliation,
   calculateReconciliationSummary,
   exportReconciliationToExcel,
   isBankTaxOrFeeLine
 } from '../../services/bankReconciliationService';
+import ReconciliationReportModal from './ReconciliationReportModal';
+import ReconciliationHistoryView from './ReconciliationHistoryView';
 import logo from '../../assets/logo.png';
 
 interface BankReconciliationTabProps {
@@ -64,11 +81,31 @@ export default function BankReconciliationTab({
   const [excludeBankTax, setExcludeBankTax] = useState<boolean>(true);
 
   // Estados de interfaz y retroalimentación
+  const [subTab, setSubTab] = useState<'reconciler' | 'history'>('reconciler');
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [activeSettlementReport, setActiveSettlementReport] = useState<BankReconciliationSettlement | null>(null);
+
+  // Lista de cuadres históricos guardados
+  const [settlementsHistory, setSettlementsHistory] = useState<BankReconciliationSettlement[]>(() => {
+    return getReconciliationSettlements();
+  });
+
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [filterBooks, setFilterBooks] = useState<'all' | 'reconciled' | 'pending'>('all');
   const [filterStatement, setFilterStatement] = useState<'all' | 'reconciled' | 'pending'>('all');
   const [isManualLineModalOpen, setIsManualLineModalOpen] = useState<boolean>(false);
+
+  // Escucha de eventos de actualización del historial de cuadres
+  useEffect(() => {
+    const handleSettlementsUpdate = () => {
+      setSettlementsHistory(getReconciliationSettlements());
+    };
+    window.addEventListener('brianna_reconciliation_settlements_updated', handleSettlementsUpdate);
+    return () => {
+      window.removeEventListener('brianna_reconciliation_settlements_updated', handleSettlementsUpdate);
+    };
+  }, []);
   
   // Datos para agregar fila manual al extracto
   const [manualLineDate, setManualLineDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -91,9 +128,18 @@ export default function BankReconciliationTab({
     }
   }, [bankAccounts, selectedAccountId]);
 
-  // Transacciones de libros filtradas para la cuenta y el período
+  // Saldo de cierre del mes anterior (para continuidad de la secuencia mensual)
+  const previousMonthClosingBalance = useMemo(() => {
+    if (!selectedAccount?.id || !period) return null;
+    return getPreviousClosingBalance(selectedAccount.id, period);
+  }, [selectedAccount?.id, period, settlementsHistory]);
+
+  // Transacciones de libros filtradas para la cuenta y el período:
+  // Incluye las transacciones del mes actual + partidas en tránsito de meses anteriores no conciliadas!
   const periodBookTransactions = useMemo(() => {
     if (!selectedAccount) return [];
+
+    const priorReconciledSet = getAllPriorReconciledBookTxIds(selectedAccount.id, period);
 
     return transactions.filter(tx => {
       // Filtrar por cuenta
@@ -101,19 +147,36 @@ export default function BankReconciliationTab({
       const matchesName = tx.bank_account_name.toLowerCase().includes(selectedAccount.bankName.toLowerCase());
       if (!matchesId && !matchesName) return false;
 
-      // Filtrar por período (YYYY-MM)
+      // Filtrar por período
       if (!tx.date) return false;
-      return tx.date.startsWith(period);
+      const txMonth = tx.date.slice(0, 7); // "YYYY-MM"
+
+      // No incluir transacciones de meses futuros
+      if (txMonth > period) return false;
+
+      // Si es de un mes anterior pero ya fue conciliada en ese período anterior, no se incluye
+      if (txMonth < period && priorReconciledSet.has(tx.id)) {
+        return false;
+      }
+
+      return true;
     });
-  }, [transactions, selectedAccount, period]);
+  }, [transactions, selectedAccount, period, settlementsHistory]);
 
   // Cargar estado de conciliación guardado al cambiar cuenta o período
   useEffect(() => {
     if (!selectedAccount?.id || !period) return;
 
     const saved = loadReconciliationData(selectedAccount.id, period);
+    const prevClosing = getPreviousClosingBalance(selectedAccount.id, period);
+
     if (saved) {
-      setOpeningBalance(saved.openingBalance || 0);
+      // Si el registro guardado no tenía saldo inicial pero el mes anterior cerró con saldo, dar continuidad
+      const effectiveOpenBal = (saved.openingBalance !== 0 && saved.openingBalance != null)
+        ? saved.openingBalance
+        : (prevClosing ?? 0);
+
+      setOpeningBalance(effectiveOpenBal);
       setClosingBalance(saved.closingBalance || 0);
       const cleanLines = (saved.statementLines || []).filter(l => {
         if (l.id?.startsWith('stmt-gen-com-')) return false;
@@ -123,13 +186,14 @@ export default function BankReconciliationTab({
       setStatementLines(cleanLines);
       setReconciledBookTxIds(saved.reconciledBookTxIds || []);
     } else {
-      // Sin conciliación previa para este período
-      setOpeningBalance(0);
+      // Sin conciliación previa para este período: HEREDA automáticamente el Saldo Final del mes anterior!
+      const inheritedOpen = prevClosing ?? 0;
+      setOpeningBalance(inheritedOpen);
       setClosingBalance(0);
       setStatementLines([]);
       setReconciledBookTxIds([]);
     }
-  }, [selectedAccount?.id, period, excludeBankTax]);
+  }, [selectedAccount?.id, period, excludeBankTax, settlementsHistory]);
 
   // Resumen financiero de conciliación en tiempo real
   const summary = useMemo(() => {
@@ -226,6 +290,10 @@ export default function BankReconciliationTab({
     } else {
       showFeedback('info', 'No se encontraron coincidencias automáticas adicionales por referencia o monto exacto.');
     }
+
+    // Mostrar reporte con los resultados de la conciliación de inmediato
+    setActiveSettlementReport(null);
+    setIsReportModalOpen(true);
   };
 
   // 2b. Utilizar movimientos de libros de este período para poblar el extracto bancario
@@ -262,6 +330,108 @@ export default function BankReconciliationTab({
 
     handleAutoSave(autoMatchResult.updatedStatementLines, autoMatchResult.reconciledBookIds, simulatedOpening, simulatedClosing);
     showFeedback('success', `¡Listo! Se cargó el extracto del banco con los ${generatedLines.length} movimientos y se conciliaron automáticamente.`);
+
+    // Mostrar reporte con los resultados del cuadre
+    setActiveSettlementReport(null);
+    setIsReportModalOpen(true);
+  };
+
+  // 2c. Guardar el estado de conciliación como un Cuadre en el Historial
+  const handleSaveToHistory = (notesText: string = '') => {
+    if (!selectedAccount?.id || !period) return;
+
+    const currentUserName = localStorage.getItem('brianna_user_name') || 'Harold Rosado';
+    const settlementNumber = generateSettlementNumber(period, selectedAccount.bankName);
+
+    const settlement: BankReconciliationSettlement = {
+      id: `settle_${Date.now()}`,
+      settlementNumber,
+      bankAccountId: selectedAccount.id,
+      bankAccountName: selectedAccount.bankName,
+      bankAccountNumber: selectedAccount.accountNumber,
+      currency: selectedAccount.currency,
+      period,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUserName,
+      openingBalance,
+      closingBalance,
+      summary,
+      matchedCount: reconciledBookTxIds.length,
+      totalBookCount: periodBookTransactions.length,
+      reconciledBookCount: reconciledBookTxIds.length,
+      unreconciledBookCount: periodBookTransactions.length - reconciledBookTxIds.length,
+      totalStmtCount: statementLines.length,
+      reconciledStmtCount: statementLines.filter(l => l.status === 'reconciled').length,
+      unreconciledStmtCount: statementLines.filter(l => l.status !== 'reconciled').length,
+      isBalanced: summary.isBalanced,
+      notes: notesText.trim() || undefined,
+      bookTransactionsSnapshot: periodBookTransactions,
+      statementLinesSnapshot: statementLines,
+      reconciledBookTxIds
+    };
+
+    saveReconciliationSettlement(settlement);
+    setSettlementsHistory(getReconciliationSettlements());
+    showFeedback('success', `¡Cuadre ${settlementNumber} guardado en el historial de conciliaciones exitosamente!`);
+  };
+
+  // 2d. Guardar el mes actual y continuar automáticamente la secuencia hacia el siguiente mes
+  const handleSaveAndAdvanceToNextMonth = (notesText: string = '') => {
+    if (!selectedAccount?.id || !period) return;
+
+    // 1. Guardar primero el cuadre del período actual
+    handleSaveToHistory(notesText);
+
+    // 2. Determinar el siguiente período
+    const nextPeriod = getNextPeriod(period);
+    const currentClosing = closingBalance;
+
+    // 3. Cambiar el período al siguiente mes
+    setPeriod(nextPeriod);
+
+    // 4. Si el mes siguiente no tiene datos guardados, asignar el saldo final como saldo inicial
+    const existingNext = loadReconciliationData(selectedAccount.id, nextPeriod);
+    if (!existingNext) {
+      setOpeningBalance(currentClosing);
+      setClosingBalance(0);
+      setStatementLines([]);
+      setReconciledBookTxIds([]);
+    }
+
+    // Cerrar modal de reporte si estaba abierto
+    setIsReportModalOpen(false);
+    setActiveSettlementReport(null);
+
+    showFeedback(
+      'success',
+      `✓ Cuadre de ${period} guardado en historial. Avanzaste a ${nextPeriod} con Saldo Inicial arrastrado de RD$ ${currentClosing.toLocaleString('es-DO', { minimumFractionDigits: 2 })}.`
+    );
+  };
+
+  // 2e. Acciones para el Historial de Cuadres
+  const handleViewHistoricalReport = (settlement: BankReconciliationSettlement) => {
+    setActiveSettlementReport(settlement);
+    setIsReportModalOpen(true);
+  };
+
+  const handleLoadInReconciler = (accId: string, p: string) => {
+    setSelectedAccountId(accId);
+    setPeriod(p);
+    setSubTab('reconciler');
+    showFeedback('info', `Cargado período ${p} en el conciliador activo.`);
+  };
+
+  const handleDeleteHistoricalSettlement = (id: string) => {
+    deleteReconciliationSettlement(id);
+    setSettlementsHistory(getReconciliationSettlements());
+    showFeedback('info', 'Registro de cuadre eliminado del historial.');
+  };
+
+  const handlePrintHistoricalSettlement = (settlement: BankReconciliationSettlement) => {
+    setActiveSettlementReport(settlement);
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   // 3. Alternar conciliación manual de una transacción en libros
@@ -455,126 +625,208 @@ export default function BankReconciliationTab({
         </div>
       )}
 
-      {/* 1. Barra Superior Minimalista de Control y Configuración */}
-      <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3.5 print:hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] flex items-center justify-center shrink-0">
-              <ArrowsRightLeftIcon className="w-4 h-4" />
+      {/* Selector de Sub-Pestaña: Conciliador de Período vs Historial de Cuadres */}
+      <div className="flex items-center gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => setSubTab('reconciler')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            subTab === 'reconciler'
+              ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <ArrowsRightLeftIcon className="w-4 h-4" />
+          <span>Conciliador Activo</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('history')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            subTab === 'history'
+              ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-2xs'
+              : 'bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white border border-gray-200/80 dark:border-zinc-800'
+          }`}
+        >
+          <DocumentChartBarIcon className="w-4 h-4 text-[#ED1C24]" />
+          <span>Historial de Cuadres</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+            subTab === 'history'
+              ? 'bg-red-500 text-white'
+              : 'bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-zinc-300'
+          }`}>
+            {settlementsHistory.length}
+          </span>
+        </button>
+      </div>
+
+      {subTab === 'history' ? (
+        <ReconciliationHistoryView
+          settlements={settlementsHistory}
+          bankAccounts={bankAccounts}
+          onViewReport={handleViewHistoricalReport}
+          onLoadInReconciler={handleLoadInReconciler}
+          onDeleteSettlement={handleDeleteHistoricalSettlement}
+          onPrintSettlement={handlePrintHistoricalSettlement}
+          onGoToReconciler={() => setSubTab('reconciler')}
+        />
+      ) : (
+        <>
+          {/* 1. Barra Superior Minimalista de Control y Configuración */}
+          <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3.5 print:hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] flex items-center justify-center shrink-0">
+                  <ArrowsRightLeftIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span>Conciliación Bancaria</span>
+                    {summary.isBalanced ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                        Cuadrado
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+                        Diferencia: RD$ {Math.abs(summary.difference).toLocaleString('es-DO', { maximumFractionDigits: 0 })}
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400">
+                    {selectedAccount.bankName} • {period}
+                  </p>
+                </div>
+              </div>
+
+              {/* Botones de Acción Agrupados y Minimalistas */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !excludeBankTax;
+                    setExcludeBankTax(nextVal);
+                    if (nextVal) {
+                      const cleaned = statementLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id));
+                      setStatementLines(cleaned);
+                      handleAutoSave(cleaned, reconciledBookTxIds, openingBalance, closingBalance);
+                      showFeedback('info', 'Impuesto bancario (0.15% y cargos) excluido de la conciliación.');
+                    } else {
+                      showFeedback('info', 'Modo con impuesto bancario activado.');
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    excludeBankTax
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                      : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
+                  }`}
+                  title="Exclusión automática de impuestos bancarios (0.15% Ley 288-04 y comisiones)"
+                >
+                  <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{excludeBankTax ? 'Sin Impuesto Bancario' : 'Con Impuesto Bancario'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRunAutoMatch}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  title="Conciliar automáticamente movimientos coincidentes y ver reporte de resultados"
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span>Auto-Conciliar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSettlementReport(null);
+                    setIsReportModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-zinc-700"
+                  title="Ver reporte detallado de resultados y cuadre actual"
+                >
+                  <DocumentChartBarIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
+                  <span>Ver Reporte</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveToHistory()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-emerald-200 dark:border-emerald-800"
+                  title="Guardar este cuadre de conciliación en el historial"
+                >
+                  <BookmarkSquareIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Guardar Cuadre</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveAndAdvanceToNextMonth()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800"
+                  title="Guardar este mes y avanzar al siguiente en secuencia con el saldo arrastrado"
+                >
+                  <span>Siguiente Mes</span>
+                  <ArrowRightIcon className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <ArrowUpTrayIcon className={`w-3.5 h-3.5 ${isUploading ? 'animate-bounce' : ''}`} />
+                  <span>{isUploading ? 'Subiendo...' : 'Subir Extracto'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsManualLineModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                  title="Agregar renglón manual al extracto"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  <span>Manual</span>
+                </button>
+
+                <div className="h-4 w-[1px] bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
+
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                  title="Exportar a Excel"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                  title="Imprimir Acta"
+                >
+                  <PrinterIcon className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearReconciliation}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+                  title="Reiniciar conciliación"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div>
-              <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <span>Conciliación Bancaria</span>
-                {summary.isBalanced ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                    Cuadrado
-                  </span>
-                ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
-                    Diferencia: RD$ {Math.abs(summary.difference).toLocaleString('es-DO', { maximumFractionDigits: 0 })}
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-zinc-400">
-                {selectedAccount.bankName} • {period}
-              </p>
-            </div>
-          </div>
-
-          {/* Botones de Acción Agrupados y Minimalistas */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-            />
-
-            <button
-              type="button"
-              onClick={() => {
-                const nextVal = !excludeBankTax;
-                setExcludeBankTax(nextVal);
-                if (nextVal) {
-                  const cleaned = statementLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id));
-                  setStatementLines(cleaned);
-                  handleAutoSave(cleaned, reconciledBookTxIds, openingBalance, closingBalance);
-                  showFeedback('info', 'Impuesto bancario (0.15% y cargos) excluido de la conciliación.');
-                } else {
-                  showFeedback('info', 'Modo con impuesto bancario activado.');
-                }
-              }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                excludeBankTax
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                  : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
-              }`}
-              title="Exclusión automática de impuestos bancarios (0.15% Ley 288-04 y comisiones)"
-            >
-              <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>{excludeBankTax ? 'Sin Impuesto Bancario' : 'Con Impuesto Bancario'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleRunAutoMatch}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
-              title="Conciliar automáticamente movimientos coincidentes"
-            >
-              <span>Auto-Conciliar</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-            >
-              <ArrowUpTrayIcon className={`w-3.5 h-3.5 ${isUploading ? 'animate-bounce' : ''}`} />
-              <span>{isUploading ? 'Subiendo...' : 'Subir Extracto'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsManualLineModalOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-              title="Agregar renglón manual al extracto"
-            >
-              <PlusIcon className="w-3.5 h-3.5" />
-              <span>Manual</span>
-            </button>
-
-            <div className="h-4 w-[1px] bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
-
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-              title="Exportar a Excel"
-            >
-              <ArrowDownTrayIcon className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-              title="Imprimir Acta"
-            >
-              <PrinterIcon className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClearReconciliation}
-              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
-              title="Reiniciar conciliación"
-            >
-              <TrashIcon className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
 
         {/* Parámetros de Selección y Saldos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-gray-100 dark:border-zinc-800/80 text-xs">
@@ -596,21 +848,60 @@ export default function BankReconciliationTab({
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
-              Período
-            </label>
-            <input
-              type="month"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
+                Período
+              </label>
+              <span className="text-[9.5px] font-mono text-gray-400">
+                Secuencia
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPeriod(getPreviousPeriod(period))}
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 hover:bg-gray-200/80 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-gray-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                title="Ir al mes anterior"
+              >
+                <ChevronLeftIcon className="w-3.5 h-3.5" />
+              </button>
+              <input
+                type="month"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs text-center"
+              />
+              <button
+                type="button"
+                onClick={() => setPeriod(getNextPeriod(period))}
+                className="p-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 hover:bg-gray-200/80 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-gray-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                title="Ir al mes siguiente"
+              >
+                <ChevronRightIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
-              Saldo Inicial Extracto
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
+                Saldo Inicial Extracto
+              </label>
+              {previousMonthClosingBalance !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpeningBalance(previousMonthClosingBalance);
+                    handleAutoSave(statementLines, reconciledBookTxIds, previousMonthClosingBalance, closingBalance);
+                    showFeedback('info', `Saldo inicial actualizado desde cierre de ${getPreviousPeriod(period)}.`);
+                  }}
+                  className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                  title="Hacer clic para restablecer con el cierre del mes anterior"
+                >
+                  ✓ Cierre anterior: RD$ {previousMonthClosingBalance.toLocaleString('es-DO', { maximumFractionDigits: 0 })}
+                </button>
+              )}
+            </div>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono">RD$</span>
               <input
@@ -702,22 +993,42 @@ export default function BankReconciliationTab({
         <div className={`p-3.5 rounded-2xl border shadow-2xs ${
           summary.isBalanced
             ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
-            : 'bg-red-50/40 dark:bg-red-950/20 border-red-200/80 dark:border-red-900/40'
+            : (statementLines.length === 0 && closingBalance === 0)
+              ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40'
+              : 'bg-red-50/40 dark:bg-red-950/20 border-red-200/80 dark:border-red-900/40'
         }`}>
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
               Estado de Cuadre
             </span>
             <span className={`text-[10px] font-bold ${
-              summary.isBalanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+              summary.isBalanced 
+                ? 'text-emerald-700 dark:text-emerald-400' 
+                : (statementLines.length === 0 && closingBalance === 0)
+                  ? 'text-amber-700 dark:text-amber-400'
+                  : 'text-red-700 dark:text-red-400'
             }`}>
-              {summary.isBalanced ? '✓ Cuadrado' : 'Descuadre'}
+              {summary.isBalanced 
+                ? '✓ Cuadrado' 
+                : (statementLines.length === 0 && closingBalance === 0)
+                  ? 'Pendiente Extracto'
+                  : 'Descuadre'
+              }
             </span>
           </div>
           <p className={`text-base sm:text-lg font-bold font-mono ${
-            summary.isBalanced ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+            summary.isBalanced 
+              ? 'text-emerald-700 dark:text-emerald-400' 
+              : (statementLines.length === 0 && closingBalance === 0)
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-red-700 dark:text-red-400'
           }`}>
-            RD$ {summary.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            {summary.isBalanced 
+              ? 'RD$ 0.00' 
+              : (statementLines.length === 0 && closingBalance === 0)
+                ? 'Sin Conciliar'
+                : `RD$ ${summary.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+            }
           </p>
         </div>
       </div>
@@ -787,9 +1098,16 @@ export default function BankReconciliationTab({
                       </div>
 
                       <div className="min-w-0">
-                        <p className="font-semibold text-xs text-gray-900 dark:text-white truncate">
-                          {tx.concept}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold text-xs text-gray-900 dark:text-white truncate">
+                            {tx.concept}
+                          </p>
+                          {tx.date && tx.date.slice(0, 7) < period && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/80 dark:border-amber-900/60" title={`Partida en tránsito arrastrada del mes ${tx.date.slice(0, 7)}`}>
+                              Arrastrado ({tx.date.slice(0, 7)})
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
                           <span>{tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : ''}</span>
                           {tx.reference && (
@@ -1086,6 +1404,34 @@ export default function BankReconciliationTab({
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {/* Modal de Reporte de Resultados de Conciliación */}
+      <ReconciliationReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setActiveSettlementReport(null);
+        }}
+        accountName={activeSettlementReport ? activeSettlementReport.bankAccountName : selectedAccount.bankName}
+        accountNumber={activeSettlementReport ? activeSettlementReport.bankAccountNumber : selectedAccount.accountNumber}
+        currency={activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : selectedAccount.currency}
+        period={activeSettlementReport ? activeSettlementReport.period : period}
+        summary={activeSettlementReport ? activeSettlementReport.summary : summary}
+        bookTransactions={activeSettlementReport ? (activeSettlementReport.bookTransactionsSnapshot || []) : periodBookTransactions}
+        statementLines={activeSettlementReport ? (activeSettlementReport.statementLinesSnapshot || []) : statementLines}
+        reconciledBookTxIds={activeSettlementReport ? (activeSettlementReport.reconciledBookTxIds || []) : reconciledBookTxIds}
+        isHistorical={!!activeSettlementReport}
+        historicalDate={activeSettlementReport ? activeSettlementReport.createdAt : undefined}
+        historicalSettlementNumber={activeSettlementReport ? activeSettlementReport.settlementNumber : undefined}
+        historicalCreatedBy={activeSettlementReport ? activeSettlementReport.createdBy : undefined}
+        existingNotes={activeSettlementReport ? activeSettlementReport.notes : ''}
+        onSaveToHistory={!activeSettlementReport ? handleSaveToHistory : undefined}
+        onSaveAndAdvanceToNextMonth={!activeSettlementReport ? handleSaveAndAdvanceToNextMonth : undefined}
+        onExportExcel={handleExportExcel}
+        onPrint={handlePrint}
+      />
 
       {/* 5. ACTA OFICIAL DE CONCILIACIÓN BANCARIA (VISIBLE ÚNICAMENTE AL IMPRIMIR) */}
       <div className="hidden print:block font-sans text-black p-6 space-y-6">
@@ -1100,19 +1446,22 @@ export default function BankReconciliationTab({
             </div>
           </div>
           <div className="text-right text-xs">
-            <p><span className="font-bold">Fecha de Emisión:</span> {new Date().toLocaleDateString('es-DO')}</p>
-            <p><span className="font-bold">Período Auditado:</span> {period}</p>
+            <p><span className="font-bold">Fecha de Emisión:</span> {activeSettlementReport ? new Date(activeSettlementReport.createdAt).toLocaleDateString('es-DO') : new Date().toLocaleDateString('es-DO')}</p>
+            <p><span className="font-bold">Período Auditado:</span> {activeSettlementReport ? activeSettlementReport.period : period}</p>
+            {activeSettlementReport?.settlementNumber && (
+              <p><span className="font-bold">No. de Cuadre:</span> {activeSettlementReport.settlementNumber}</p>
+            )}
           </div>
         </div>
 
         {/* Datos de la Cuenta */}
         <div className="grid grid-cols-2 gap-4 p-3 bg-gray-100 border border-gray-300 rounded text-xs">
           <div>
-            <p><span className="font-bold">Entidad Bancaria:</span> {selectedAccount.bankName}</p>
-            <p><span className="font-bold">Número de Cuenta:</span> {selectedAccount.accountNumber}</p>
+            <p><span className="font-bold">Entidad Bancaria:</span> {activeSettlementReport ? activeSettlementReport.bankAccountName : selectedAccount.bankName}</p>
+            <p><span className="font-bold">Número de Cuenta:</span> {activeSettlementReport ? (activeSettlementReport.bankAccountNumber || 'N/A') : selectedAccount.accountNumber}</p>
           </div>
           <div>
-            <p><span className="font-bold">Moneda:</span> {selectedAccount.currency}</p>
+            <p><span className="font-bold">Moneda:</span> {activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : selectedAccount.currency}</p>
             <p><span className="font-bold">Titular:</span> {selectedAccount.holderName}</p>
           </div>
         </div>
@@ -1126,27 +1475,27 @@ export default function BankReconciliationTab({
             <tbody>
               <tr className="border-b border-gray-300">
                 <td className="p-2 font-bold">Saldo Inicial según Extracto Bancario:</td>
-                <td className="p-2 text-right font-black">RD$ {summary.statementOpeningBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right font-black">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).statementOpeningBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="border-b border-gray-300">
                 <td className="p-2 font-bold">(+) Depósitos en Tránsito (Registrados en libros no en banco):</td>
-                <td className="p-2 text-right font-black">RD$ {summary.unreconciledBookIncome.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right font-black">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).unreconciledBookIncome.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="border-b border-gray-300">
                 <td className="p-2 font-bold">(-) Pagos / Cheques en Tránsito (Registrados en libros no cobrados):</td>
-                <td className="p-2 text-right font-black">RD$ {summary.unreconciledBookExpense.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right font-black">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).unreconciledBookExpense.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="border-b border-gray-300 bg-gray-50">
                 <td className="p-2 font-black">Saldo Final según Extracto del Banco:</td>
-                <td className="p-2 text-right font-black">RD$ {summary.statementClosingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right font-black">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).statementClosingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="border-b border-gray-300 bg-gray-50">
                 <td className="p-2 font-black">Saldo según Libros del Sistema:</td>
-                <td className="p-2 text-right font-black">RD$ {summary.bookCalculatedBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right font-black">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).bookCalculatedBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
               <tr className="border-b-2 border-black font-black bg-gray-100">
                 <td className="p-2 uppercase">Diferencia de Conciliación:</td>
-                <td className="p-2 text-right">RD$ {summary.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right">RD$ {(activeSettlementReport ? activeSettlementReport.summary : summary).difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
               </tr>
             </tbody>
           </table>
@@ -1155,16 +1504,16 @@ export default function BankReconciliationTab({
         {/* Firmas de Responsabilidad */}
         <div className="grid grid-cols-3 gap-8 pt-16 text-center text-xs">
           <div className="border-t border-black pt-2">
-            <p className="font-bold">Elaborado por</p>
-            <p className="text-[10px] text-gray-600">Auxiliar de Tesorería</p>
+            <p className="font-bold">{activeSettlementReport?.createdBy || localStorage.getItem('brianna_user_name') || 'Harold Rosado'}</p>
+            <p className="text-[10px] text-gray-600">Elaborado por (Tesorería)</p>
           </div>
           <div className="border-t border-black pt-2">
-            <p className="font-bold">Revisado por</p>
-            <p className="text-[10px] text-gray-600">Contabilidad General</p>
+            <p className="font-bold">Contabilidad General</p>
+            <p className="text-[10px] text-gray-600">Revisado por</p>
           </div>
           <div className="border-t border-black pt-2">
-            <p className="font-bold">Aprobado por</p>
-            <p className="text-[10px] text-gray-600">Gerencia Financiera</p>
+            <p className="font-bold">Gerencia Financiera</p>
+            <p className="text-[10px] text-gray-600">Aprobado por</p>
           </div>
         </div>
       </div>
