@@ -51,6 +51,24 @@ const DEFAULT_CONFIG: AlanubeConfig = {
 };
 
 import { saveRemoteSetting } from './settingsService';
+import { parseENcfSeqNum } from '../utils/sequenceStorage';
+
+const getMaxIssuedElectronicNcf = (eNcfType: string): number => {
+  let maxNum = 0;
+  try {
+    const raw = localStorage.getItem('brianna_local_invoices');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const inv of parsed) {
+          const num = parseENcfSeqNum(inv?.ncf, eNcfType);
+          if (num !== null && num > maxNum) maxNum = num;
+        }
+      }
+    }
+  } catch {}
+  return maxNum;
+};
 
 export const getAlanubeConfig = (): AlanubeConfig => {
   try {
@@ -80,16 +98,23 @@ export const saveAlanubeConfig = (config: Partial<AlanubeConfig>): void => {
 
 /**
  * Genera el próximo e-NCF de 13 caracteres (ej. E320000000014)
- * Patrón oficial DGII: E + 2 dígitos tipo + 10 dígitos correlativo = 13 caracteres
+ * Patrón oficial DGII: E + 2 dígitos tipo + 10 dígitos correlativo = 13 caracteres.
+ * Garantiza estrictamente que NUNCA se repita una secuencia ya emitida en facturas locales o remotas.
  */
 export const getNextElectronicSequence = (eNcfType: 'E31' | 'E32' | 'E45' | 'E46'): string => {
   const key = `brianna_seq_${eNcfType.toLowerCase()}`;
+  const maxIssued = getMaxIssuedElectronicNcf(eNcfType);
   const current = localStorage.getItem(key) || '0000000001';
   const num = parseInt(current, 10);
-  const validNum = isNaN(num) || num < 1 ? 1 : num;
+  const storedNum = isNaN(num) || num < 1 ? 1 : num;
+  
+  // El siguiente número siempre debe ser estrictamente superior a cualquier factura ya emitida
+  const validNum = Math.max(maxIssued + 1, storedNum);
   const nextFormatted = String(validNum + 1).padStart(10, '0');
   localStorage.setItem(key, nextFormatted);
-  window.dispatchEvent(new Event('brianna_seq_updated'));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('brianna_seq_updated'));
+  }
   return `${eNcfType}${String(validNum).padStart(10, '0')}`;
 };
 
@@ -98,9 +123,11 @@ export const getNextElectronicSequence = (eNcfType: 'E31' | 'E32' | 'E45' | 'E46
  */
 export const peekElectronicSequence = (eNcfType: 'E31' | 'E32' | 'E45' | 'E46'): string => {
   const key = `brianna_seq_${eNcfType.toLowerCase()}`;
+  const maxIssued = getMaxIssuedElectronicNcf(eNcfType);
   const current = localStorage.getItem(key) || '0000000001';
   const num = parseInt(current, 10);
-  const validNum = isNaN(num) || num < 1 ? 1 : num;
+  const storedNum = isNaN(num) || num < 1 ? 1 : num;
+  const validNum = Math.max(maxIssued + 1, storedNum);
   return `${eNcfType}${String(validNum).padStart(10, '0')}`;
 };
 
@@ -360,10 +387,14 @@ export const transmitElectronicInvoice = async (
         const realSecCode = data.securityCode || fallbackSecurityCode;
         const realQrUrl = data.documentStampUrl || data.qrCodeUrl || defaultDgiiUrl;
 
+        const resolvedENcf = (data.documentNumber && typeof data.documentNumber === 'string' && data.documentNumber.startsWith(payload.eNcfType))
+          ? data.documentNumber
+          : eNcf;
+
         return {
           success: true,
           trackId: realTrackId,
-          eNcf: data.documentNumber || eNcf,
+          eNcf: resolvedENcf,
           securityCode: realSecCode,
           qrCodeUrl: realQrUrl,
           dgiiStatus: data.legalStatus === 'ACCEPTED' ? 'Aceptado' : (data.legalStatus || 'Aceptado'),

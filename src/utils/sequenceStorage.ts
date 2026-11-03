@@ -74,6 +74,24 @@ export function formatSequence8Digits(val: string): string {
   return formatSequence10Digits(val);
 }
 
+export function parseENcfSeqNum(ncf?: string, prefix?: string): number | null {
+  if (!ncf) return null;
+  const str = String(ncf).trim().toUpperCase();
+  if (prefix) {
+    const p = prefix.toUpperCase();
+    if (!str.startsWith(p)) return null;
+    const clean = str.replace(new RegExp(`^${p}`), '').replace(/\D/g, '');
+    const num = parseInt(clean, 10);
+    return isNaN(num) || num < 1 ? null : num;
+  }
+  const match = str.match(/^(E31|E32|E34|E44|E45|E46|B01|B02|B04|B15)(\d+)/);
+  if (match) {
+    const num = parseInt(match[2], 10);
+    return isNaN(num) || num < 1 ? null : num;
+  }
+  return null;
+}
+
 export function loadSequenceSettings(): SequenceSettings {
   const e31 = localStorage.getItem('brianna_seq_e31') || localStorage.getItem('brianna_seq_b01') || DEFAULT_SEQUENCES.seqE31;
   const e32 = localStorage.getItem('brianna_seq_e32') || localStorage.getItem('brianna_seq_b02') || DEFAULT_SEQUENCES.seqE32;
@@ -115,43 +133,52 @@ export function loadSequenceSettings(): SequenceSettings {
   };
 }
 
-export function saveSequenceSettings(settings: Partial<SequenceSettings>) {
+export function saveSequenceSettings(settings: Partial<SequenceSettings>, force = false) {
+  const sanitizeMax = (key: string, incomingVal: string) => {
+    const formatted = formatSequence10Digits(incomingVal);
+    if (force) return formatted;
+    const cur = localStorage.getItem(key) || '0000000001';
+    const curNum = parseInt(cur, 10) || 1;
+    const inNum = parseInt(formatted, 10) || 1;
+    return inNum >= curNum ? formatted : cur;
+  };
+
   if (settings.seqE31 !== undefined) {
-    const val = formatSequence10Digits(settings.seqE31);
+    const val = sanitizeMax('brianna_seq_e31', settings.seqE31);
     localStorage.setItem('brianna_seq_e31', val);
     localStorage.setItem('brianna_seq_b01', val);
   } else if (settings.seqB01 !== undefined) {
-    const val = formatSequence10Digits(settings.seqB01);
+    const val = sanitizeMax('brianna_seq_e31', settings.seqB01);
     localStorage.setItem('brianna_seq_e31', val);
     localStorage.setItem('brianna_seq_b01', val);
   }
 
   if (settings.seqE32 !== undefined) {
-    const val = formatSequence10Digits(settings.seqE32);
+    const val = sanitizeMax('brianna_seq_e32', settings.seqE32);
     localStorage.setItem('brianna_seq_e32', val);
     localStorage.setItem('brianna_seq_b02', val);
   } else if (settings.seqB02 !== undefined) {
-    const val = formatSequence10Digits(settings.seqB02);
+    const val = sanitizeMax('brianna_seq_e32', settings.seqB02);
     localStorage.setItem('brianna_seq_e32', val);
     localStorage.setItem('brianna_seq_b02', val);
   }
 
   if (settings.seqE34 !== undefined) {
-    const val = formatSequence10Digits(settings.seqE34);
+    const val = sanitizeMax('brianna_seq_e34', settings.seqE34);
     localStorage.setItem('brianna_seq_e34', val);
     localStorage.setItem('brianna_seq_b04', val);
   } else if (settings.seqB04 !== undefined) {
-    const val = formatSequence10Digits(settings.seqB04);
+    const val = sanitizeMax('brianna_seq_e34', settings.seqB04);
     localStorage.setItem('brianna_seq_e34', val);
     localStorage.setItem('brianna_seq_b04', val);
   }
 
   if (settings.seqE45 !== undefined) {
-    const val = formatSequence10Digits(settings.seqE45);
+    const val = sanitizeMax('brianna_seq_e45', settings.seqE45);
     localStorage.setItem('brianna_seq_e45', val);
     localStorage.setItem('brianna_seq_b15', val);
   } else if (settings.seqB15 !== undefined) {
-    const val = formatSequence10Digits(settings.seqB15);
+    const val = sanitizeMax('brianna_seq_e45', settings.seqB15);
     localStorage.setItem('brianna_seq_e45', val);
     localStorage.setItem('brianna_seq_b15', val);
   }

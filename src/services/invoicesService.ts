@@ -8,6 +8,7 @@ import {
   type InvoicePaymentSummary 
 } from './invoicePaymentsService';
 import { getLocalStorageMovements, deleteCashMovement } from './cashMovementsService';
+import { parseENcfSeqNum } from '../utils/sequenceStorage';
 
 export interface InvoiceItem {
   id?: string;
@@ -123,6 +124,147 @@ const LOCAL_STORAGE_KEY = 'brianna_local_invoices';
 let inMemoryInvoices: Invoice[] | null = null;
 let inFlightInvoicesPromise: Promise<Invoice[]> | null = null;
 
+/**
+ * Detecta y repara automáticamente secuencias duplicadas de e-NCF (E31, E32, E34, E45, E46).
+ * Mantiene el comprobante original en la factura más antigua y asigna números correlativos
+ * consecutivos a las facturas posteriores, alineando los contadores del sistema.
+ */
+export const repairDuplicateElectronicNcfs = (
+  invoices: Invoice[]
+): { repairedList: Invoice[]; didRepair: boolean } => {
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    return { repairedList: invoices, didRepair: false };
+  }
+
+  // 1. Detectar si existen duplicados reales de e-NCF
+  const eNcfMap = new Map<string, Invoice[]>();
+  for (const inv of invoices) {
+    if (!inv || !inv.ncf) continue;
+    const ncf = String(inv.ncf).trim().toUpperCase();
+    if (ncf.startsWith('E31') || ncf.startsWith('E32') || ncf.startsWith('E34') || ncf.startsWith('E45') || ncf.startsWith('E46')) {
+      const list = eNcfMap.get(ncf) || [];
+      list.push(inv);
+      eNcfMap.set(ncf, list);
+    }
+  }
+
+  let hasDuplicates = false;
+  for (const list of eNcfMap.values()) {
+    if (list.length > 1) {
+      hasDuplicates = true;
+      break;
+    }
+  }
+
+  if (!hasDuplicates) {
+    return { repairedList: invoices, didRepair: false };
+  }
+
+  // 2. Determinar la secuencia más alta por cada tipo de e-NCF
+  const highestByPrefix: Record<string, number> = {
+    E31: 0,
+    E32: 0,
+    E34: 0,
+    E45: 0,
+    E46: 0
+  };
+
+  for (const inv of invoices) {
+    if (!inv || !inv.ncf) continue;
+    const ncf = String(inv.ncf).trim().toUpperCase();
+    for (const prefix of ['E31', 'E32', 'E34', 'E45', 'E46']) {
+      if (ncf.startsWith(prefix)) {
+        const num = parseENcfSeqNum(ncf, prefix);
+        if (num !== null && num > highestByPrefix[prefix]) {
+          highestByPrefix[prefix] = num;
+        }
+      }
+    }
+  }
+
+  for (const prefix of ['E31', 'E32', 'E34', 'E45', 'E46']) {
+    const raw = localStorage.getItem(`brianna_seq_${prefix.toLowerCase()}`);
+    if (raw) {
+      const num = parseInt(raw, 10);
+      if (!isNaN(num) && num > highestByPrefix[prefix]) {
+        highestByPrefix[prefix] = num;
+      }
+    }
+  }
+
+  // 3. Ordenar cronológicamente (antiguas primero) para respetar la emisión original
+  const chronological = [...invoices].sort((a, b) => {
+    const tA = new Date(a.created_at || 0).getTime();
+    const tB = new Date(b.created_at || 0).getTime();
+    if (tA !== tB) return tA - tB;
+    const numA = parseInt(String(a.invoice_number || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.invoice_number || '').replace(/\D/g, ''), 10) || 0;
+    return numA - numB;
+  });
+
+  const seenNcf = new Set<string>();
+  const repairedInvoicesMap = new Map<string, string>(); // inv.id -> new unique NCF
+
+  for (const inv of chronological) {
+    if (!inv || !inv.ncf) continue;
+    const ncf = String(inv.ncf).trim().toUpperCase();
+    const isElectronicNcf = ncf.startsWith('E31') || ncf.startsWith('E32') || ncf.startsWith('E34') || ncf.startsWith('E45') || ncf.startsWith('E46');
+    
+    if (isElectronicNcf) {
+      if (!seenNcf.has(ncf)) {
+        seenNcf.add(ncf);
+      } else {
+        // Asignar el siguiente correlativo estricto
+        const prefix = ncf.substring(0, 3);
+        highestByPrefix[prefix] = (highestByPrefix[prefix] || 0) + 1;
+        const newNcf = `${prefix}${String(highestByPrefix[prefix]).padStart(10, '0')}`;
+        seenNcf.add(newNcf);
+        repairedInvoicesMap.set(String(inv.id), newNcf);
+      }
+    }
+  }
+
+  // 4. Construir la lista con los comprobantes corregidos
+  const repairedList = invoices.map(inv => {
+    const newNcf = repairedInvoicesMap.get(String(inv.id));
+    if (newNcf) {
+      return {
+        ...inv,
+        ncf: newNcf,
+        ecf_qr_url: inv.ecf_qr_url ? inv.ecf_qr_url.replace(/encf=[^&]+/i, `encf=${newNcf}`) : inv.ecf_qr_url
+      };
+    }
+    return inv;
+  });
+
+  // 5. Elevar contadores en localStorage
+  for (const prefix of ['E31', 'E32', 'E34', 'E45', 'E46']) {
+    if (highestByPrefix[prefix] > 0) {
+      const nextFormatted = String(highestByPrefix[prefix] + 1).padStart(10, '0');
+      localStorage.setItem(`brianna_seq_${prefix.toLowerCase()}`, nextFormatted);
+    }
+  }
+
+  // 6. Actualizar en Supabase en segundo plano si está disponible
+  if (isSupabaseConfigured() && repairedInvoicesMap.size > 0) {
+    (async () => {
+      try {
+        for (const [invId, newNcf] of repairedInvoicesMap.entries()) {
+          await supabase.from('invoices').update({ ncf: newNcf }).eq('id', invId);
+        }
+      } catch (err) {
+        console.warn('Sync repaired NCFs to Supabase warning:', err);
+      }
+    })();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('brianna_seq_updated'));
+  }
+
+  return { repairedList, didRepair: true };
+};
+
 export const getLocalStorageInvoices = (): Invoice[] => {
   const paymentsMap = getLocalInvoicePayments();
   if (inMemoryInvoices !== null) {
@@ -161,11 +303,12 @@ export const getLocalStorageInvoices = (): Invoice[] => {
         deduplicated.push(inv);
       }
 
-      inMemoryInvoices = deduplicated;
-      if (deduplicated.length !== parsed.length) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(deduplicated));
+      const { repairedList, didRepair } = repairDuplicateElectronicNcfs(deduplicated);
+      inMemoryInvoices = repairedList;
+      if (didRepair || deduplicated.length !== parsed.length) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(repairedList));
       }
-      return mergePaymentsIntoInvoices(deduplicated, paymentsMap);
+      return mergePaymentsIntoInvoices(repairedList, paymentsMap);
     }
     return [];
   } catch {
@@ -175,12 +318,13 @@ export const getLocalStorageInvoices = (): Invoice[] => {
 
 export const saveLocalStorageInvoices = (invoices: Invoice[]): void => {
   const filtered = (invoices || []).filter(inv => !isQuotationInvoice(inv) && !isAbonoInvoice(inv));
+  const { repairedList } = repairDuplicateElectronicNcfs(filtered);
   
   const seenIds = new Set<string>();
   const seenKeys = new Set<string>();
   const deduplicated: Invoice[] = [];
 
-  for (const inv of filtered) {
+  for (const inv of repairedList) {
     if (!inv) continue;
     const invId = String(inv.id || '').trim();
     const invNum = String(inv.invoice_number || '').trim();
@@ -256,7 +400,14 @@ const parseInternalSeqNum = (inv: { invoice_number?: string; ncf?: string }): nu
   const check = (raw?: string) => {
     if (!raw) return;
     const str = String(raw).trim();
-    if (str.startsWith('CT-') || str.startsWith('FIN-') || str.startsWith('REC-') || str.startsWith('ABO-')) {
+    if (
+      str.startsWith('CT-') || 
+      str.startsWith('FIN-') || 
+      str.startsWith('REC-') || 
+      str.startsWith('ABO-') ||
+      str.startsWith('E') ||
+      str.startsWith('B')
+    ) {
       return;
     }
     const clean = str.replace(/^(INT|FAC-INT|FAC-E|FAC)-?/i, '').replace(/\D/g, '');
@@ -316,12 +467,28 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
           let maxCt = 0;
+          let maxE31 = 0;
+          let maxE32 = 0;
+          let maxE34 = 0;
+          let maxE45 = 0;
           for (const inv of (data as Invoice[])) {
             const ct = parseCtSeqNum(inv);
             if (ct !== null && ct > maxCt) maxCt = ct;
 
             const intNum = parseInternalSeqNum(inv);
             if (intNum !== null && intNum > maxInv) maxInv = intNum;
+
+            const ncfE31 = parseENcfSeqNum(inv.ncf, 'E31');
+            if (ncfE31 !== null && ncfE31 > maxE31) maxE31 = ncfE31;
+
+            const ncfE32 = parseENcfSeqNum(inv.ncf, 'E32');
+            if (ncfE32 !== null && ncfE32 > maxE32) maxE32 = ncfE32;
+
+            const ncfE34 = parseENcfSeqNum(inv.ncf, 'E34');
+            if (ncfE34 !== null && ncfE34 > maxE34) maxE34 = ncfE34;
+
+            const ncfE45 = parseENcfSeqNum(inv.ncf, 'E45');
+            if (ncfE45 !== null && ncfE45 > maxE45) maxE45 = ncfE45;
           }
           if (maxInv > 0) {
             const rawSeq = parseInt(localStorage.getItem('brianna_seq_invoice') || '1', 10);
@@ -336,6 +503,22 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
             if (localCt <= maxCt) {
               localStorage.setItem('brianna_seq_ct', String(maxCt + 1));
             }
+          }
+          if (maxE31 > 0) {
+            const cur = parseInt(localStorage.getItem('brianna_seq_e31') || '1', 10);
+            if (cur <= maxE31) localStorage.setItem('brianna_seq_e31', String(maxE31 + 1).padStart(10, '0'));
+          }
+          if (maxE32 > 0) {
+            const cur = parseInt(localStorage.getItem('brianna_seq_e32') || '1', 10);
+            if (cur <= maxE32) localStorage.setItem('brianna_seq_e32', String(maxE32 + 1).padStart(10, '0'));
+          }
+          if (maxE34 > 0) {
+            const cur = parseInt(localStorage.getItem('brianna_seq_e34') || '1', 10);
+            if (cur <= maxE34) localStorage.setItem('brianna_seq_e34', String(maxE34 + 1).padStart(10, '0'));
+          }
+          if (maxE45 > 0) {
+            const cur = parseInt(localStorage.getItem('brianna_seq_e45') || '1', 10);
+            if (cur <= maxE45) localStorage.setItem('brianna_seq_e45', String(maxE45 + 1).padStart(10, '0'));
           }
 
           return mergedInvoices;
