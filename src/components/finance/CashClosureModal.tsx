@@ -179,7 +179,7 @@ export default function CashClosureModal({
     return 'Jennifer';
   });
   const [notes, setNotes] = useState('');
-  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ingreso' | 'egreso'>('todos');
+  const [movementTab, setMovementTab] = useState<'mios' | 'todos' | 'ingreso' | 'egreso' | 'credito'>('todos');
 
   // Completion modal & email states
   const [showCompletionOptions, setShowCompletionOptions] = useState(false);
@@ -597,13 +597,8 @@ export default function CashClosureModal({
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
       const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
-      const isCredit = pmLower.includes('crédito') || pmLower.includes('credito');
+      const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
       const isCash = !isCard && !isBank && !isCredit;
-
-      // Las ventas a crédito NO representan entradas directas de dinero en el momento de la venta.
-      // Los ingresos reales de esas facturas a crédito ingresan mediante sus respectivos Abonos/Cobros.
-      // Excluir ventas a crédito de los movimientos de ingresos de caja para evitar duplicar la factura y el monto.
-      if (isCredit) return;
 
       const author = inv.cashier_name || (inv as any).created_by || '';
 
@@ -613,14 +608,14 @@ export default function CashClosureModal({
 
       list.push({
         id: `inv-${inv.id || invNumber}`,
-        type: 'Ingreso',
+        type: isCredit ? 'Crédito' : 'Ingreso',
         category: 'venta' as any,
-        categoryLabel: 'Venta POS',
+        categoryLabel: isCredit ? 'Venta a Crédito' : 'Venta POS',
         concept: conceptText,
         customer,
         amount: Number(inv.total_amount) || 0,
-        paymentMethod: pm,
-        payment_method: pm,
+        paymentMethod: isCredit ? 'Crédito' : pm,
+        payment_method: isCredit ? 'Crédito' : pm,
         createdAt: inv.created_at || (inv as any).date || new Date().toISOString(),
         created_at: inv.created_at || (inv as any).date || new Date().toISOString(),
         reference: inv.ncf || invNumber,
@@ -630,8 +625,10 @@ export default function CashClosureModal({
         isCredit,
         isMine: true,
         author,
-        badgeText: `Venta • ${pm}`,
-        badgeColorClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+        badgeText: isCredit ? 'Crédito (Por Cobrar)' : `Venta • ${pm}`,
+        badgeColorClass: isCredit
+          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/40'
+          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
       });
     });
 
@@ -651,13 +648,18 @@ export default function CashClosureModal({
     unifiedShiftMovements.filter(m => m.type === 'Egreso'),
     [unifiedShiftMovements]
   );
+  const unifiedCreditos = useMemo(() => 
+    unifiedShiftMovements.filter(m => m.type === 'Crédito' || m.isCredit),
+    [unifiedShiftMovements]
+  );
 
   const displayedMovements = useMemo(() => {
     if (movementTab === 'mios') return unifiedMisMovimientos;
     if (movementTab === 'ingreso') return unifiedIngresos;
     if (movementTab === 'egreso') return unifiedEgresos;
+    if (movementTab === 'credito') return unifiedCreditos;
     return unifiedShiftMovements;
-  }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedIngresos, unifiedEgresos]);
+  }, [movementTab, unifiedMisMovimientos, unifiedShiftMovements, unifiedIngresos, unifiedEgresos, unifiedCreditos]);
 
   // Totales de entradas y salidas que suman estrictamente al cuadre actual (en caja única, todas las de la sesión)
   const quadreInflowsAmount = useMemo(() => {
@@ -687,8 +689,14 @@ export default function CashClosureModal({
     // 1. Facturas directas (POS)
     scopedInvoices.forEach(inv => {
       const amt = Number(inv.total_amount) || 0;
-      const method = inv.payment_method;
-      if (method === 'Mixto') {
+      const method = (inv.payment_method || '').trim();
+      const methodLower = method.toLowerCase();
+      const isMixed = methodLower === 'mixto';
+      const isCredit = methodLower.includes('créd') || methodLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
+      const isCard = methodLower.includes('tarjeta');
+      const isBank = methodLower.includes('transferencia') || methodLower.includes('transf') || methodLower.includes('banco');
+
+      if (isMixed) {
         const mpList = inv.mixed_payments || (() => {
           if (inv.transfer_reference?.startsWith('[')) {
             try { return JSON.parse(inv.transfer_reference); } catch {}
@@ -698,28 +706,33 @@ export default function CashClosureModal({
         if (Array.isArray(mpList) && mpList.length > 0) {
           mpList.forEach((mp: any) => {
             const mpAmt = Number(mp.amount) || 0;
-            if (mp.method === 'Efectivo') cash += mpAmt;
-            else if (mp.method === 'Tarjeta') card += mpAmt;
-            else if (mp.method === 'Transferencia') transfer += mpAmt;
+            const mpMethodLower = (mp.method || '').toLowerCase();
+            if (mpMethodLower.includes('créd') || mpMethodLower.includes('cred')) credit += mpAmt;
+            else if (mpMethodLower.includes('tarjeta')) card += mpAmt;
+            else if (mpMethodLower.includes('transf') || mpMethodLower.includes('banco')) transfer += mpAmt;
             else cash += mpAmt;
           });
         } else {
           cash += amt;
         }
-      } else if (method === 'Efectivo') cash += amt;
-      else if (method === 'Tarjeta') card += amt;
-      else if (method === 'Transferencia') transfer += amt;
-      else if (method === 'Crédito') credit += amt;
-      else cash += amt;
+      } else if (isCredit) {
+        credit += amt;
+      } else if (isCard) {
+        card += amt;
+      } else if (isBank) {
+        transfer += amt;
+      } else {
+        cash += amt;
+      }
     });
 
     // 2. Recibos de financiamientos (Cuotas y Abonos a capital)
     scopedFinancingReceipts.forEach(rc => {
       const amt = Number(rc.totalPaid) || 0;
       const method = rc.paymentMethod || 'Efectivo';
-      if (method === 'Efectivo') cash += amt;
-      else if (method === 'Tarjeta') card += amt;
-      else if (method === 'Transferencia') transfer += amt;
+      const methodLower = (method || '').toLowerCase();
+      if (methodLower.includes('tarjeta')) card += amt;
+      else if (methodLower.includes('transferencia') || methodLower.includes('transf')) transfer += amt;
       else cash += amt;
     });
 
@@ -727,9 +740,9 @@ export default function CashClosureModal({
     scopedCreditPayments.forEach(p => {
       const amt = Number(p.amount) || 0;
       const method = p.method || 'Efectivo';
-      if (method === 'Efectivo') cash += amt;
-      else if (method === 'Tarjeta') card += amt;
-      else if (method === 'Transferencia') transfer += amt;
+      const methodLower = (method || '').toLowerCase();
+      if (methodLower.includes('tarjeta')) card += amt;
+      else if (methodLower.includes('transferencia') || methodLower.includes('transf')) transfer += amt;
       else cash += amt;
     });
 
@@ -766,7 +779,9 @@ export default function CashClosureModal({
     return { ingresos, egresos };
   }, [scopedMovements, scopedCreditPayments]);
 
-  const grandTotalSales = systemSales.cash + systemSales.card + systemSales.transfer + systemSales.credit;
+  // Total efectivamente cobrado (entradas reales en efectivo, tarjetas y bancos)
+  const totalRealCobrado = systemSales.cash + systemSales.card + systemSales.transfer;
+  const grandTotalSales = totalRealCobrado + systemSales.credit;
   const totalInvoicesAmount = useMemo(() => {
     return scopedInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
   }, [scopedInvoices]);
@@ -953,9 +968,10 @@ export default function CashClosureModal({
   const printSalesCredit = (savedClosure?.system_sales_credit !== undefined && Number(savedClosure.system_sales_credit) > 0)
     ? Number(savedClosure.system_sales_credit)
     : (systemSales.credit > 0 ? systemSales.credit : Number(savedClosure?.system_sales_credit || 0));
+  const printTotalCobrado = printSalesCash + printSalesCard + printSalesTransfer;
   const printTotalSales = (savedClosure?.total_sales !== undefined && Number(savedClosure.total_sales) > 0)
     ? Number(savedClosure.total_sales)
-    : (grandTotalSales > 0 ? grandTotalSales : (printSalesCash + printSalesCard + printSalesTransfer + printSalesCredit));
+    : (grandTotalSales > 0 ? grandTotalSales : (printTotalCobrado + printSalesCredit));
 
   const printTotalIngresos = useMemo(() => {
     if (savedClosure?.cash_movements_in !== undefined && Number(savedClosure.cash_movements_in) > 0) {
@@ -1002,26 +1018,31 @@ export default function CashClosureModal({
     if (!hasSales && scopedInvoices.length > 0) {
       scopedInvoices.forEach(inv => {
         const pm = (inv.payment_method || 'Efectivo').trim();
+        const pmLower = pm.toLowerCase();
+        const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
+        const isCard = pmLower.includes('tarjeta');
+        const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+        const isCash = !isCard && !isBank && !isCredit;
         const invNumber = inv.invoice_number || inv.id || '';
         const customer = inv.customer_name || 'Consumidor Final';
         const dateStr = inv.created_at || (inv as any).date || new Date().toISOString();
         base.push({
           id: `inv-${inv.id || invNumber}`,
-          type: 'Ingreso',
+          type: isCredit ? 'Crédito' : 'Ingreso',
           category: 'venta' as any,
-          categoryLabel: 'Venta POS',
+          categoryLabel: isCredit ? 'Venta a Crédito' : 'Venta POS',
           concept: `Factura #${invNumber} - ${customer}`,
           customer,
           amount: Number(inv.total_amount) || 0,
-          paymentMethod: pm,
-          payment_method: pm,
+          paymentMethod: isCredit ? 'Crédito' : pm,
+          payment_method: isCredit ? 'Crédito' : pm,
           createdAt: dateStr,
           created_at: dateStr,
           reference: inv.ncf || invNumber,
-          isCash: pm.toLowerCase() === 'efectivo',
-          isCard: pm.toLowerCase().includes('tarjeta'),
-          isBank: pm.toLowerCase().includes('transferencia'),
-          isCredit: pm.toLowerCase().includes('crédito')
+          isCash,
+          isCard,
+          isBank,
+          isCredit
         });
       });
     }
@@ -1156,12 +1177,13 @@ Facturas / Cobros en Turno: ${totalDocsCount}
 • Efectivo Recaudado en Turno:   RD$ ${printShiftCashNet.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 • Total Teórico en Gaveta:       RD$ ${printTotalDrawer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 
---- RESUMEN DE VENTAS Y COBROS ---
-• Total Facturado / Cobrado: RD$ ${printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Efectivo: RD$ ${printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Tarjeta: RD$ ${printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Transferencia: RD$ ${printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-  - Crédito: RD$ ${printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+--- RESUMEN DE COBROS Y VENTAS ---
+• TOTAL COBRADO (ENTRADAS REALES): RD$ ${printTotalCobrado.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Efectivo Cobrado en Gaveta:   RD$ ${printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Tarjetas Procesadas:          RD$ ${printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+  - Transferencias Bancarias:     RD$ ${printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• VENTAS A CRÉDITO (POR COBRAR):  RD$ ${printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+• TOTAL FACTURADO EN TURNO:       RD$ ${printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
 
 --- MOVIMIENTOS EXTRA (EFECTIVO & TRANSFERENCIA) ---
 • Egresos efectivo: -RD$ ${printEgresosCashTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -1472,19 +1494,21 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                   </span>
                 </div>
 
-                {/* Total Facturado / Cobrado */}
+                {/* Total Cobrado Real vs Facturado */}
                 <div className="bg-zinc-50/60 dark:bg-zinc-900/40 p-2 sm:p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800/80">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block truncate">Ventas / Cobros Totales</span>
+                    <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 block truncate">Total Cobrado (Real)</span>
                     <span className="text-[9px] font-medium px-1 py-0.2 bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
                       {totalDocsCount} docs
                     </span>
                   </div>
-                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-0.5 block leading-tight">
-                    RD$ {grandTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 block leading-tight">
+                    RD$ {totalRealCobrado.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                   </span>
-                  <span className="text-[9.5px] text-zinc-400 dark:text-zinc-500 font-medium block truncate">
-                    Efectivo, Tarjeta, Transf, Crédito
+                  <span className="text-[9.5px] text-zinc-400 dark:text-zinc-500 font-medium block truncate" title={`Facturado Total: RD$ ${grandTotalSales.toLocaleString('es-DO')} (incluye RD$ ${systemSales.credit.toLocaleString('es-DO')} a crédito por cobrar)`}>
+                    {systemSales.credit > 0 
+                      ? `+ RD$ ${systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })} a Crédito`
+                      : 'Efectivo, Tarjetas y Transf.'}
                   </span>
                 </div>
 
@@ -1761,9 +1785,9 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         </span>
                       </div>
 
-                      <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-center">
-                        <span className="text-[9.5px] text-zinc-500 dark:text-zinc-400 block truncate">Crédito</span>
-                        <span className="font-bold font-mono text-[11px] text-zinc-900 dark:text-zinc-100">
+                      <div className="p-1.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-center">
+                        <span className="text-[9.5px] text-amber-700 dark:text-amber-400 font-bold block truncate">Crédito (Por Cobrar)</span>
+                        <span className="font-bold font-mono text-[11px] text-amber-700 dark:text-amber-300">
                           RD$ {systemSales.credit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -1900,6 +1924,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         <span>Egresos</span>
                         <span className="text-[9px] opacity-60 font-mono">({unifiedEgresos.length})</span>
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('credito')}
+                        className={`flex-1 py-1 px-2 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
+                          movementTab === 'credito' 
+                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 shadow-2xs font-bold border border-amber-300 dark:border-amber-800' 
+                            : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium'
+                        }`}
+                      >
+                        <span>Crédito</span>
+                        <span className="text-[9px] font-mono text-amber-600 dark:text-amber-400 font-bold">({unifiedCreditos.length})</span>
+                      </button>
                     </div>
 
                     {displayedMovements.length === 0 ? (
@@ -1910,11 +1947,14 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                           ? 'Sin ingresos registrados en este turno'
                           : movementTab === 'egreso'
                           ? 'Sin egresos registrados en este turno'
-                          : 'Sin ingresos ni egresos registrados en este turno'}
+                          : movementTab === 'credito'
+                          ? 'Sin ventas a crédito en este turno'
+                          : 'Sin movimientos registrados en este turno'}
                       </div>
                     ) : (
                       <div className="space-y-1 max-h-28 sm:max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                         {displayedMovements.map(m => {
+                          const isCredit = m.type === 'Crédito' || Boolean(m.isCredit);
                           const isIngreso = m.type === 'Ingreso';
                           const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
                           const isCobro = m.category === 'cobro';
@@ -1925,19 +1965,25 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               className={`flex items-center justify-between p-1.5 px-2.5 rounded-lg border text-xs transition-all ${
                                 isExternalMovement 
                                   ? 'bg-amber-50/20 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/30' 
+                                  : isCredit
+                                  ? 'bg-amber-50/25 dark:bg-amber-950/20 border-amber-200/70 dark:border-amber-800/40 hover:bg-amber-50/40 dark:hover:bg-amber-950/30'
                                   : 'bg-zinc-50/40 dark:bg-zinc-900/50 border-zinc-200/70 dark:border-zinc-800/80 hover:bg-white dark:hover:bg-zinc-900'
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 {/* Modern Icon Box */}
                                 <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
-                                  isCobro
+                                  isCredit
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60'
+                                    : isCobro
                                     ? 'bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-100 dark:border-teal-900/40'
                                     : isIngreso
                                     ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40'
                                     : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
                                 }`}>
-                                  {isCobro ? (
+                                  {isCredit ? (
+                                    <ClockIcon className="w-3.5 h-3.5" />
+                                  ) : isCobro ? (
                                     <CreditCardIcon className="w-3.5 h-3.5" />
                                   ) : isIngreso ? (
                                     <ArrowDownLeftIcon className="w-3.5 h-3.5" />
@@ -1956,11 +2002,20 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                         Informativo
                                       </span>
                                     )}
+                                    {isCredit && (
+                                      <span className="text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60 px-1 py-0.2 rounded shrink-0">
+                                        Venta a Crédito
+                                      </span>
+                                    )}
                                   </div>
 
                                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1 flex-wrap font-normal">
-                                    <span className="font-medium text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-1 py-0.2 rounded text-[9px]">
-                                      {m.paymentMethod}
+                                    <span className={`font-medium px-1 py-0.2 rounded text-[9px] ${
+                                      isCredit 
+                                        ? 'bg-amber-100/80 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-bold' 
+                                        : 'text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80'
+                                    }`}>
+                                      {isCredit ? 'Crédito (Por Cobrar)' : m.paymentMethod}
                                     </span>
                                     {m.createdAt && (
                                       <span className="text-zinc-400 dark:text-zinc-500 text-[9.5px]">
@@ -1978,10 +2033,19 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                               <div className="text-right shrink-0 ml-2">
                                 <span className={`font-mono font-bold text-xs tracking-tight ${
-                                  isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                  isCredit 
+                                    ? 'text-amber-700 dark:text-amber-300' 
+                                    : isIngreso 
+                                    ? 'text-emerald-600 dark:text-emerald-400' 
+                                    : 'text-rose-600 dark:text-rose-400'
                                 } ${isExternalMovement ? 'opacity-65' : ''}`}>
-                                  {isIngreso ? '+' : '-'}RD$ {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  {isCredit ? 'RD$' : isIngreso ? '+RD$' : '-RD$'} {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </span>
+                                {isCredit && (
+                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                    Por Cobrar
+                                  </span>
+                                )}
                                 {isExternalMovement && (
                                   <span className="block text-[7.5px] font-bold uppercase tracking-wider text-amber-600/90 dark:text-amber-400/90">
                                     No sumado
@@ -2539,36 +2603,42 @@ Observaciones: ${printNotes || 'Sin observaciones'}
               {/* Ventas por Método */}
               <div>
                 <h3 className="text-[8px] font-black uppercase tracking-wider mb-0.5 text-black border-b border-gray-300 pb-0.5">
-                  Ventas & Cobros por Método
+                  Resumen de Cobros y Ventas
                 </h3>
                 <table className="w-full text-left text-[7.5px] border-collapse border border-gray-300">
                   <tbody>
                     <tr>
-                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Efectivo</td>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Efectivo Cobrado</td>
                       <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Tarjeta</td>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Tarjeta Cobrada</td>
                       <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr>
-                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Transferencia</td>
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Transferencia Cobrada</td>
                       <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
                         RD$ {printSalesTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
-                    <tr>
-                      <td className="p-0.5 px-1 border border-gray-300 font-bold">Crédito</td>
-                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold">
+                    <tr className="bg-emerald-50 font-bold">
+                      <td className="p-0.5 px-1 border border-gray-300 text-emerald-900">TOTAL COBRADO (Real)</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono text-emerald-900">
+                        RD$ {printTotalCobrado.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                    <tr className="bg-amber-50/70">
+                      <td className="p-0.5 px-1 border border-gray-300 font-bold text-amber-900">Crédito (Por Cobrar)</td>
+                      <td className="p-0.5 px-1 border border-gray-300 text-right font-mono font-bold text-amber-900">
                         RD$ {printSalesCredit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                     <tr className="bg-gray-100 font-black">
-                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado/Cobrado</td>
+                      <td className="p-0.5 px-1 border border-gray-300 uppercase">Total Facturado en Turno</td>
                       <td className="p-0.5 px-1 border border-gray-300 text-right font-mono">
                         RD$ {printTotalSales.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>

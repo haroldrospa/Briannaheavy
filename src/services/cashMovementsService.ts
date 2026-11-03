@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface CashMovement {
   id: string;
-  type: 'Ingreso' | 'Egreso';
+  type: 'Ingreso' | 'Egreso' | 'Crédito';
   amount: number;
   concept: string;
   payment_method?: 'Efectivo' | 'Transferencia' | string;

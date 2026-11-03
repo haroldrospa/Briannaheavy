@@ -130,19 +130,16 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         if (isQuotationInvoice(inv) || isAbonoInvoice(inv)) return; // Excluir cotizaciones y abonos
         const pm = (inv.payment_method || 'Efectivo').trim();
         const pmLower = pm.toLowerCase();
-        const isCredit = pmLower.includes('créd') || pmLower.includes('cred');
-        // Excluir ventas a crédito de los movimientos de flujo de caja ya que el dinero real entra al registrar los abonos
-        if (isCredit) return;
-
+        const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
         const isCard = pmLower.includes('tarjeta');
         const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco') || pmLower.includes('usd');
 
         salesAsMovements.push({
           id: `inv_${inv.id || inv.invoice_number}`,
-          type: 'Ingreso',
+          type: isCredit ? 'Crédito' : 'Ingreso',
           amount: Number(inv.total_amount) || 0,
-          concept: `Venta Factura #${formatInvoiceNumber(inv.invoice_number)}${inv.customer_name ? ` • ${inv.customer_name}` : ''}${isCredit ? ' (Crédito)' : ''}`,
-          payment_method: isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : (isCredit ? 'Crédito' : 'Efectivo')),
+          concept: `Venta Factura #${formatInvoiceNumber(inv.invoice_number)}${inv.customer_name ? ` • ${inv.customer_name}` : ''}${isCredit ? ' (Crédito Por Cobrar)' : ''}`,
+          payment_method: isCredit ? 'Crédito' : (isCard ? 'Tarjeta' : (isBank ? 'Transferencia' : 'Efectivo')),
           bank_account_id: inv.bank_account_id,
           bank_account_name: inv.bank_account_name,
           reference: inv.transfer_reference || inv.ncf || inv.invoice_number,

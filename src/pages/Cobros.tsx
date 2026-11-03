@@ -1357,18 +1357,23 @@ export default function Cobros() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h4 className="font-black text-sm text-gray-900 dark:text-white hover:text-[#ED1C24] transition-colors">{item.customer}</h4>
-                      <p className="text-[11px] font-mono text-gray-400">RNC: {item.rnc} • Fact: {item.invoice}</p>
+                      <h4 className="font-bold text-sm text-gray-900 dark:text-white hover:text-[#ED1C24] transition-colors">{item.customer}</h4>
+                      <p className="text-[11px] font-mono text-gray-400">RNC: {item.rnc} • Fact: #{item.invoice}</p>
                     </div>
-                    <span className={`px-2.5 py-0.5 text-[10px] font-black rounded-full ${
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-bold rounded-full ${
                       item.status === 'Saldado'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/50'
                         : item.status === 'Atrasado'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                        ? 'bg-red-50 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200/50'
                         : item.status === 'Con Abono'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/50'
+                        : 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/50'
                     }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        item.status === 'Saldado' ? 'bg-emerald-500' :
+                        item.status === 'Atrasado' ? 'bg-red-500' :
+                        item.status === 'Con Abono' ? 'bg-blue-500' : 'bg-amber-500'
+                      }`} />
                       {item.status}
                     </span>
                   </div>
@@ -1392,7 +1397,7 @@ export default function Cobros() {
                           e.stopPropagation();
                           handleOpenDetails(item);
                         }}
-                        className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                         title="Ver Información y Estado de Cuenta"
                       >
                         <EyeIcon className="w-4 h-4" />
@@ -1404,7 +1409,7 @@ export default function Cobros() {
                           e.stopPropagation();
                           handlePrintReceivableInvoiceLetter(item);
                         }}
-                        className="p-1.5 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                         title="Imprimir Factura (Formato Carta)"
                       >
                         <PrinterIcon className="w-4 h-4" />
@@ -1416,9 +1421,10 @@ export default function Cobros() {
                             e.stopPropagation();
                             handleOpenPayment(item);
                           }}
-                          className="px-3 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-xs font-black shadow-xs cursor-pointer"
+                          className="px-3 py-1.5 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
                         >
-                          Pagar / Abonar
+                          <BanknotesIcon className="w-3.5 h-3.5" />
+                          <span>Pagar</span>
                         </button>
                       ) : (
                         <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">✓ Pagado</span>
@@ -1429,7 +1435,7 @@ export default function Cobros() {
                           e.stopPropagation();
                           handleOpenEdit(item);
                         }}
-                        className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                         title="Editar cuenta por cobrar"
                       >
                         <PencilSquareIcon className="w-4 h-4" />
@@ -1444,68 +1450,103 @@ export default function Cobros() {
             <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-100 dark:divide-zinc-800 text-left">
                 <thead>
-                  <tr className="bg-[#f4f3f1]/60 dark:bg-zinc-800/40 text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                    <th className="px-3.5 py-2">Cliente & RNC</th>
-                    <th className="px-3.5 py-2">Factura / e-NCF</th>
-                    <th className="px-3.5 py-2">Repuestos Vendidos</th>
-                    <th className="px-3.5 py-2">Emisión / Venc.</th>
-                    <th className="px-3.5 py-2 text-right">Total Factura</th>
-                    <th className="px-3.5 py-2 text-right">Saldo Pendiente</th>
-                    <th className="px-3.5 py-2 text-center">Estado</th>
-                    <th className="px-3.5 py-2 text-right">Acción</th>
+                  <tr className="bg-gray-50/80 dark:bg-zinc-800/40 text-[11px] font-semibold text-gray-500 dark:text-zinc-400">
+                    <th className="py-3 px-3.5">Cliente & RNC</th>
+                    <th className="py-3 px-3">Factura</th>
+                    <th className="py-3 px-3 hidden xl:table-cell">Repuestos</th>
+                    <th className="py-3 px-3">Vencimiento</th>
+                    <th className="py-3 px-3 text-right">Total Factura</th>
+                    <th className="py-3 px-3 text-right">Saldo Pendiente</th>
+                    <th className="py-3 px-3 text-center">Estado</th>
+                    <th className="py-3 px-3.5 text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 text-[11.5px]">
+                <tbody className="divide-y divide-gray-100 dark:divide-zinc-800 text-xs">
                   {filteredReceivables.map((item) => (
                     <tr 
                       key={item.id} 
                       onClick={() => handleOpenDetails(item)}
-                      className="hover:bg-red-50/30 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                      className="hover:bg-red-50/20 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer group"
                       title="Click para ver información completa y estado de cuenta del cliente"
                     >
-                      <td className="px-3.5 py-2">
-                        <span className="font-bold text-gray-900 dark:text-white block group-hover:text-[#ED1C24] transition-colors leading-tight">{item.customer}</span>
-                        <span className="font-mono text-[10px] text-gray-400">{item.rnc}</span>
+                      <td className="py-2.5 px-3.5">
+                        <span className="font-semibold text-gray-900 dark:text-white block group-hover:text-[#ED1C24] transition-colors leading-snug line-clamp-1 max-w-[210px]">
+                          {item.customer}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[10.5px] text-gray-400">{item.rnc}</span>
+                          <span className="text-[10px] text-gray-400 truncate max-w-[130px] xl:hidden before:content-['•'] before:mr-1" title={item.items}>
+                            {item.items}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-3.5 py-2 font-mono leading-tight">
-                        <span className="font-bold text-gray-900 dark:text-zinc-200 block">{item.invoice}</span>
-                        <span className="text-[9.5px] text-[#ED1C24] font-black">{item.ncf}</span>
+                      <td className="py-2.5 px-3 font-mono leading-tight whitespace-nowrap">
+                        <span className="font-bold text-gray-900 dark:text-zinc-200 block text-xs">#{item.invoice}</span>
+                        <span className="text-[10px] text-[#ED1C24] font-semibold block">{item.ncf}</span>
                       </td>
-                      <td className="px-3.5 py-2 max-w-[220px]">
-                        <span className="text-gray-700 dark:text-zinc-300 line-clamp-1 text-[11px]">{item.items}</span>
+                      <td className="py-2.5 px-3 max-w-[190px] hidden xl:table-cell">
+                        <span className="text-gray-600 dark:text-zinc-300 truncate block text-[11px]" title={item.items}>
+                          {item.items}
+                        </span>
                       </td>
-                      <td className="px-3.5 py-2 text-gray-600 dark:text-zinc-400 leading-tight">
-                        <div className="text-[11px]">{item.issueDate}</div>
-                        <div className="text-[9.5px] text-gray-400">Vence: {item.dueDate}</div>
+                      <td className="py-2.5 px-3 leading-tight whitespace-nowrap">
+                        <div className={`text-xs font-semibold ${item.status === 'Atrasado' ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-800 dark:text-zinc-200'}`}>
+                          {item.dueDate}
+                        </div>
+                        <div className="text-[10px] text-gray-400">
+                          Emisión: {item.issueDate}
+                        </div>
                       </td>
-                      <td className="px-3.5 py-2 text-right font-mono font-bold text-gray-900 dark:text-white">
+                      <td className="py-2.5 px-3 text-right font-mono text-gray-600 dark:text-zinc-300 whitespace-nowrap text-xs">
                         RD$ {item.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3.5 py-2 text-right font-mono font-black text-[#ED1C24]">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-[#ED1C24] whitespace-nowrap text-xs">
                         RD$ {item.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3.5 py-2 text-center">
-                        <span className={`px-2 py-0.5 text-[9.5px] font-black rounded-full inline-block ${
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-bold rounded-full ${
                           item.status === 'Saldado'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40'
                             : item.status === 'Atrasado'
-                            ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                            ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200/60 dark:border-red-800/40'
                             : item.status === 'Con Abono'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40'
                         }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            item.status === 'Saldado' ? 'bg-emerald-500' :
+                            item.status === 'Atrasado' ? 'bg-red-500' :
+                            item.status === 'Con Abono' ? 'bg-blue-500' : 'bg-amber-500'
+                          }`} />
                           {item.status}
                         </span>
                       </td>
-                      <td className="px-3.5 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-2.5 px-3.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {item.balance > 0 ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPayment(item);
+                              }}
+                              className="px-3 py-1 bg-[#ED1C24] hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
+                              title="Registrar pago a esta factura"
+                            >
+                              <BanknotesIcon className="w-3.5 h-3.5" />
+                              <span>Pagar</span>
+                            </button>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs px-2 py-1">✓ Pagado</span>
+                          )}
+
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenDetails(item);
                             }}
-                            className="p-1 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                             title="Ver información y estado de cuenta"
                           >
                             <EyeIcon className="w-3.5 h-3.5" />
@@ -1517,35 +1558,22 @@ export default function Cobros() {
                               e.stopPropagation();
                               handlePrintReceivableInvoiceLetter(item);
                             }}
-                            className="p-1 rounded-full text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-[#ED1C24] dark:text-zinc-400 dark:hover:text-red-400 bg-gray-100 hover:bg-red-50 dark:bg-zinc-800 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
                             title="Imprimir Factura (Formato Carta)"
                           >
                             <PrinterIcon className="w-3.5 h-3.5" />
                           </button>
-                          {item.balance > 0 ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenPayment(item);
-                              }}
-                              className="px-2.5 py-1 bg-[#ED1C24] hover:bg-red-700 text-white rounded-full text-[11px] font-black shadow-xs transition-all cursor-pointer inline-flex items-center gap-1 active:scale-[0.98]"
-                            >
-                              <span>Abonar</span>
-                            </button>
-                          ) : (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">✓ Saldado</span>
-                          )}
+
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenEdit(item);
                             }}
-                            className="p-1.5 rounded-full text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 dark:text-zinc-500 dark:hover:text-white bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                             title="Editar cuenta por cobrar"
                           >
-                            <PencilSquareIcon className="w-4 h-4" />
+                            <PencilSquareIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -2923,10 +2951,10 @@ export default function Cobros() {
                         setIsDetailModalOpen(false);
                         handleOpenPayment(activeDetailItem);
                       }}
-                      className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
                     >
-                      <CurrencyDollarIcon className="w-4 h-4" />
-                      <span>Cobrar o abonar</span>
+                      <BanknotesIcon className="w-4 h-4" />
+                      <span>Pagar Factura</span>
                     </button>
                   ) : associatedCustomerInvoices.some(inv => inv.balance > 0) ? (
                     <button
@@ -2938,10 +2966,10 @@ export default function Cobros() {
                           handleOpenPayment(invToPay);
                         }
                       }}
-                      className="px-5 py-2.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      className="px-5 py-2.5 rounded-xl bg-[#ED1C24] hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
                     >
-                      <CurrencyDollarIcon className="w-4 h-4" />
-                      <span>Cobrar o abonar</span>
+                      <BanknotesIcon className="w-4 h-4" />
+                      <span>Pagar Factura</span>
                     </button>
                   ) : (
                     <span className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-zinc-300 text-xs font-medium inline-flex items-center gap-1.5">

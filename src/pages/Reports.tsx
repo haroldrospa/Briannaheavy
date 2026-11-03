@@ -478,6 +478,37 @@ export default function Reports() {
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
   const [selectedClosureForDetail, setSelectedClosureForDetail] = useState<any>(null);
   const [companyConfig, setCompanyConfig] = useState(getInvoiceCustomConfig);
+  const [activeQuickRange, setActiveQuickRange] = useState<'hoy' | 'mes' | 'mes_anterior' | 'ano' | 'todo'>('mes');
+
+  const handleSetQuickRange = (range: 'hoy' | 'mes' | 'mes_anterior' | 'ano' | 'todo') => {
+    setActiveQuickRange(range);
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    if (range === 'hoy') {
+      const todayStr = `${y}-${pad(m + 1)}-${pad(now.getDate())}`;
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (range === 'mes') {
+      const startStr = `${y}-${pad(m + 1)}-01`;
+      const todayStr = `${y}-${pad(m + 1)}-${pad(now.getDate())}`;
+      setStartDate(startStr);
+      setEndDate(todayStr);
+    } else if (range === 'mes_anterior') {
+      const prevMonth = new Date(y, m - 1, 1);
+      const lastDayPrev = new Date(y, m, 0);
+      setStartDate(`${prevMonth.getFullYear()}-${pad(prevMonth.getMonth() + 1)}-01`);
+      setEndDate(`${lastDayPrev.getFullYear()}-${pad(lastDayPrev.getMonth() + 1)}-${pad(lastDayPrev.getDate())}`);
+    } else if (range === 'ano') {
+      setStartDate(`${y}-01-01`);
+      setEndDate(`${y}-${pad(m + 1)}-${pad(now.getDate())}`);
+    } else if (range === 'todo') {
+      setStartDate('2020-01-01');
+      setEndDate(`${y + 1}-12-31`);
+    }
+  };
 
   useEffect(() => {
     const handleConfigUpdate = () => {
@@ -1065,12 +1096,74 @@ export default function Reports() {
         {/* Streamlined Filters Toolbar */}
         <div className="p-4 sm:p-5 bg-gray-50/80 dark:bg-zinc-900/60 border-b border-gray-200/80 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-3.5 print:hidden">
           <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            {/* Quick date range selector */}
+            <div className="flex items-center gap-1 bg-gray-200/70 dark:bg-zinc-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('hoy')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  activeQuickRange === 'hoy'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                }`}
+              >
+                Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('mes')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  activeQuickRange === 'mes'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                }`}
+              >
+                Este Mes
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('mes_anterior')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  activeQuickRange === 'mes_anterior'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                }`}
+              >
+                Mes Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('ano')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  activeQuickRange === 'ano'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                }`}
+              >
+                Este Año
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetQuickRange('todo')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  activeQuickRange === 'todo'
+                    ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+                }`}
+              >
+                Ver Todo
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 px-3.5 py-2 rounded-xl shadow-2xs">
               <span className="text-xs font-bold uppercase text-gray-400 dark:text-zinc-500">Desde:</span>
               <input 
                 type="date" 
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setActiveQuickRange('mes');
+                }}
                 className="bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer" 
               />
             </div>
@@ -1080,7 +1173,10 @@ export default function Reports() {
               <input 
                 type="date" 
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setActiveQuickRange('mes');
+                }}
                 className="bg-transparent text-sm font-bold text-gray-900 dark:text-white outline-none cursor-pointer" 
               />
             </div>

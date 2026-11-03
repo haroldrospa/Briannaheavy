@@ -165,7 +165,11 @@ export const initRealtimeSync = (): (() => void) => {
         }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // Silently handle channel error when backend or project is paused/offline
+      }
+    });
 
   return () => {
     supabase.removeChannel(unifiedChannel);
