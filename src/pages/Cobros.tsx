@@ -690,9 +690,7 @@ export default function Cobros() {
     });
   };
 
-  const handlePrintStatement = () => {
-    handlePrintStatementSummary();
-  };
+
 
   useEffect(() => {
     const handleAfterPrint = () => {
