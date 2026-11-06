@@ -654,52 +654,85 @@ export default function Reports() {
       });
     }
 
-    // Incorporar facturas de venta del turno si no están presentes
-    const hasSales = baseMovs.some((m: any) => m.category === 'venta' || String(m.concept || '').toLowerCase().includes('factura #'));
-    if (!hasSales) {
-      const cDate = selectedClosureForDetail.createdAt ? selectedClosureForDetail.createdAt.slice(0, 10) : selectedClosureForDetail.date;
-      const cReg = (selectedClosureForDetail.register || '').toLowerCase().trim();
-      const rawInvoices = getLocalStorageInvoices();
-      const matchingInvs = rawInvoices.filter((inv: any) => {
-        if (isAbonoInvoice(inv)) return false;
-        const invDate = inv.created_at ? inv.created_at.slice(0, 10) : (inv.date ? inv.date.slice(0, 10) : '');
-        const invReg = (inv.register_name || inv.register || 'caja principal').toLowerCase().trim();
-        const dateMatch = !cDate || invDate === cDate;
-        const regMatch = !cReg || cReg.includes('todas') || !invReg || invReg.includes(cReg) || cReg.includes(invReg);
-        return dateMatch && regMatch;
+    // Asegurar que TODAS las facturas de venta del turno (incluyendo las de crédito) estén presentes
+    const cDate = selectedClosureForDetail.createdAt ? selectedClosureForDetail.createdAt.slice(0, 10) : (selectedClosureForDetail.date ? selectedClosureForDetail.date.slice(0, 10) : '');
+    const cReg = (selectedClosureForDetail.register || '').toLowerCase().trim();
+    const rawInvoices = getLocalStorageInvoices();
+    const matchingInvs = rawInvoices.filter((inv: any) => {
+      if (isAbonoInvoice(inv)) return false;
+      const invDate = inv.created_at ? inv.created_at.slice(0, 10) : (inv.date ? inv.date.slice(0, 10) : '');
+      const invReg = (inv.register_name || inv.register || 'caja principal').toLowerCase().trim();
+      const dateMatch = !cDate || invDate === cDate;
+      const regMatch = !cReg || cReg.includes('todas') || !invReg || invReg.includes(cReg) || cReg.includes(invReg);
+      return dateMatch && regMatch;
+    });
+
+    matchingInvs.forEach((inv: any) => {
+      const invNumber = String(inv.invoice_number || inv.id || '').trim();
+      const invId = `inv-${inv.id || invNumber}`.toLowerCase();
+      const altId = `inv_${inv.id || invNumber}`.toLowerCase();
+      const rawNum = invNumber.toLowerCase();
+
+      const alreadyExists = baseMovs.some((m: any) => {
+        const mId = String(m.id || '').toLowerCase();
+        const mRef = String(m.reference || '').toLowerCase();
+        const mConcept = String(m.concept || '').toLowerCase();
+        return mId === invId || mId === altId || (rawNum && (mRef === rawNum || mConcept.includes(`factura #${rawNum}`)));
       });
 
-      matchingInvs.forEach((inv: any) => {
-        const invNumber = inv.invoice_number || inv.id || '';
+      if (!alreadyExists) {
+        const pm = (inv.payment_method || 'Efectivo').trim();
+        const pmLower = pm.toLowerCase();
+        const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
+        const isCard = pmLower.includes('tarjeta');
+        const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+        const isCash = !isCard && !isBank && !isCredit;
+        const customer = inv.customer_name || 'Consumidor Final';
+        const dateStr = inv.created_at || inv.date || new Date().toISOString();
+
         baseMovs.push({
           id: `inv-${inv.id || invNumber}`,
-          type: 'Ingreso',
+          type: isCredit ? 'Crédito' : 'Ingreso',
           category: 'venta',
-          categoryLabel: 'Venta POS',
-          concept: `Factura #${invNumber} - ${inv.customer_name || 'Consumidor Final'}`,
-          customer: inv.customer_name || 'Consumidor Final',
+          categoryLabel: isCredit ? 'Venta a Crédito' : 'Venta POS',
+          concept: `Factura #${invNumber} - ${customer}`,
+          customer,
           amount: Number(inv.total_amount) || 0,
-          payment_method: inv.payment_method || 'Efectivo',
-          paymentMethod: inv.payment_method || 'Efectivo',
-          created_at: inv.created_at || inv.date || new Date().toISOString(),
-          createdAt: inv.created_at || inv.date || new Date().toISOString(),
-          reference: inv.ncf || invNumber
+          payment_method: isCredit ? 'Crédito' : pm,
+          paymentMethod: isCredit ? 'Crédito' : pm,
+          created_at: dateStr,
+          createdAt: dateStr,
+          reference: inv.ncf || invNumber,
+          isCash,
+          isCard,
+          isBank,
+          isCredit
         });
-      });
-    }
+      }
+    });
 
     return baseMovs.sort((a, b) => new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime());
   }, [selectedClosureForDetail, dbData.movimientos_caja]);
 
   const closureIncomesTotal = useMemo(() => {
     return closureDetailMovements
-      .filter((m: any) => m.type === 'Ingreso')
+      .filter((m: any) => {
+        if (m.type !== 'Ingreso') return false;
+        const isCredit = Boolean(m.isCredit) || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('créd') || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('cred');
+        return !isCredit;
+      })
       .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
   }, [closureDetailMovements]);
 
   const closureExpensesTotal = useMemo(() => {
     return closureDetailMovements
       .filter((m: any) => m.type === 'Egreso')
+      .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
+  }, [closureDetailMovements]);
+
+  const closureCreditTotal = useMemo(() => {
+    return closureDetailMovements
+      .filter((m: any) => m.type === 'Crédito' || Boolean(m.isCredit) || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('créd') || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('cred'))
       .reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
   }, [closureDetailMovements]);
 
@@ -2951,13 +2984,18 @@ export default function Reports() {
                     </span>
                   </h4>
                   {closureDetailMovements.length > 0 && (
-                    <div className="flex items-center gap-3 text-xs font-mono font-bold">
+                    <div className="flex items-center gap-3 text-xs font-mono font-bold flex-wrap">
                       <span className="text-emerald-600 dark:text-emerald-400">
                         In: +RD$ {closureIncomesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </span>
                       <span className="text-rose-600 dark:text-rose-400">
                         Out: -RD$ {closureExpensesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </span>
+                      {closureCreditTotal > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          Crédito: RD$ {closureCreditTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2980,25 +3018,38 @@ export default function Reports() {
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 font-medium">
                         {closureDetailMovements.map((m: any, idx: number) => {
-                          const isIngreso = m.type === 'Ingreso';
+                          const isCredit = m.type === 'Crédito' || Boolean(m.isCredit) || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('créd') || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('cred');
+                          const isIngreso = !isCredit && m.type === 'Ingreso';
                           const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                          const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo'));
-                          const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                          const method = isCredit ? 'Crédito' : (m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo')));
+                          const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : isCredit ? 'Venta a Crédito' : 'Retiro / Gasto de Caja');
                           const ref = m.reference ? ` • Ref: ${m.reference}` : '';
                           return (
                             <tr key={m.id || idx} className="hover:bg-gray-100/50 dark:hover:bg-zinc-800/40">
                               <td className="py-2 px-2 text-center font-mono text-[11px] text-gray-500 dark:text-zinc-400">{timeStr}</td>
                               <td className="py-2 px-2 text-center font-bold text-[11px]">
-                                <span className={`px-2 py-0.5 rounded-full ${isIngreso ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'}`}>
-                                  {isIngreso ? 'Ingreso' : 'Egreso'}
+                                <span className={`px-2 py-0.5 rounded-full ${
+                                  isCredit
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60'
+                                    : isIngreso
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                }`}>
+                                  {isCredit ? 'Crédito' : isIngreso ? 'Ingreso' : 'Egreso'}
                                 </span>
                               </td>
                               <td className="py-2 px-2 text-gray-700 dark:text-zinc-300 text-xs">{method}</td>
                               <td className="py-2 px-2 text-gray-900 dark:text-white font-semibold">
                                 {concept}{ref}
                               </td>
-                              <td className={`py-2 px-2 text-right font-mono font-bold ${isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              <td className={`py-2 px-2 text-right font-mono font-bold ${
+                                isCredit
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : isIngreso
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-rose-600 dark:text-rose-400'
+                              }`}>
+                                {isCredit ? 'RD$' : isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                               </td>
                             </tr>
                           );
@@ -3265,6 +3316,9 @@ export default function Reports() {
                   {closureExpensesTotal > 0 && (
                     <span className="text-rose-800">Total Egresos: -RD$ {closureExpensesTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
                   )}
+                  {closureCreditTotal > 0 && (
+                    <span className="text-amber-800">Crédito: RD$ {closureCreditTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  )}
                 </div>
               </div>
 
@@ -3280,25 +3334,35 @@ export default function Reports() {
                 </thead>
                 <tbody>
                   {closureDetailMovements.map((m: any, idx: number) => {
-                    const isIngreso = m.type === 'Ingreso';
+                    const isCredit = m.type === 'Crédito' || Boolean(m.isCredit) || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('créd') || String(m.payment_method || m.paymentMethod || '').toLowerCase().includes('cred');
+                    const isIngreso = !isCredit && m.type === 'Ingreso';
                     const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                    const method = m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo'));
-                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                    const method = isCredit ? 'Crédito' : (m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : (m.method || 'Efectivo')));
+                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : isCredit ? 'Venta a Crédito' : 'Retiro / Gasto de Caja');
                     const ref = m.reference ? ` • Ref: ${m.reference}` : '';
+
+                    let typeBadge = isCredit ? 'Venta Crédito' : isIngreso ? '⊕ Ingreso' : '⊖ Egreso';
+                    if (!isCredit && m.category === 'venta') typeBadge = 'Venta POS';
+                    else if (m.category === 'financiamiento') typeBadge = 'Financ.';
+                    else if (m.category === 'cobro') typeBadge = 'Cobro';
+                    else if (m.categoryLabel) typeBadge = m.categoryLabel;
+
                     return (
                       <tr key={m.id || idx} className="odd:bg-gray-50/50">
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-mono text-[6.5px] text-gray-700">{timeStr}</td>
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">
-                          <span className={isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
-                            {m.category === 'venta' ? 'Venta POS' : m.category === 'cobro' ? 'Cobro' : isIngreso ? '⊕ Ingreso' : '⊖ Egreso'}
+                          <span className={isCredit ? 'text-amber-800' : isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
+                            {typeBadge}
                           </span>
                         </td>
                         <td className="p-0.5 px-1 border border-gray-300 text-gray-800 font-medium truncate max-w-[100px]">{method}</td>
                         <td className="p-0.5 px-1 border border-gray-300 font-semibold text-black">
                           {concept}{ref}
                         </td>
-                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${isIngreso ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${
+                          isCredit ? 'text-amber-900' : isIngreso ? 'text-emerald-800' : 'text-rose-800'
+                        }`}>
+                          {isCredit ? '' : isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );

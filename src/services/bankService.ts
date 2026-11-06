@@ -2,7 +2,7 @@ import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receip
 import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, updateCashMovement, type CashMovement } from './cashMovementsService';
 import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, updateInvoice, type Invoice } from './invoicesService';
 import { getStoredReceipts } from './financingReceiptsService';
-import { getLocalInvoicePayments, saveLocalInvoicePayments, deleteSingleInvoicePayment } from './invoicePaymentsService';
+import { getLocalInvoicePayments, saveLocalInvoicePayments, deleteSingleInvoicePayment, updateSingleInvoicePayment } from './invoicePaymentsService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface BankTransaction {
@@ -18,7 +18,7 @@ export interface BankTransaction {
   date: string;
   created_by?: string;
   source_id?: string;
-  source_type?: 'invoice' | 'cash_movement' | 'financing_payment' | 'manual_bank';
+  source_type?: 'invoice' | 'cash_movement' | 'financing_payment' | 'manual_bank' | 'invoice_payment';
 }
 
 export interface BankAccountWithBalance extends CompanyBankAccount {
@@ -333,12 +333,45 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
           const isTransfer = pm.includes('transferencia') || pm.includes('transf') || pm.includes('usd') || pm.includes('banco');
           const isCard = pm.includes('tarjeta');
 
-          let assignedBankId = defaultBank.id;
-          let assignedBankName = defaultBank.bankName;
+          // Resolver cuenta bancaria o caja guardada en el abono
+          let assignedBankId = (p as any).bank_account_id || '';
+          let assignedBankName = (p as any).bank_account_name || '';
 
-          if (!isTransfer && !isCard) {
+          if (assignedBankId === 'caja-general' || (!assignedBankId && !isTransfer && !isCard)) {
             assignedBankId = 'caja-general';
             assignedBankName = 'Caja General (Efectivo)';
+          } else if (assignedBankId) {
+            const matchBank = bankAccounts.find(b => b.id === assignedBankId);
+            if (matchBank) {
+              assignedBankName = `${matchBank.bankName} - ${matchBank.accountNumber} (${matchBank.accountType || matchBank.currency})`;
+            }
+          }
+
+          if (!assignedBankId && assignedBankName) {
+            if (assignedBankName.toLowerCase().includes('caja')) {
+              assignedBankId = 'caja-general';
+              assignedBankName = 'Caja General (Efectivo)';
+            } else {
+              const matchBank = bankAccounts.find(b => 
+                (b.accountNumber && assignedBankName.includes(b.accountNumber)) ||
+                b.bankName.toLowerCase().includes(assignedBankName.toLowerCase()) ||
+                assignedBankName.toLowerCase().includes(b.bankName.toLowerCase())
+              );
+              if (matchBank) {
+                assignedBankId = matchBank.id;
+                assignedBankName = `${matchBank.bankName} - ${matchBank.accountNumber} (${matchBank.accountType || matchBank.currency})`;
+              }
+            }
+          }
+
+          if (!assignedBankId || !assignedBankName) {
+            if (isTransfer || isCard) {
+              assignedBankId = defaultBank.id;
+              assignedBankName = `${defaultBank.bankName} - ${defaultBank.accountNumber} (${defaultBank.accountType || defaultBank.currency})`;
+            } else {
+              assignedBankId = 'caja-general';
+              assignedBankName = 'Caja General (Efectivo)';
+            }
           }
 
           aggregated.push({
@@ -349,12 +382,12 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
             amount: Number(p.amount) || 0,
             concept: `Abono Factura #${summary.invoice_number || 'S/N'}${summary.customer_name ? ` - ${summary.customer_name}` : ''}`,
             reference: p.reference,
-            payment_method: isCard ? 'Tarjeta' : (isTransfer ? 'Transferencia' : 'Efectivo'),
+            payment_method: assignedBankId === 'caja-general' ? 'Efectivo' : (isCard ? 'Tarjeta' : 'Transferencia'),
             category: 'Venta / Facturación',
             date: p.date || new Date().toISOString(),
             created_by: p.cashier || 'Cajero',
             source_id: p.id,
-            source_type: 'cash_movement'
+            source_type: 'invoice_payment'
           });
         });
       }
@@ -511,7 +544,7 @@ export const calculateBankAccountsSummary = (
     const accountTxs = transactions.filter(t => {
       if (t.bank_account_id === 'caja-general') return false;
       if (t.bank_account_id === acc.id) return true;
-      if (t.bank_account_name && acc.accountNumber && t.concept?.includes(acc.accountNumber)) return true;
+      if (t.bank_account_name && acc.accountNumber && (t.bank_account_name.includes(acc.accountNumber) || t.concept?.includes(acc.accountNumber))) return true;
       const firstWithThisBankName = accounts.find(a => 
         a.bankName.toLowerCase().trim() === acc.bankName.toLowerCase().trim()
       );
@@ -662,7 +695,42 @@ export const updateBankTransaction = async (
 ): Promise<boolean> => {
   if (!tx || !tx.id) return false;
 
-  // 1. Si es un movimiento de efectivo o transferencia de caja
+  // 1. Si es un abono a factura de venta
+  if (tx.id.startsWith('abono-') || tx.source_type === 'invoice_payment') {
+    const paymentId = tx.source_id || tx.id.replace(/^abono-/, '');
+    const success = await updateSingleInvoicePayment(paymentId, {
+      amount: updates.amount,
+      reference: updates.reference,
+      bank_account_id: updates.bank_account_id,
+      bank_account_name: updates.bank_account_name,
+      payment_method: updates.payment_method,
+      date: updates.date,
+      created_by: updates.created_by,
+      type: updates.type,
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return success;
+  }
+
+  // 2. Si es una factura de venta (contado)
+  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
+    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
+    await updateInvoice(invId, {
+      total_amount: updates.amount !== undefined ? updates.amount : tx.amount,
+      transfer_reference: updates.reference !== undefined ? updates.reference : tx.reference,
+      bank_account_id: updates.bank_account_id !== undefined ? updates.bank_account_id : tx.bank_account_id,
+      bank_account_name: updates.bank_account_name !== undefined ? updates.bank_account_name : tx.bank_account_name,
+      payment_method: updates.payment_method !== undefined ? updates.payment_method : tx.payment_method,
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
+    return true;
+  }
+
+  // 3. Si es un movimiento de efectivo o transferencia de caja
   if (tx.source_type === 'cash_movement' || tx.id.startsWith('mov-')) {
     const movId = tx.source_id || tx.id.replace(/^mov-/, '');
     await updateCashMovement(movId, {
@@ -676,10 +744,13 @@ export const updateBankTransaction = async (
       created_at: updates.date !== undefined ? updates.date : tx.date,
       created_by: updates.created_by !== undefined ? updates.created_by : tx.created_by,
     });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    }
     return true;
   }
 
-  // 2. Si es una transacción bancaria manual directa
+  // 4. Si es una transacción bancaria manual directa
   if (tx.source_type === 'manual_bank' || tx.id.startsWith('btx-')) {
     const current = getManualBankTransactions();
     const updated = current.map(t => {
@@ -702,23 +773,7 @@ export const updateBankTransaction = async (
     });
     saveManualBankTransactions(updated);
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
-    }
-    return true;
-  }
-
-  // 3. Si es una factura de venta
-  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
-    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
-    await updateInvoice(invId, {
-      total_amount: updates.amount !== undefined ? updates.amount : tx.amount,
-      transfer_reference: updates.reference !== undefined ? updates.reference : tx.reference,
-      bank_account_id: updates.bank_account_id !== undefined ? updates.bank_account_id : tx.bank_account_id,
-      bank_account_name: updates.bank_account_name !== undefined ? updates.bank_account_name : tx.bank_account_name,
-      payment_method: updates.payment_method !== undefined ? updates.payment_method : tx.payment_method,
-    });
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed'));
+      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
     }
     return true;
   }

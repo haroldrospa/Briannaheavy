@@ -116,7 +116,7 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
 
             return {
               id: String(row.id),
-              type: (row.type === 'Ingreso' ? 'Ingreso' : 'Egreso') as 'Ingreso' | 'Egreso',
+              type: (row.type === 'Ingreso' ? 'Ingreso' : (row.type === 'Crédito' ? 'Crédito' : 'Egreso')) as 'Ingreso' | 'Egreso' | 'Crédito',
               amount: Number(row.amount) || 0,
               concept: cleanConcept || rawReason,
               payment_method: row.payment_method || (isCard ? 'Tarjeta' : (bankMatch ? 'Transferencia' : 'Efectivo')),
@@ -325,13 +325,15 @@ export const updateCashMovement = async (id: string, updates: Partial<CashMoveme
         updates.concept !== undefined ||
         updates.payment_method !== undefined ||
         updates.bank_account_name !== undefined ||
+        updates.bank_account_id !== undefined ||
         updates.reference !== undefined
       ) {
         const target = updatedMov || updates;
+        const isCash = target.bank_account_id === 'caja-general' || (target.payment_method || '').toLowerCase() === 'efectivo';
         const formattedReason = [
           target.concept,
           target.payment_method === 'Tarjeta' ? '[Tarjeta de Crédito]' : '',
-          target.bank_account_name ? `(Banco: ${target.bank_account_name})` : '',
+          (!isCash && target.bank_account_name && !target.bank_account_name.toLowerCase().includes('caja')) ? `(Banco: ${target.bank_account_name})` : '',
           target.reference ? `[Ref: ${target.reference}]` : '',
           target.register_name ? `[${target.register_name}]` : ''
         ].filter(Boolean).join(' ');

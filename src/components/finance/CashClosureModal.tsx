@@ -513,7 +513,7 @@ export default function CashClosureModal({
   const unifiedShiftMovements = useMemo(() => {
     const list: Array<{
       id: string;
-      type: 'Ingreso' | 'Egreso';
+      type: 'Ingreso' | 'Egreso' | 'Crédito';
       category: 'ingreso_manual' | 'egreso_manual' | 'cobro' | 'venta';
       categoryLabel: string;
       concept: string;
@@ -562,7 +562,7 @@ export default function CashClosureModal({
 
       list.push({
         id: `mov-${m.id}`,
-        type: m.type,
+        type: (m.type as 'Ingreso' | 'Egreso' | 'Crédito'),
         category: isAbono ? 'cobro' : (isIngreso ? 'ingreso_manual' : 'egreso_manual'),
         categoryLabel: isAbono ? 'Cobro Factura' : (isIngreso ? 'Ingreso Manual' : 'Egreso / Retiro'),
         concept: conceptText,
@@ -929,7 +929,7 @@ export default function CashClosureModal({
         difference: finalDiff,
         status,
         denominations: denomRecord,
-        movements: (selectedCashierFilter === 'todos' ? unifiedShiftMovements : unifiedMisMovimientos) as any,
+        movements: unifiedShiftMovements as any,
         notes: closureNotes,
       });
 
@@ -1013,37 +1013,52 @@ export default function CashClosureModal({
       ? [...savedClosure.movements]
       : (selectedCashierFilter === 'todos' ? [...unifiedShiftMovements] : [...unifiedMisMovimientos]);
 
-    // Si el cierre guardado no tenía las ventas del turno, incorporarlas
-    const hasSales = base.some((m: any) => m.category === 'venta' || String(m.concept || '').toLowerCase().includes('factura #'));
-    if (!hasSales && scopedInvoices.length > 0) {
+    // Asegurar que TODAS las facturas del turno (incluyendo las de crédito) estén incorporadas en la lista
+    if (scopedInvoices.length > 0) {
       scopedInvoices.forEach(inv => {
-        const pm = (inv.payment_method || 'Efectivo').trim();
-        const pmLower = pm.toLowerCase();
-        const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
-        const isCard = pmLower.includes('tarjeta');
-        const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
-        const isCash = !isCard && !isBank && !isCredit;
-        const invNumber = inv.invoice_number || inv.id || '';
-        const customer = inv.customer_name || 'Consumidor Final';
-        const dateStr = inv.created_at || (inv as any).date || new Date().toISOString();
-        base.push({
-          id: `inv-${inv.id || invNumber}`,
-          type: isCredit ? 'Crédito' : 'Ingreso',
-          category: 'venta' as any,
-          categoryLabel: isCredit ? 'Venta a Crédito' : 'Venta POS',
-          concept: `Factura #${invNumber} - ${customer}`,
-          customer,
-          amount: Number(inv.total_amount) || 0,
-          paymentMethod: isCredit ? 'Crédito' : pm,
-          payment_method: isCredit ? 'Crédito' : pm,
-          createdAt: dateStr,
-          created_at: dateStr,
-          reference: inv.ncf || invNumber,
-          isCash,
-          isCard,
-          isBank,
-          isCredit
+        if (isAbonoInvoice(inv)) return;
+        const invNumber = String(inv.invoice_number || inv.id || '').trim();
+        const invId = `inv-${inv.id || invNumber}`.toLowerCase();
+        const altId = `inv_${inv.id || invNumber}`.toLowerCase();
+        const rawNum = invNumber.toLowerCase();
+
+        const alreadyExists = base.some((m: any) => {
+          const mId = String(m.id || '').toLowerCase();
+          const mRef = String(m.reference || '').toLowerCase();
+          const mConcept = String(m.concept || '').toLowerCase();
+          return mId === invId || mId === altId || (rawNum && (mRef === rawNum || mConcept.includes(`factura #${rawNum}`)));
         });
+
+        if (!alreadyExists) {
+          const pm = (inv.payment_method || 'Efectivo').trim();
+          const pmLower = pm.toLowerCase();
+          const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
+          const isCard = pmLower.includes('tarjeta');
+          const isBank = pmLower.includes('transferencia') || pmLower.includes('transf') || pmLower.includes('banco');
+          const isCash = !isCard && !isBank && !isCredit;
+          const customer = inv.customer_name || 'Consumidor Final';
+          const dateStr = inv.created_at || (inv as any).date || new Date().toISOString();
+
+          base.push({
+            id: `inv-${inv.id || invNumber}`,
+            type: isCredit ? 'Crédito' : 'Ingreso',
+            category: 'venta' as any,
+            categoryLabel: isCredit ? 'Venta a Crédito' : 'Venta POS',
+            concept: `Factura #${invNumber} - ${customer}`,
+            customer,
+            amount: Number(inv.total_amount) || 0,
+            paymentMethod: isCredit ? 'Crédito' : pm,
+            payment_method: isCredit ? 'Crédito' : pm,
+            createdAt: dateStr,
+            created_at: dateStr,
+            reference: inv.ncf || invNumber,
+            isCash,
+            isCard,
+            isBank,
+            isCredit,
+            isMine: true
+          });
+        }
       });
     }
 
@@ -2727,15 +2742,16 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                 </thead>
                 <tbody>
                   {printMovements.map((m: any, idx) => {
-                    const isIngreso = m.type === 'Ingreso';
+                    const isCredit = m.type === 'Crédito' || Boolean(m.isCredit) || String(m.paymentMethod || m.payment_method || '').toLowerCase().includes('créd') || String(m.paymentMethod || m.payment_method || '').toLowerCase().includes('cred');
+                    const isIngreso = !isCredit && m.type === 'Ingreso';
                     const rawTime = m.createdAt || m.created_at || m.date;
                     const timeStr = rawTime ? new Date(rawTime).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                    const method = m.paymentMethod || m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : 'Efectivo');
-                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : 'Retiro / Gasto de Caja');
+                    const method = isCredit ? 'Crédito' : (m.paymentMethod || m.payment_method || (m.bank_account_name ? `Transf. (${m.bank_account_name})` : 'Efectivo'));
+                    const concept = m.concept || m.reason || (isIngreso ? 'Ingreso de Fondos' : isCredit ? 'Venta a Crédito' : 'Retiro / Gasto de Caja');
                     const ref = m.reference ? ` • Ref: ${m.reference}` : '';
                     
-                    let typeBadge = isIngreso ? '⊕ Ingreso' : '⊖ Egreso';
-                    if (m.category === 'venta') typeBadge = 'Venta POS';
+                    let typeBadge = isCredit ? 'Venta Crédito' : isIngreso ? '⊕ Ingreso' : '⊖ Egreso';
+                    if (!isCredit && m.category === 'venta') typeBadge = 'Venta POS';
                     else if (m.category === 'financiamiento') typeBadge = 'Financ.';
                     else if (m.category === 'cobro') typeBadge = 'Cobro';
                     else if (m.categoryLabel) typeBadge = m.categoryLabel;
@@ -2744,7 +2760,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       <tr key={m.id || idx} className="odd:bg-gray-50/50">
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-mono text-[6.5px] text-gray-700">{timeStr}</td>
                         <td className="p-0.5 px-1 border border-gray-300 text-center font-bold">
-                          <span className={isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
+                          <span className={isCredit ? 'text-amber-800' : isIngreso ? 'text-emerald-700' : 'text-rose-700'}>
                             {typeBadge}
                           </span>
                         </td>
@@ -2752,8 +2768,10 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         <td className="p-0.5 px-1 border border-gray-300 font-semibold text-black">
                           {concept}{ref}
                         </td>
-                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${isIngreso ? 'text-emerald-800' : 'text-rose-800'}`}>
-                          {isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        <td className={`p-0.5 px-1 border border-gray-300 text-right font-mono font-bold whitespace-nowrap ${
+                          isCredit ? 'text-amber-900' : isIngreso ? 'text-emerald-800' : 'text-rose-800'
+                        }`}>
+                          {isCredit ? '' : isIngreso ? '+' : '-'}RD$ {Number(m.amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );

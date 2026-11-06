@@ -117,7 +117,7 @@ export interface MappedInstallment {
 export interface UnifiedFinancialMovement {
   id: string;
   sourceType: 'pago_financiamiento' | 'ingreso_caja' | 'egreso_caja';
-  type: 'Ingreso' | 'Egreso';
+  type: 'Ingreso' | 'Egreso' | 'Crédito' | string;
   amount: number;
   concept: string;
   customerOrOrigin: string;
@@ -716,7 +716,7 @@ export default function Financing() {
       list.push({
         id: `mov-${m.id}`,
         sourceType: m.type === 'Ingreso' ? 'ingreso_caja' : 'egreso_caja',
-        type: m.type,
+        type: m.type as any,
         amount: Number(m.amount) || 0,
         concept: m.concept || (m.type === 'Ingreso' ? 'Ingreso a caja' : 'Egreso de caja'),
         customerOrOrigin: m.type === 'Ingreso' ? 'Entrada a Caja / Bancos' : 'Gasto Operativo / Salida',

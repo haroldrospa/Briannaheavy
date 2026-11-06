@@ -73,11 +73,25 @@ export default function Banks() {
       const pad = (n: number) => String(n).padStart(2, '0');
       const formattedDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+      let initialBankId = transactionToEdit.bank_account_id || '';
+      if (initialBankId !== 'caja-general' && !bankAccounts.some(b => b.id === initialBankId)) {
+        const found = bankAccounts.find(b => 
+          (b.accountNumber && transactionToEdit.bank_account_name?.includes(b.accountNumber)) ||
+          b.bankName.toLowerCase() === transactionToEdit.bank_account_name?.toLowerCase()
+        );
+        if (found) initialBankId = found.id;
+      }
+      if (!initialBankId) {
+        initialBankId = (transactionToEdit.payment_method || '').toLowerCase().includes('efectivo')
+          ? 'caja-general'
+          : (bankAccounts[0]?.id || 'caja-general');
+      }
+
       setEditForm({
         concept: transactionToEdit.concept || '',
         amount: String(transactionToEdit.amount || ''),
         type: transactionToEdit.type || 'Egreso',
-        bank_account_id: transactionToEdit.bank_account_id || (bankAccounts[0]?.id || 'caja-general'),
+        bank_account_id: initialBankId,
         reference: transactionToEdit.reference || '',
         date: formattedDateStr,
         created_by: transactionToEdit.created_by || '',
@@ -101,9 +115,14 @@ export default function Banks() {
 
     setIsSavingEdit(true);
     try {
-      const selectedAccount = editForm.bank_account_id === 'caja-general' 
+      const isCaja = editForm.bank_account_id === 'caja-general';
+      const selectedAccount = isCaja 
         ? CASH_ACCOUNT 
         : bankAccounts.find(b => b.id === editForm.bank_account_id) || bankAccounts[0];
+
+      const accountDisplayName = isCaja
+        ? 'Caja General (Efectivo)'
+        : `${selectedAccount.bankName} - ${selectedAccount.accountNumber} (${selectedAccount.accountType || selectedAccount.currency})`;
 
       const success = await updateBankTransaction(transactionToEdit, {
         concept: editForm.concept.trim(),
@@ -111,8 +130,8 @@ export default function Banks() {
         type: editForm.type,
         reference: editForm.reference.trim(),
         bank_account_id: selectedAccount.id,
-        bank_account_name: selectedAccount.bankName,
-        payment_method: selectedAccount.id === 'caja-general' ? 'Efectivo' : 'Transferencia',
+        bank_account_name: accountDisplayName,
+        payment_method: isCaja ? 'Efectivo' : 'Transferencia',
         date: editForm.date ? new Date(editForm.date).toISOString() : transactionToEdit.date,
         created_by: editForm.created_by.trim() || undefined,
       });
@@ -872,7 +891,19 @@ export default function Banks() {
                               </div>
                               <div>
                                 <span className="font-semibold text-zinc-900 dark:text-white block print:text-black">
-                                  {tx.bank_account_name}
+                                  {(() => {
+                                    if (isCash || tx.bank_account_id === 'caja-general') {
+                                      return 'Caja General (Efectivo)';
+                                    }
+                                    const matchBank = bankAccounts.find(b => 
+                                      b.id === tx.bank_account_id || 
+                                      (b.accountNumber && tx.bank_account_name?.includes(b.accountNumber))
+                                    );
+                                    if (matchBank) {
+                                      return `${matchBank.bankName} - ${matchBank.accountNumber} (${matchBank.accountType || matchBank.currency})`;
+                                    }
+                                    return tx.bank_account_name || 'Cuenta Bancaria';
+                                  })()}
                                 </span>
                                 <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block">
                                   {isCash ? 'Efectivo en Caja' : 'Transferencia'}
