@@ -56,6 +56,13 @@ export interface ReceivableItem {
     amountUsd?: number;
     exchangeRate?: number;
   }>;
+  itemsList?: Array<{
+    description: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+  rawInvoice?: Invoice;
 }
 
 const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
@@ -122,6 +129,28 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
         }
       }
 
+      let structuredItems: Array<{ description: string; quantity: number; unit_price: number; total_price: number }> = [];
+      if (Array.isArray(inv.items) && inv.items.length > 0) {
+        structuredItems = inv.items.map((it: any) => ({
+          description: it.description || 'Artículo / Repuesto',
+          quantity: Number(it.quantity) || 1,
+          unit_price: Number(it.unit_price) || 0,
+          total_price: Number(it.total_price) || ((Number(it.quantity) || 1) * (Number(it.unit_price) || 0))
+        }));
+      } else if (typeof (inv as any).items === 'string') {
+        try {
+          const parsed = JSON.parse((inv as any).items);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            structuredItems = parsed.map((it: any) => ({
+              description: it.description || 'Artículo / Repuesto',
+              quantity: Number(it.quantity) || 1,
+              unit_price: Number(it.unit_price) || 0,
+              total_price: Number(it.total_price) || ((Number(it.quantity) || 1) * (Number(it.unit_price) || 0))
+            }));
+          }
+        } catch {}
+      }
+
       return {
         id: inv.id || `rec_${idx + 1}`,
         invoice_id: inv.id,
@@ -138,7 +167,9 @@ const mapInvoicesToReceivables = (invs: Invoice[]): ReceivableItem[] => {
         dueDate,
         creditDays,
         status,
-        paymentsHistory: payments
+        paymentsHistory: payments,
+        itemsList: structuredItems,
+        rawInvoice: inv
       };
     });
 };
@@ -217,6 +248,32 @@ export default function Cobros() {
   const [selectedDetailItem, setSelectedDetailItem] = useState<ReceivableItem | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'statement'>('details');
+  const [statementPrintMode, setStatementPrintMode] = useState<'summary' | 'detailed'>('summary');
+  const [statementViewMode, setStatementViewMode] = useState<'summary' | 'detailed'>('summary');
+
+  const getInvoiceItems = (inv: ReceivableItem) => {
+    if (inv.itemsList && inv.itemsList.length > 0) return inv.itemsList;
+    const allStored = getLocalStorageInvoices();
+    const cleanNum = String(inv.invoice || '').trim();
+    const matched = allStored.find(si => 
+      (si.id && inv.invoice_id && String(si.id) === String(inv.invoice_id)) ||
+      (si.invoice_number && cleanNum && String(si.invoice_number).trim() === cleanNum)
+    );
+    if (matched && Array.isArray(matched.items) && matched.items.length > 0) {
+      return matched.items.map((it: any) => ({
+        description: it.description || 'Artículo / Repuesto',
+        quantity: Number(it.quantity) || 1,
+        unit_price: Number(it.unit_price) || 0,
+        total_price: Number(it.total_price) || ((Number(it.quantity) || 1) * (Number(it.unit_price) || 0))
+      }));
+    }
+    return [{
+      description: inv.items || 'Repuestos & Mercancía POS',
+      quantity: 1,
+      unit_price: inv.totalAmount,
+      total_price: inv.totalAmount
+    }];
+  };
 
   const activeDetailItem = useMemo(() => {
     if (!selectedDetailItem) return null;
@@ -611,7 +668,8 @@ export default function Cobros() {
   };
 
 
-  const handlePrintStatement = () => {
+  const handlePrintStatementSummary = () => {
+    setStatementPrintMode('summary');
     document.body.classList.remove('print-ticket-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-ticket-mode');
     document.body.classList.add('print-statement-mode', 'print-letter-mode');
     requestAnimationFrame(() => {
@@ -619,6 +677,21 @@ export default function Cobros() {
         window.print();
       }, 150);
     });
+  };
+
+  const handlePrintStatementDetailed = () => {
+    setStatementPrintMode('detailed');
+    document.body.classList.remove('print-ticket-mode', 'print-barcode-mode', 'print-closure-mode', 'print-receipt-mode', 'print-statement-ticket-mode');
+    document.body.classList.add('print-statement-mode', 'print-letter-mode');
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print();
+      }, 150);
+    });
+  };
+
+  const handlePrintStatement = () => {
+    handlePrintStatementSummary();
   };
 
   useEffect(() => {
@@ -2789,82 +2862,155 @@ export default function Cobros() {
                         </div>
                       </div>
 
-                      {/* All Customer Invoices Table */}
+                      {/* All Customer Invoices Table & Detailed View */}
                       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200/70 dark:border-zinc-800 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-700 dark:text-zinc-300">
-                            Todas las Facturas del Cliente ({associatedCustomerInvoices.length})
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            Corte: {new Date().toLocaleDateString('es-DO')}
-                          </span>
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-gray-700 dark:text-zinc-300">
+                              Facturas del Cliente ({associatedCustomerInvoices.length})
+                            </span>
+                            <span className="text-[11px] text-gray-400 font-normal">
+                              • Corte: {new Date().toLocaleDateString('es-DO')}
+                            </span>
+                          </div>
+                          
+                          {/* Selector de Vista en Pantalla */}
+                          <div className="flex items-center p-0.5 bg-gray-100 dark:bg-zinc-800 rounded-lg border border-gray-200/60 dark:border-zinc-700/60 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setStatementViewMode('summary')}
+                              className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                statementViewMode === 'summary'
+                                  ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs'
+                                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-zinc-200'
+                              }`}
+                            >
+                              Historial de Cuenta
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStatementViewMode('detailed')}
+                              className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                statementViewMode === 'detailed'
+                                  ? 'bg-white dark:bg-zinc-900 text-[#ED1C24] dark:text-red-400 shadow-xs'
+                                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-zinc-200'
+                              }`}
+                            >
+                              Desglose con Artículos
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
-                              <tr>
-                                <th className="px-3.5 py-2.5">Factura</th>
-                                <th className="px-3.5 py-2.5">e-NCF</th>
-                                <th className="px-3.5 py-2.5">Emisión</th>
-                                <th className="px-3.5 py-2.5">Vencimiento</th>
-                                <th className="px-3.5 py-2.5 text-right">Total Factura</th>
-                                <th className="px-3.5 py-2.5 text-right">Abonado</th>
-                                <th className="px-3.5 py-2.5 text-right">Saldo Pendiente</th>
-                                <th className="px-3.5 py-2.5 text-center">Estado</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
-                              {associatedCustomerInvoices.map((inv) => (
-                                <tr key={inv.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
-                                  <td className="px-3.5 py-2.5 font-mono font-bold text-gray-900 dark:text-white">{inv.invoice}</td>
-                                  <td className="px-3.5 py-2.5 font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{inv.ncf}</td>
-                                  <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400">{inv.issueDate}</td>
-                                  <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400 font-mono">{inv.dueDate}</td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
-                                    RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
-                                    RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">
-                                    RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="px-3.5 py-2.5 text-center">
-                                    <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-md border ${
-                                      inv.status === 'Saldado'
-                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/40'
-                                        : inv.status === 'Atrasado'
-                                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/40'
-                                        : inv.status === 'Con Abono'
-                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/40'
-                                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/40'
-                                    }`}>
-                                      {inv.status}
-                                    </span>
-                                  </td>
+                        {statementViewMode === 'summary' ? (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-gray-50 dark:bg-zinc-800/40 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                                <tr>
+                                  <th className="px-3.5 py-2.5">Factura</th>
+                                  <th className="px-3.5 py-2.5">e-NCF</th>
+                                  <th className="px-3.5 py-2.5">Emisión</th>
+                                  <th className="px-3.5 py-2.5">Vencimiento</th>
+                                  <th className="px-3.5 py-2.5 text-right">Total Factura</th>
+                                  <th className="px-3.5 py-2.5 text-right">Abonado</th>
+                                  <th className="px-3.5 py-2.5 text-right">Saldo Pendiente</th>
+                                  <th className="px-3.5 py-2.5 text-center">Estado</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                            <tfoot className="bg-gray-50 dark:bg-zinc-800/60 font-semibold text-xs border-t border-gray-200 dark:border-zinc-700">
-                              <tr>
-                                <td colSpan={4} className="px-3.5 py-3 text-gray-700 dark:text-zinc-300">
-                                  Totales Consolidados
-                                </td>
-                                <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
-                                  RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
-                                  RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="px-3.5 py-3 text-right font-mono font-bold text-gray-900 dark:text-white">
-                                  RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td></td>
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                                {associatedCustomerInvoices.map((inv) => (
+                                  <tr key={inv.id} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/20">
+                                    <td className="px-3.5 py-2.5 font-mono font-bold text-gray-900 dark:text-white">{inv.invoice}</td>
+                                    <td className="px-3.5 py-2.5 font-mono text-xs text-gray-600 dark:text-zinc-400 font-medium">{inv.ncf}</td>
+                                    <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400">{inv.issueDate}</td>
+                                    <td className="px-3.5 py-2.5 text-gray-600 dark:text-zinc-400 font-mono">{inv.dueDate}</td>
+                                    <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
+                                      RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3.5 py-2.5 text-right font-mono text-gray-900 dark:text-white font-medium">
+                                      RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3.5 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">
+                                      RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="px-3.5 py-2.5 text-center">
+                                      <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-md border ${
+                                        inv.status === 'Saldado'
+                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/50 dark:border-emerald-800/40'
+                                          : inv.status === 'Atrasado'
+                                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/50 dark:border-rose-800/40'
+                                          : inv.status === 'Con Abono'
+                                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/50 dark:border-blue-800/40'
+                                          : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/50 dark:border-amber-800/40'
+                                      }`}>
+                                        {inv.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-gray-50 dark:bg-zinc-800/60 font-semibold text-xs border-t border-gray-200 dark:border-zinc-700">
+                                <tr>
+                                  <td colSpan={4} className="px-3.5 py-3 text-gray-700 dark:text-zinc-300">
+                                    Totales Consolidados
+                                  </td>
+                                  <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
+                                    RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3.5 py-3 text-right font-mono text-gray-900 dark:text-white">
+                                    RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-3.5 py-3 text-right font-mono font-bold text-gray-900 dark:text-white">
+                                    RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        ) : (
+                          /* Desglose detallado con artículos en pantalla */
+                          <div className="p-4 space-y-4">
+                            {associatedCustomerInvoices.map((inv) => {
+                              const items = getInvoiceItems(inv);
+                              return (
+                                <div key={inv.id} className="rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
+                                  <div className="bg-gray-50 dark:bg-zinc-800/60 p-3 border-b border-gray-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold text-xs text-gray-900 dark:text-white">Factura #{inv.invoice}</span>
+                                      <span className="font-mono text-[11px] text-gray-500 bg-white dark:bg-zinc-900 px-1.5 py-0.5 rounded border border-gray-200 dark:border-zinc-700">NCF: {inv.ncf}</span>
+                                      <span className="text-xs text-gray-500">Emisión: {inv.issueDate}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs font-mono">
+                                      <span className="text-gray-700 dark:text-zinc-300">Total: <strong>RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                                      <span className="text-emerald-600 dark:text-emerald-400">Abonado: <strong>RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                                      <span className="text-[#ED1C24] font-bold">Saldo: <strong>RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                                    </div>
+                                  </div>
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-gray-50/50 dark:bg-zinc-800/30 text-[10px] uppercase font-semibold text-gray-500">
+                                      <tr>
+                                        <th className="py-2 px-3 text-center w-14">Cant.</th>
+                                        <th className="py-2 px-3">Artículo / Repuesto</th>
+                                        <th className="py-2 px-3 text-right w-28">Precio Unit.</th>
+                                        <th className="py-2 px-3 text-right w-28">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                                      {items.map((it, itIdx) => (
+                                        <tr key={itIdx}>
+                                          <td className="py-1.5 px-3 text-center font-mono font-semibold text-gray-700 dark:text-zinc-300">{it.quantity}</td>
+                                          <td className="py-1.5 px-3 font-medium text-gray-900 dark:text-white">{it.description}</td>
+                                          <td className="py-1.5 px-3 text-right font-mono text-gray-600 dark:text-zinc-400">RD$ {it.unit_price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                          <td className="py-1.5 px-3 text-right font-mono font-bold text-gray-900 dark:text-white">RD$ {it.total_price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* Customer Payments Consolidated */}
@@ -2926,20 +3072,29 @@ export default function Cobros() {
                   <button
                     type="button"
                     onClick={() => handlePrintReceivableInvoiceLetter(activeDetailItem)}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                    title="Imprimir esta factura en formato Carta con historial de abonos"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                    title="Imprimir solo esta factura en formato Carta"
                   >
-                    <PrinterIcon className="w-4 h-4" />
+                    <DocumentTextIcon className="w-4 h-4 text-gray-500" />
                     <span>Factura (Carta)</span>
                   </button>
                   <button
                     type="button"
-                    onClick={handlePrintStatement}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                    title="Imprimir estado de cuenta oficial en formato Carta"
+                    onClick={handlePrintStatementSummary}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 text-gray-900 dark:text-white border border-gray-300 dark:border-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                    title="Imprimir estado de cuenta con el historial y balance consolidado (Formato Carta)"
+                  >
+                    <PrinterIcon className="w-4 h-4 text-blue-600" />
+                    <span>Estado de Cuenta: Historial (Carta)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintStatementDetailed}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#ED1C24] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                    title="Imprimir estado de cuenta detallado con todos los artículos de cada factura (Formato Carta)"
                   >
                     <PrinterIcon className="w-4 h-4" />
-                    <span>Estado de Cuenta (Carta)</span>
+                    <span>Estado de Cuenta: Con Artículos (Carta)</span>
                   </button>
                 </div>
 
@@ -2990,7 +3145,7 @@ export default function Cobros() {
         )}
       </AnimatePresence>
 
-      {/* Portal de Impresión: Formato Carta Oficial / PDF */}
+      {/* Portal de Impresión: Formato Carta Oficial / PDF (Historial o Detallado con Artículos) */}
       {selectedDetailItem && typeof document !== 'undefined' && createPortal(
         <div 
           className="printable-customer-statement font-sans text-black bg-white"
@@ -3001,6 +3156,10 @@ export default function Cobros() {
               @page {
                 size: letter portrait !important;
                 margin: 8mm 10mm !important;
+              }
+              .statement-avoid-break {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
               }
             }
           `}</style>
@@ -3016,10 +3175,10 @@ export default function Cobros() {
             </div>
             <div className="text-right shrink-0">
               <span className="inline-block px-2.5 py-0.5 bg-gray-100 text-black font-black text-[10px] uppercase tracking-widest rounded-full border border-gray-300">
-                Estado de Cuenta
+                {statementPrintMode === 'detailed' ? 'Estado de Cuenta con Artículos' : 'Estado de Cuenta'}
               </span>
               <p className="text-xs font-mono font-black text-black mt-1">
-                DOC: EDC-{selectedDetailItem.rnc ? selectedDetailItem.rnc.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'CLI'}-{Date.now().toString().slice(-4)}
+                DOC: EDC-{statementPrintMode === 'detailed' ? 'ART-' : ''}{selectedDetailItem.rnc ? selectedDetailItem.rnc.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'CLI'}-{Date.now().toString().slice(-4)}
               </p>
               <p className="text-[10px] text-gray-700 font-medium mt-0.5">
                 Fecha de Corte: <strong className="font-bold text-black">{new Date().toLocaleDateString('es-DO', { year: 'numeric', month: 'short', day: 'numeric' })}</strong>
@@ -3071,62 +3230,152 @@ export default function Cobros() {
             </div>
           </div>
 
-          {/* Tabla de Facturas */}
-          <div className="mb-3 overflow-hidden rounded-xl border border-gray-300">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-100 text-black uppercase tracking-wider text-[9px] font-black">
-                <tr>
-                  <th className="py-1.5 px-2.5">Factura</th>
-                  <th className="py-1.5 px-2.5">e-NCF</th>
-                  <th className="py-1.5 px-2.5">Emisión</th>
-                  <th className="py-1.5 px-2.5">Vencimiento</th>
-                  <th className="py-1.5 px-2.5 text-right">Total Factura</th>
-                  <th className="py-1.5 px-2.5 text-right">Monto Pagado</th>
-                  <th className="py-1.5 px-2.5 text-right">Saldo Pendiente</th>
-                  <th className="py-1.5 px-2.5 text-center">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-300 text-[10.5px]">
-                {associatedCustomerInvoices.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="py-1.5 px-2.5 font-bold font-mono text-black">{inv.invoice}</td>
-                    <td className="py-1.5 px-2.5 font-mono text-gray-700 text-[9.5px]">{inv.ncf}</td>
-                    <td className="py-1.5 px-2.5">{inv.issueDate}</td>
-                    <td className="py-1.5 px-2.5">{inv.dueDate}</td>
-                    <td className="py-1.5 px-2.5 text-right font-mono font-medium">RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                    <td className="py-1.5 px-2.5 text-right font-mono text-emerald-700 font-medium">RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                    <td className="py-1.5 px-2.5 text-right font-mono font-black text-black">RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                    <td className="py-1.5 px-2.5 text-center font-bold text-[9px]">
-                      {inv.status}
-                    </td>
+          {/* CONTENIDO SEGÚN MODO SELECCIONADO: DETALLADO CON ARTÍCULOS vs RESUMIDO / HISTORIAL */}
+          {statementPrintMode === 'detailed' ? (
+            /* ========================================================
+               MODO 1: ESTADO DE CUENTA DETALLADO CON ARTÍCULOS
+               ======================================================== */
+            <div className="space-y-3 mb-3">
+              <div className="border-b border-gray-300 pb-1">
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-600">
+                  Desglose Detallado de Facturas y Artículos Facturados ({associatedCustomerInvoices.length})
+                </span>
+              </div>
+
+              {associatedCustomerInvoices.map((inv) => {
+                const items = getInvoiceItems(inv);
+                return (
+                  <div key={inv.id} className="statement-avoid-break rounded-xl border border-gray-300 overflow-hidden text-xs">
+                    {/* Header de la Factura */}
+                    <div className="bg-gray-100 p-2 px-3 border-b border-gray-300 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-black text-xs">
+                          Factura #{inv.invoice}
+                        </span>
+                        <span className="font-mono text-[10px] text-gray-600 bg-white px-1.5 py-0.5 rounded border border-gray-300 font-semibold">
+                          NCF: {inv.ncf}
+                        </span>
+                        <span className="text-[10px] text-gray-600">
+                          Emisión: <strong>{inv.issueDate}</strong> • Vence: <strong>{inv.dueDate}</strong>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 font-mono text-[10.5px]">
+                        <span className="text-gray-800">Total: <strong>RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                        <span className="text-emerald-700">Abonado: <strong>RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                        <span className="text-[#ED1C24] font-black">Saldo: <strong>RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-gray-200 text-gray-800">
+                          {inv.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tabla de Artículos de esta Factura */}
+                    <table className="w-full text-left text-[10px]">
+                      <thead className="bg-gray-50 text-gray-700 uppercase tracking-wider text-[8.5px] font-bold border-b border-gray-200">
+                        <tr>
+                          <th className="py-1 px-2.5 w-12 text-center">Cant.</th>
+                          <th className="py-1 px-2.5">Descripción del Artículo / Repuesto</th>
+                          <th className="py-1 px-2.5 text-right w-28">Precio Unit.</th>
+                          <th className="py-1 px-2.5 text-right w-28">Importe Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {items.map((it, itIdx) => (
+                          <tr key={itIdx} className="odd:bg-white even:bg-gray-50/40">
+                            <td className="py-1 px-2.5 text-center font-mono font-bold text-gray-900">{it.quantity}</td>
+                            <td className="py-1 px-2.5 font-medium text-gray-900">{it.description}</td>
+                            <td className="py-1 px-2.5 text-right font-mono text-gray-700">RD$ {it.unit_price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="py-1 px-2.5 text-right font-mono font-bold text-gray-900">RD$ {it.total_price.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* Abonos específicos de esta factura si los tiene */}
+                    {inv.paymentsHistory && inv.paymentsHistory.length > 0 && (
+                      <div className="bg-emerald-50/60 p-1.5 px-3 border-t border-gray-200 text-[9px] flex flex-wrap items-center gap-x-4 gap-y-1 text-emerald-950">
+                        <span className="font-bold uppercase tracking-wider text-[8px] text-emerald-800">Abonos Aplicados:</span>
+                        {inv.paymentsHistory.map((p, pIdx) => (
+                          <span key={p.id || pIdx} className="font-mono">
+                            {p.date ? p.date.slice(0, 10) : ''}: <strong>RD$ {Number(p.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong> ({p.method}{p.reference ? ` - Ref: ${p.reference}` : ''})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Totales Consolidados al final del desglose de artículos */}
+              <div className="statement-avoid-break bg-gray-100 rounded-xl p-2.5 border border-gray-300 flex justify-between items-center text-xs font-black">
+                <span className="uppercase tracking-wider text-black">Totales Consolidados ({customerTotals.count} facturas)</span>
+                <div className="flex items-center gap-5 font-mono">
+                  <span className="text-gray-900">Total: RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-emerald-700">Abonado: RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  <span className="text-[#ED1C24] text-sm">Saldo Pendiente: RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ========================================================
+               MODO 2: ESTADO DE CUENTA RESUMIDO / HISTORIAL DE CUENTA
+               ======================================================== */
+            <div className="mb-3 overflow-hidden rounded-xl border border-gray-300">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 text-black uppercase tracking-wider text-[9px] font-black">
+                  <tr>
+                    <th className="py-1.5 px-2.5">Factura</th>
+                    <th className="py-1.5 px-2.5">e-NCF</th>
+                    <th className="py-1.5 px-2.5">Emisión</th>
+                    <th className="py-1.5 px-2.5">Vencimiento</th>
+                    <th className="py-1.5 px-2.5 text-right">Total Factura</th>
+                    <th className="py-1.5 px-2.5 text-right">Monto Pagado</th>
+                    <th className="py-1.5 px-2.5 text-right">Saldo Pendiente</th>
+                    <th className="py-1.5 px-2.5 text-center">Estado</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-gray-100 border-t-2 border-gray-400 font-black text-[10.5px]">
-                <tr>
-                  <td colSpan={4} className="py-2 px-2.5 uppercase tracking-wider text-black">
-                    Totales Consolidados
-                  </td>
-                  <td className="py-2 px-2.5 text-right font-mono">
-                    RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-2 px-2.5 text-right font-mono text-emerald-700">
-                    RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-2 px-2.5 text-right font-mono text-[#ED1C24]">
-                    RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-300 text-[10.5px]">
+                  {associatedCustomerInvoices.map((inv) => (
+                    <tr key={inv.id}>
+                      <td className="py-1.5 px-2.5 font-bold font-mono text-black">{inv.invoice}</td>
+                      <td className="py-1.5 px-2.5 font-mono text-gray-700 text-[9.5px]">{inv.ncf}</td>
+                      <td className="py-1.5 px-2.5">{inv.issueDate}</td>
+                      <td className="py-1.5 px-2.5">{inv.dueDate}</td>
+                      <td className="py-1.5 px-2.5 text-right font-mono font-medium">RD$ {inv.totalAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-1.5 px-2.5 text-right font-mono text-emerald-700 font-medium">RD$ {inv.paidAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-1.5 px-2.5 text-right font-mono font-black text-black">RD$ {inv.balance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      <td className="py-1.5 px-2.5 text-center font-bold text-[9px]">
+                        {inv.status}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-100 border-t-2 border-gray-400 font-black text-[10.5px]">
+                  <tr>
+                    <td colSpan={4} className="py-2 px-2.5 uppercase tracking-wider text-black">
+                      Totales Consolidados
+                    </td>
+                    <td className="py-2 px-2.5 text-right font-mono">
+                      RD$ {customerTotals.totalBilled.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-2 px-2.5 text-right font-mono text-emerald-700">
+                      RD$ {customerTotals.totalPaid.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-2 px-2.5 text-right font-mono text-[#ED1C24]">
+                      RD$ {customerTotals.totalBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
 
           {/* Historial de Abonos si existen */}
           {customerAllPayments.length > 0 && (
-            <div className="mb-3">
+            <div className="statement-avoid-break mb-3">
               <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-1">
-                Historial de Abonos Registrados ({customerAllPayments.length})
+                Historial Consolidado de Abonos Registrados ({customerAllPayments.length})
               </span>
               <div className="overflow-hidden rounded-xl border border-gray-300">
                 <table className="w-full text-left text-[10px]">
@@ -3140,7 +3389,7 @@ export default function Cobros() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {customerAllPayments.slice(0, 6).map((pay, pIdx) => (
+                    {customerAllPayments.slice(0, 8).map((pay, pIdx) => (
                       <tr key={pIdx}>
                         <td className="py-1 px-2.5">{pay.date}</td>
                         <td className="py-1 px-2.5 font-mono font-bold">{pay.invoice}</td>
@@ -3163,12 +3412,12 @@ export default function Cobros() {
           )}
 
           {/* Nota Oficial */}
-          <div className="mb-3 p-2 bg-gray-50 rounded-xl border border-gray-300 text-[8.5px] text-gray-600 leading-tight">
+          <div className="statement-avoid-break mb-3 p-2 bg-gray-50 rounded-xl border border-gray-300 text-[8.5px] text-gray-600 leading-tight">
             <strong>Aviso de Balance:</strong> Este estado de cuenta certifica el historial de créditos y balance pendiente de pago emitido por Brianna Heavy, SRL. Para aclaraciones o acuerdos de pago, favor comunicarse al departamento de cobros al (809) 555-0199.
           </div>
 
           {/* Firmas */}
-          <div className="grid grid-cols-2 gap-10 mt-5 pt-3 border-t border-dashed border-gray-400">
+          <div className="statement-avoid-break grid grid-cols-2 gap-10 mt-5 pt-3 border-t border-dashed border-gray-400">
             <div className="text-center">
               <div className="border-b border-black w-3/4 mx-auto mb-1.5"></div>
               <p className="text-[9.5px] font-black text-black uppercase tracking-wider">Departamento de Cobros / Caja</p>
