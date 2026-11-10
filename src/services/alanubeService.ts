@@ -261,6 +261,10 @@ export const buildDgiiVerificationUrl = (
  * Formatea de forma legible cualquier tipo de error devuelto por la API de Alanube o la DGII
  */
 export const formatAlanubeError = (data: any, status: number): string => {
+  if (status === 401 || status === 403 || String(data?.message || '').toLowerCase().includes('unauthorized') || String(data?.error || '').toLowerCase().includes('unauthorized')) {
+    return 'Token de Alanube no autorizado o vencido (401 Unauthorized).\nEl Token JWT de autenticación expiró o fue revocado en Alanube.\nPor favor, ingresa el nuevo token en Configuración > Facturación Electrónica (Alanube / DGII).';
+  }
+
   if (!data) return `Error ${status} del servidor fiscal Alanube / DGII`;
 
   // 1. Array de errores de validación JSON Schema de Alanube

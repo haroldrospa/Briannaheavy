@@ -12,7 +12,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
-import BarcodeLabel, { type LabelSizePreset } from './BarcodeLabel';
+import BarcodeLabel, { 
+  renderLabelPureHtml, 
+  type LabelSizePreset 
+} from './BarcodeLabel';
 import { getInvoiceCustomConfig } from '../../utils/receiptSettings';
 
 export interface BulkBarcodePrintModalProps {
@@ -21,6 +24,14 @@ export interface BulkBarcodePrintModalProps {
   onClose: () => void;
   onClearSelection?: () => void;
 }
+
+const PAGE_DIMENSIONS: Record<LabelSizePreset, string> = {
+  mini: '30mm 20mm',
+  compact: '40mm 25mm',
+  standard: '50mm 30mm',
+  large: '70mm 40mm',
+  sheet: 'auto'
+};
 
 export default function BulkBarcodePrintModal({ 
   isOpen, 
@@ -44,7 +55,9 @@ export default function BulkBarcodePrintModal({
     return initialMap;
   });
 
-  const [sizePreset, setSizePreset] = useState<LabelSizePreset>('standard');
+  const [sizePreset, setSizePreset] = useState<LabelSizePreset>(() => {
+    return (localStorage.getItem('brianna_barcode_size') as LabelSizePreset) || 'mini';
+  });
   const [showPrice, setShowPrice] = useState<boolean>(true);
   const [showCode, setShowCode] = useState<boolean>(true);
   const [showBrand, setShowBrand] = useState<boolean>(true);
@@ -112,10 +125,80 @@ export default function BulkBarcodePrintModal({
   }, [selectedItems, quantities]);
 
   // Handle Print trigger
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (flattenedLabelsToPrint.length === 0) return;
     setIsPrinting(true);
+
+    const isElectron = typeof window !== 'undefined' && Boolean((window as any).electronAPI?.isElectron);
+
+    if (isElectron && (window as any).electronAPI?.printLabelHtml) {
+      try {
+        const MM_DIMENSIONS: Record<LabelSizePreset, { width: number; height: number }> = {
+          mini: { width: 30, height: 20 },
+          compact: { width: 40, height: 25 },
+          standard: { width: 50, height: 30 },
+          large: { width: 70, height: 40 },
+          sheet: { width: 210, height: 297 }
+        };
+        const dim = MM_DIMENSIONS[sizePreset] || { width: 30, height: 20 };
+
+        const savedLeft = localStorage.getItem('brianna_barcode_margin_left');
+        const savedTop = localStorage.getItem('brianna_barcode_margin_top');
+        const savedRight = localStorage.getItem('brianna_barcode_margin_right');
+        const savedBottom = localStorage.getItem('brianna_barcode_margin_bottom');
+        const marginLeft = savedLeft !== null ? parseFloat(savedLeft) : 2.5;
+        const marginTop = savedTop !== null ? parseFloat(savedTop) : 1.0;
+        const marginRight = savedRight !== null ? parseFloat(savedRight) : 1.5;
+        const marginBottom = savedBottom !== null ? parseFloat(savedBottom) : 0.8;
+
+        let fullLabelsHtml = '';
+        flattenedLabelsToPrint.forEach(item => {
+          const singleHtml = renderLabelPureHtml({
+            item,
+            size: sizePreset,
+            variant: 'modern',
+            showPrice,
+            showCode,
+            showBrand,
+            showDepartment,
+            showCompany,
+            companyName,
+            marginLeftMm: marginLeft,
+            marginTopMm: marginTop,
+            marginRightMm: marginRight,
+            marginBottomMm: marginBottom
+          });
+          fullLabelsHtml += `<div class="label-page">${singleHtml}</div>`;
+        });
+
+        const selectedPrinter = localStorage.getItem('brianna_barcode_printer') || '';
+
+        const result = await (window as any).electronAPI.printLabelHtml({
+          html: fullLabelsHtml,
+          deviceName: selectedPrinter,
+          widthMm: dim.width,
+          heightMm: dim.height,
+          copies: 1,
+          silent: true
+        });
+
+        if (result && result.success) {
+          if (onClearSelection) onClearSelection();
+          onClose();
+        } else {
+          alert('Error al imprimir lote: ' + (result?.error || 'Verifica la impresora.'));
+        }
+      } catch (err: any) {
+        console.error('Error en bulk print:', err);
+        alert('Error en impresión: ' + (err?.message || err));
+      } finally {
+        setIsPrinting(false);
+      }
+      return;
+    }
+
     document.body.classList.add('print-barcode-mode');
+    document.body.classList.add(`print-barcode-size-${sizePreset}`);
     if (sizePreset === 'sheet') {
       document.body.classList.add('print-barcode-sheet');
       document.body.classList.remove('print-barcode-thermal');
@@ -124,8 +207,47 @@ export default function BulkBarcodePrintModal({
       document.body.classList.remove('print-barcode-sheet');
     }
 
+    // Inyectar regla @page exacta para que el navegador y el controlador
+    // no giren la etiqueta 90 grados ni generen saltos de página en blanco
+    const styleId = 'bulk-barcode-dynamic-page-style';
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+
+    const pageSize = PAGE_DIMENSIONS[sizePreset] || '50mm 30mm';
+    if (sizePreset === 'sheet') {
+      styleEl.textContent = `
+        @page {
+          size: auto;
+          margin: 5mm;
+        }
+      `;
+    } else {
+      styleEl.textContent = `
+        @page {
+          size: ${pageSize};
+          margin: 0mm !important;
+        }
+      `;
+    }
+
     const cleanup = () => {
-      document.body.classList.remove('print-barcode-mode', 'print-barcode-thermal', 'print-barcode-sheet');
+      const el = document.getElementById(styleId);
+      if (el) el.remove();
+
+      document.body.classList.remove(
+        'print-barcode-mode', 
+        'print-barcode-thermal', 
+        'print-barcode-sheet',
+        'print-barcode-size-mini',
+        'print-barcode-size-compact',
+        'print-barcode-size-standard',
+        'print-barcode-size-large',
+        'print-barcode-size-sheet'
+      );
       setIsPrinting(false);
       window.removeEventListener('afterprint', cleanup);
       if (onClearSelection) onClearSelection();
@@ -135,7 +257,7 @@ export default function BulkBarcodePrintModal({
 
     setTimeout(() => {
       window.print();
-      setTimeout(cleanup, 1500);
+      setTimeout(cleanup, 2000);
     }, 120);
   };
 
@@ -336,10 +458,11 @@ export default function BulkBarcodePrintModal({
                   <span>Formato y Tamaño de Impresión</span>
                 </label>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                   {[
-                    { key: 'standard', title: '50 x 30 mm', subtitle: 'Estándar Térmico' },
+                    { key: 'mini', title: '30 x 20 mm', subtitle: 'Mini Térmico' },
                     { key: 'compact', title: '40 x 25 mm', subtitle: 'Compacta' },
+                    { key: 'standard', title: '50 x 30 mm', subtitle: 'Estándar Térmico' },
                     { key: 'large', title: '70 x 40 mm', subtitle: 'Grande / Detallada' },
                     { key: 'sheet', title: 'Hoja Carta / A4', subtitle: 'Cuadrícula Adhesiva' },
                   ].map((f) => (
@@ -420,7 +543,13 @@ export default function BulkBarcodePrintModal({
                 {/* Preview Frame */}
                 <div className="w-full bg-white dark:bg-zinc-900/50 p-6 rounded-2xl shadow-inner border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col items-center justify-center min-h-[220px] overflow-hidden">
                   {currentPreviewItem && (
-                    <div className="transform scale-110 sm:scale-125 transition-transform duration-200">
+                    <div className={`transform ${
+                      sizePreset === 'mini' 
+                        ? 'scale-150 sm:scale-175' 
+                        : sizePreset === 'compact' 
+                        ? 'scale-125 sm:scale-140' 
+                        : 'scale-110 sm:scale-125'
+                    } transition-transform duration-200`}>
                       <BarcodeLabel
                         item={currentPreviewItem}
                         size={sizePreset}
@@ -446,7 +575,7 @@ export default function BulkBarcodePrintModal({
                 <div className="flex justify-between text-gray-500 dark:text-zinc-400 font-medium">
                   <span>Formato seleccionado:</span>
                   <strong className="text-gray-900 dark:text-zinc-100 font-bold">
-                    {sizePreset === 'standard' ? '50x30mm Térmica' : sizePreset === 'compact' ? '40x25mm Compacta' : sizePreset === 'large' ? '70x40mm Grande' : 'Hoja Carta Cuadrícula'}
+                    {sizePreset === 'mini' ? '30x20mm Mini Térmica' : sizePreset === 'standard' ? '50x30mm Térmica' : sizePreset === 'compact' ? '40x25mm Compacta' : sizePreset === 'large' ? '70x40mm Grande' : 'Hoja Carta Cuadrícula'}
                   </strong>
                 </div>
                 <div className="pt-2 border-t border-gray-100 dark:border-zinc-800 flex justify-between items-center">

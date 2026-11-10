@@ -18,6 +18,7 @@ interface BarcodeProps {
   height?: number;
   barWidth?: number;
   showText?: boolean;
+  textSize?: string;
   className?: string;
 }
 
@@ -55,23 +56,36 @@ export function generateCode128Bars(text: string): boolean[] {
   return bars;
 }
 
+export function renderBarcodeSvgString(value: string, height: number = 22, barWidth: number = 1.0): string {
+  const bars = generateCode128Bars(value);
+  const totalWidth = bars.length * barWidth;
+  const rects = bars.map((isBar, idx) => {
+    if (!isBar) return '';
+    return `<rect x="${idx * barWidth}" y="0" width="${barWidth + 0.05}" height="${height}" fill="#000000" />`;
+  }).join('');
+
+  return `<svg width="100%" height="${height}" viewBox="0 0 ${totalWidth} ${height}" preserveAspectRatio="none" style="display:block; width:100%; max-width:27mm; height:${height}px; margin:0 auto; overflow:hidden;">${rects}</svg>`;
+}
+
 export default function Barcode({
   value,
   height = 36,
   barWidth = 1.4,
   showText = true,
+  textSize = "",
   className = ""
 }: BarcodeProps) {
   const bars = generateCode128Bars(value);
   const totalWidth = bars.length * barWidth;
 
   return (
-    <div className={`flex flex-col items-center select-none ${className}`}>
+    <div className={`flex flex-col items-center select-none w-full max-w-full ${className}`}>
       <svg
         width={totalWidth}
         height={height}
         viewBox={`0 0 ${totalWidth} ${height}`}
-        className="overflow-visible"
+        style={{ maxWidth: '100%', height: 'auto', maxHeight: `${height}px` }}
+        className="overflow-hidden"
       >
         {bars.map((isBar, idx) => {
           if (!isBar) return null;
@@ -80,7 +94,7 @@ export default function Barcode({
               key={idx}
               x={idx * barWidth}
               y={0}
-              width={barWidth + 0.1}
+              width={barWidth + 0.05}
               height={height}
               fill="currentColor"
             />
@@ -88,7 +102,7 @@ export default function Barcode({
         })}
       </svg>
       {showText && (
-        <span className="font-mono text-[10px] font-black tracking-widest text-black mt-1 uppercase">
+        <span className={`font-mono font-black text-black uppercase text-center truncate max-w-full leading-none ${textSize || 'text-[10px] tracking-widest mt-1'}`}>
           {value}
         </span>
       )}

@@ -127,7 +127,6 @@ button, a, input, select, textarea {
 @layer utilities {
   @media print {
     @page {
-      size: portrait;
       margin: 0mm;
     }
     
@@ -436,11 +435,10 @@ button, a, input, select, textarea {
 
     /* Thermal single label mode (each item on its own label/page break) */
     body.print-barcode-mode .printable-barcode-thermal-mode {
-      display: flex !important;
-      flex-direction: column !important;
-      align-items: center !important;
-      gap: 0 !important;
-      padding: 1mm !important;
+      display: block !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
 
     body.print-barcode-mode .printable-barcode-thermal-mode .printable-barcode-single-item {
@@ -452,7 +450,78 @@ button, a, input, select, textarea {
       justify-content: center !important;
       align-items: center !important;
       margin: 0 auto !important;
-      padding: 1mm 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    body.print-barcode-mode .printable-barcode-thermal-mode .printable-barcode-single-item:last-child {
+      page-break-after: avoid !important;
+      break-after: avoid !important;
+    }
+
+    /* Precision thermal dimensions by preset (calibrado a 18mm para rollo de 20mm evitando saltos dobles) */
+    body.print-barcode-size-mini .printable-barcode-thermal-mode .printable-barcode-single-item {
+      width: 30mm !important;
+      height: 18mm !important;
+      max-width: 30mm !important;
+      max-height: 18mm !important;
+      overflow: hidden !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+    body.print-barcode-size-mini .printable-barcode-thermal-mode .printable-barcode-single-item .barcode-label-box {
+      width: 30mm !important;
+      height: 18mm !important;
+      max-width: 30mm !important;
+      max-height: 18mm !important;
+      border: none !important;
+      box-shadow: none !important;
+      box-sizing: border-box !important;
+    }
+
+    body.print-barcode-size-compact .printable-barcode-thermal-mode .printable-barcode-single-item {
+      width: 40mm !important;
+      height: 25mm !important;
+      max-width: 40mm !important;
+      max-height: 25mm !important;
+      overflow: hidden !important;
+    }
+    body.print-barcode-size-compact .printable-barcode-thermal-mode .printable-barcode-single-item .barcode-label-box {
+      width: 40mm !important;
+      height: 25mm !important;
+      max-width: 40mm !important;
+      max-height: 25mm !important;
+      box-sizing: border-box !important;
+    }
+
+    body.print-barcode-size-standard .printable-barcode-thermal-mode .printable-barcode-single-item {
+      width: 50mm !important;
+      height: 30mm !important;
+      max-width: 50mm !important;
+      max-height: 30mm !important;
+      overflow: hidden !important;
+    }
+    body.print-barcode-size-standard .printable-barcode-thermal-mode .printable-barcode-single-item .barcode-label-box {
+      width: 50mm !important;
+      height: 30mm !important;
+      max-width: 50mm !important;
+      max-height: 30mm !important;
+      box-sizing: border-box !important;
+    }
+
+    body.print-barcode-size-large .printable-barcode-thermal-mode .printable-barcode-single-item {
+      width: 70mm !important;
+      height: 40mm !important;
+      max-width: 70mm !important;
+      max-height: 40mm !important;
+      overflow: hidden !important;
+    }
+    body.print-barcode-size-large .printable-barcode-thermal-mode .printable-barcode-single-item .barcode-label-box {
+      width: 70mm !important;
+      height: 40mm !important;
+      max-width: 70mm !important;
+      max-height: 40mm !important;
+      box-sizing: border-box !important;
     }
 
     /* Sheet Grid mode (A4 / Letter sticker sheets) */

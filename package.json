@@ -1,13 +1,17 @@
 {
   "name": "brianna-heavy",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop": "electron .",
+    "desktop:dist": "electron-builder --win --dir",
+    "desktop:build": "electron-builder --win"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -36,6 +40,8 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.5.2",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "oxlint": "^1.69.0",
     "postcss": "^8.5.15",
@@ -43,5 +49,37 @@
     "typescript": "~6.0.2",
     "vite": "^8.1.0",
     "vite-plugin-pwa": "^1.3.0"
+  },
+  "build": {
+    "appId": "com.briannaheavy.pos",
+    "productName": "Brianna Heavy Equipment",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.ico"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Brianna Heavy Equipment"
+    }
   }
 }

@@ -29,3 +29,10 @@ dist-ssr
 # Supabase temp
 supabase/.temp/
 .temp/
+
+# Electron build outputs & large binaries
+release/
+dist/
+dist-ssr/
+*.tmp
+
