@@ -3114,15 +3114,12 @@ export default function POS() {
           finalInvoiceNumber = formattedInvSeq;
           finalNcf = intNcf;
 
-          const internalSecurityCode = generateSecurityCode();
-          const internalQrUrl = `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${internalSecurityCode}&monto=${total.toFixed(2)}`;
-
           setLastEcfData({
             success: true,
             trackId: `INT-${finalInvoiceNumber}`,
             eNcf: finalNcf,
-            securityCode: internalSecurityCode,
-            qrCodeUrl: internalQrUrl,
+            securityCode: '',
+            qrCodeUrl: '',
             dgiiStatus: 'Emitido Localmente',
             issuedAt: new Date().toISOString(),
           });
@@ -3221,8 +3218,8 @@ export default function POS() {
           success: true,
           trackId: `INT-${finalInvoiceNumber}`,
           eNcf: finalNcf,
-          securityCode: generateSecurityCode(),
-          qrCodeUrl: `https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=${selectedClient?.rnc || '000000000'}&encf=${finalNcf}&codigoseguridad=${generateSecurityCode()}&monto=${total.toFixed(2)}`,
+          securityCode: '',
+          qrCodeUrl: '',
           dgiiStatus: 'Emitido Localmente',
           issuedAt: new Date().toISOString(),
         }),
@@ -3262,9 +3259,9 @@ export default function POS() {
         status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : (paymentMethod === 'Crédito' ? 'Crédito Pendiente' : 'Pagada (No Fiscal)')),
         is_electronic: isElectronic,
         billing_mode: billingMode,
-        ecf_security_code: ecfRes?.securityCode || lastEcfData?.securityCode,
-        ecf_track_id: ecfRes?.trackId || lastEcfData?.trackId,
-        ecf_qr_url: ecfRes?.qrCodeUrl || lastEcfData?.qrCodeUrl,
+        ecf_security_code: isElectronic ? (ecfRes?.securityCode || lastEcfData?.securityCode) : undefined,
+        ecf_track_id: isElectronic ? (ecfRes?.trackId || lastEcfData?.trackId) : (internalDocType === 'CT' ? `CT-${finalInvoiceNumber}` : `INT-${finalInvoiceNumber}`),
+        ecf_qr_url: isElectronic ? (ecfRes?.qrCodeUrl || lastEcfData?.qrCodeUrl) : undefined,
         ecf_dgii_status: isElectronic ? 'Aceptado' : (internalDocType === 'CT' ? 'Cotización' : 'Emitido Localmente'),
         paid_currency: paidCurrency,
         exchange_rate: exchangeRate,
@@ -4598,11 +4595,15 @@ export default function POS() {
               <h3 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
                 {lastCompletedSale?.ncf.startsWith('CT')
                   ? 'Cotización Creada'
+                  : (lastCompletedSale?.billingMode === 'internal' || !lastCompletedSale?.isElectronic)
+                  ? 'Factura Interna Registrada'
                   : 'Venta Facturada'}
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                 {lastCompletedSale?.ncf.startsWith('CT')
                   ? 'Presupuesto registrado exitosamente.'
+                  : (lastCompletedSale?.billingMode === 'internal' || !lastCompletedSale?.isElectronic)
+                  ? 'Factura interna emitida exitosamente.'
                   : 'Comprobante fiscal electrónico emitido.'}
               </p>
 
@@ -4692,7 +4693,7 @@ export default function POS() {
                   </div>
                 )}
 
-                {!lastCompletedSale?.ncf.startsWith('CT') && (
+                {!lastCompletedSale?.ncf.startsWith('CT') && lastCompletedSale?.isElectronic && (
                   <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80">
                     <span className="text-zinc-500 dark:text-zinc-400">DGII e-CF</span>
                     <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
@@ -4702,7 +4703,7 @@ export default function POS() {
                   </div>
                 )}
 
-                {lastCompletedSale?.lastEcfData?.securityCode && (
+                {lastCompletedSale?.isElectronic && lastCompletedSale?.lastEcfData?.securityCode && (
                   <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100 dark:border-zinc-800/80">
                     <span className="text-zinc-500 dark:text-zinc-400">Cód. Seguridad</span>
                     <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">
@@ -4723,6 +4724,8 @@ export default function POS() {
                   <span>
                     {lastCompletedSale?.ncf.startsWith('CT')
                       ? 'Imprimir Cotización (Carta)'
+                      : (lastCompletedSale?.billingMode === 'internal' || !lastCompletedSale?.isElectronic)
+                      ? 'Imprimir Factura Interna (Carta)'
                       : 'Imprimir Factura (Carta)'}
                   </span>
                 </button>
@@ -4817,6 +4820,7 @@ export default function POS() {
           ncf={lastCompletedSale?.ncf || currentNCF}
           invoiceType={lastCompletedSale ? (lastCompletedSale.billingMode === 'electronic' ? lastCompletedSale.ncfType : lastCompletedSale.internalDocType) : (billingMode === 'electronic' ? electronicDocType : internalDocType)}
           isElectronic={lastCompletedSale ? lastCompletedSale.isElectronic : billingMode === 'electronic'}
+          billingMode={lastCompletedSale?.billingMode || billingMode}
           date={lastCompletedSale?.date || new Date()}
           customerName={
             typeof lastCompletedSale?.client === 'object' && lastCompletedSale?.client?.name

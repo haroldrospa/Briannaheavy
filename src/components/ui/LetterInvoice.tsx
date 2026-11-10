@@ -27,6 +27,7 @@ export interface LetterInvoiceProps {
   invoiceNumber?: string;
   invoiceType?: string;
   isElectronic?: boolean;
+  billingMode?: 'electronic' | 'internal';
   date?: string | Date;
   customerName?: string;
   customerRnc?: string;
@@ -166,6 +167,7 @@ export default function LetterInvoice({
   previousBalance: propPreviousBalance,
   mixedPayments,
   newBalance: propNewBalance,
+  billingMode,
 }: LetterInvoiceProps) {
   const activeConfig = getInvoiceCustomConfig();
   const isAbono = Boolean(
@@ -190,7 +192,14 @@ export default function LetterInvoice({
       : (balance !== undefined ? balance : 0));
 
   const isCotizacion = (ncf && ncf.startsWith('CT')) || (invoiceNumber && invoiceNumber.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
-  const isEcf = !isCotizacion && !isAbono && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
+  const isEcf = !isCotizacion && !isAbono && (isElectronic || (ncf && ncf.startsWith('E')) || (invoiceType && invoiceType.startsWith('E')));
+  const isInternal = billingMode === 'internal' ||
+    invoiceType === 'FAC-INT' ||
+    invoiceType === 'INTERNO' ||
+    invoiceType === 'Factura Interna' ||
+    (ncf && ncf.startsWith('INT')) ||
+    (invoiceNumber && invoiceNumber.startsWith('INT')) ||
+    (!isEcf && !isCotizacion && !isAbono);
 
   // 1. Detect if this document is in USD
   const hasUsdPayment = (paymentsHistory || []).some(
@@ -262,6 +271,7 @@ export default function LetterInvoice({
     if (invoiceType === 'E45') return 'FACTURA ELECTRÓNICA GUBERNAMENTAL (e-CF)';
     if (invoiceType === 'E46') return 'FACTURA ELECTRÓNICA REGÍMENES ESPECIALES (e-CF)';
     if (isEcf) return 'FACTURA ELECTRÓNICA (e-CF)';
+    if (isInternal) return 'FACTURA INTERNA DE VENTA';
     return 'FACTURA COMERCIAL DE VENTA';
   };
 
@@ -708,9 +718,9 @@ export default function LetterInvoice({
         </div>
       )}
 
-      {/* 4. Resumen & Bloque Informativo (Sin QR para Cotizaciones) */}
+      {/* 4. Resumen & Bloque Informativo (Sin QR para Cotizaciones ni Facturas Internas) */}
       <div className="grid grid-cols-12 gap-6 items-start border-t-2 border-zinc-900 pt-6 mb-6">
-        {/* Lado Izquierdo: Timbre o Nota de Cotización */}
+        {/* Lado Izquierdo: Timbre o Nota Informativa */}
         {isCotizacion ? (
           <div className="col-span-7 flex flex-col justify-center p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-left space-y-1.5">
             <span className="font-black text-zinc-950 uppercase tracking-wide text-xs">
@@ -721,6 +731,18 @@ export default function LetterInvoice({
             </p>
             <p className="text-[10px] text-zinc-600 font-bold">
               Válido por 15 días calendario a partir de la fecha de emisión.
+            </p>
+          </div>
+        ) : isInternal ? (
+          <div className="col-span-7 flex flex-col justify-center p-4 bg-zinc-50 rounded-2xl border border-zinc-200 text-left space-y-1.5">
+            <span className="font-black text-zinc-950 uppercase tracking-wide text-xs">
+              Comprobante de Factura Interna
+            </span>
+            <p className="text-[11px] text-zinc-700 leading-snug">
+              Documento de venta comercial para control y registro interno de la empresa. No constituye un comprobante fiscal con valor tributario ante la DGII.
+            </p>
+            <p className="text-[10px] text-zinc-500 font-semibold">
+              Brianna Heavy Equipment S.R.L. • Venta Comercial Interna
             </p>
           </div>
         ) : (
@@ -940,6 +962,8 @@ export default function LetterInvoice({
         <p>
           {isCotizacion
             ? 'Cotización informativa sin valor fiscal emitida por Brianna Heavy Equipment S.R.L.'
+            : isInternal
+            ? 'Documento interno de venta comercial sin valor fiscal ante la DGII.'
             : isEcf
             ? 'Documento emitido conforme a las regulaciones de Facturación Electrónica de la Dirección General de Impuestos Internos (DGII).'
             : 'Documento interno de venta comercial.'}

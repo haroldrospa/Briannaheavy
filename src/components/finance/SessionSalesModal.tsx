@@ -563,15 +563,22 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                   </div>
                 </div>
 
-                {/* 2D QR Code Timbre DGII */}
-                <div className="pt-2 border-t border-gray-200 flex flex-col items-center justify-center space-y-1">
-                  <QRCode 
-                    value={`https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=000000000&encf=${selectedSaleToPrint.ncf}&codigoseguridad=1B19B3&monto=${selectedSaleToPrint.total.toFixed(2)}`} 
-                    size={95} 
-                    level="M" 
-                  />
-                  <p className="text-[8px] text-gray-500 font-mono text-center">TIMBRE ELECTRÓNICO DGII</p>
-                </div>
+                {/* 2D QR Code Timbre DGII (Solo para Factura Electrónica e-CF) */}
+                {selectedSaleToPrint.ncf.startsWith('E') ? (
+                  <div className="pt-2 border-t border-gray-200 flex flex-col items-center justify-center space-y-1">
+                    <QRCode 
+                      value={`https://dgii.gov.do/ecf/consultatimbre?rncemisor=132610362&rncComprador=000000000&encf=${selectedSaleToPrint.ncf}&codigoseguridad=1B19B3&monto=${selectedSaleToPrint.total.toFixed(2)}`} 
+                      size={95} 
+                      level="M" 
+                    />
+                    <p className="text-[8px] text-gray-500 font-mono text-center">TIMBRE ELECTRÓNICO DGII</p>
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-gray-200 text-center text-[10px] text-gray-500 py-1">
+                    <p className="font-bold text-gray-700 dark:text-zinc-300">DOCUMENTO INTERNO</p>
+                    <p className="text-[9px]">Comprobante no fiscal sin código QR</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 mt-3">
@@ -601,6 +608,7 @@ export default function SessionSalesModal({ isOpen, onClose, sales }: SessionSal
                 invoiceNumber={selectedSaleToPrint.id}
                 invoiceType={selectedSaleToPrint.invoiceType}
                 isElectronic={selectedSaleToPrint.ncf.startsWith('E')}
+                billingMode={selectedSaleToPrint.ncf.startsWith('E') ? 'electronic' : 'internal'}
                 date={selectedSaleToPrint.time ? new Date() : new Date()}
                 customerName={selectedSaleToPrint.client}
                 cashierName={selectedSaleToPrint.cashier_name || selectedSaleToPrint.cashier || 'Harold Rosado'}

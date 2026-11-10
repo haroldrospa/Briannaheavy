@@ -3442,6 +3442,7 @@ export default function Cobros() {
           ncf={invoiceToPrintLetter.ncf || invoiceToPrintLetter.invoice_number}
           invoiceType={invoiceToPrintLetter.ncf_type || (invoiceToPrintLetter.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={Boolean(invoiceToPrintLetter.is_electronic || (invoiceToPrintLetter.ncf && invoiceToPrintLetter.ncf.startsWith('E')))}
+          billingMode={invoiceToPrintLetter.billing_mode || (invoiceToPrintLetter.is_electronic || (invoiceToPrintLetter.ncf && invoiceToPrintLetter.ncf.startsWith('E')) ? 'electronic' : 'internal')}
           date={invoiceToPrintLetter.created_at || invoiceToPrintLetter.issueDate || new Date()}
           customerName={invoiceToPrintLetter.customer_name || invoiceToPrintLetter.customer}
           customerRnc={invoiceToPrintLetter.customer_rnc || invoiceToPrintLetter.rnc || ''}

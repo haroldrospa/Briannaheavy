@@ -951,27 +951,38 @@ export default function Invoices() {
                   </button>
                 </div>
 
-                {/* QR Timbre Box (Both Fiscal and Internal) */}
-                <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-2 mb-3.5">
-                  <div className="inline-block p-2 bg-white rounded-xl shadow-xs border border-gray-100">
-                    <QRCode value={qrVal} size={95} level="M" />
+                {/* QR Timbre Box (Only Fiscal Electronic Invoices, omit for Internal) */}
+                {isElec ? (
+                  <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-2 mb-3.5">
+                    <div className="inline-block p-2 bg-white rounded-xl shadow-xs border border-gray-100">
+                      <QRCode value={qrVal} size={95} level="M" />
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-[10px] text-gray-500 dark:text-zinc-400 font-mono">
+                      <span>Cód: <strong className="text-gray-900 dark:text-zinc-200">{secCode}</strong></span>
+                      <span>•</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        DGII Válido
+                      </span>
+                    </div>
+                    <a 
+                      href={qrVal} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#ED1C24] hover:underline inline-block cursor-pointer font-bold"
+                    >
+                      Verificar Comprobante ↗
+                    </a>
                   </div>
-                  <div className="flex items-center justify-center gap-2 text-[10px] text-gray-500 dark:text-zinc-400 font-mono">
-                    <span>Cód: <strong className="text-gray-900 dark:text-zinc-200">{secCode}</strong></span>
-                    <span>•</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                      {isElec ? 'DGII Válido' : 'Certificado Válido'}
+                ) : (
+                  <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-1 mb-3.5">
+                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider block">
+                      Factura Interna (No Fiscal)
                     </span>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400">
+                      Comprobante comercial para control interno sin código QR fiscal.
+                    </p>
                   </div>
-                  <a 
-                    href={qrVal} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-[#ED1C24] hover:underline inline-block cursor-pointer font-bold"
-                  >
-                    Verificar Comprobante ↗
-                  </a>
-                </div>
+                )}
 
                 {/* Items Detail */}
                 <div className="space-y-1.5 mb-3.5">
@@ -1106,6 +1117,7 @@ export default function Invoices() {
           ncf={viewingInvoice.ncf || viewingInvoice.invoice_number}
           invoiceType={viewingInvoice.ncf_type || (viewingInvoice.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic'}
+          billingMode={viewingInvoice.billing_mode || (isElec ? 'electronic' : 'internal')}
           date={viewingInvoice.created_at || new Date()}
           customerName={viewingInvoice.customer_name}
           customerRnc={viewingInvoice.customer_rnc || ''}

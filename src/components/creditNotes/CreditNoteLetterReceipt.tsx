@@ -206,18 +206,25 @@ export default function CreditNoteLetterReceipt({
 
       {/* 5. Totales y QR */}
       <div className="flex justify-between items-start border-t-2 border-zinc-900 pt-4 mb-8">
-        <div className="flex items-center gap-4 max-w-[50%]">
-          <div className="p-2 border border-zinc-300 rounded-xl bg-white shadow-2xs">
-            <QRCode value={qrVal} size={90} level="M" />
+        {isEcf ? (
+          <div className="flex items-center gap-4 max-w-[50%]">
+            <div className="p-2 border border-zinc-300 rounded-xl bg-white shadow-2xs">
+              <QRCode value={qrVal} size={90} level="M" />
+            </div>
+            <div className="text-[10px] text-zinc-500 space-y-1">
+              <p>
+                <strong className="text-zinc-900">Nota de Crédito Oficial DGII</strong>
+              </p>
+              <p>Escanee para verificar la validez fiscal de este documento ante la DGII.</p>
+              <p className="font-mono text-zinc-700">Cód: {secCode}</p>
+            </div>
           </div>
-          <div className="text-[10px] text-zinc-500 space-y-1">
-            <p>
-              <strong className="text-zinc-900">Nota de Crédito Oficial DGII</strong>
-            </p>
-            <p>Escanee para verificar la validez fiscal de este documento ante la DGII.</p>
-            <p className="font-mono text-zinc-700">Cód: {secCode}</p>
+        ) : (
+          <div className="max-w-[50%] p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-left space-y-1">
+            <strong className="text-xs text-zinc-900 block uppercase">Nota de Crédito Interna</strong>
+            <p className="text-[10px] text-zinc-500">Documento interno de compensación o devolución sin código QR fiscal.</p>
           </div>
-        </div>
+        )}
 
         <div className="w-[320px] space-y-2 text-xs">
           <div className="flex justify-between text-zinc-600">

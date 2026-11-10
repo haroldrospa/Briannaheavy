@@ -494,24 +494,35 @@ export default function CreditNotes() {
                 </button>
               </div>
 
-              {/* QR Verification */}
-              <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-2 mb-3.5">
-                <div className="inline-block p-2 bg-white rounded-xl shadow-xs border border-gray-100">
-                  <QRCode
-                    value={
-                      viewingNote.ecf_qr_url ||
-                      `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${viewingNote.ncf}`
-                    }
-                    size={90}
-                    level="M"
-                  />
+              {/* QR Verification (Only for electronic credit notes) */}
+              {viewingNote.is_electronic || viewingNote.ncf_type === 'E34' || viewingNote.ncf?.startsWith('E') ? (
+                <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-2 mb-3.5">
+                  <div className="inline-block p-2 bg-white rounded-xl shadow-xs border border-gray-100">
+                    <QRCode
+                      value={
+                        viewingNote.ecf_qr_url ||
+                        `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=131488417&ncf=${viewingNote.ncf}`
+                      }
+                      size={90}
+                      level="M"
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-500 font-mono">
+                    <span>Cód: <strong className="text-gray-900 dark:text-white">{viewingNote.ecf_security_code || '34F595'}</strong></span>
+                    <span className="mx-2">•</span>
+                    <span className="text-emerald-600 font-semibold">Validado DGII</span>
+                  </div>
                 </div>
-                <div className="text-[10px] text-gray-500 font-mono">
-                  <span>Cód: <strong className="text-gray-900 dark:text-white">{viewingNote.ecf_security_code || '34F595'}</strong></span>
-                  <span className="mx-2">•</span>
-                  <span className="text-emerald-600 font-semibold">Validado DGII</span>
+              ) : (
+                <div className="p-3 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800 text-center space-y-1 mb-3.5">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider block">
+                    Nota de Crédito Interna
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400">
+                    Documento de compensación interna sin código QR fiscal.
+                  </p>
                 </div>
-              </div>
+              )}
 
               {/* Items list */}
               <div className="space-y-1.5 mb-3.5 text-xs">

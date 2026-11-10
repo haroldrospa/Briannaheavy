@@ -210,18 +210,29 @@ export default function CreditNoteTicketReceipt({
       </div>
 
       {/* QR & Fiscal Certification */}
-      <div className="text-center pt-2 border-t border-dashed border-zinc-300 space-y-2">
-        <div className="inline-block p-1.5 bg-white border border-zinc-300 rounded-lg">
-          <QRCode value={qrVal} size={is58mm ? 75 : 95} level="M" />
+      {isEcf ? (
+        <div className="text-center pt-2 border-t border-dashed border-zinc-300 space-y-2">
+          <div className="inline-block p-1.5 bg-white border border-zinc-300 rounded-lg">
+            <QRCode value={qrVal} size={is58mm ? 75 : 95} level="M" />
+          </div>
+          <div className="font-mono text-zinc-600" style={{ fontSize: '0.72em' }}>
+            <div>Cód. Seguridad: <strong className="text-black">{secCode}</strong></div>
+            <div className="text-emerald-700 font-bold mt-0.5">e-CF Validador DGII Oficial</div>
+          </div>
+          <p className="text-zinc-400 uppercase tracking-wider text-[0.65em]">
+            Documento Fiscal Oficial • Brianna Heavy Equipment
+          </p>
         </div>
-        <div className="font-mono text-zinc-600" style={{ fontSize: '0.72em' }}>
-          <div>Cód. Seguridad: <strong className="text-black">{secCode}</strong></div>
-          {isEcf && <div className="text-emerald-700 font-bold mt-0.5">e-CF Validador DGII Oficial</div>}
+      ) : (
+        <div className="text-center pt-2 border-t border-dashed border-zinc-300 space-y-1">
+          <p className="font-bold text-zinc-700 uppercase" style={{ fontSize: '0.75em' }}>
+            Nota de Crédito Interna
+          </p>
+          <p className="text-zinc-400 uppercase tracking-wider text-[0.65em]">
+            Uso Interno • Brianna Heavy Equipment
+          </p>
         </div>
-        <p className="text-zinc-400 uppercase tracking-wider text-[0.65em]">
-          Documento Fiscal Oficial • Brianna Heavy Equipment
-        </p>
-      </div>
+      )}
     </div>
   );
 }

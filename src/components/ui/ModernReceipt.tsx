@@ -20,6 +20,7 @@ export interface ModernReceiptProps {
   invoiceNumber?: string;
   invoiceType?: string;
   isElectronic?: boolean;
+  billingMode?: 'electronic' | 'internal';
   date?: string | Date;
   customerName?: string;
   customerRnc?: string;
@@ -142,6 +143,7 @@ export default function ModernReceipt({
   changeAmountUsd,
   totalUsd,
   mixedPayments,
+  billingMode,
 }: ModernReceiptProps) {
   const activeConfig: InvoiceCustomConfig = {
     ...getInvoiceCustomConfig(),
@@ -169,7 +171,14 @@ export default function ModernReceipt({
   const qrVal = qrCodeUrl || `https://dgii.gov.do/herramientas/consultas/Paginas/NCF.aspx?rnc=${activeConfig.rnc || '131488417'}&ncf=${ncf || 'INT-000001'}`;
 
   const isCotizacion = (ncf && ncf.startsWith('CT')) || invoiceType === 'REC-P' || invoiceType === 'COT' || invoiceType === 'CT';
-  const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || invoiceType.startsWith('E'));
+  const isEcf = !isCotizacion && (isElectronic || (ncf && ncf.startsWith('E')) || (invoiceType && invoiceType.startsWith('E')));
+  const isInternal = billingMode === 'internal' || 
+    invoiceType === 'FAC-INT' || 
+    invoiceType === 'INTERNO' ||
+    invoiceType === 'Factura Interna' ||
+    (ncf && ncf.startsWith('INT')) ||
+    (invoiceNumber && invoiceNumber.startsWith('INT')) ||
+    (!isEcf && !isCotizacion);
   const docTitle = isEcf ? 'FACTURA ELECTRÓNICA' : (isCotizacion ? 'COTIZACIÓN' : 'FACTURA INTERNA');
 
   const isUsd = paidCurrency === 'USD' || (paidCurrency !== 'DOP' && lastPayment?.currency === 'USD');
@@ -569,8 +578,8 @@ export default function ModernReceipt({
         )}
       </div>
 
-      {/* 5. Timbre Digital & QR Code (Omit for Cotizaciones) */}
-      {!isCotizacion && activeConfig.showQrCode && (
+      {/* 5. Timbre Digital & QR Code (Omit for Cotizaciones and Internal Invoices) */}
+      {!isCotizacion && !isInternal && isEcf && activeConfig.showQrCode && (
         <div className="mb-3 pt-2 pb-1 text-center">
           <div className="inline-block bg-white p-2 rounded-2xl border-2 border-zinc-200 shadow-xs">
             <QRCode value={qrVal} size={fontConf.qrSize} level="M" />
@@ -578,7 +587,7 @@ export default function ModernReceipt({
 
           <div className="mt-2 font-mono text-zinc-800 leading-tight space-y-0.5" style={{ fontSize: '0.78em' }}>
             <p className="font-black text-black uppercase tracking-wider">
-              {isEcf ? 'TIMBRE ELECTRÓNICO DGII' : 'TIMBRE DIGITAL ELECTRÓNICO'}
+              TIMBRE ELECTRÓNICO DGII
             </p>
             {secCode && (
               <div className="pt-0.5">
@@ -588,9 +597,16 @@ export default function ModernReceipt({
               </div>
             )}
             <p className="text-zinc-500 pt-0.5" style={{ fontSize: '0.9em' }}>
-              {isEcf ? 'Consulte validez en dgii.gov.do/ecf' : 'Comprobante Válido • Brianna Heavy Equipment'}
+              Consulte validez en dgii.gov.do/ecf
             </p>
           </div>
+        </div>
+      )}
+
+      {isInternal && !isCotizacion && (
+        <div className="mb-3 p-2 bg-zinc-50 rounded-xl border border-zinc-200 text-center text-zinc-600" style={{ fontSize: '0.78em' }}>
+          <p className="font-bold text-black uppercase">Factura Interna (No Fiscal)</p>
+          <p className="text-zinc-500 mt-0.5">Comprobante de uso interno • Sin validez fiscal</p>
         </div>
       )}
 
