@@ -69,7 +69,7 @@ import { fetchInventory, getLocalStorageInventory, updateInventoryItem } from '.
 import { fetchCustomers, getLocalStorageCustomers, createCustomer } from '../services/customersService';
 import { searchDgiiRnc, cacheDgiiRnc } from '../services/dgiiService';
 import { useAlert } from '../contexts/ConfirmContext';
-import { transmitElectronicInvoice, generateSecurityCode, type ElectronicInvoiceResponse } from '../services/alanubeService';
+import { transmitElectronicInvoice, type ElectronicInvoiceResponse } from '../services/alanubeService';
 import { filterInvoicesByShift, isQuotationInvoice, matchesCashierUser, getActiveShift, isShiftOpen, fetchLatestOpenShift } from '../services/shiftsService';
 
 const mapInvoiceToSessionSale = (inv: Invoice): SessionSale => {

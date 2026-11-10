@@ -1117,7 +1117,7 @@ export default function Invoices() {
           ncf={viewingInvoice.ncf || viewingInvoice.invoice_number}
           invoiceType={viewingInvoice.ncf_type || (viewingInvoice.is_electronic ? 'E32' : 'INTERNO')}
           isElectronic={viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic'}
-          billingMode={viewingInvoice.billing_mode || (isElec ? 'electronic' : 'internal')}
+          billingMode={viewingInvoice.billing_mode || ((viewingInvoice.is_electronic || (viewingInvoice.ncf && viewingInvoice.ncf.startsWith('E')) || viewingInvoice.billing_mode === 'electronic') ? 'electronic' : 'internal')}
           date={viewingInvoice.created_at || new Date()}
           customerName={viewingInvoice.customer_name}
           customerRnc={viewingInvoice.customer_rnc || ''}
