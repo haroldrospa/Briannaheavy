@@ -101,7 +101,7 @@ export default function MaintenanceWorkOrderForm({ initialData, readOnly = false
   const totalCalculated = (Number(laborCost) || 0) + (Number(partsCost) || 0);
 
   return (
-    <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[900px] flex flex-col rounded-[2.5rem] print:rounded-none overflow-hidden">
+    <div className="w-full bg-[#f4f3f1] dark:bg-[#0a0a0a] print:bg-white print:w-full print:m-0 print:p-0 min-h-[900px] print:min-h-0 flex flex-col rounded-[2.5rem] print:rounded-none overflow-hidden print:overflow-visible">
       
       <div className="w-full max-w-none p-6 sm:p-10 font-sans flex-1 flex flex-col print:max-w-none print:p-0">
         

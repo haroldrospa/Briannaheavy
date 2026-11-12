@@ -1005,30 +1005,75 @@ export default function Reports() {
   return (
     <div className="space-y-6">
       
-      {/* Strict Print CSS Isolation with A4 Format & Generous Lateral Margins */}
+      {/* Strict Print CSS Isolation with Context-Aware Portal Isolation */}
       <style font-sans="true">{`
         @media print {
-          @page {
-            size: A4 portrait;
-            margin: 12mm 18mm;
-          }
-          body > *:not(#report-printable-area) {
-            display: none !important;
-          }
-          #report-printable-area {
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            background: white !important;
-            color: black !important;
-            font-size: 10pt !important;
-            padding: 0 !important;
-            margin: 0 auto !important;
-            box-sizing: border-box !important;
-          }
-          #report-printable-area * {
-            visibility: visible !important;
-          }
+          ${selectedInspectionForPrint ? `
+            @page {
+              size: letter portrait;
+              margin: 4mm 6mm !important;
+            }
+            body > *:not(#inspection-printable-portal) {
+              display: none !important;
+            }
+            #inspection-printable-portal {
+              display: block !important;
+              position: static !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              background: #ffffff !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              box-sizing: border-box !important;
+            }
+          ` : selectedWorkOrderForPreview ? `
+            @page {
+              size: letter portrait;
+              margin: 8mm 10mm !important;
+            }
+            body > *:not(#workorder-printable-portal) {
+              display: none !important;
+            }
+            #workorder-printable-portal {
+              display: block !important;
+              position: static !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              background: #ffffff !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              box-sizing: border-box !important;
+            }
+          ` : selectedClosureForDetail ? `
+            body > *:not(.printable-closure) {
+              display: none !important;
+            }
+            .printable-closure {
+              display: block !important;
+            }
+          ` : `
+            @page {
+              size: A4 portrait;
+              margin: 12mm 18mm;
+            }
+            body > *:not(#report-printable-area) {
+              display: none !important;
+            }
+            #report-printable-area {
+              display: block !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              background: white !important;
+              color: black !important;
+              font-size: 10pt !important;
+              padding: 0 !important;
+              margin: 0 auto !important;
+              box-sizing: border-box !important;
+            }
+            #report-printable-area * {
+              visibility: visible !important;
+            }
+          `}
         }
       `}</style>
 
@@ -2054,8 +2099,13 @@ export default function Reports() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs font-medium text-gray-800 dark:text-zinc-200">
                       {reportData.map((row: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30">
-                          <td className="p-3 font-mono font-bold text-gray-900 dark:text-white">{row.code}</td>
+                        <tr 
+                          key={idx} 
+                          onClick={() => setSelectedInspectionForPrint(row)}
+                          className="hover:bg-red-50/50 dark:hover:bg-red-950/20 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 cursor-pointer transition-colors group"
+                          title="Haz clic para ver el reporte de inspección completo"
+                        >
+                          <td className="p-3 font-mono font-bold text-gray-900 dark:text-white group-hover:text-[#ED1C24] transition-colors">{row.code}</td>
                           <td className="p-3">{row.date}</td>
                           <td className="p-3 font-bold text-gray-900 dark:text-white">{row.vehicle}</td>
                           <td className="p-3 text-gray-400 font-mono text-[11px]">{row.vin}</td>
@@ -2073,14 +2123,27 @@ export default function Reports() {
                             </span>
                           </td>
                           <td className="p-3 text-right">
-                            <button 
-                              onClick={() => setSelectedInspectionForPrint(row)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-bold text-xs transition-all shadow-sm cursor-pointer"
-                              title="Ver reporte de inspección completo"
-                            >
-                              <EyeIcon className="h-3.5 w-3.5" />
-                              Ver Inspección
-                            </button>
+                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button 
+                                onClick={() => setSelectedInspectionForPrint(row)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-bold text-xs transition-all shadow-sm cursor-pointer"
+                                title="Ver reporte de inspección completo"
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                <span>Ver</span>
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setSelectedInspectionForPrint(row);
+                                  setTimeout(() => window.print(), 250);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-[#d91920] text-white font-bold text-xs transition-all shadow-sm cursor-pointer"
+                                title="Imprimir inspección técnica en hoja oficial"
+                              >
+                                <PrinterIcon className="h-3.5 w-3.5" />
+                                <span>Imprimir</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2860,10 +2923,10 @@ export default function Reports() {
         document.body
       )}
 
-      {/* Selected Inspection Print Modal View */}
-      {selectedInspectionForPrint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 print:p-0 print:bg-white print:static print:z-auto">
-          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl print:max-h-none print:shadow-none print:w-full print:rounded-none">
+      {/* Selected Inspection Print Modal View (Portaled to document.body for flawless printing) */}
+      {selectedInspectionForPrint && typeof document !== 'undefined' && createPortal(
+        <div id="inspection-printable-portal" className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 print:p-0 print:bg-white print:static print:z-auto print:block print:w-full print:m-0">
+          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl print:max-h-none print:shadow-none print:w-full print:rounded-none print:overflow-visible print:border-none print:m-0 print:p-0 print:bg-white">
             {/* Header Screen Only */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 print:hidden shrink-0">
               <div className="flex items-center gap-3">
@@ -2897,17 +2960,18 @@ export default function Reports() {
             </div>
 
             {/* Printable Form Body */}
-            <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0">
+            <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0 print:m-0 print:bg-white">
               <TruckInspectionForm initialData={selectedInspectionForPrint} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Selected Work Order Preview / Print Modal View */}
-      {selectedWorkOrderForPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 print:p-0 print:bg-white print:static print:z-auto">
-          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl print:max-h-none print:shadow-none print:w-full print:rounded-none">
+      {/* Selected Work Order Preview / Print Modal View (Portaled to document.body for flawless printing) */}
+      {selectedWorkOrderForPreview && typeof document !== 'undefined' && createPortal(
+        <div id="workorder-printable-portal" className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 print:p-0 print:bg-white print:static print:z-auto print:block print:w-full print:m-0">
+          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl print:max-h-none print:shadow-none print:w-full print:rounded-none print:overflow-visible print:border-none print:m-0 print:p-0 print:bg-white">
             {/* Header Screen Only */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 print:hidden shrink-0">
               <div className="flex items-center gap-3">
@@ -2941,11 +3005,12 @@ export default function Reports() {
             </div>
 
             {/* Printable Form Body */}
-            <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0">
+            <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0 print:m-0 print:bg-white">
               <MaintenanceWorkOrderForm initialData={selectedWorkOrderForPreview} readOnly={true} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Selected Cash Closure Detail Modal (Screen View) */}
