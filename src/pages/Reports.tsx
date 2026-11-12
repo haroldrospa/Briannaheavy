@@ -2181,118 +2181,152 @@ export default function Reports() {
 
       {/* Isolated Print Portal (Rendered directly under document.body) */}
       {!selectedInspectionForPrint && !selectedClosureForDetail && !selectedWorkOrderForPreview && typeof document !== 'undefined' && createPortal(
-        <div id="report-printable-area" className="hidden print:block font-sans text-black bg-white p-6">
+        <div id="report-printable-area" className="hidden print:block font-sans text-zinc-900 bg-white p-8">
           {/* Top Brand Accent Line */}
-          <div className="w-full h-1.5 bg-[#ED1C24] mb-4 rounded-full" />
+          <div className="w-full h-1 bg-gradient-to-r from-[#ED1C24] via-rose-500 to-[#ED1C24] mb-6 rounded-full" />
 
           {/* Executive Corporate Print Header */}
-          <div className="pb-4 border-b border-gray-300 mb-4 flex justify-between items-center">
+          <div className="pb-5 border-b border-zinc-200 mb-5 flex justify-between items-start">
             <div className="flex items-center gap-4">
-              <img src={logo} alt="Brianna Heavy Logo" className="h-12 object-contain" />
+              <img src={logo} alt="Brianna Heavy Logo" className="h-11 object-contain" />
               <div>
-                <span className="text-[9px] font-black text-[#ED1C24] uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                  REPORTE OFICIAL DE GESTIÓN
-                </span>
-                <h1 className="text-xl font-black text-gray-900 tracking-tight mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-bold text-[#ED1C24] uppercase tracking-wider bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                    Reporte Oficial de Gestión
+                  </span>
+                </div>
+                <h1 className="text-xl font-black text-zinc-900 tracking-tight mt-1">
                   {selectedReportInfo.name.toUpperCase()}
                 </h1>
-                <p className="text-[10px] font-medium text-gray-500">
-                  Brianna Heavy Equipment SRL • RNC: 132610362
+                <p className="text-[10px] font-medium text-zinc-400 mt-0.5">
+                  Brianna Heavy Equipment SRL • RNC: 132-61036-2
                 </p>
               </div>
             </div>
 
-            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-right text-[10px] text-gray-700 space-y-1">
-              <p><strong>Nº de Reporte:</strong> <span className="font-mono font-bold text-gray-900">#{formattedReportCode}</span></p>
-              <p><strong>Período:</strong> {startDate} al {endDate}</p>
-              <p><strong>Emisión:</strong> {currentDateStr} • {currentTimeStr}</p>
+            <div className="text-right text-[10px] space-y-1">
+              <div className="inline-flex items-center gap-1.5 bg-zinc-50 border border-zinc-200 px-2.5 py-1 rounded-lg">
+                <span className="text-zinc-400 uppercase text-[9px] font-bold">Nº Reporte:</span>
+                <span className="font-mono font-bold text-zinc-900">#{formattedReportCode}</span>
+              </div>
+              <p className="text-zinc-500 pt-1">
+                <span className="text-zinc-400 font-medium">Período:</span> <strong className="text-zinc-800">{startDate} al {endDate}</strong>
+              </p>
+              <p className="text-zinc-400">
+                Emisión: <span className="text-zinc-600 font-medium">{currentDateStr} • {currentTimeStr}</span>
+              </p>
             </div>
           </div>
 
           {/* Report Summary KPI Header (Print) */}
-          <div className="bg-gray-100 p-3 rounded-xl border border-gray-300 mb-5 flex justify-between items-center text-xs font-bold text-gray-900">
-            <div>Filtro: {startDate} al {endDate}</div>
+          <div className="bg-zinc-50/80 p-3.5 rounded-xl border border-zinc-200/90 mb-5 flex justify-between items-center text-xs">
+            <div className="flex items-center gap-2 text-zinc-600 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ED1C24]" />
+              <span>Rango evaluado: <strong className="text-zinc-900 font-bold">{startDate} al {endDate}</strong></span>
+            </div>
             <div>
               {activeReport === 'ecf' ? (
-                <span className="flex items-center gap-3">
-                  <span>Subtotal: <strong>RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span> | 
-                  <span>ITBIS (18%): <strong>RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span> | 
-                  <span>Total e-CF: <strong className="text-[#ED1C24]">RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
-                </span>
+                <div className="flex items-center gap-3 text-zinc-600 text-[11px]">
+                  <span>Comprobantes: <strong className="text-zinc-900">{ecfTotals.count}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>Subtotal: <strong className="text-zinc-900 font-mono">RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>ITBIS: <strong className="text-zinc-900 font-mono">RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>Total e-CF: <strong className="text-[#ED1C24] font-black font-mono">RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
               ) : activeReport === 'caja' || activeReport === 'movimientos_caja' ? (
-                <span className="flex items-center gap-3">
-                  <span className="text-emerald-700">Ingresos: RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span> | 
-                  <span className="text-red-700">Egresos: RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span> | 
-                  <span className="text-gray-900 font-black">Flujo Neto: RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                </span>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="text-emerald-700 font-semibold">Ingresos: <strong className="font-mono">+RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span className="text-red-700 font-semibold">Egresos: <strong className="font-mono">-RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span className="text-zinc-900 font-bold">Flujo Neto: <strong className="font-mono text-zinc-900">RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
+              ) : activeReport === 'inspecciones' ? (
+                <div className="flex items-center gap-2 text-[11px] text-zinc-700">
+                  <span>Total de Inspecciones: <strong className="text-zinc-900 font-bold text-xs bg-zinc-200/60 px-2 py-0.5 rounded">{reportData.length}</strong></span>
+                </div>
               ) : (
-                <span>Registros: <strong>{reportData.length}</strong> &nbsp;|&nbsp; Monto Total: <strong className="text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                <div className="flex items-center gap-3 text-zinc-600 text-[11px]">
+                  <span>Registros: <strong className="text-zinc-900 font-bold">{reportData.length}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>Monto Total: <strong className="text-[#ED1C24] font-black font-mono">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
               )}
             </div>
           </div>
 
           {/* Printable Data Table */}
-          <div className="mt-2 overflow-hidden rounded-lg border border-gray-300">
+          <div className="mt-2 overflow-hidden rounded-xl border border-zinc-200 bg-white">
             
             {/* 1. Facturación Electrónica e-CF Print Table (Dividida por Comprobante) */}
             {activeReport === 'ecf' && (
-              <div className="space-y-4">
+              <div className="space-y-4 p-2">
                 {Object.entries(ecfGroupedByType)
                   .filter(([prefix]) => selectedNcfType === 'todos' || selectedNcfType === prefix)
                   .map(([prefix, group]) => (
-                    <div key={prefix} className="overflow-hidden rounded-lg border border-gray-300">
+                    <div key={prefix} className="overflow-hidden rounded-xl border border-zinc-200">
                       {/* Section Header (Print) */}
-                      <div className="bg-gray-100 p-2 border-b border-gray-300 flex justify-between items-center text-xs font-bold text-gray-900">
+                      <div className="bg-zinc-50 p-2.5 border-b border-zinc-200 flex justify-between items-center text-xs font-bold text-zinc-800">
                         <div className="flex items-center gap-2">
                           <span className="bg-[#ED1C24] text-white px-2 py-0.5 rounded text-[10px] font-black">{group.prefix}</span>
-                          <span>{group.typeName} ({group.items.length} {group.items.length === 1 ? 'comprobante' : 'comprobantes'})</span>
+                          <span className="font-semibold text-zinc-900">{group.typeName} ({group.items.length} {group.items.length === 1 ? 'comprobante' : 'comprobantes'})</span>
                         </div>
-                        <div className="space-x-3 text-[10.5px]">
-                          <span>Subtotal: <strong>RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
-                          <span>ITBIS: <strong>RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
-                          <span>Total {group.prefix}: <strong>RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                        <div className="space-x-3 text-[10.5px] font-normal text-zinc-600">
+                          <span>Subtotal: <strong className="text-zinc-900 font-mono">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                          <span>ITBIS: <strong className="text-zinc-900 font-mono">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                          <span>Total: <strong className="text-zinc-900 font-mono">RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
                         </div>
                       </div>
 
                       <table className="w-full text-left border-collapse text-[10.5px]">
                         <thead>
-                          <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
-                            <th className="p-2">e-NCF</th>
-                            <th className="p-2">Fecha</th>
-                            <th className="p-2">Cliente</th>
-                            <th className="p-2">RNC/Cédula</th>
-                            <th className="p-2">Método</th>
-                            <th className="p-2">Subtotal</th>
-                            <th className="p-2">ITBIS (18%)</th>
-                            <th className="p-2 text-right">Total Factura</th>
-                            <th className="p-2 text-center">Estado DGII</th>
+                          <tr className="bg-zinc-100/80 text-zinc-600 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
+                            <th className="p-2.5">e-NCF</th>
+                            <th className="p-2.5">Fecha</th>
+                            <th className="p-2.5">Cliente</th>
+                            <th className="p-2.5">RNC/Cédula</th>
+                            <th className="p-2.5">Método</th>
+                            <th className="p-2.5">Subtotal</th>
+                            <th className="p-2.5">ITBIS (18%)</th>
+                            <th className="p-2.5 text-right">Total Factura</th>
+                            <th className="p-2.5 text-center">Estado DGII</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200 font-medium">
-                          {group.items.map((row: any, idx: number) => (
-                            <tr key={idx} className="even:bg-gray-50/80">
-                              <td className="p-2 font-bold font-mono text-gray-900">{row.code}</td>
-                              <td className="p-2">{row.date}</td>
-                              <td className="p-2 font-bold">{row.client}</td>
-                              <td className="p-2 font-mono text-gray-600">{row.rnc}</td>
-                              <td className="p-2">{row.method}</td>
-                              <td className="p-2 font-mono">RD$ {Number(row.subtotal || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-2 font-mono">RD$ {Number(row.tax_amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-2 text-right font-mono font-black text-gray-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                              <td className="p-2 text-center">
-                                <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800">
-                                  {row.dgiiStatus || 'Aceptado'}
-                                </span>
+                        <tbody className="divide-y divide-zinc-100 font-medium">
+                          {group.items.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="py-6 text-center text-zinc-400 text-xs">
+                                No se encontraron comprobantes para este tipo
                               </td>
                             </tr>
-                          ))}
+                          ) : (
+                            group.items.map((row: any, idx: number) => (
+                              <tr key={idx} className="even:bg-zinc-50/50">
+                                <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                                <td className="p-2.5 text-zinc-600">{row.date}</td>
+                                <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                                <td className="p-2.5 font-mono text-zinc-500">{row.rnc}</td>
+                                <td className="p-2.5 text-zinc-600">{row.method}</td>
+                                <td className="p-2.5 font-mono text-zinc-700">RD$ {Number(row.subtotal || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                <td className="p-2.5 font-mono text-zinc-700">RD$ {Number(row.tax_amount || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                <td className="p-2.5 text-right font-mono font-black text-zinc-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                                <td className="p-2.5 text-center">
+                                  <span className="px-1.5 py-0.5 rounded text-[8.5px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-800">
+                                    {row.dgiiStatus || 'Aceptado'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-gray-100 text-gray-900 font-black text-[10.5px] border-t border-gray-300">
-                            <td colSpan={5} className="p-2 text-right uppercase tracking-wider">Subtotales {group.prefix}:</td>
-                            <td className="p-2 font-mono">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 font-mono">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                            <td className="p-2 text-right font-mono font-black">RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                          <tr className="bg-zinc-50 text-zinc-900 font-bold text-[10.5px] border-t-2 border-zinc-200">
+                            <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Subtotales {group.prefix}:</td>
+                            <td className="p-2.5 font-mono">RD$ {group.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2.5 font-mono">RD$ {group.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {group.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                             <td></td>
                           </tr>
                         </tfoot>
@@ -2301,13 +2335,15 @@ export default function Reports() {
                   ))}
 
                 {/* Print Grand Total Box */}
-                <div className="bg-gray-900 text-white p-3 rounded-lg flex justify-between items-center text-xs font-black">
-                  <span>TOTAL GENERAL CONSOLIDADO E-CF ({ecfTotals.count} COMPROBANTES):</span>
-                  <span className="space-x-4 font-mono">
-                    <span>Subtotal: RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                    <span>ITBIS: RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
-                    <span className="text-[#ED1C24] bg-white px-2.5 py-0.5 rounded font-black">Gran Total: RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                <div className="bg-zinc-50 border border-zinc-200 p-3.5 rounded-xl flex justify-between items-center text-xs font-bold text-zinc-800">
+                  <span className="uppercase tracking-wider text-[11px] text-zinc-600">
+                    TOTAL GENERAL CONSOLIDADO E-CF ({ecfTotals.count} COMPROBANTES):
                   </span>
+                  <div className="flex items-center gap-4 font-mono text-xs">
+                    <span className="text-zinc-600">Subtotal: <strong className="text-zinc-900">RD$ {ecfTotals.subtotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                    <span className="text-zinc-600">ITBIS: <strong className="text-zinc-900">RD$ {ecfTotals.tax.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong></span>
+                    <span className="text-white bg-[#ED1C24] px-3 py-1 rounded-lg font-black shadow-xs">Gran Total: RD$ {ecfTotals.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -2316,7 +2352,7 @@ export default function Reports() {
             {activeReport === 'internas' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Nº Factura</th>
                     <th className="p-2.5">Fecha</th>
                     <th className="p-2.5">Cliente</th>
@@ -2327,28 +2363,37 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Total Facturado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold font-mono text-gray-900">{row.code}</td>
-                      <td className="p-2.5">{row.date}</td>
-                      <td className="p-2.5 font-bold">{row.client}</td>
-                      <td className="p-2.5 text-gray-600">{row.rnc}</td>
-                      <td className="p-2.5">{row.method}</td>
-                      <td className="p-2.5">{row.cashier || 'Cajero Principal'}</td>
-                      <td className="p-2.5">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-zinc-300 bg-zinc-100 text-zinc-800">
-                          {row.status || 'Completada'}
-                        </span>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No se encontraron facturas internas</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
                       </td>
-                      <td className="p-2.5 text-right font-mono font-black text-gray-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 text-zinc-600">{row.date}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                        <td className="p-2.5 text-zinc-500 font-mono">{row.rnc}</td>
+                        <td className="p-2.5 text-zinc-600">{row.method}</td>
+                        <td className="p-2.5 text-zinc-600">{row.cashier || 'Cajero Principal'}</td>
+                        <td className="p-2.5">
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-zinc-200 bg-zinc-50 text-zinc-700">
+                            {row.status || 'Completada'}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-black text-zinc-900">RD$ {Number(row.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider">Total Facturas Internas:</td>
-                    <td className="p-2.5 text-right font-mono font-black">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Facturas Internas:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2357,7 +2402,7 @@ export default function Reports() {
             {activeReport === 'ventas' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código</th>
                     <th className="p-2.5">Fecha</th>
                     <th className="p-2.5">Cliente</th>
@@ -2367,27 +2412,36 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Total Facturado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5">{row.date}</td>
-                      <td className="p-2.5 font-bold">{row.client}</td>
-                      <td className="p-2.5 text-gray-600">{row.rnc}</td>
-                      <td className="p-2.5">{row.method}</td>
-                      <td className="p-2.5">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800">
-                          {row.status}
-                        </span>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No se encontraron ventas registradas</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
                       </td>
-                      <td className="p-2.5 text-right font-black text-gray-900">RD$ {row.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 text-zinc-600">{row.date}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                        <td className="p-2.5 text-zinc-500 font-mono">{row.rnc}</td>
+                        <td className="p-2.5 text-zinc-600">{row.method}</td>
+                        <td className="p-2.5">
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-800">
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-right font-black font-mono text-zinc-900">RD$ {row.total.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Total Facturado:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Facturado:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2396,7 +2450,7 @@ export default function Reports() {
             {activeReport === 'financiamientos' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código</th>
                     <th className="p-2.5">Cliente</th>
                     <th className="p-2.5">Artículo / Maquinaria</th>
@@ -2406,23 +2460,32 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Próximo Pago</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5 font-bold">{row.client}</td>
-                      <td className="p-2.5">{row.item}</td>
-                      <td className="p-2.5 font-black text-gray-900">RD$ {row.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5">{row.rate}</td>
-                      <td className="p-2.5">{row.term}</td>
-                      <td className="p-2.5 text-right font-bold">{row.nextPayment}</td>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No se encontraron contratos de financiamiento</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                        <td className="p-2.5 text-zinc-600">{row.item}</td>
+                        <td className="p-2.5 font-black font-mono text-zinc-900">RD$ {row.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-zinc-600">{row.rate}</td>
+                        <td className="p-2.5 text-zinc-600">{row.term}</td>
+                        <td className="p-2.5 text-right font-semibold text-zinc-700">{row.nextPayment}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Total Cartera Financiada:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Cartera Financiada:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2431,7 +2494,7 @@ export default function Reports() {
             {activeReport === 'moras' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código</th>
                     <th className="p-2.5">Cliente</th>
                     <th className="p-2.5">Contrato</th>
@@ -2441,23 +2504,32 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Total Deuda</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5 font-bold">{row.client}</td>
-                      <td className="p-2.5">{row.invoice}</td>
-                      <td className="p-2.5 font-black text-red-700">{row.daysOverdue} días</td>
-                      <td className="p-2.5">RD$ {row.unpaidInstallment.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-red-600 font-bold">RD$ {row.penalty.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-right font-black text-red-700">RD$ {row.totalDue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No hay préstamos en mora registrados</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                        <td className="p-2.5 text-zinc-600">{row.invoice}</td>
+                        <td className="p-2.5 font-bold text-red-700 bg-red-50/50 px-2 rounded">{row.daysOverdue} días</td>
+                        <td className="p-2.5 font-mono text-zinc-700">RD$ {row.unpaidInstallment.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-red-600 font-semibold font-mono">RD$ {row.penalty.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-right font-black font-mono text-red-700">RD$ {row.totalDue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Total Deuda en Mora:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Deuda en Mora:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-red-700">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2466,7 +2538,7 @@ export default function Reports() {
             {activeReport === 'movimientos_caja' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código / Fecha</th>
                     <th className="p-2.5">Usuario</th>
                     <th className="p-2.5">Tipo</th>
@@ -2476,31 +2548,40 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Monto (RD$)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((mov: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold font-mono text-gray-900">{mov.id || mov.code} <span className="text-gray-500 font-normal">({mov.date})</span></td>
-                      <td className="p-2.5 font-bold text-gray-800">👤 {mov.cashier || mov.created_by || 'Harold Rosado'}</td>
-                      <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                          mov.type === 'Ingreso' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-red-100 text-red-900 border border-red-300'
-                        }`}>
-                          {mov.type === 'Ingreso' ? '🟢 INGRESO' : '🔴 EGRESO'}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-bold">{mov.category || 'General'}</td>
-                      <td className="p-2.5 text-gray-700">{mov.description || mov.concept || 'Movimiento de caja'}</td>
-                      <td className="p-2.5">{mov.method || 'Efectivo'}</td>
-                      <td className={`p-2.5 text-right font-black font-mono ${mov.type === 'Ingreso' ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {mov.type === 'Ingreso' ? '+' : '-'}RD$ {mov.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No hay movimientos de caja en este período</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((mov: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{mov.id || mov.code} <span className="text-zinc-400 font-normal">({mov.date})</span></td>
+                        <td className="p-2.5 font-semibold text-zinc-800">👤 {mov.cashier || mov.created_by || 'Harold Rosado'}</td>
+                        <td className="p-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[8.5px] font-bold uppercase tracking-wide border ${
+                            mov.type === 'Ingreso' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'
+                          }`}>
+                            {mov.type === 'Ingreso' ? 'Ingreso' : 'Egreso'}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-semibold text-zinc-700">{mov.category || 'General'}</td>
+                        <td className="p-2.5 text-zinc-600">{mov.description || mov.concept || 'Movimiento de caja'}</td>
+                        <td className="p-2.5 text-zinc-600">{mov.method || 'Efectivo'}</td>
+                        <td className={`p-2.5 text-right font-black font-mono ${mov.type === 'Ingreso' ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {mov.type === 'Ingreso' ? '+' : '-'}RD$ {mov.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Flujo Neto Total:</td>
-                    <td className="p-2.5 text-right">RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Flujo Neto Total:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {cajaTotals.net.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2509,7 +2590,7 @@ export default function Reports() {
             {activeReport === 'inventario' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código</th>
                     <th className="p-2.5">Artículo</th>
                     <th className="p-2.5">Categoría</th>
@@ -2520,24 +2601,33 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Valor Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5 font-bold">{row.name}</td>
-                      <td className="p-2.5">{row.category}</td>
-                      <td className="p-2.5">{row.stockInit}</td>
-                      <td className="p-2.5 text-emerald-700 font-bold">+{row.in}</td>
-                      <td className="p-2.5 text-red-700 font-bold">-{row.out}</td>
-                      <td className="p-2.5 font-black text-gray-900">{row.stockCurrent}</td>
-                      <td className="p-2.5 text-right font-black">RD$ {row.totalValue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No hay artículos en el catálogo</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.name}</td>
+                        <td className="p-2.5 text-zinc-600">{row.category}</td>
+                        <td className="p-2.5 text-zinc-600">{row.stockInit}</td>
+                        <td className="p-2.5 text-emerald-700 font-semibold">+{row.in}</td>
+                        <td className="p-2.5 text-red-700 font-semibold">-{row.out}</td>
+                        <td className="p-2.5 font-black text-zinc-900">{row.stockCurrent}</td>
+                        <td className="p-2.5 text-right font-black font-mono text-zinc-900">RD$ {row.totalValue.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider">Valor Total del Stock:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Valor Total del Stock:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2546,7 +2636,7 @@ export default function Reports() {
             {activeReport === 'clientes' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Cliente</th>
                     <th className="p-2.5">RNC/Cédula</th>
                     <th className="p-2.5">Tipo</th>
@@ -2555,22 +2645,31 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Total Compras</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.client}</td>
-                      <td className="p-2.5 font-bold text-gray-700">{row.rnc}</td>
-                      <td className="p-2.5">{row.type}</td>
-                      <td className="p-2.5 font-bold">{row.invoices}</td>
-                      <td className="p-2.5">RD$ {row.creditLimit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-right font-black text-gray-900">RD$ {row.totalSpent.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No hay clientes con movimientos</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.client}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">{row.rnc}</td>
+                        <td className="p-2.5 text-zinc-600">{row.type}</td>
+                        <td className="p-2.5 font-bold text-zinc-800">{row.invoices}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">RD$ {row.creditLimit.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-right font-black font-mono text-zinc-900">RD$ {row.totalSpent.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider">Total Facturado a Clientes:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={5} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Facturado a Clientes:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2579,7 +2678,7 @@ export default function Reports() {
             {activeReport === 'caja' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Fecha</th>
                     <th className="p-2.5">Usuario</th>
                     <th className="p-2.5">Fondo Inicial</th>
@@ -2591,43 +2690,52 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Total Contado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900 whitespace-nowrap">{formatPrettyDate(row.date)}</td>
-                      <td className="p-2.5 font-bold text-gray-900 whitespace-nowrap">👤 {row.cashier}</td>
-                      <td className="p-2.5">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-emerald-700 font-bold">+RD$ {row.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-red-700 font-bold">-RD$ {row.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5">RD$ {row.totalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5">RD$ {row.totalCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5">RD$ {row.totalTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-2.5 text-right font-black text-gray-900">RD$ {row.counted.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-10 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No hay cierres de caja en este período</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Rango: {startDate} al {endDate}</p>
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold text-zinc-900 whitespace-nowrap">{formatPrettyDate(row.date)}</td>
+                        <td className="p-2.5 font-semibold text-zinc-800 whitespace-nowrap">👤 {row.cashier}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">RD$ {row.initialFund.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-emerald-700 font-bold font-mono">+RD$ {row.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-red-700 font-bold font-mono">-RD$ {row.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">RD$ {row.totalCash.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">RD$ {row.totalCard.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 font-mono text-zinc-600">RD$ {row.totalTransfer.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-2.5 text-right font-black font-mono text-zinc-900">RD$ {row.counted.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={2} className="p-2.5 uppercase tracking-wider">Totales Consolidados:</td>
-                    <td className="p-2.5">
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={2} className="p-2.5 uppercase tracking-wider text-zinc-500 font-semibold">Totales Consolidados:</td>
+                    <td className="p-2.5 font-mono">
                       RD$ {reportData.reduce((sum: number, r: any) => sum + (r.initialFund || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-emerald-400">
+                    <td className="p-2.5 text-emerald-700 font-mono">
                       +RD$ {cajaTotals.incomes.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-red-400">
+                    <td className="p-2.5 text-red-700 font-mono">
                       -RD$ {cajaTotals.expenses.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5">
+                    <td className="p-2.5 font-mono">
                       RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCash || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-blue-300">
+                    <td className="p-2.5 font-mono">
                       RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalCard || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-purple-300">
+                    <td className="p-2.5 font-mono">
                       RD$ {reportData.reduce((sum: number, r: any) => sum + (r.totalTransfer || 0), 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-2.5 text-right font-black">
+                    <td className="p-2.5 text-right font-black font-mono text-[#ED1C24]">
                       RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -2635,10 +2743,11 @@ export default function Reports() {
               </table>
             )}
 
+            {/* 10. Inspecciones Print Table */}
             {activeReport === 'inspecciones' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código Reporte</th>
                     <th className="p-2.5">Fecha</th>
                     <th className="p-2.5">Vehículo / Maquinaria</th>
@@ -2648,42 +2757,52 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Estado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5">{row.date}</td>
-                      <td className="p-2.5 font-bold text-gray-900">{row.vehicle}</td>
-                      <td className="p-2.5 text-gray-600 font-mono">{row.vin}</td>
-                      <td className="p-2.5 font-bold">{row.inspector}</td>
-                      <td className="p-2.5 text-center">
-                        <span className="inline-flex gap-1.5 font-bold text-[10px]">
-                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">{row.goodItems} B</span>
-                          <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">{row.regItems} R</span>
-                          <span className="text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{row.defItems} D</span>
-                        </span>
-                      </td>
-                      <td className="p-2.5 text-right font-black">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-blue-300 bg-blue-50 text-blue-800">
-                          {row.status}
-                        </span>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No se encontraron inspecciones registradas</p>
+                        <p className="text-[10px] text-zinc-400 mt-1">No hay inspecciones para el período {startDate} al {endDate}.</p>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 text-zinc-600">{row.date}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.vehicle}</td>
+                        <td className="p-2.5 text-zinc-500 font-mono">{row.vin}</td>
+                        <td className="p-2.5 font-semibold text-zinc-800">{row.inspector}</td>
+                        <td className="p-2.5 text-center">
+                          <span className="inline-flex gap-1.5 font-bold text-[9.5px]">
+                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">{row.goodItems} B</span>
+                            <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">{row.regItems} R</span>
+                            <span className="text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{row.defItems} D</span>
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-right font-bold">
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-blue-200 bg-blue-50 text-blue-800">
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider">Total Inspecciones Registradas:</td>
-                    <td className="p-2.5 text-right font-black">{reportData.length}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Total Inspecciones Registradas:</td>
+                    <td className="p-2.5 text-right font-black font-mono text-[#ED1C24]">{reportData.length}</td>
                   </tr>
                 </tfoot>
               </table>
             )}
 
+            {/* 11. Órdenes de Trabajo Print Table */}
             {activeReport === 'ordenes_trabajo' && (
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="bg-gray-900 text-white text-[10px] font-black uppercase tracking-wider">
+                  <tr className="bg-zinc-100/80 text-zinc-700 text-[9.5px] font-bold uppercase tracking-wider border-b border-zinc-200">
                     <th className="p-2.5">Código Orden</th>
                     <th className="p-2.5">Fecha</th>
                     <th className="p-2.5">Equipo</th>
@@ -2694,37 +2813,48 @@ export default function Reports() {
                     <th className="p-2.5 text-right">Costo Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 font-medium">
-                  {reportData.map((row: any, idx: number) => (
-                    <tr key={idx} className="even:bg-gray-50/80">
-                      <td className="p-2.5 font-bold text-gray-900">{row.code}</td>
-                      <td className="p-2.5">{row.date}</td>
-                      <td className="p-2.5 font-bold text-gray-900">{row.equipment}</td>
-                      <td className="p-2.5">{row.service}</td>
-                      <td className="p-2.5 font-bold">{row.technician}</td>
-                      <td className="p-2.5">{row.type}</td>
-                      <td className="p-2.5">
-                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800">
-                          {row.status}
-                        </span>
+                <tbody className="divide-y divide-zinc-100 font-medium">
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-zinc-400">
+                        <p className="font-semibold text-zinc-600 text-xs">No se encontraron órdenes de trabajo</p>
+                        <p className="text-[10px] text-zinc-400 mt-1">No hay órdenes para el período {startDate} al {endDate}.</p>
                       </td>
-                      <td className="p-2.5 text-right font-black text-gray-900">RD$ {row.totalCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    reportData.map((row: any, idx: number) => (
+                      <tr key={idx} className="even:bg-zinc-50/50">
+                        <td className="p-2.5 font-bold font-mono text-zinc-900">{row.code}</td>
+                        <td className="p-2.5 text-zinc-600">{row.date}</td>
+                        <td className="p-2.5 font-semibold text-zinc-900">{row.equipment}</td>
+                        <td className="p-2.5 text-zinc-700">{row.service}</td>
+                        <td className="p-2.5 font-semibold text-zinc-800">{row.technician}</td>
+                        <td className="p-2.5 text-zinc-600">{row.type}</td>
+                        <td className="p-2.5">
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-800">
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-right font-black font-mono text-zinc-900">RD$ {row.totalCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-gray-900 text-white font-black text-xs">
-                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider">Costo Total de Mantenimientos:</td>
-                    <td className="p-2.5 text-right">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                  <tr className="bg-zinc-50 border-t-2 border-zinc-300 text-zinc-900 font-bold text-xs">
+                    <td colSpan={7} className="p-2.5 text-right uppercase tracking-wider text-zinc-500 font-semibold">Costo Total de Mantenimientos:</td>
+                    <td className="p-2.5 text-right font-mono font-black text-[#ED1C24]">RD$ {grandTotal.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
             )}
           </div>
 
-          {/* Clean Corporate Footer (No Signatures) */}
-          <div className="mt-8 pt-4 border-t border-gray-300 text-center text-[9px] font-bold text-gray-500 uppercase tracking-widest">
-            Brianna Heavy Equipment SRL • Reporte Oficial Emitido Electrónicamente
+          {/* Clean Corporate Minimal Footer */}
+          <div className="mt-8 pt-4 border-t border-zinc-200 flex justify-between items-center text-[9px] text-zinc-400">
+            <span className="font-semibold text-zinc-600">Brianna Heavy Equipment SRL • RNC 132-61036-2</span>
+            <span>Reporte Oficial de Gestión • Emitido Electrónicamente</span>
+            <span className="font-mono text-zinc-500">#{formattedReportCode}</span>
           </div>
         </div>,
         document.body
