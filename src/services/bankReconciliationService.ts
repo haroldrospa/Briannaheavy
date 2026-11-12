@@ -122,11 +122,16 @@ export const loadReconciliationData = (
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as BankReconciliationData;
-    // Limpiar comisiones o impuestos artificiales previamente inyectados
+    // Limpiar comisiones o impuestos artificiales previamente inyectados y sanear textos corruptos
     if (parsed && Array.isArray(parsed.statementLines)) {
-      parsed.statementLines = parsed.statementLines.filter(
-        l => !l.id?.startsWith('stmt-gen-com-')
-      );
+      parsed.statementLines = parsed.statementLines
+        .filter(l => !l.id?.startsWith('stmt-gen-com-'))
+        .map(l => ({
+          ...l,
+          concept: sanitizeBankText(l.concept),
+          date: sanitizeBankText(l.date),
+          reference: l.reference ? sanitizeBankText(l.reference) : undefined,
+        }));
     }
     return parsed;
   } catch (err) {
@@ -140,6 +145,14 @@ export const loadReconciliationData = (
  */
 export const saveReconciliationData = (data: BankReconciliationData): void => {
   try {
+    if (data && Array.isArray(data.statementLines)) {
+      data.statementLines = data.statementLines.map(l => ({
+        ...l,
+        concept: sanitizeBankText(l.concept),
+        date: sanitizeBankText(l.date),
+        reference: l.reference ? sanitizeBankText(l.reference) : undefined,
+      }));
+    }
     const key = `${STORAGE_PREFIX}${data.bankAccountId}_${data.period}`;
     localStorage.setItem(key, JSON.stringify(data));
     window.dispatchEvent(new CustomEvent('brianna_reconciliation_saved', { detail: data }));
@@ -147,6 +160,49 @@ export const saveReconciliationData = (data: BankReconciliationData): void => {
     console.error('Error al guardar datos de conciliación:', err);
   }
 };
+
+/**
+ * Recorre y sanea todas las conciliaciones guardadas en localStorage,
+ * purgando cualquier residuo de bytes nulos \u0000 o caracteres \u2261 (≡)
+ */
+export const sanitizeAllStoredBankReconciliations = (): void => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keysToClean: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) {
+        keysToClean.push(k);
+      }
+    }
+    keysToClean.forEach(key => {
+      const raw = localStorage.getItem(key);
+      if (raw && (raw.includes('\u0000') || raw.includes('\u2261') || raw.includes('≡'))) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.statementLines)) {
+            parsed.statementLines = parsed.statementLines.map((l: any) => ({
+              ...l,
+              concept: sanitizeBankText(l.concept),
+              date: sanitizeBankText(l.date),
+              reference: l.reference ? sanitizeBankText(l.reference) : undefined,
+            }));
+            localStorage.setItem(key, JSON.stringify(parsed));
+          }
+        } catch {}
+      }
+    });
+  } catch (err) {
+    console.warn('Error sanitizing stored bank reconciliations:', err);
+  }
+};
+
+// Auto-ejecutar sanitización preventiva
+if (typeof window !== 'undefined') {
+  try {
+    sanitizeAllStoredBankReconciliations();
+  } catch {}
+}
 
 /**
  * Elimina o reinicia la conciliación guardada
@@ -337,6 +393,67 @@ export const getAllPriorReconciledBookTxIds = (bankAccountId: string, currentPer
 };
 
 /**
+ * Sanea y limpia cualquier texto de extracto o libro bancario, eliminando
+ * bytes nulos (\u0000) generados por archivos UTF-16 mal decodificados,
+ * glifos de control (\u2261 '≡'), y espacios redundantes.
+ */
+export const sanitizeBankText = (val: any): string => {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/\u0000/g, '') // Elimina caracteres nulos
+    .replace(/\u2261/g, '') // Elimina glifo triple barra ≡
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Elimina caracteres de control
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+/**
+ * Detecta y decodifica inteligentemente el búfer de un archivo bancario:
+ * Si es XLSX/XLS binario, devuelve los bytes directamente para SheetJS.
+ * Si es CSV o TXT (con o sin BOM, UTF-16 LE/BE o UTF-8), decodifica a string limpio.
+ */
+export const decodeTextOrWorkbook = (
+  buffer: ArrayBuffer
+): { isExcel: boolean; data?: Uint8Array; text?: string } => {
+  const bytes = new Uint8Array(buffer);
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4B; // PK (XLSX, XLSM)
+  const isOle = bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0; // BIFF8 (XLS)
+  if (isZip || isOle) {
+    return { isExcel: true, data: bytes };
+  }
+
+  // Comprobar marcas de orden de bytes (BOM)
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+    return { isExcel: false, text: new TextDecoder('utf-16le').decode(bytes) };
+  }
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+    return { isExcel: false, text: new TextDecoder('utf-16be').decode(bytes) };
+  }
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return { isExcel: false, text: new TextDecoder('utf-8').decode(bytes) };
+  }
+
+  // Heurística de detección para UTF-16 LE sin BOM (habitual en exportaciones de bancos dominicanos)
+  let nullEven = 0, nullOdd = 0;
+  const sampleLen = Math.min(bytes.length, 300);
+  for (let i = 0; i < sampleLen; i++) {
+    if (bytes[i] === 0) {
+      if (i % 2 === 0) nullEven++;
+      else nullOdd++;
+    }
+  }
+  if (nullOdd > 10 && nullEven === 0) {
+    return { isExcel: false, text: new TextDecoder('utf-16le').decode(bytes) };
+  }
+  if (nullEven > 10 && nullOdd === 0) {
+    return { isExcel: false, text: new TextDecoder('utf-16be').decode(bytes) };
+  }
+
+  // Por defecto UTF-8
+  return { isExcel: false, text: new TextDecoder('utf-8').decode(bytes) };
+};
+
+/**
  * Parsea un archivo Excel (.xlsx, .xls) o CSV de un extracto bancario
  * Soporta formatos de Banco Popular, Banreservas, BHD y genéricos.
  */
@@ -346,13 +463,20 @@ export const parseBankStatementFile = async (file: File): Promise<BankStatementL
 
     reader.onload = (e) => {
       try {
-        const data = e.target?.result;
-        if (!data) {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer) {
           resolve([]);
           return;
         }
 
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+        const decoded = decodeTextOrWorkbook(buffer);
+        let workbook: XLSX.WorkBook;
+        if (decoded.isExcel && decoded.data) {
+          workbook = XLSX.read(decoded.data, { type: 'array', cellDates: true });
+        } else {
+          workbook = XLSX.read(decoded.text || '', { type: 'string', cellDates: true });
+        }
+
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
@@ -381,7 +505,7 @@ export const parseBankStatementFile = async (file: File): Promise<BankStatementL
           if (!Array.isArray(row)) continue;
 
           row.forEach((cell, colIdx) => {
-            const val = String(cell || '').trim().toLowerCase();
+            const val = sanitizeBankText(cell).toLowerCase();
             if (val.includes('fecha') || val.includes('date')) {
               if (dateCol === -1) dateCol = colIdx;
             }
@@ -433,7 +557,7 @@ export const parseBankStatementFile = async (file: File): Promise<BankStatementL
           if (rawDate instanceof Date) {
             dateStr = rawDate.toISOString().split('T')[0];
           } else {
-            const str = String(rawDate).trim();
+            const str = sanitizeBankText(rawDate);
             // Detectar formatos comunes DD/MM/YYYY o YYYY-MM-DD
             if (str.includes('/')) {
               const parts = str.split('/');
@@ -456,24 +580,26 @@ export const parseBankStatementFile = async (file: File): Promise<BankStatementL
 
           if (!dateStr) continue;
 
-          const concept = descCol !== -1 ? String(row[descCol] || '').trim() : 'Movimiento Bancario';
-          const reference = refCol !== -1 ? String(row[refCol] || '').trim() : undefined;
+          const rawConcept = descCol !== -1 ? row[descCol] : 'Movimiento Bancario';
+          const concept = sanitizeBankText(rawConcept) || 'Movimiento Bancario';
+          const rawRef = refCol !== -1 ? row[refCol] : undefined;
+          const reference = rawRef ? sanitizeBankText(rawRef) : undefined;
 
           // Montos
           let debit = 0;
           let credit = 0;
 
           if (debitCol !== -1) {
-            const rawDebit = String(row[debitCol] || '').replace(/[^0-9.-]/g, '');
+            const rawDebit = sanitizeBankText(row[debitCol]).replace(/[^0-9.-]/g, '');
             debit = Math.abs(parseFloat(rawDebit) || 0);
           }
           if (creditCol !== -1) {
-            const rawCredit = String(row[creditCol] || '').replace(/[^0-9.-]/g, '');
+            const rawCredit = sanitizeBankText(row[creditCol]).replace(/[^0-9.-]/g, '');
             credit = Math.abs(parseFloat(rawCredit) || 0);
           }
 
           if (debitCol === -1 && creditCol === -1 && amountCol !== -1) {
-            const rawAmt = String(row[amountCol] || '').replace(/[^0-9.-]/g, '');
+            const rawAmt = sanitizeBankText(row[amountCol]).replace(/[^0-9.-]/g, '');
             const parsed = parseFloat(rawAmt) || 0;
             if (parsed < 0) {
               debit = Math.abs(parsed);
@@ -506,7 +632,7 @@ export const parseBankStatementFile = async (file: File): Promise<BankStatementL
     };
 
     reader.onerror = (err) => reject(err);
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   });
 };
 

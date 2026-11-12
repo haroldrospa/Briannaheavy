@@ -12,7 +12,11 @@ import {
   ClockIcon,
   ArrowRightIcon
 } from '@heroicons/react/24/outline';
-import type { ReconciliationSummary, BankStatementLine } from '../../services/bankReconciliationService';
+import {
+  type ReconciliationSummary,
+  type BankStatementLine,
+  sanitizeBankText
+} from '../../services/bankReconciliationService';
 import type { BankTransaction } from '../../services/bankService';
 import logo from '../../assets/logo.png';
 
@@ -472,10 +476,10 @@ export default function ReconciliationReportModal({
                                 }`}>
                                   {line.type}
                                 </span>
-                                <span className="font-bold text-gray-900 dark:text-white">{line.concept}</span>
+                                <span className="font-bold text-gray-900 dark:text-white">{sanitizeBankText(line.concept)}</span>
                               </div>
                               <span className="text-[10.5px] text-gray-400">
-                                {line.date} • Ref: {line.reference || 'N/A'}
+                                {sanitizeBankText(line.date)} • Ref: {sanitizeBankText(line.reference || 'N/A')}
                               </span>
                             </div>
                             <span className="font-black font-mono text-gray-900 dark:text-white shrink-0">

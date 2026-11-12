@@ -44,7 +44,9 @@ import {
   runAutoReconciliation,
   calculateReconciliationSummary,
   exportReconciliationToExcel,
-  isBankTaxOrFeeLine
+  isBankTaxOrFeeLine,
+  sanitizeBankText,
+  sanitizeAllStoredBankReconciliations
 } from '../../services/bankReconciliationService';
 import ReconciliationReportModal from './ReconciliationReportModal';
 import ReconciliationHistoryView from './ReconciliationHistoryView';
@@ -226,6 +228,7 @@ export default function BankReconciliationTab({
   useEffect(() => {
     if (!selectedAccount?.id || !period) return;
 
+    sanitizeAllStoredBankReconciliations();
     const saved = loadReconciliationData(selectedAccount.id, period);
     const prevClosing = getPreviousClosingBalance(selectedAccount.id, period);
 
@@ -237,11 +240,18 @@ export default function BankReconciliationTab({
 
       setOpeningBalance(effectiveOpenBal);
       setClosingBalance(saved.closingBalance || 0);
-      const cleanLines = (saved.statementLines || []).filter(l => {
-        if (l.id?.startsWith('stmt-gen-com-')) return false;
-        if (excludeBankTax && isBankTaxOrFeeLine(l.concept, l.id)) return false;
-        return true;
-      });
+      const cleanLines = (saved.statementLines || [])
+        .filter(l => {
+          if (l.id?.startsWith('stmt-gen-com-')) return false;
+          if (excludeBankTax && isBankTaxOrFeeLine(l.concept, l.id)) return false;
+          return true;
+        })
+        .map(l => ({
+          ...l,
+          concept: sanitizeBankText(l.concept),
+          date: sanitizeBankText(l.date),
+          reference: l.reference ? sanitizeBankText(l.reference) : undefined,
+        }));
       setStatementLines(cleanLines);
       setReconciledBookTxIds(saved.reconciledBookTxIds || []);
     } else {
@@ -307,9 +317,15 @@ export default function BankReconciliationTab({
       }
 
       // Si excludeBankTax está activo, omitir cargos de impuesto bancario (0.15% Ley 288-04 y comisiones)
+      const sanitizedLines = parsedLines.map(l => ({
+        ...l,
+        concept: sanitizeBankText(l.concept),
+        date: sanitizeBankText(l.date),
+        reference: l.reference ? sanitizeBankText(l.reference) : undefined,
+      }));
       const finalLines = excludeBankTax
-        ? parsedLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id))
-        : parsedLines;
+        ? sanitizedLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id))
+        : sanitizedLines;
       const omittedCount = parsedLines.length - finalLines.length;
 
       setStatementLines(finalLines);
@@ -1456,14 +1472,14 @@ export default function BankReconciliationTab({
 
                       <div className="min-w-0">
                         <p className="font-semibold text-xs text-gray-900 dark:text-white truncate">
-                          {line.concept}
+                          {sanitizeBankText(line.concept)}
                         </p>
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
-                          <span>{line.date}</span>
+                          <span>{sanitizeBankText(line.date)}</span>
                           {line.reference && (
                             <>
                               <span>•</span>
-                              <span className="font-mono truncate max-w-[120px]">Ref: {line.reference}</span>
+                              <span className="font-mono truncate max-w-[120px]">Ref: {sanitizeBankText(line.reference)}</span>
                             </>
                           )}
                         </div>
