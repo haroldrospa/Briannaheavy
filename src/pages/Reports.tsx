@@ -20,7 +20,8 @@ import {
   CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
-import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvoice } from '../services/invoicesService';
+import MaintenanceWorkOrderForm from '../components/forms/MaintenanceWorkOrderForm';
+import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvoice, isInternalExpenseInvoice } from '../services/invoicesService';
 import { fetchFinancings, getLocalStorageFinancings } from '../services/financingService';
 import { fetchCustomers, getLocalStorageCustomers } from '../services/customersService';
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
@@ -102,21 +103,25 @@ const mapReportsData = (
   const validInvs = (invs || []).filter(inv => !isQuotationInvoice(inv));
 
   if (validInvs && validInvs.length > 0) {
-    mappedData.ventas = validInvs.map(inv => ({
-      code: inv.invoice_number || `FAC-${inv.id}`,
-      ncf: inv.ncf || 'N/A',
-      ncf_type: inv.ncf_type || (inv.ncf ? inv.ncf.substring(0, 3) : 'Interna'),
-      date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
-      client: inv.customer_name || 'Cliente General',
-      rnc: inv.customer_rnc || '000000000',
-      method: inv.payment_method || 'Efectivo',
-      status: inv.status || 'Pagada',
-      total: Number(inv.total_amount || 0),
-      is_electronic: Boolean(inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')))
-    }));
+    mappedData.ventas = validInvs.map(inv => {
+      const isGi = isInternalExpenseInvoice(inv);
+      return {
+        code: inv.invoice_number || (isGi ? `GI-${inv.id}` : `FAC-${inv.id}`),
+        ncf: inv.ncf || 'N/A',
+        ncf_type: isGi ? 'Gasto Interno' : (inv.ncf_type || (inv.ncf ? inv.ncf.substring(0, 3) : 'Interna')),
+        date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
+        client: inv.customer_name || (isGi ? 'Consumo Empresa' : 'Cliente General'),
+        rnc: inv.customer_rnc || (isGi ? 'Gasto Interno' : '000000000'),
+        method: isGi ? 'Gasto Interno' : (inv.payment_method || 'Efectivo'),
+        status: isGi ? 'Gasto Interno' : (inv.status || 'Pagada'),
+        total: Number(inv.total_amount || 0),
+        is_electronic: Boolean(inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E'))),
+        is_internal_expense: isGi,
+      };
+    });
 
     // Facturación Electrónica e-CF
-    const ecfList = validInvs.filter(inv => inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E')));
+    const ecfList = validInvs.filter(inv => !isInternalExpenseInvoice(inv) && (inv.is_electronic || inv.billing_mode === 'electronic' || (inv.ncf && inv.ncf.startsWith('E'))));
     mappedData.ecf = ecfList.map(inv => {
       const ncfCode = inv.ncf || inv.invoice_number || `E3200000001`;
       let prefix = 'E32';
@@ -162,18 +167,22 @@ const mapReportsData = (
     });
 
     // Facturación Interna
-    const internalList = validInvs.filter(inv => inv.billing_mode === 'internal' || (inv.ncf && inv.ncf.startsWith('INT')) || !inv.ncf || (!inv.is_electronic && !inv.ncf?.startsWith('E')));
-    mappedData.internas = internalList.map(inv => ({
-      code: inv.invoice_number || inv.ncf || `INT-${inv.id}`,
-      date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
-      client: inv.customer_name || 'Cliente General',
-      rnc: inv.customer_rnc || 'Consumidor Final',
-      method: inv.payment_method || 'Efectivo',
-      cashier: inv.cashier_name || 'Cajero Principal',
-      status: inv.status || 'Completada',
-      subtotal: Number(inv.subtotal || inv.total_amount),
-      total: Number(inv.total_amount || 0)
-    }));
+    const internalList = validInvs.filter(inv => inv.billing_mode === 'internal' || (inv.ncf && inv.ncf.startsWith('INT')) || (inv.ncf && inv.ncf.startsWith('GI')) || isInternalExpenseInvoice(inv) || !inv.ncf || (!inv.is_electronic && !inv.ncf?.startsWith('E')));
+    mappedData.internas = internalList.map(inv => {
+      const isGi = isInternalExpenseInvoice(inv);
+      return {
+        code: inv.invoice_number || inv.ncf || (isGi ? `GI-${inv.id}` : `INT-${inv.id}`),
+        date: inv.created_at ? inv.created_at.slice(0, 10) : '2026-07-21',
+        client: inv.customer_name || (isGi ? 'Consumo Empresa' : 'Cliente General'),
+        rnc: inv.customer_rnc || (isGi ? 'Gasto Interno' : 'Consumidor Final'),
+        method: isGi ? 'Gasto Interno' : (inv.payment_method || 'Efectivo'),
+        cashier: inv.cashier_name || 'Cajero Principal',
+        status: isGi ? 'Gasto Interno' : (inv.status || 'Completada'),
+        subtotal: Number(inv.subtotal || inv.total_amount),
+        total: Number(inv.total_amount || 0),
+        is_internal_expense: isGi,
+      };
+    });
   }
 
   if (fins && fins.length > 0) {
@@ -403,7 +412,7 @@ const mapReportsData = (
       const defCount = 4 - goodCount;
       return {
         code: ins.report_number || `INS-${String(ins.id).slice(0, 6)}`,
-        date: ins.created_at ? ins.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        date: ins.date ? String(ins.date).slice(0, 10) : (ins.created_at ? String(ins.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
         vehicle: ins.truck_name || 'Camión MACK Granite',
         vin: ins.chassis_number || '1M2AX13C5PM001892',
         inspector: ins.driver_name || 'Inspector Técnico',
@@ -417,16 +426,28 @@ const mapReportsData = (
   }
 
   if (workOrders && workOrders.length > 0) {
-    mappedData.ordenes_trabajo = workOrders.map((wo: any) => ({
-      code: wo.control_number || `OT-${String(wo.id).slice(0, 6)}`,
-      date: wo.created_at ? wo.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      equipment: wo.truck_name || 'Equipo Pesado',
-      service: wo.description || 'Mantenimiento preventivo',
-      technician: wo.technician_name || 'Taller Central',
-      type: 'Taller',
-      status: wo.status || 'Completada',
-      totalCost: Number(wo.total_cost || ((wo.labor_cost || 0) + (wo.parts_cost || 0)) || 0)
-    }));
+    mappedData.ordenes_trabajo = workOrders.map((wo: any) => {
+      const orderDate = wo.date ? String(wo.date).slice(0, 10) : (wo.created_at ? String(wo.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10));
+      const labor = Number(wo.labor_cost || 0);
+      const parts = Number(wo.parts_cost || 0);
+      const total = Number(wo.total_cost) > 0 ? Number(wo.total_cost) : (labor + parts);
+
+      return {
+        id: wo.id,
+        code: wo.control_number || `OT-${String(wo.id).slice(0, 6)}`,
+        date: orderDate,
+        equipment: wo.truck_name || 'Equipo Pesado',
+        service: wo.service_type || wo.description || 'Mantenimiento preventivo',
+        description: wo.description || wo.service_type || '',
+        technician: wo.technician_name || wo.assigned_to || 'Taller Central',
+        type: wo.maintenance_type || 'Interno',
+        status: wo.status || 'Completada',
+        laborCost: labor,
+        partsCost: parts,
+        totalCost: total,
+        raw: wo
+      };
+    });
   }
 
   return mappedData;
@@ -476,6 +497,7 @@ export default function Reports() {
   });
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
+  const [selectedWorkOrderForPreview, setSelectedWorkOrderForPreview] = useState<any>(null);
   const [selectedClosureForDetail, setSelectedClosureForDetail] = useState<any>(null);
   const [companyConfig, setCompanyConfig] = useState(getInvoiceCustomConfig);
   const [activeQuickRange, setActiveQuickRange] = useState<'hoy' | 'mes' | 'mes_anterior' | 'ano' | 'todo'>('mes');
@@ -2089,11 +2111,16 @@ export default function Reports() {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-800/60 text-xs font-medium text-gray-800 dark:text-zinc-200">
                       {reportData.map((row: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-zinc-800/40 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30">
-                          <td className="p-3 font-mono font-bold text-gray-900 dark:text-white">{row.code}</td>
+                        <tr 
+                          key={idx} 
+                          onClick={() => setSelectedWorkOrderForPreview(row)}
+                          className="hover:bg-red-50/50 dark:hover:bg-red-950/20 odd:bg-gray-50/30 dark:odd:bg-zinc-900/30 cursor-pointer transition-colors group"
+                          title="Haz clic para abrir la vista previa detallada de esta orden de trabajo"
+                        >
+                          <td className="p-3 font-mono font-bold text-gray-900 dark:text-white group-hover:text-[#ED1C24] transition-colors">{row.code}</td>
                           <td className="p-3">{row.date}</td>
-                          <td className="p-3 font-bold text-gray-900 dark:text-white">{row.equipment}</td>
-                          <td className="p-3">{row.service}</td>
+                          <td className="p-3 font-bold text-gray-900 dark:text-white group-hover:text-[#ED1C24] transition-colors">{row.equipment}</td>
+                          <td className="p-3 group-hover:text-[#ED1C24] transition-colors font-medium">{row.service}</td>
                           <td className="p-3 font-semibold">{row.technician}</td>
                           <td className="p-3">{row.type}</td>
                           <td className="p-3">
@@ -2103,14 +2130,27 @@ export default function Reports() {
                           </td>
                           <td className="p-3 text-right font-black text-gray-900 dark:text-white">RD$ {row.totalCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                           <td className="p-3 text-right">
-                            <button 
-                              onClick={handlePrint}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-[#d91920] text-white font-bold text-xs transition-all shadow-sm cursor-pointer"
-                              title="Imprimir esta orden"
-                            >
-                              <PrinterIcon className="h-3.5 w-3.5" />
-                              Imprimir
-                            </button>
+                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button 
+                                onClick={() => setSelectedWorkOrderForPreview(row)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-bold text-xs transition-all shadow-sm cursor-pointer"
+                                title="Ver vista previa de la orden de trabajo"
+                              >
+                                <EyeIcon className="h-3.5 w-3.5" />
+                                <span>Vista Previa</span>
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setSelectedWorkOrderForPreview(row);
+                                  setTimeout(() => window.print(), 250);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ED1C24] hover:bg-[#d91920] text-white font-bold text-xs transition-all shadow-sm cursor-pointer"
+                                title="Imprimir esta orden"
+                              >
+                                <PrinterIcon className="h-3.5 w-3.5" />
+                                <span>Imprimir</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2140,7 +2180,7 @@ export default function Reports() {
       </div>
 
       {/* Isolated Print Portal (Rendered directly under document.body) */}
-      {!selectedInspectionForPrint && !selectedClosureForDetail && typeof document !== 'undefined' && createPortal(
+      {!selectedInspectionForPrint && !selectedClosureForDetail && !selectedWorkOrderForPreview && typeof document !== 'undefined' && createPortal(
         <div id="report-printable-area" className="hidden print:block font-sans text-black bg-white p-6">
           {/* Top Brand Accent Line */}
           <div className="w-full h-1.5 bg-[#ED1C24] mb-4 rounded-full" />
@@ -2729,6 +2769,50 @@ export default function Reports() {
             {/* Printable Form Body */}
             <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0">
               <TruckInspectionForm initialData={selectedInspectionForPrint} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Work Order Preview / Print Modal View */}
+      {selectedWorkOrderForPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 print:p-0 print:bg-white print:static print:z-auto">
+          <div className="bg-white dark:bg-[#16171d] rounded-3xl w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden shadow-2xl print:max-h-none print:shadow-none print:w-full print:rounded-none">
+            {/* Header Screen Only */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-zinc-800 print:hidden shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900/40 flex items-center justify-center">
+                  <WrenchScrewdriverIcon className="h-5 w-5 text-[#ED1C24]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 dark:text-white">
+                    Vista Previa — Orden de Trabajo {selectedWorkOrderForPreview.code}
+                  </h3>
+                  <p className="text-[11px] font-medium text-gray-500">
+                    {selectedWorkOrderForPreview.equipment} • {selectedWorkOrderForPreview.service}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => window.print()} 
+                  className="flex items-center gap-2 bg-[#ED1C24] hover:bg-[#d91920] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                >
+                  <PrinterIcon className="h-4 w-4" />
+                  Imprimir Orden (PDF)
+                </button>
+                <button 
+                  onClick={() => setSelectedWorkOrderForPreview(null)} 
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-white rounded-full cursor-pointer"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Form Body */}
+            <div className="flex-1 overflow-y-auto print:overflow-visible p-6 print:p-0">
+              <MaintenanceWorkOrderForm initialData={selectedWorkOrderForPreview} readOnly={true} />
             </div>
           </div>
         </div>

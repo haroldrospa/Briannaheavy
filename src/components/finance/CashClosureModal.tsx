@@ -25,7 +25,7 @@ import {
   UserIcon,
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
-import { fetchInvoices, getLocalStorageInvoices, isAbonoInvoice, type Invoice } from '../../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, isAbonoInvoice, isInternalExpenseInvoice, type Invoice } from '../../services/invoicesService';
 import { fetchCashMovements, getLocalStorageMovements, type CashMovement } from '../../services/cashMovementsService';
 import { fetchRemoteInvoicePayments, getLocalInvoicePayments } from '../../services/invoicePaymentsService';
 import { createCashClosure, getLocalStorageCashClosures, type CashClosure } from '../../services/cashClosuresService';
@@ -593,6 +593,39 @@ export default function CashClosureModal({
     // Facturas y Ventas del turno (para mostrar junto a los movimientos)
     scopedInvoices.forEach(inv => {
       if (isAbonoInvoice(inv)) return; // Excluir abonos ya que se procesan como movimientos de cobro
+
+      const author = inv.cashier_name || (inv as any).created_by || '';
+      const invNumber = inv.invoice_number || inv.id || '';
+
+      if (isInternalExpenseInvoice(inv)) {
+        // Gasto Interno: Se muestra en movimientos de auditoría como consumo de empresa sin sumar al dinero de caja
+        const customer = inv.customer_name || 'Consumo Empresa';
+        const conceptText = `Gasto Interno #${invNumber} - ${customer}`;
+        list.push({
+          id: `inv-gi-${inv.id || invNumber}`,
+          type: 'Egreso',
+          category: 'gasto_interno' as any,
+          categoryLabel: 'Gasto Interno (Empresa)',
+          concept: conceptText,
+          customer,
+          amount: Number(inv.total_amount) || 0,
+          paymentMethod: 'Gasto Interno',
+          payment_method: 'Gasto Interno',
+          createdAt: inv.created_at || (inv as any).date || new Date().toISOString(),
+          created_at: inv.created_at || (inv as any).date || new Date().toISOString(),
+          reference: inv.ncf || invNumber,
+          isCash: false,
+          isCard: false,
+          isBank: false,
+          isCredit: false,
+          isMine: true,
+          author,
+          badgeText: '🏢 Gasto Interno • Consumo Empresa',
+          badgeColorClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300/60 dark:border-purple-800/40'
+        });
+        return;
+      }
+
       const pm = (inv.payment_method || 'Efectivo').trim();
       const pmLower = pm.toLowerCase();
       const isCard = pmLower.includes('tarjeta');
@@ -600,9 +633,6 @@ export default function CashClosureModal({
       const isCredit = pmLower.includes('créd') || pmLower.includes('cred') || (inv.credit_days !== undefined && inv.credit_days > 0) || inv.status === 'Crédito Pendiente';
       const isCash = !isCard && !isBank && !isCredit;
 
-      const author = inv.cashier_name || (inv as any).created_by || '';
-
-      const invNumber = inv.invoice_number || inv.id || '';
       const customer = inv.customer_name || 'Consumidor Final';
       const conceptText = `Factura #${invNumber} - ${customer}`;
 
@@ -670,7 +700,7 @@ export default function CashClosureModal({
 
   const quadreOutflowsAmount = useMemo(() => {
     return unifiedEgresos
-      .filter(m => m.isMine !== false || selectedCashierFilter === 'todos')
+      .filter(m => (m.isMine !== false || selectedCashierFilter === 'todos') && m.category !== 'gasto_interno')
       .reduce((sum, m) => sum + m.amount, 0);
   }, [unifiedEgresos, selectedCashierFilter]);
 
@@ -688,6 +718,7 @@ export default function CashClosureModal({
 
     // 1. Facturas directas (POS)
     scopedInvoices.forEach(inv => {
+      if (isInternalExpenseInvoice(inv)) return; // Excluir gastos internos del cuadre de ventas monetarias
       const amt = Number(inv.total_amount) || 0;
       const method = (inv.payment_method || '').trim();
       const methodLower = method.toLowerCase();
@@ -783,7 +814,14 @@ export default function CashClosureModal({
   const totalRealCobrado = systemSales.cash + systemSales.card + systemSales.transfer;
   const grandTotalSales = totalRealCobrado + systemSales.credit;
   const totalInvoicesAmount = useMemo(() => {
-    return scopedInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+    return scopedInvoices
+      .filter(inv => !isInternalExpenseInvoice(inv))
+      .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+  }, [scopedInvoices]);
+  const totalInternalExpensesAmount = useMemo(() => {
+    return scopedInvoices
+      .filter(inv => isInternalExpenseInvoice(inv))
+      .reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
   }, [scopedInvoices]);
   const extraReceiptsTotal = useMemo(() => {
     const fin = scopedFinancingReceipts.reduce((sum, r) => sum + (Number(r.totalPaid) || 0), 0);
@@ -1690,11 +1728,18 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         <DocumentTextIcon className="w-3.5 h-3.5 text-zinc-400" />
                         Facturas de Ventas ({scopedInvoices.length})
                       </h3>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">Total:</span>
-                        <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
-                          RD$ {totalInvoicesAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        {totalInternalExpensesAmount > 0 && (
+                          <span className="text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 px-1.5 py-0.5 rounded">
+                            Gasto Interno: RD$ {totalInternalExpensesAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })} (Sin cobro)
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase">Total Ventas:</span>
+                          <span className="text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
+                            RD$ {totalInvoicesAmount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -1704,30 +1749,34 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                       </div>
                     ) : (
                       <div className="space-y-1 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
-                        {scopedInvoices.map(inv => (
-                          <div key={inv.id} className="flex items-center justify-between p-1.5 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-bold shrink-0 ${
-                                inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
-                                inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
-                                inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
-                                inv.payment_method === 'Mixto' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' :
-                                'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                              }`}>
-                                {inv.payment_method || 'Efectivo'}
-                              </span>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1 truncate">
-                                  <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px]">{inv.invoice_number}</span>
-                                  <span className="text-zinc-500 dark:text-zinc-400 text-[10.5px] truncate">{inv.customer_name || 'Consumidor Final'}</span>
+                        {scopedInvoices.map(inv => {
+                          const isGi = isInternalExpenseInvoice(inv);
+                          return (
+                            <div key={inv.id} className="flex items-center justify-between p-1.5 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/80 text-xs">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-bold shrink-0 ${
+                                  isGi ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50' :
+                                  inv.payment_method === 'Efectivo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' :
+                                  inv.payment_method === 'Tarjeta' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' :
+                                  inv.payment_method === 'Transferencia' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
+                                  inv.payment_method === 'Mixto' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' :
+                                  'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                }`}>
+                                  {isGi ? 'Gasto Interno' : (inv.payment_method || 'Efectivo')}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1 truncate">
+                                    <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-[11px]">{inv.invoice_number}</span>
+                                    <span className="text-zinc-500 dark:text-zinc-400 text-[10.5px] truncate">{inv.customer_name || (isGi ? 'Consumo Empresa' : 'Consumidor Final')}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <span className={`font-bold font-mono shrink-0 ml-1.5 text-xs ${isGi ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                                {isGi ? '🏢 RD$ ' : '+RD$ '}{Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                              </span>
                             </div>
-                            <span className="font-bold font-mono text-zinc-900 dark:text-zinc-100 shrink-0 ml-1.5 text-xs">
-                              +RD$ {Number(inv.total_amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1971,6 +2020,7 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                         {displayedMovements.map(m => {
                           const isCredit = m.type === 'Crédito' || Boolean(m.isCredit);
                           const isIngreso = m.type === 'Ingreso';
+                          const isGastoInterno = m.category === 'gasto_interno';
                           const isExternalMovement = (m.category === 'ingreso_manual' || m.category === 'egreso_manual') && m.isMine === false;
                           const isCobro = m.category === 'cobro';
 
@@ -1980,6 +2030,8 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               className={`flex items-center justify-between p-1.5 px-2.5 rounded-lg border text-xs transition-all ${
                                 isExternalMovement 
                                   ? 'bg-amber-50/20 dark:bg-amber-950/10 border-amber-200/60 dark:border-amber-900/30' 
+                                  : isGastoInterno
+                                  ? 'bg-purple-50/25 dark:bg-purple-950/20 border-purple-200/70 dark:border-purple-800/40 hover:bg-purple-50/40 dark:hover:bg-purple-950/30'
                                   : isCredit
                                   ? 'bg-amber-50/25 dark:bg-amber-950/20 border-amber-200/70 dark:border-amber-800/40 hover:bg-amber-50/40 dark:hover:bg-amber-950/30'
                                   : 'bg-zinc-50/40 dark:bg-zinc-900/50 border-zinc-200/70 dark:border-zinc-800/80 hover:bg-white dark:hover:bg-zinc-900'
@@ -1988,7 +2040,9 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                               <div className="flex items-center gap-2 min-w-0">
                                 {/* Modern Icon Box */}
                                 <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
-                                  isCredit
+                                  isGastoInterno
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300/60 dark:border-purple-800/60'
+                                    : isCredit
                                     ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800/60'
                                     : isCobro
                                     ? 'bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-100 dark:border-teal-900/40'
@@ -1996,7 +2050,9 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                     ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40'
                                     : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
                                 }`}>
-                                  {isCredit ? (
+                                  {isGastoInterno ? (
+                                    <DocumentTextIcon className="w-3.5 h-3.5" />
+                                  ) : isCredit ? (
                                     <ClockIcon className="w-3.5 h-3.5" />
                                   ) : isCobro ? (
                                     <CreditCardIcon className="w-3.5 h-3.5" />
@@ -2017,6 +2073,11 @@ Observaciones: ${printNotes || 'Sin observaciones'}
                                         Informativo
                                       </span>
                                     )}
+                                    {isGastoInterno && (
+                                      <span className="text-[9px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300/60 px-1 py-0.2 rounded shrink-0">
+                                        Gasto Interno (Empresa)
+                                      </span>
+                                    )}
                                     {isCredit && (
                                       <span className="text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60 px-1 py-0.2 rounded shrink-0">
                                         Venta a Crédito
@@ -2026,11 +2087,13 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                                   <div className="text-[10px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1 flex-wrap font-normal">
                                     <span className={`font-medium px-1 py-0.2 rounded text-[9px] ${
-                                      isCredit 
+                                      isGastoInterno
+                                        ? 'bg-purple-100/80 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 font-bold'
+                                        : isCredit 
                                         ? 'bg-amber-100/80 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-bold' 
                                         : 'text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80'
                                     }`}>
-                                      {isCredit ? 'Crédito (Por Cobrar)' : m.paymentMethod}
+                                      {isGastoInterno ? 'Gasto Interno' : isCredit ? 'Crédito (Por Cobrar)' : m.paymentMethod}
                                     </span>
                                     {m.createdAt && (
                                       <span className="text-zinc-400 dark:text-zinc-500 text-[9.5px]">
@@ -2048,14 +2111,21 @@ Observaciones: ${printNotes || 'Sin observaciones'}
 
                               <div className="text-right shrink-0 ml-2">
                                 <span className={`font-mono font-bold text-xs tracking-tight ${
-                                  isCredit 
+                                  isGastoInterno
+                                    ? 'text-purple-700 dark:text-purple-300'
+                                    : isCredit 
                                     ? 'text-amber-700 dark:text-amber-300' 
                                     : isIngreso 
                                     ? 'text-emerald-600 dark:text-emerald-400' 
                                     : 'text-rose-600 dark:text-rose-400'
                                 } ${isExternalMovement ? 'opacity-65' : ''}`}>
-                                  {isCredit ? 'RD$' : isIngreso ? '+RD$' : '-RD$'} {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                                  {isGastoInterno ? 'RD$' : isCredit ? 'RD$' : isIngreso ? '+RD$' : '-RD$'} {Number(m.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                                 </span>
+                                {isGastoInterno && (
+                                  <span className="block text-[8px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                                    Consumo Empresa
+                                  </span>
+                                )}
                                 {isCredit && (
                                   <span className="block text-[8px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                                     Por Cobrar

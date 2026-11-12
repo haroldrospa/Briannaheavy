@@ -12,6 +12,12 @@ export interface WorkOrder {
   total_cost: number;
   status: string;
   created_at?: string;
+  date?: string;
+  maintenance_type?: string;
+  service_type?: string;
+  assigned_to?: string;
+  verified_by?: string;
+  approved_by?: string;
 }
 
 export interface TruckInspection {
@@ -26,6 +32,11 @@ export interface TruckInspection {
   engine_ok: boolean;
   notes?: string;
   created_at?: string;
+  date?: string;
+  brand?: string;
+  model?: string;
+  year?: string;
+  chassis_number?: string;
 }
 
 const LOCAL_WORK_ORDERS_KEY = 'brianna_local_work_orders';
@@ -40,6 +51,24 @@ let inFlightInspectionsPromise: Promise<TruckInspection[]> | null = null;
 let lastInspectionsFetch = 0;
 
 const MAINTENANCE_CACHE_TTL = 60_000; // 60 seconds
+
+export const getLocalStorageWorkOrders = (): WorkOrder[] => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_WORK_ORDERS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const getLocalStorageTruckInspections = (): TruckInspection[] => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_INSPECTIONS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
 
 export const fetchWorkOrders = async (forceRefresh = false): Promise<WorkOrder[]> => {
   const now = Date.now();
@@ -59,61 +88,124 @@ export const fetchWorkOrders = async (forceRefresh = false): Promise<WorkOrder[]
           .select('*')
           .order('created_at', { ascending: false })
           .limit(100);
+
+        const localOrders = getLocalStorageWorkOrders();
+
         if (!error && data) {
-          const orders = data as WorkOrder[];
-          inMemoryWorkOrders = orders;
+          const remoteOrders = data as WorkOrder[];
+          
+          // Merge local and remote avoiding duplicate control_number or id
+          const orderMap = new Map<string, WorkOrder>();
+          localOrders.forEach(o => {
+            const key = o.control_number || o.id;
+            if (key) orderMap.set(key, o);
+          });
+          remoteOrders.forEach(o => {
+            const key = o.control_number || o.id;
+            if (key) {
+              const existing = orderMap.get(key);
+              orderMap.set(key, { ...existing, ...o });
+            }
+          });
+
+          const merged = Array.from(orderMap.values()).sort((a, b) => {
+            const dateA = new Date(a.date || a.created_at || 0).getTime();
+            const dateB = new Date(b.date || b.created_at || 0).getTime();
+            return dateB - dateA;
+          });
+
+          inMemoryWorkOrders = merged;
           lastWorkOrdersFetch = Date.now();
-          localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(orders));
-          return orders;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(merged));
+          }
+          return merged;
         }
       } catch (err) {
         console.warn('Error fetching work orders from Supabase:', err);
       } finally {
         inFlightWorkOrdersPromise = null;
       }
-      try {
-        const raw = localStorage.getItem(LOCAL_WORK_ORDERS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        inMemoryWorkOrders = parsed;
-        return parsed;
-      } catch {
-        return [];
-      }
+      const local = getLocalStorageWorkOrders();
+      inMemoryWorkOrders = local;
+      return local;
     })();
     return inFlightWorkOrdersPromise;
   }
 
-  try {
-    const raw = localStorage.getItem(LOCAL_WORK_ORDERS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    inMemoryWorkOrders = parsed;
-    return parsed;
-  } catch {
-    return [];
-  }
+  const local = getLocalStorageWorkOrders();
+  inMemoryWorkOrders = local;
+  return local;
 };
 
-export const createWorkOrder = async (order: Omit<WorkOrder, 'id' | 'created_at'>): Promise<WorkOrder> => {
+export const createWorkOrder = async (order: Omit<WorkOrder, 'id' | 'created_at'> & { id?: string; created_at?: string }): Promise<WorkOrder> => {
+  const generatedId = order.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `wo_${Date.now()}`);
+  const nowIso = order.created_at || new Date().toISOString();
+
+  const laborCost = Number(order.labor_cost) || 0;
+  const partsCost = Number(order.parts_cost) || 0;
+  const totalCost = Number(order.total_cost) > 0 ? Number(order.total_cost) : (laborCost + partsCost);
+
+  const fullOrder: WorkOrder = {
+    ...order,
+    id: generatedId,
+    created_at: nowIso,
+    date: order.date || nowIso.slice(0, 10),
+    labor_cost: laborCost,
+    parts_cost: partsCost,
+    total_cost: totalCost,
+    status: order.status || 'Completada',
+    truck_name: order.truck_name || 'Equipo Pesado',
+    technician_name: order.technician_name || 'Taller Central',
+    description: order.description || 'Mantenimiento preventivo'
+  };
+
+  // 1. Guardar de inmediato en almacenamiento local para no depender de la red
+  const currentLocal = getLocalStorageWorkOrders();
+  const filtered = currentLocal.filter(o => o.id !== fullOrder.id && o.control_number !== fullOrder.control_number);
+  const updatedList = [fullOrder, ...filtered];
+  inMemoryWorkOrders = updatedList;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(updatedList));
+    // Emitir evento para actualizar en tiempo real el tab de Reportes y demás vistas
+    window.dispatchEvent(new CustomEvent('brianna_work_orders_updated', { detail: fullOrder }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  // 2. Sincronizar en segundo plano con Supabase si está disponible
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase.from('work_orders').insert([order]).select().single();
+      const supabasePayload = {
+        control_number: fullOrder.control_number,
+        truck_name: fullOrder.truck_name,
+        chassis_number: fullOrder.chassis_number || null,
+        technician_name: fullOrder.technician_name,
+        description: fullOrder.description,
+        labor_cost: fullOrder.labor_cost,
+        parts_cost: fullOrder.parts_cost,
+        total_cost: fullOrder.total_cost,
+        status: fullOrder.status
+      };
+
+      const { data, error } = await supabase.from('work_orders').insert([supabasePayload]).select().single();
       if (!error && data) {
-        const current = await fetchWorkOrders();
-        const updated = [data as WorkOrder, ...current];
-        inMemoryWorkOrders = updated;
-        localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(updated));
-        return data as WorkOrder;
+        const syncedOrder: WorkOrder = { ...fullOrder, ...(data as any) };
+        const refreshed = updatedList.map(o => (o.control_number === fullOrder.control_number ? syncedOrder : o));
+        inMemoryWorkOrders = refreshed;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(refreshed));
+          window.dispatchEvent(new CustomEvent('brianna_work_orders_updated', { detail: syncedOrder }));
+        }
+        return syncedOrder;
+      } else if (error) {
+        console.warn('Supabase work_orders insert error:', error.message);
       }
     } catch (err) {
       console.warn('Error inserting work order in Supabase:', err);
     }
   }
-  const newOrder: WorkOrder = { ...order, id: Date.now().toString(), created_at: new Date().toISOString() };
-  const current = await fetchWorkOrders();
-  const updated = [newOrder, ...current];
-  inMemoryWorkOrders = updated;
-  localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(updated));
-  return newOrder;
+
+  return fullOrder;
 };
 
 export const fetchTruckInspections = async (forceRefresh = false): Promise<TruckInspection[]> => {
@@ -134,77 +226,107 @@ export const fetchTruckInspections = async (forceRefresh = false): Promise<Truck
           .select('*')
           .order('created_at', { ascending: false })
           .limit(100);
+
+        const localInspections = getLocalStorageTruckInspections();
+
         if (!error && data) {
-          const inspections = data as TruckInspection[];
-          inMemoryInspections = inspections;
+          const remoteInspections = data as TruckInspection[];
+          
+          const inspMap = new Map<string, TruckInspection>();
+          localInspections.forEach(i => {
+            const key = i.report_number || i.id;
+            if (key) inspMap.set(key, i);
+          });
+          remoteInspections.forEach(i => {
+            const key = i.report_number || i.id;
+            if (key) {
+              const existing = inspMap.get(key);
+              inspMap.set(key, { ...existing, ...i });
+            }
+          });
+
+          const merged = Array.from(inspMap.values()).sort((a, b) => {
+            const dateA = new Date(a.date || a.created_at || 0).getTime();
+            const dateB = new Date(b.date || b.created_at || 0).getTime();
+            return dateB - dateA;
+          });
+
+          inMemoryInspections = merged;
           lastInspectionsFetch = Date.now();
-          localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(inspections));
-          return inspections;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(merged));
+          }
+          return merged;
         }
       } catch (err) {
         console.warn('Error fetching truck inspections from Supabase:', err);
       } finally {
         inFlightInspectionsPromise = null;
       }
-      try {
-        const raw = localStorage.getItem(LOCAL_INSPECTIONS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        inMemoryInspections = parsed;
-        return parsed;
-      } catch {
-        return [];
-      }
+      const local = getLocalStorageTruckInspections();
+      inMemoryInspections = local;
+      return local;
     })();
     return inFlightInspectionsPromise;
   }
 
-  try {
-    const raw = localStorage.getItem(LOCAL_INSPECTIONS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    inMemoryInspections = parsed;
-    return parsed;
-  } catch {
-    return [];
-  }
+  const local = getLocalStorageTruckInspections();
+  inMemoryInspections = local;
+  return local;
 };
 
-export const createTruckInspection = async (inspection: Omit<TruckInspection, 'id' | 'created_at'>): Promise<TruckInspection> => {
+export const createTruckInspection = async (inspection: Omit<TruckInspection, 'id' | 'created_at'> & { id?: string; created_at?: string }): Promise<TruckInspection> => {
+  const generatedId = inspection.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ins_${Date.now()}`);
+  const nowIso = inspection.created_at || new Date().toISOString();
+
+  const fullInspection: TruckInspection = {
+    ...inspection,
+    id: generatedId,
+    created_at: nowIso,
+    date: inspection.date || nowIso.slice(0, 10),
+    truck_name: inspection.truck_name || 'Camión / Equipo',
+    driver_name: inspection.driver_name || 'Inspector de Taller'
+  };
+
+  const currentLocal = getLocalStorageTruckInspections();
+  const filtered = currentLocal.filter(i => i.id !== fullInspection.id && i.report_number !== fullInspection.report_number);
+  const updatedList = [fullInspection, ...filtered];
+  inMemoryInspections = updatedList;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(updatedList));
+    window.dispatchEvent(new CustomEvent('brianna_inspections_updated', { detail: fullInspection }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase.from('truck_inspections').insert([inspection]).select().single();
+      const supabasePayload = {
+        report_number: fullInspection.report_number,
+        truck_name: fullInspection.truck_name,
+        driver_name: fullInspection.driver_name,
+        mileage_hours: fullInspection.mileage_hours ?? null,
+        brakes_ok: fullInspection.brakes_ok ?? true,
+        lights_ok: fullInspection.lights_ok ?? true,
+        tires_ok: fullInspection.tires_ok ?? true,
+        engine_ok: fullInspection.engine_ok ?? true,
+        notes: fullInspection.notes || null
+      };
+
+      const { data, error } = await supabase.from('truck_inspections').insert([supabasePayload]).select().single();
       if (!error && data) {
-        const current = await fetchTruckInspections();
-        const updated = [data as TruckInspection, ...current];
-        inMemoryInspections = updated;
-        localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(updated));
-        return data as TruckInspection;
+        const syncedInspection: TruckInspection = { ...fullInspection, ...(data as any) };
+        const refreshed = updatedList.map(i => (i.report_number === fullInspection.report_number ? syncedInspection : i));
+        inMemoryInspections = refreshed;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(refreshed));
+          window.dispatchEvent(new CustomEvent('brianna_inspections_updated', { detail: syncedInspection }));
+        }
+        return syncedInspection;
       }
     } catch (err) {
       console.warn('Error inserting truck inspection in Supabase:', err);
     }
   }
-  const newInspection: TruckInspection = { ...inspection, id: Date.now().toString(), created_at: new Date().toISOString() };
-  const current = await fetchTruckInspections();
-  const updated = [newInspection, ...current];
-  inMemoryInspections = updated;
-  localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(updated));
-  return newInspection;
-};
 
-export const getLocalStorageWorkOrders = (): WorkOrder[] => {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_WORK_ORDERS_KEY) : null;
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-export const getLocalStorageTruckInspections = (): TruckInspection[] => {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(LOCAL_INSPECTIONS_KEY) : null;
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  return fullInspection;
 };

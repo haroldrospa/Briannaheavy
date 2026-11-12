@@ -1150,7 +1150,7 @@ const CheckoutModal = memo(({
   onCompleteSale: (params: {
     billingMode: 'electronic' | 'internal';
     electronicDocType: 'E31' | 'E32' | 'E45' | 'E46';
-    internalDocType: 'FAC-INT' | 'CT';
+    internalDocType: 'FAC-INT' | 'CT' | 'GASTO-INT';
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
@@ -1169,7 +1169,7 @@ const CheckoutModal = memo(({
 }) => {
   const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');
   const [electronicDocType, setElectronicDocType] = useState<'E31' | 'E32' | 'E45' | 'E46'>('E32');
-  const [internalDocType, setInternalDocType] = useState<'FAC-INT' | 'CT'>('FAC-INT');
+  const [internalDocType, setInternalDocType] = useState<'FAC-INT' | 'CT' | 'GASTO-INT'>('FAC-INT');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('Efectivo');
   const [amountReceived, setAmountReceived] = useState<string>(() => total.toFixed(2));
   const [transferReference, setTransferReference] = useState<string>('');
@@ -1245,6 +1245,7 @@ const CheckoutModal = memo(({
   }, [isOpen, total, currentExchangeRate, initialCurrency]);
 
   const isCotizacion = billingMode === 'internal' && internalDocType === 'CT';
+  const isGastoInterno = billingMode === 'internal' && internalDocType === 'GASTO-INT';
 
   const effectiveCreditDays = Math.max(1, Number(creditDays) || 15);
 
@@ -1289,7 +1290,7 @@ const CheckoutModal = memo(({
   const mixedCashChange = (numMixedCashReceived > numMixedCash) ? Math.round((numMixedCashReceived - numMixedCash) * 100) / 100 : 0;
   const isMixedValid = isMixedExact;
   
-  const isPaymentValid = isCotizacion ? true : (
+  const isPaymentValid = (isCotizacion || isGastoInterno) ? true : (
     (paymentMethod === 'Efectivo' 
       ? (paidCurrency === 'USD' ? numReceivedUsd >= totalUsd : numReceived >= total) 
       : true) &&
@@ -1298,7 +1299,7 @@ const CheckoutModal = memo(({
     (paymentMethod === 'Mixto' ? isMixedValid : true)
   );
 
-  const needsClient = !isCotizacion && (
+  const needsClient = !isCotizacion && !isGastoInterno && (
     paymentMethod === 'Crédito' ||
     (billingMode === 'electronic' && (electronicDocType === 'E31' || electronicDocType === 'E45' || electronicDocType === 'E46'))
   );
@@ -1352,6 +1353,21 @@ const CheckoutModal = memo(({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEmit) return;
+
+    if (isGastoInterno) {
+      onCompleteSale({
+        billingMode,
+        electronicDocType,
+        internalDocType,
+        paymentMethod: 'Gasto Interno',
+        amountReceived: '0',
+        transferReference: '',
+        paidCurrency,
+        exchangeRate: currentExchangeRate,
+      });
+      return;
+    }
+
     const chosenBank = bankAccounts.find(a => a.id === selectedBankId) || bankAccounts[0];
 
     if (paymentMethod === 'Mixto') {
@@ -1615,10 +1631,11 @@ const CheckoutModal = memo(({
                   })}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {([
-                    { id: 'FAC-INT', code: 'FAC-INT', title: 'Factura Interna', subtitle: 'Venta comercial directa' },
-                    { id: 'CT', code: 'CT', title: 'Cotización', subtitle: 'Presupuesto para cliente' },
+                    { id: 'FAC-INT', code: 'FAC-INT', title: 'Factura Interna', subtitle: 'Venta comercial' },
+                    { id: 'GASTO-INT', code: 'GASTO-INT', title: 'Gasto Interno', subtitle: 'Consumo empresa' },
+                    { id: 'CT', code: 'CT', title: 'Cotización', subtitle: 'Presupuesto' },
                   ] as const).map(d => {
                     const isSelected = internalDocType === d.id;
                     return (
@@ -1626,14 +1643,16 @@ const CheckoutModal = memo(({
                         key={d.id}
                         type="button"
                         onClick={() => setInternalDocType(d.id)}
-                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-black'
+                            ? d.id === 'GASTO-INT'
+                              ? 'bg-purple-700 text-white border-transparent shadow-xs font-black'
+                              : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent shadow-xs font-black'
                             : 'bg-gray-50 dark:bg-zinc-900 border-gray-200/60 dark:border-zinc-800 text-gray-700 dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-800'
                         }`}
                       >
-                        <p className="text-xs font-black">{d.title}</p>
-                        <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-gray-300 dark:text-zinc-600' : 'text-gray-400 dark:text-zinc-500'}`}>
+                        <p className="text-xs font-black truncate">{d.title}</p>
+                        <p className={`text-[9px] mt-0.5 truncate ${isSelected ? 'text-gray-200 dark:text-zinc-300' : 'text-gray-400 dark:text-zinc-500'}`}>
                           {d.subtitle}
                         </p>
                       </button>
@@ -1648,14 +1667,14 @@ const CheckoutModal = memo(({
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
-                2. Cliente {needsClient && <span className="text-[#ED1C24] font-bold">(* RNC Requerido)</span>}
+                2. {isGastoInterno ? 'Responsable / Asignado' : 'Cliente'} {needsClient && <span className="text-[#ED1C24] font-bold">(* RNC Requerido)</span>}
               </span>
               <button
                 type="button"
                 onClick={onOpenSelectClient}
                 className="text-[11px] font-bold text-[#ED1C24] hover:underline cursor-pointer"
               >
-                {selectedClient ? 'Cambiar' : '+ Seleccionar Cliente'}
+                {selectedClient ? 'Cambiar' : (isGastoInterno ? '+ Asignar a Personal / Equipo' : '+ Seleccionar Cliente')}
               </button>
             </div>
             {selectedClient ? (
@@ -1686,15 +1705,29 @@ const CheckoutModal = memo(({
               >
                 <span className="flex items-center gap-2 truncate">
                   <UserIcon className="w-4 h-4 text-gray-400 dark:text-zinc-500 shrink-0" />
-                  {clientMissing ? 'RNC / Cliente Requerido para este comprobante' : 'Consumidor Final (Venta de Contado)'}
+                  {clientMissing ? 'RNC / Cliente Requerido para este comprobante' : (isGastoInterno ? 'Consumo Interno (Empresa - Brianna Heavy)' : 'Consumidor Final (Venta de Contado)')}
                 </span>
                 <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase shrink-0">Buscar ➔</span>
               </div>
             )}
           </div>
 
-          {/* 3. MÉTODO DE PAGO (Omitido en Cotización) */}
-          {!isCotizacion && (
+          {/* 3. MÉTODO DE PAGO (Omitido en Cotización y Gasto Interno) */}
+          {isGastoInterno ? (
+            <div className="bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-black text-purple-900 dark:text-purple-200">
+                <span className="flex h-2.5 w-2.5 rounded-full bg-purple-600 animate-pulse" />
+                <span>Gasto Interno • Consumo Operativo de la Empresa</span>
+              </div>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed font-medium">
+                Este movimiento rebajará las existencias del inventario como consumo propio. En el cuadre de caja figurará en el historial de movimientos de auditoría para control contable, <strong>sin sumar ni restar dinero al efectivo esperado</strong>.
+              </p>
+              <div className="flex items-center justify-between pt-1 border-t border-purple-200/60 dark:border-purple-800/40 text-[11px] font-bold text-purple-900 dark:text-purple-100">
+                <span>Efecto en Cuadre de Caja:</span>
+                <span className="font-mono text-purple-700 dark:text-purple-300">RD$ 0.00 (Sin cobro)</span>
+              </div>
+            </div>
+          ) : !isCotizacion ? (
             <>
               {/* Moneda de Pago Selector */}
               <div className="flex items-center justify-between bg-gray-100 dark:bg-zinc-900 border border-transparent dark:border-zinc-800 p-1 rounded-xl">
@@ -2213,7 +2246,7 @@ const CheckoutModal = memo(({
                 </div>
               )}
             </>
-          )}
+          ) : null}
 
           {/* Action Button */}
           <div className="pt-2">
@@ -2224,6 +2257,8 @@ const CheckoutModal = memo(({
                 canEmit
                   ? isCotizacion
                     ? 'bg-[#ED1C24] hover:bg-red-700 text-white active:scale-[0.99]'
+                    : isGastoInterno
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white active:scale-[0.99] shadow-purple-900/20'
                     : paymentMethod === 'Crédito'
                     ? 'bg-amber-600 hover:bg-amber-700 text-white active:scale-[0.99] shadow-amber-900/20'
                     : paymentMethod === 'Mixto'
@@ -2235,7 +2270,7 @@ const CheckoutModal = memo(({
               {isTransmitting ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>{isCotizacion ? 'Guardando Cotización...' : 'Emitiendo Comprobante...'}</span>
+                  <span>{isCotizacion ? 'Guardando Cotización...' : isGastoInterno ? 'Registrando Gasto Interno...' : 'Emitiendo Comprobante...'}</span>
                 </>
               ) : (
                 <>
@@ -2243,6 +2278,8 @@ const CheckoutModal = memo(({
                   <span>
                     {isCotizacion
                       ? '📄 Guardar Cotización (CT)'
+                      : isGastoInterno
+                      ? `🏢 Registrar Gasto Interno (${curSymbol} ${paidCurrency === 'USD' ? totalUsd.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : total.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
                       : (paymentMethod === 'Crédito'
                           ? `Emitir Factura a Crédito (${effectiveCreditDays} Días)`
                           : (paymentMethod === 'Mixto'
@@ -2769,7 +2806,7 @@ export default function POS() {
   // Billing & e-CF Modes: 'internal' (Sistema / No DGII por defecto) vs 'electronic' (DGII e-CF)
   const [billingMode, setBillingMode] = useState<'electronic' | 'internal'>('internal');
   const [electronicDocType, setElectronicDocType] = useState<'E31' | 'E32' | 'E45' | 'E46'>('E32');
-  const [internalDocType, setInternalDocType] = useState<'FAC-INT' | 'CT'>('FAC-INT');
+  const [internalDocType, setInternalDocType] = useState<'FAC-INT' | 'CT' | 'GASTO-INT'>('FAC-INT');
   const [lastEcfData, setLastEcfData] = useState<ElectronicInvoiceResponse | null>(null);
   const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
 
@@ -2798,7 +2835,7 @@ export default function POS() {
     invoiceNumber: string;
     ncf: string;
     ncfType: string;
-    internalDocType: 'FAC-INT' | 'CT';
+    internalDocType: 'FAC-INT' | 'CT' | 'GASTO-INT';
     billingMode: 'electronic' | 'internal';
     isElectronic: boolean;
     total: number;
@@ -2982,7 +3019,7 @@ export default function POS() {
   const completeSale = async (saleParams: {
     billingMode: 'electronic' | 'internal';
     electronicDocType: 'E31' | 'E32' | 'E45' | 'E46';
-    internalDocType: 'FAC-INT' | 'CT';
+    internalDocType: 'FAC-INT' | 'CT' | 'GASTO-INT';
     paymentMethod: PaymentMethodType;
     amountReceived: string;
     transferReference: string;
@@ -3108,6 +3145,21 @@ export default function POS() {
             dgiiStatus: 'Emitido Localmente',
             issuedAt: new Date().toISOString(),
           });
+        } else if (internalDocType === 'GASTO-INT') {
+          const { invoiceNumber: formattedGiSeq, ncf: giNcf } = await syncAndGetNextInvoiceSequence('gasto_interno');
+
+          finalInvoiceNumber = formattedGiSeq;
+          finalNcf = giNcf;
+
+          setLastEcfData({
+            success: true,
+            trackId: `GI-${finalInvoiceNumber}`,
+            eNcf: finalNcf,
+            securityCode: '',
+            qrCodeUrl: '',
+            dgiiStatus: 'Emitido Localmente',
+            issuedAt: new Date().toISOString(),
+          });
         } else {
           const { invoiceNumber: formattedInvSeq, ncf: intNcf } = await syncAndGetNextInvoiceSequence('internal');
 
@@ -3146,8 +3198,8 @@ export default function POS() {
           id: finalInvoiceNumber,
           ncf: finalNcf,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : 'Venta de Contado'),
-          paymentMethod: paymentMethod,
+          client: selectedClient ? selectedClient.name : (isElectronic ? 'Consumidor Final' : (internalDocType === 'GASTO-INT' ? 'Consumo Empresa (Gasto Interno)' : 'Venta de Contado')),
+          paymentMethod: internalDocType === 'GASTO-INT' ? 'Gasto Interno' : paymentMethod,
           invoiceType: finalNcfType,
           total: total,
           subtotal: subtotal,
@@ -3214,6 +3266,14 @@ export default function POS() {
           qrCodeUrl: '',
           dgiiStatus: 'Emitido Localmente',
           issuedAt: new Date().toISOString(),
+        } : internalDocType === 'GASTO-INT' ? {
+          success: true,
+          trackId: `GI-${finalInvoiceNumber}`,
+          eNcf: finalNcf,
+          securityCode: '',
+          qrCodeUrl: '',
+          dgiiStatus: 'Emitido Localmente',
+          issuedAt: new Date().toISOString(),
         } : {
           success: true,
           trackId: `INT-${finalInvoiceNumber}`,
@@ -3242,12 +3302,12 @@ export default function POS() {
         invoice_number: finalInvoiceNumber,
         ncf: finalNcf,
         ncf_type: finalNcfType,
-        customer_name: clientSnapshot ? clientSnapshot.name : (isElectronic ? 'Venta de Contado (e-CF)' : (internalDocType === 'CT' ? 'Consumidor Final (Venta de Contado)' : 'Venta Interna (No Fiscal)')),
+        customer_name: clientSnapshot ? clientSnapshot.name : (isElectronic ? 'Venta de Contado (e-CF)' : (internalDocType === 'CT' ? 'Consumidor Final (Venta de Contado)' : (internalDocType === 'GASTO-INT' ? 'Consumo Interno (Empresa)' : 'Venta Interna (No Fiscal)'))),
         customer_rnc: clientSnapshot ? clientSnapshot.rnc : '',
         subtotal,
         tax_amount: tax,
         total_amount: total,
-        payment_method: internalDocType === 'CT' ? 'Cotización' : paymentMethod,
+        payment_method: internalDocType === 'CT' ? 'Cotización' : (internalDocType === 'GASTO-INT' ? 'Gasto Interno' : paymentMethod),
         bank_account_id: paymentMethod === 'Transferencia' ? bankAccountId : (mixedPayments?.find(m => m.bankAccountId)?.bankAccountId || undefined),
         bank_account_name: paymentMethod === 'Transferencia' ? bankAccountName : (mixedPayments?.find(m => m.bankAccountName)?.bankAccountName || undefined),
         transfer_reference: paymentMethod === 'Transferencia' ? transferReference : (mixedPayments?.find(m => m.reference)?.reference || undefined),
@@ -3256,11 +3316,12 @@ export default function POS() {
         due_date: paymentMethod === 'Crédito' ? (dueDate || new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)) : undefined,
         cashier_name: localStorage.getItem('brianna_user_name') || 'Harold Rosado',
         register_name: activeRegister,
-        status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : (paymentMethod === 'Crédito' ? 'Crédito Pendiente' : 'Pagada (No Fiscal)')),
+        status: isElectronic ? 'Emitida e-CF (DGII)' : (internalDocType === 'CT' ? 'Cotización' : (internalDocType === 'GASTO-INT' ? 'Gasto Interno' : (paymentMethod === 'Crédito' ? 'Crédito Pendiente' : 'Pagada (No Fiscal)'))),
         is_electronic: isElectronic,
+        is_internal_expense: internalDocType === 'GASTO-INT',
         billing_mode: billingMode,
         ecf_security_code: isElectronic ? (ecfRes?.securityCode || lastEcfData?.securityCode) : undefined,
-        ecf_track_id: isElectronic ? (ecfRes?.trackId || lastEcfData?.trackId) : (internalDocType === 'CT' ? `CT-${finalInvoiceNumber}` : `INT-${finalInvoiceNumber}`),
+        ecf_track_id: isElectronic ? (ecfRes?.trackId || lastEcfData?.trackId) : (internalDocType === 'CT' ? `CT-${finalInvoiceNumber}` : (internalDocType === 'GASTO-INT' ? `GI-${finalInvoiceNumber}` : `INT-${finalInvoiceNumber}`)),
         ecf_qr_url: isElectronic ? (ecfRes?.qrCodeUrl || lastEcfData?.qrCodeUrl) : undefined,
         ecf_dgii_status: isElectronic ? 'Aceptado' : (internalDocType === 'CT' ? 'Cotización' : 'Emitido Localmente'),
         paid_currency: paidCurrency,
@@ -4595,6 +4656,8 @@ export default function POS() {
               <h3 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
                 {lastCompletedSale?.ncf.startsWith('CT')
                   ? 'Cotización Creada'
+                  : lastCompletedSale?.internalDocType === 'GASTO-INT'
+                  ? 'Gasto Interno Registrado'
                   : (lastCompletedSale?.billingMode === 'internal' || !lastCompletedSale?.isElectronic)
                   ? 'Factura Interna Registrada'
                   : 'Venta Facturada'}
@@ -4602,6 +4665,8 @@ export default function POS() {
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                 {lastCompletedSale?.ncf.startsWith('CT')
                   ? 'Presupuesto registrado exitosamente.'
+                  : lastCompletedSale?.internalDocType === 'GASTO-INT'
+                  ? 'Consumo de la empresa registrado sin cobro en caja.'
                   : (lastCompletedSale?.billingMode === 'internal' || !lastCompletedSale?.isElectronic)
                   ? 'Factura interna emitida exitosamente.'
                   : 'Comprobante fiscal electrónico emitido.'}
@@ -4610,7 +4675,9 @@ export default function POS() {
               {/* Amount Hero Section */}
               <div className="my-4 pt-3 pb-3 px-4 rounded-2xl bg-zinc-50/80 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800/60">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 block">
-                  {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' ? 'Monto Cobrado (USD)' : 'Total Facturado'}
+                  {lastCompletedSale?.internalDocType === 'GASTO-INT'
+                    ? 'Total Gasto Interno (No Cobrado)'
+                    : lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD' ? 'Monto Cobrado (USD)' : 'Total Facturado'}
                 </span>
                 <div className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white mt-1">
                   {lastCompletedSale?.lastPaymentInfo?.paidCurrency === 'USD'
@@ -4626,14 +4693,18 @@ export default function POS() {
                 {/* Payment Badge */}
                 <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700/80 shadow-2xs">
                   <span className={`w-1.5 h-1.5 rounded-full ${
-                    lastCompletedSale?.paymentMethod === 'Crédito' 
+                    lastCompletedSale?.internalDocType === 'GASTO-INT'
+                      ? 'bg-purple-500'
+                      : lastCompletedSale?.paymentMethod === 'Crédito' 
                       ? 'bg-amber-500' 
                       : lastCompletedSale?.paymentMethod === 'Mixto' 
                       ? 'bg-indigo-500' 
                       : 'bg-emerald-500'
                   }`} />
                   <span>
-                    {lastCompletedSale?.paymentMethod === 'Crédito'
+                    {lastCompletedSale?.internalDocType === 'GASTO-INT'
+                      ? 'Gasto Interno (Consumo Empresa)'
+                      : lastCompletedSale?.paymentMethod === 'Crédito'
                       ? `Crédito (${lastCompletedSale?.creditDays || 15} Días)`
                       : lastCompletedSale?.paymentMethod === 'Mixto'
                       ? 'Pago Mixto'

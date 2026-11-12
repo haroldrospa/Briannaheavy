@@ -5830,7 +5830,7 @@ export default function Financing() {
                                       </button>
                                     </div>
                                     <p className="text-[10px] text-gray-500 dark:text-zinc-400 italic">
-                                      {surplusDestination === 'capital' && '✨ El sobrante se amortizará 100% directo a capital (reduce la deuda sin intereses).'}
+                                      {surplusDestination === 'capital' && 'El sobrante se amortizará 100% directo a capital (reduce la deuda sin intereses).'}
                                       {surplusDestination === 'cuota_completa' && '📋 Se saldará la siguiente cuota si el monto la cubre; el remanente se abonará al capital.'}
                                       {surplusDestination === 'devuelta' && '💵 Se entregará el excedente como cambio en efectivo al cliente.'}
                                     </p>
@@ -5949,7 +5949,7 @@ export default function Financing() {
                                       onClick={() => setSurplusDestination('capital')}
                                       className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'capital' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'}`}
                                     >
-                                      ✨ Al Capital
+                                      Al Capital
                                     </button>
                                     <button
                                       type="button"
@@ -6081,7 +6081,7 @@ export default function Financing() {
                                       onClick={() => setSurplusDestination('capital')}
                                       className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${surplusDestination === 'capital' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'}`}
                                     >
-                                      ✨ Al Capital
+                                      Al Capital
                                     </button>
                                     <button
                                       type="button"

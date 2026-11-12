@@ -48,6 +48,7 @@ export interface Invoice {
   created_at?: string;
   items?: InvoiceItem[];
   is_electronic?: boolean;
+  is_internal_expense?: boolean;
   billing_mode?: 'electronic' | 'internal';
   ecf_security_code?: string;
   ecf_track_id?: string;
@@ -114,6 +115,29 @@ export const isQuotationInvoice = (inv: { invoice_number?: string; ncf?: string;
     status === 'cotizacion' ||
     method === 'cotización' ||
     method === 'cotizacion'
+  );
+};
+
+export const isInternalExpenseInvoice = (inv: { invoice_number?: string; ncf?: string; ncf_type?: string; status?: string; payment_method?: string; is_internal_expense?: boolean; id?: string } | null | undefined): boolean => {
+  if (!inv) return false;
+  if (inv.is_internal_expense === true) return true;
+  const num = String(inv.invoice_number || inv.id || '').toUpperCase();
+  const ncf = String(inv.ncf || '').toUpperCase();
+  const ncfType = String(inv.ncf_type || '').toUpperCase();
+  const status = String(inv.status || '').toLowerCase();
+  const method = String(inv.payment_method || '').toLowerCase();
+  return (
+    num.startsWith('GI-') ||
+    num.startsWith('GASTO-') ||
+    ncf.startsWith('GI-') ||
+    ncf.startsWith('GI') ||
+    ncf.startsWith('GASTO') ||
+    ncfType === 'GASTO-INT' ||
+    ncfType === 'GI' ||
+    status.includes('gasto interno') ||
+    status.includes('consumo interno') ||
+    method.includes('gasto interno') ||
+    method.includes('consumo interno')
   );
 };
 
@@ -405,6 +429,8 @@ const parseInternalSeqNum = (inv: { invoice_number?: string; ncf?: string }): nu
       str.startsWith('FIN-') || 
       str.startsWith('REC-') || 
       str.startsWith('ABO-') ||
+      str.startsWith('GI-') ||
+      str.startsWith('GASTO-') ||
       str.startsWith('E') ||
       str.startsWith('B')
     ) {
@@ -426,6 +452,18 @@ const parseCtSeqNum = (inv: { invoice_number?: string; ncf?: string }): number |
   const num = String(inv.invoice_number || inv.ncf || '').trim();
   if (!num.startsWith('CT-')) return null;
   const clean = num.replace(/^CT-?/i, '').replace(/\D/g, '');
+  if (!clean) return null;
+  const parsed = parseInt(clean, 10);
+  if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
+    return parsed;
+  }
+  return null;
+};
+
+const parseGiSeqNum = (inv: { invoice_number?: string; ncf?: string }): number | null => {
+  const num = String(inv.invoice_number || inv.ncf || '').trim().toUpperCase();
+  if (!num.startsWith('GI-') && !num.startsWith('GASTO-')) return null;
+  const clean = num.replace(/^(GI|GASTO-INT|GASTO)-?/i, '').replace(/\D/g, '');
   if (!clean) return null;
   const parsed = parseInt(clean, 10);
   if (!isNaN(parsed) && parsed >= 1 && parsed < 500000) {
@@ -467,6 +505,7 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           // Auto-alinear contadores de secuencia local con los valores más altos de la base de datos
           let maxInv = 0;
           let maxCt = 0;
+          let maxGi = 0;
           let maxE31 = 0;
           let maxE32 = 0;
           let maxE34 = 0;
@@ -474,6 +513,9 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
           for (const inv of (data as Invoice[])) {
             const ct = parseCtSeqNum(inv);
             if (ct !== null && ct > maxCt) maxCt = ct;
+
+            const gi = parseGiSeqNum(inv);
+            if (gi !== null && gi > maxGi) maxGi = gi;
 
             const intNum = parseInternalSeqNum(inv);
             if (intNum !== null && intNum > maxInv) maxInv = intNum;
@@ -502,6 +544,13 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
             const localCt = (rawCt > 0 && rawCt < 500000) ? rawCt : 1;
             if (localCt <= maxCt) {
               localStorage.setItem('brianna_seq_ct', String(maxCt + 1));
+            }
+          }
+          if (maxGi > 0) {
+            const rawGi = parseInt(localStorage.getItem('brianna_seq_gasto_interno') || '1', 10);
+            const localGi = (rawGi > 0 && rawGi < 500000) ? rawGi : 1;
+            if (localGi <= maxGi) {
+              localStorage.setItem('brianna_seq_gasto_interno', String(maxGi + 1));
             }
           }
           if (maxE31 > 0) {
@@ -542,16 +591,20 @@ export const fetchInvoices = async (forceRefresh = false): Promise<Invoice[]> =>
  * checking both local invoices and Supabase to prevent 409 unique constraint errors.
  */
 export const syncAndGetNextInvoiceSequence = async (
-  type: 'internal' | 'electronic' | 'ct'
+  type: 'internal' | 'electronic' | 'ct' | 'gasto_interno'
 ): Promise<{ invoiceNumber: string; ncf: string }> => {
   const localList = getLocalStorageInvoices();
   let maxInternalSeq = 0;
   let maxCtSeq = 0;
+  let maxGiSeq = 0;
 
   // 1. Scan localStorage invoices
   for (const inv of localList) {
     const ct = parseCtSeqNum(inv);
     if (ct !== null && ct > maxCtSeq) maxCtSeq = ct;
+
+    const gi = parseGiSeqNum(inv);
+    if (gi !== null && gi > maxGiSeq) maxGiSeq = gi;
 
     const intNum = parseInternalSeqNum(inv);
     if (intNum !== null && intNum > maxInternalSeq) maxInternalSeq = intNum;
@@ -571,6 +624,9 @@ export const syncAndGetNextInvoiceSequence = async (
           const ct = parseCtSeqNum(row);
           if (ct !== null && ct > maxCtSeq) maxCtSeq = ct;
 
+          const gi = parseGiSeqNum(row);
+          if (gi !== null && gi > maxGiSeq) maxGiSeq = gi;
+
           const intNum = parseInternalSeqNum(row);
           if (intNum !== null && intNum > maxInternalSeq) maxInternalSeq = intNum;
         }
@@ -587,13 +643,22 @@ export const syncAndGetNextInvoiceSequence = async (
   const rawStoredCt = parseInt(localStorage.getItem('brianna_seq_ct') || '0', 10);
   const storedCt = (rawStoredCt > 0 && rawStoredCt < 500000) ? rawStoredCt : 0;
 
+  const rawStoredGi = parseInt(localStorage.getItem('brianna_seq_gasto_interno') || '0', 10);
+  const storedGi = (rawStoredGi > 0 && rawStoredGi < 500000) ? rawStoredGi : 0;
+
   const effectiveMaxInternal = Math.max(maxInternalSeq, storedInv > 0 ? storedInv - 1 : 0);
   const effectiveMaxCt = Math.max(maxCtSeq, storedCt > 0 ? storedCt - 1 : 0);
+  const effectiveMaxGi = Math.max(maxGiSeq, storedGi > 0 ? storedGi - 1 : 0);
 
   if (type === 'ct') {
     const nextSeq = effectiveMaxCt + 1;
     localStorage.setItem('brianna_seq_ct', String(nextSeq + 1));
     const formatted = `CT-${String(nextSeq).padStart(6, '0')}`;
+    return { invoiceNumber: formatted, ncf: formatted };
+  } else if (type === 'gasto_interno') {
+    const nextSeq = effectiveMaxGi + 1;
+    localStorage.setItem('brianna_seq_gasto_interno', String(nextSeq + 1));
+    const formatted = `GI-${String(nextSeq).padStart(6, '0')}`;
     return { invoiceNumber: formatted, ncf: formatted };
   } else {
     const nextSeq = effectiveMaxInternal + 1;
@@ -705,6 +770,7 @@ export const createInvoice = async (
           change_amount_usd: invoiceData.change_amount_usd,
           total_usd: invoiceData.total_usd,
           mixed_payments: invoiceData.mixed_payments,
+          is_internal_expense: invoiceData.is_internal_expense,
         };
 
         const currentList = getLocalStorageInvoices();

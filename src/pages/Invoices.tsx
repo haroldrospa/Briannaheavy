@@ -19,7 +19,7 @@ import {
 import QRCode from '../components/ui/QRCode';
 import LetterInvoice from '../components/ui/LetterInvoice';
 import NewCreditNoteModal from '../components/creditNotes/NewCreditNoteModal';
-import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, isAbonoInvoice, type Invoice } from '../services/invoicesService';
+import { fetchInvoices, getLocalStorageInvoices, updateInvoice, deleteInvoice, formatInvoiceNumber, isQuotationInvoice, isAbonoInvoice, isInternalExpenseInvoice, type Invoice } from '../services/invoicesService';
 import { getActiveRole, type UserRole } from '../utils/rolePermissions';
 import { matchesCashierUser } from '../services/shiftsService';
 
@@ -417,6 +417,10 @@ export default function Invoices() {
                           <span className="inline-flex items-center text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded border border-red-200/50 dark:border-red-900/30 shrink-0">
                             e-CF {invoice.ncf_type || 'E32'}
                           </span>
+                        ) : isInternalExpenseInvoice(invoice) ? (
+                          <span className="inline-flex items-center text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800/40 shrink-0">
+                            Gasto Interno
+                          </span>
                         ) : (
                           <span className="inline-flex items-center text-[9px] font-bold text-gray-600 dark:text-zinc-400 bg-gray-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded shrink-0">
                             Interna
@@ -426,6 +430,14 @@ export default function Invoices() {
 
                       {/* Status Badge */}
                       {(() => {
+                        if (isInternalExpenseInvoice(invoice)) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                              Consumo Empresa
+                            </span>
+                          );
+                        }
                         const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.ncf_type === 'ABONO' || invoice.status === 'pagada (abono)' || invoice.status === 'abono';
                         if (isAbono) {
                           return (
@@ -552,6 +564,10 @@ export default function Invoices() {
                           <span className="inline-flex items-center text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-md border border-red-200/50 dark:border-red-900/30">
                             e-CF {invoice.ncf_type || 'E32'}
                           </span>
+                        ) : isInternalExpenseInvoice(invoice) ? (
+                          <span className="inline-flex items-center text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800/40">
+                            Gasto Interno
+                          </span>
                         ) : (
                           <span className="inline-flex items-center text-[10px] font-medium text-gray-500 dark:text-zinc-400 bg-gray-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md">
                             Interna
@@ -607,6 +623,14 @@ export default function Invoices() {
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       {(() => {
+                        if (isInternalExpenseInvoice(invoice)) {
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                              Gasto Interno (Empresa)
+                            </span>
+                          );
+                        }
                         const isAbono = invoice.invoice_number?.startsWith('ABO-') || invoice.ncf_type === 'ABONO' || invoice.status === 'pagada (abono)' || invoice.status === 'abono';
                         if (isAbono) {
                           return (

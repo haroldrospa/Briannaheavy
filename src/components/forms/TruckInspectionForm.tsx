@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { PrinterIcon } from '@heroicons/react/24/outline';
 import logo from '../../assets/logo.png';
+import { createTruckInspection } from '../../services/maintenanceService';
 
 const UNIVERSAL_VEHICLES_CATALOG = [
   { brand: 'MACK', models: ['ANTHEM', 'GRANITE', 'PINNACLE', 'LR', 'TERRAPRO', 'SUPER-LINER', 'TITAN', 'MD SERIES'] },
@@ -172,6 +173,7 @@ interface TruckInspectionFormProps {
     defItems?: number;
     status?: string;
   };
+  registerSubmit?: (submitFn: () => Promise<any>) => void;
 }
 
 const getCurrentDate = () => {
@@ -189,7 +191,7 @@ const getCurrentTime = () => {
   return `${hours}:${minutes}`;
 };
 
-export default function TruckInspectionForm({ initialData }: TruckInspectionFormProps = {}) {
+export default function TruckInspectionForm({ initialData, registerSubmit }: TruckInspectionFormProps = {}) {
   const [formData, setFormData] = useState<Record<string, { status: 'B'|'R'|'D'|'', obs: string }>>(() => {
     if (!initialData) return {};
     const data: Record<string, { status: 'B'|'R'|'D'|'', obs: string }> = {};
@@ -325,6 +327,42 @@ export default function TruckInspectionForm({ initialData }: TruckInspectionForm
     });
     return { good, reg, def, total: INSPECTION_ITEMS.length };
   }, [formData]);
+
+  const submitFnRef = useRef<(() => Promise<any>) | null>(null);
+
+  submitFnRef.current = async () => {
+    const truckName = `${vehicleInfo.brand} ${vehicleInfo.model}`.trim() || 'Camión MACK Granite';
+    const brakesOk = formData['LUCES DE FRENOS']?.status !== 'D';
+    const lightsOk = formData['LUCES DELANTERAS ALTA / BAJA']?.status !== 'D' && formData['LUCES TRASERAS']?.status !== 'D';
+    const tiresOk = formData['NEUMÁTICOS']?.status !== 'D' && formData['LLANTAS FRENTE']?.status !== 'D';
+    const engineOk = formData['ACEITE DE MOTOR']?.status !== 'D';
+
+    const payload = {
+      report_number: reportSeq.startsWith('#') ? reportSeq : `#${reportSeq}`,
+      truck_name: truckName,
+      driver_name: inspectorName || 'Inspector Técnico',
+      mileage_hours: parseFloat(vehicleInfo.mileage.replace(/[^0-9.]/g, '')) || 0,
+      brakes_ok: brakesOk,
+      lights_ok: lightsOk,
+      tires_ok: tiresOk,
+      engine_ok: engineOk,
+      notes: generalNotes,
+      date: inspectionDate,
+      brand: vehicleInfo.brand,
+      model: vehicleInfo.model,
+      year: vehicleInfo.year,
+      chassis_number: vehicleInfo.vin
+    };
+
+    return await createTruckInspection(payload);
+  };
+
+  // Registrar función de guardado
+  useEffect(() => {
+    if (registerSubmit) {
+      registerSubmit(() => (submitFnRef.current ? submitFnRef.current() : Promise.resolve(null)));
+    }
+  }, [registerSubmit]);
 
   // División exacta en 2 columnas de 20 items cada una
   const col1Items = useMemo(() => INSPECTION_ITEMS.slice(0, 20), []);

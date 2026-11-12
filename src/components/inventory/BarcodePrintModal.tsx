@@ -9,7 +9,7 @@ import {
   EyeIcon,
   BoltIcon,
   CheckCircleIcon,
-  SparklesIcon
+  PaintBrushIcon
 } from '@heroicons/react/24/outline';
 import BarcodeLabel, { 
   renderLabelPureHtml, 
@@ -643,7 +643,7 @@ export default function BarcodePrintModal({ isOpen, item, onClose }: BarcodePrin
               {/* 4. Estilo de Diseño (Moderno vs Clásico) */}
               <div className="p-3.5 bg-gray-50 dark:bg-zinc-900/60 rounded-2xl border border-gray-200/70 dark:border-zinc-800/80 space-y-2">
                 <label className="text-xs font-black text-gray-900 dark:text-zinc-100 uppercase tracking-tight flex items-center gap-1.5">
-                  <SparklesIcon className="w-4 h-4 text-amber-500" />
+                  <PaintBrushIcon className="w-4 h-4 text-gray-500 dark:text-zinc-400" />
                   <span>Estilo de Diseño de Etiqueta</span>
                 </label>
 
@@ -657,7 +657,7 @@ export default function BarcodePrintModal({ isOpen, item, onClose }: BarcodePrin
                         : 'bg-white dark:bg-[#16171d] border-gray-200 dark:border-zinc-700/80 text-gray-700 dark:text-zinc-400 hover:border-gray-300'
                     }`}
                   >
-                    <span className="block text-xs font-black">✨ Moderno Minimalista (Recomendado)</span>
+                    <span className="block text-xs font-black">Moderno Minimalista (Recomendado)</span>
                     <span className={`block text-[10px] mt-0.5 ${designVariant === 'modern' ? 'text-zinc-300 dark:text-zinc-700' : 'text-gray-500'}`}>
                       Sin marco tosco, texto grande y barras gruesas
                     </span>

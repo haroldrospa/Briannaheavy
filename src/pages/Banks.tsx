@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   BuildingLibraryIcon, 
   ArrowDownCircleIcon, 
@@ -31,7 +32,17 @@ import BankReconciliationTab from '../components/banks/BankReconciliationTab';
 import logo from '../assets/logo.png';
 
 export default function Banks() {
-  const [activeMainTab, setActiveMainTab] = useState<'movements' | 'reconciliation'>('movements');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentTab = searchParams.get('tab');
+  const activeMainTab = (currentTab === 'reconciliation' || currentTab === 'conciliacion') ? 'reconciliation' : 'movements';
+
+  const setActiveMainTab = (tab: 'movements' | 'reconciliation') => {
+    if (tab === 'reconciliation') {
+      setSearchParams({ tab: 'conciliacion' });
+    } else {
+      setSearchParams({});
+    }
+  };
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>([]);
   const [loading, setLoading] = useState<boolean>(true);

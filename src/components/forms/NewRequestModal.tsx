@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { XMarkIcon, TruckIcon, WrenchScrewdriverIcon, ChevronRightIcon, ArrowLeftIcon, CheckIcon, PrinterIcon } from '@heroicons/react/24/outline';
 import TruckInspectionForm from './TruckInspectionForm';
 import MaintenanceWorkOrderForm from './MaintenanceWorkOrderForm';
@@ -33,10 +33,41 @@ const cardVariants = {
 export default function NewRequestModal({ isOpen, onClose }: NewRequestModalProps) {
   const [selectedForm, setSelectedForm] = useState<'selection' | 'inspection' | 'maintenance'>('selection');
   const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  if (!isOpen && selectedForm !== 'selection') {
-    setTimeout(() => setSelectedForm('selection'), 300);
-  }
+  const workOrderSubmitRef = useRef<(() => Promise<any>) | null>(null);
+  const inspectionSubmitRef = useRef<(() => Promise<any>) | null>(null);
+
+  const registerWorkOrderSubmit = useCallback((fn: () => Promise<any>) => {
+    workOrderSubmitRef.current = fn;
+  }, []);
+
+  const registerInspectionSubmit = useCallback((fn: () => Promise<any>) => {
+    inspectionSubmitRef.current = fn;
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen && selectedForm !== 'selection') {
+      const timer = setTimeout(() => setSelectedForm('selection'), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, selectedForm]);
+
+  const handleSaveClick = async () => {
+    setIsSaving(true);
+    try {
+      if (selectedForm === 'maintenance' && workOrderSubmitRef.current) {
+        await workOrderSubmitRef.current();
+      } else if (selectedForm === 'inspection' && inspectionSubmitRef.current) {
+        await inspectionSubmitRef.current();
+      }
+    } catch (err) {
+      console.error('Error al guardar formulario:', err);
+    } finally {
+      setIsSaving(false);
+      setShowSavePrompt(true);
+    }
+  };
 
   const handleFinalizeSave = (shouldPrint: boolean) => {
     if (selectedForm === 'inspection') {
@@ -46,7 +77,7 @@ export default function NewRequestModal({ isOpen, onClose }: NewRequestModalProp
     }
     setShowSavePrompt(false);
     if (shouldPrint) {
-      setTimeout(() => window.print(), 100);
+      setTimeout(() => window.print(), 150);
     } else {
       onClose();
     }
@@ -157,19 +188,24 @@ export default function NewRequestModal({ isOpen, onClose }: NewRequestModalProp
                 </motion.div>
               )}
 
-              {selectedForm === 'inspection' && <TruckInspectionForm />}
-              {selectedForm === 'maintenance' && <MaintenanceWorkOrderForm />}
+              {selectedForm === 'inspection' && (
+                <TruckInspectionForm registerSubmit={registerInspectionSubmit} />
+              )}
+              {selectedForm === 'maintenance' && (
+                <MaintenanceWorkOrderForm registerSubmit={registerWorkOrderSubmit} />
+              )}
             </div>
 
             {/* Footer (Fixed at bottom) */}
             {selectedForm !== 'selection' && (
               <div className="flex justify-end p-4 sm:p-6 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-[#16171d] print:hidden shrink-0">
                 <button 
-                  onClick={() => setShowSavePrompt(true)}
-                  className="flex items-center gap-2 bg-[#ED1C24] text-white hover:bg-[#d91920] px-8 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer"
+                  onClick={handleSaveClick}
+                  disabled={isSaving}
+                  className="flex items-center gap-2 bg-[#ED1C24] text-white hover:bg-[#d91920] disabled:opacity-50 px-8 py-2.5 rounded-full font-bold transition-all shadow-sm cursor-pointer"
                 >
                   <CheckIcon className="h-5 w-5 stroke-[2.5]" />
-                  Guardar
+                  {isSaving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             )}

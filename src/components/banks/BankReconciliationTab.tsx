@@ -13,10 +13,12 @@ import {
   ShieldCheckIcon,
   DocumentChartBarIcon,
   BookmarkSquareIcon,
-  SparklesIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ArrowRightIcon
+  ArrowRightIcon,
+  BuildingLibraryIcon,
+  CalendarDaysIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import type { CompanyBankAccount } from '../../utils/receiptSettings';
 import { 
@@ -54,6 +56,21 @@ interface BankReconciliationTabProps {
   onTransactionsUpdated: () => void;
 }
 
+const MONTHS = [
+  { value: '01', label: 'Enero' },
+  { value: '02', label: 'Febrero' },
+  { value: '03', label: 'Marzo' },
+  { value: '04', label: 'Abril' },
+  { value: '05', label: 'Mayo' },
+  { value: '06', label: 'Junio' },
+  { value: '07', label: 'Julio' },
+  { value: '08', label: 'Agosto' },
+  { value: '09', label: 'Septiembre' },
+  { value: '10', label: 'Octubre' },
+  { value: '11', label: 'Noviembre' },
+  { value: '12', label: 'Diciembre' },
+];
+
 export default function BankReconciliationTab({
   bankAccounts,
   transactions,
@@ -69,6 +86,46 @@ export default function BankReconciliationTab({
     const month = String(d.getMonth() + 1).padStart(2, '0');
     return `${d.getFullYear()}-${month}`;
   });
+
+  // Desglose de Año y Mes del período activo para selección clara y directa
+  const [currentYear, currentMonth] = useMemo(() => {
+    if (!period || !period.includes('-')) {
+      const d = new Date();
+      return [d.getFullYear().toString(), String(d.getMonth() + 1).padStart(2, '0')];
+    }
+    const parts = period.split('-');
+    return [parts[0], parts[1].padStart(2, '0')];
+  }, [period]);
+
+  const availableYears = useMemo(() => {
+    const currentY = new Date().getFullYear();
+    const years = [currentY - 3, currentY - 2, currentY - 1, currentY, currentY + 1, currentY + 2];
+    const parsedY = parseInt(currentYear, 10);
+    if (!isNaN(parsedY) && !years.includes(parsedY)) {
+      years.push(parsedY);
+      years.sort((a, b) => a - b);
+    }
+    return years;
+  }, [currentYear]);
+
+  const formattedPeriodName = useMemo(() => {
+    const m = MONTHS.find(item => item.value === currentMonth);
+    return `${m ? m.label : currentMonth} de ${currentYear}`;
+  }, [currentMonth, currentYear]);
+
+  const handleMonthChange = (newMonth: string) => {
+    setPeriod(`${currentYear}-${newMonth}`);
+  };
+
+  const handleYearChange = (newYear: string) => {
+    setPeriod(`${newYear}-${currentMonth}`);
+  };
+
+  const handleGoToCurrentMonth = () => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    setPeriod(`${d.getFullYear()}-${m}`);
+  };
 
   // Saldos según extracto
   const [openingBalance, setOpeningBalance] = useState<number>(0);
@@ -94,6 +151,8 @@ export default function BankReconciliationTab({
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [filterBooks, setFilterBooks] = useState<'all' | 'reconciled' | 'pending'>('all');
   const [filterStatement, setFilterStatement] = useState<'all' | 'reconciled' | 'pending'>('all');
+  const [searchBooks, setSearchBooks] = useState<string>('');
+  const [searchStatement, setSearchStatement] = useState<string>('');
   const [isManualLineModalOpen, setIsManualLineModalOpen] = useState<boolean>(false);
 
   // Escucha de eventos de actualización del historial de cuadres
@@ -161,7 +220,7 @@ export default function BankReconciliationTab({
 
       return true;
     });
-  }, [transactions, selectedAccount, period, settlementsHistory]);
+  }, [transactions, selectedAccount?.id, period, settlementsHistory.length]);
 
   // Cargar estado de conciliación guardado al cambiar cuenta o período
   useEffect(() => {
@@ -193,7 +252,7 @@ export default function BankReconciliationTab({
       setStatementLines([]);
       setReconciledBookTxIds([]);
     }
-  }, [selectedAccount?.id, period, excludeBankTax, settlementsHistory]);
+  }, [selectedAccount?.id, period, excludeBankTax, settlementsHistory.length]);
 
   // Resumen financiero de conciliación en tiempo real
   const summary = useMemo(() => {
@@ -577,24 +636,38 @@ export default function BankReconciliationTab({
     window.print();
   };
 
-  // Filtrado de listas para la vista de usuario
+  // Filtrado de listas para la vista de usuario con buscador integrado
   const visibleBookTransactions = useMemo(() => {
     return periodBookTransactions.filter(tx => {
       const isRec = reconciledBookTxIds.includes(tx.id);
-      if (filterBooks === 'reconciled') return isRec;
-      if (filterBooks === 'pending') return !isRec;
+      if (filterBooks === 'reconciled' && !isRec) return false;
+      if (filterBooks === 'pending' && isRec) return false;
+      if (searchBooks.trim()) {
+        const q = searchBooks.toLowerCase();
+        const matchConcept = tx.concept?.toLowerCase().includes(q);
+        const matchRef = tx.reference?.toLowerCase().includes(q);
+        const matchAmt = tx.amount?.toString().includes(q);
+        if (!matchConcept && !matchRef && !matchAmt) return false;
+      }
       return true;
     });
-  }, [periodBookTransactions, reconciledBookTxIds, filterBooks]);
+  }, [periodBookTransactions, reconciledBookTxIds, filterBooks, searchBooks]);
 
   const visibleStatementLines = useMemo(() => {
     return statementLines.filter(line => {
       const isRec = line.status === 'reconciled';
-      if (filterStatement === 'reconciled') return isRec;
-      if (filterStatement === 'pending') return !isRec;
+      if (filterStatement === 'reconciled' && !isRec) return false;
+      if (filterStatement === 'pending' && isRec) return false;
+      if (searchStatement.trim()) {
+        const q = searchStatement.toLowerCase();
+        const matchConcept = line.concept?.toLowerCase().includes(q);
+        const matchRef = line.reference?.toLowerCase().includes(q);
+        const matchAmt = line.amount?.toString().includes(q);
+        if (!matchConcept && !matchRef && !matchAmt) return false;
+      }
       return true;
     });
-  }, [statementLines, filterStatement]);
+  }, [statementLines, filterStatement, searchStatement]);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -671,36 +744,53 @@ export default function BankReconciliationTab({
           onPrintSettlement={handlePrintHistoricalSettlement}
           onGoToReconciler={() => setSubTab('reconciler')}
         />
+      ) : !selectedAccount ? (
+        <div className="p-12 text-center bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 text-gray-500">
+          <BuildingLibraryIcon className="w-8 h-8 text-gray-400 mx-auto animate-pulse mb-2" />
+          <p className="text-sm font-bold text-gray-700 dark:text-zinc-300">Cargando cuentas bancarias...</p>
+        </div>
       ) : (
         <>
-          {/* 1. Barra Superior Minimalista de Control y Configuración */}
-          <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 shadow-2xs space-y-3.5 print:hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] flex items-center justify-center shrink-0">
-                  <ArrowsRightLeftIcon className="w-4 h-4" />
+          {/* 1. Barra Superior de Control y Configuración */}
+          <div className="bg-white dark:bg-zinc-900 border border-gray-200/80 dark:border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 print:hidden">
+            {/* Cabecera Principal y Acciones */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-gray-100 dark:border-zinc-800/80">
+              
+              {/* Info y Estado */}
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 text-[#ED1C24] flex items-center justify-center shrink-0 shadow-2xs">
+                  <ArrowsRightLeftIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span>Conciliación Bancaria</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                      Conciliación Bancaria
+                    </h2>
                     {summary.isBalanced ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
                         Cuadrado
                       </span>
+                    ) : (statementLines.length === 0 && closingBalance === 0) ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        <InformationCircleIcon className="w-3.5 h-3.5" />
+                        Pendiente Extracto
+                      </span>
                     ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
-                        Diferencia: RD$ {Math.abs(summary.difference).toLocaleString('es-DO', { maximumFractionDigits: 0 })}
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                        <XCircleIcon className="w-3.5 h-3.5" />
+                        Diferencia: RD$ {Math.abs(summary.difference).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                       </span>
                     )}
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-zinc-400">
-                    {selectedAccount.bankName} • {period}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5 font-medium">
+                    {selectedAccount.bankName} • <span className="font-semibold text-gray-800 dark:text-zinc-200">{formattedPeriodName}</span>
                   </p>
                 </div>
               </div>
 
-              {/* Botones de Acción Agrupados y Minimalistas */}
-              <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Botones de Acción Agrupados y Claros */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -709,39 +799,52 @@ export default function BankReconciliationTab({
                   className="hidden"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextVal = !excludeBankTax;
-                    setExcludeBankTax(nextVal);
-                    if (nextVal) {
-                      const cleaned = statementLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id));
-                      setStatementLines(cleaned);
-                      handleAutoSave(cleaned, reconciledBookTxIds, openingBalance, closingBalance);
-                      showFeedback('info', 'Impuesto bancario (0.15% y cargos) excluido de la conciliación.');
-                    } else {
-                      showFeedback('info', 'Modo con impuesto bancario activado.');
-                    }
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    excludeBankTax
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                      : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700'
-                  }`}
-                  title="Exclusión automática de impuestos bancarios (0.15% Ley 288-04 y comisiones)"
-                >
-                  <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>{excludeBankTax ? 'Sin Impuesto Bancario' : 'Con Impuesto Bancario'}</span>
-                </button>
-
+                {/* Botón Destacado 1: Auto-Conciliar */}
                 <button
                   type="button"
                   onClick={handleRunAutoMatch}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#ED1C24] hover:bg-red-700 active:scale-[0.98] text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm"
                   title="Conciliar automáticamente movimientos coincidentes y ver reporte de resultados"
                 >
-                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <ArrowsRightLeftIcon className="w-4 h-4" />
                   <span>Auto-Conciliar</span>
+                </button>
+
+                {/* Botón Destacado 2: Subir Extracto */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Subir archivo Excel o CSV del extracto de tu banco"
+                >
+                  <ArrowUpTrayIcon className={`w-4 h-4 ${isUploading ? 'animate-bounce' : ''}`} />
+                  <span>{isUploading ? 'Subiendo...' : 'Subir Extracto'}</span>
+                </button>
+
+                {/* Botón Destacado 3: Guardar Cuadre */}
+                <button
+                  type="button"
+                  onClick={() => handleSaveToHistory()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  title="Guardar este cuadre de conciliación en el historial"
+                >
+                  <BookmarkSquareIcon className="w-4 h-4" />
+                  <span>Guardar Cuadre</span>
+                </button>
+
+                {/* Separador */}
+                <div className="h-5 w-[1px] bg-gray-200 dark:bg-zinc-800 mx-0.5 hidden sm:block" />
+
+                {/* Herramientas Secundarias */}
+                <button
+                  type="button"
+                  onClick={() => setIsManualLineModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-gray-200/60 dark:border-zinc-700"
+                  title="Agregar renglón manual al extracto"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  <span>Manual</span>
                 </button>
 
                 <button
@@ -750,273 +853,321 @@ export default function BankReconciliationTab({
                     setActiveSettlementReport(null);
                     setIsReportModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-zinc-700"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-gray-200/60 dark:border-zinc-700"
                   title="Ver reporte detallado de resultados y cuadre actual"
                 >
                   <DocumentChartBarIcon className="w-3.5 h-3.5 text-[#ED1C24]" />
-                  <span>Ver Reporte</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSaveToHistory()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-emerald-200 dark:border-emerald-800"
-                  title="Guardar este cuadre de conciliación en el historial"
-                >
-                  <BookmarkSquareIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Guardar Cuadre</span>
+                  <span className="hidden sm:inline">Reporte</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSaveAndAdvanceToNextMonth()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800"
-                  title="Guardar este mes y avanzar al siguiente en secuencia con el saldo arrastrado"
+                  className="inline-flex items-center gap-1 px-2.5 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800"
+                  title="Guardar este mes y avanzar al siguiente en secuencia"
                 >
-                  <span>Siguiente Mes</span>
+                  <span className="hidden md:inline">Siguiente Mes</span>
                   <ArrowRightIcon className="w-3.5 h-3.5" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-                >
-                  <ArrowUpTrayIcon className={`w-3.5 h-3.5 ${isUploading ? 'animate-bounce' : ''}`} />
-                  <span>{isUploading ? 'Subiendo...' : 'Subir Extracto'}</span>
-                </button>
+                {/* Acciones de Iconos */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
+                    title="Exportar a Excel"
+                  >
+                    <ArrowDownTrayIcon className="w-4 h-4" />
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsManualLineModalOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-                  title="Agregar renglón manual al extracto"
-                >
-                  <PlusIcon className="w-3.5 h-3.5" />
-                  <span>Manual</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors cursor-pointer"
+                    title="Imprimir Acta"
+                  >
+                    <PrinterIcon className="w-4 h-4" />
+                  </button>
 
-                <div className="h-4 w-[1px] bg-gray-200 dark:bg-zinc-700 mx-1 hidden sm:block" />
+                  <button
+                    type="button"
+                    onClick={handleClearReconciliation}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors cursor-pointer"
+                    title="Reiniciar conciliación"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  className="p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-                  title="Exportar a Excel"
-                >
-                  <ArrowDownTrayIcon className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-                  title="Imprimir Acta"
-                >
-                  <PrinterIcon className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleClearReconciliation}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
-                  title="Reiniciar conciliación"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
-        {/* Parámetros de Selección y Saldos */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-gray-100 dark:border-zinc-800/80 text-xs">
-          <div>
-            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
-              Cuenta
-            </label>
-            <select
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs"
-            >
-              {bankAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.bankName} - {acc.accountNumber} ({acc.currency})
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Parámetros de Selección y Saldos: Claros y Espaciosos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-1 text-xs">
+              
+              {/* 1. Selector de Cuenta Bancaria (lg:col-span-4) */}
+              <div className="lg:col-span-4 bg-gray-50/80 dark:bg-zinc-800/40 p-3 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                <label className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 flex items-center gap-1.5 mb-1.5 uppercase tracking-wide">
+                  <BuildingLibraryIcon className="w-3.5 h-3.5 text-red-500" />
+                  <span>1. Cuenta Bancaria</span>
+                </label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white font-bold focus:border-red-500 outline-none text-xs shadow-2xs cursor-pointer"
+                >
+                  {bankAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.bankName} - {acc.accountNumber} ({acc.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
-                Período
+              {/* 2. Selector de Período / Mes y Año (lg:col-span-4) */}
+              <div className="lg:col-span-4 bg-gray-50/80 dark:bg-zinc-800/40 p-3 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 flex items-center gap-1.5 uppercase tracking-wide">
+                    <CalendarDaysIcon className="w-3.5 h-3.5 text-blue-500" />
+                    <span>2. Mes y Año a Conciliar</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGoToCurrentMonth}
+                    className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                    title="Ir al mes actual de hoy"
+                  >
+                    Hoy
+                  </button>
+                </div>
+                
+                {/* Controles intuitivos de selección de Mes y Año */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPeriod(getPreviousPeriod(period))}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-200 transition-colors cursor-pointer shadow-2xs shrink-0"
+                    title="Mes anterior"
+                  >
+                    <ChevronLeftIcon className="w-4 h-4" />
+                  </button>
+
+                  {/* Selector directo de Mes */}
+                  <select
+                    value={currentMonth}
+                    onChange={(e) => handleMonthChange(e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white font-bold focus:border-red-500 outline-none text-xs shadow-2xs cursor-pointer"
+                  >
+                    {MONTHS.map(m => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Selector directo de Año */}
+                  <select
+                    value={currentYear}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    className="w-20 px-2 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white font-bold focus:border-red-500 outline-none text-xs text-center shadow-2xs cursor-pointer shrink-0"
+                  >
+                    {availableYears.map(y => (
+                      <option key={y} value={y.toString()}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setPeriod(getNextPeriod(period))}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-200 transition-colors cursor-pointer shadow-2xs shrink-0"
+                    title="Mes siguiente"
+                  >
+                    <ChevronRightIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Saldo Inicial del Extracto (lg:col-span-2) */}
+              <div className="lg:col-span-2 bg-gray-50/80 dark:bg-zinc-800/40 p-3 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 uppercase tracking-wide truncate">
+                    3. Saldo Inicial
+                  </label>
+                  {previousMonthClosingBalance !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpeningBalance(previousMonthClosingBalance);
+                        handleAutoSave(statementLines, reconciledBookTxIds, previousMonthClosingBalance, closingBalance);
+                        showFeedback('info', `Saldo inicial actualizado desde cierre de ${getPreviousPeriod(period)}.`);
+                      }}
+                      className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer truncate max-w-[90px]"
+                      title={`Copiar cierre anterior: RD$ ${previousMonthClosingBalance.toLocaleString('es-DO')}`}
+                    >
+                      ✓ Mes ant.
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono font-bold">RD$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={openingBalance || ''}
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setOpeningBalance(val);
+                      handleAutoSave(statementLines, reconciledBookTxIds, val, closingBalance);
+                    }}
+                    className="w-full pl-9 pr-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white font-mono font-bold text-xs focus:border-red-500 outline-none shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* 4. Saldo Final del Extracto (lg:col-span-2) */}
+              <div className="lg:col-span-2 bg-gray-50/80 dark:bg-zinc-800/40 p-3 rounded-xl border border-gray-200/70 dark:border-zinc-800">
+                <label className="text-[11px] font-bold text-gray-600 dark:text-zinc-400 block mb-1.5 uppercase tracking-wide truncate">
+                  4. Saldo Final Banco
+                </label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono font-bold">RD$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={closingBalance || ''}
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setClosingBalance(val);
+                      handleAutoSave(statementLines, reconciledBookTxIds, openingBalance, val);
+                    }}
+                    className="w-full pl-9 pr-2.5 py-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white font-mono font-bold text-xs focus:border-red-500 outline-none shadow-2xs"
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Barra Inferior de Opciones Contables */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-gray-100 dark:border-zinc-800/80 text-xs">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={excludeBankTax}
+                  onChange={(e) => {
+                    const nextVal = e.target.checked;
+                    setExcludeBankTax(nextVal);
+                    if (nextVal) {
+                      const cleaned = statementLines.filter(l => !isBankTaxOrFeeLine(l.concept, l.id));
+                      setStatementLines(cleaned);
+                      handleAutoSave(cleaned, reconciledBookTxIds, openingBalance, closingBalance);
+                      showFeedback('info', 'Impuesto bancario (0.15% y cargos) excluido.');
+                    } else {
+                      showFeedback('info', 'Modo con impuesto bancario activado.');
+                    }
+                  }}
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-gray-300 dark:border-zinc-700 dark:bg-zinc-800 cursor-pointer"
+                />
+                <span className="font-semibold text-gray-700 dark:text-zinc-300">
+                  Excluir automáticamente 0.15% (Ley 288-04) y comisiones bancarias del extracto
+                </span>
               </label>
-              <span className="text-[9.5px] font-mono text-gray-400">
-                Secuencia
+
+              <span className="text-[11px] text-gray-400 dark:text-zinc-500">
+                Período activo: <span className="font-mono font-bold text-gray-600 dark:text-zinc-400">{period}</span>
               </span>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPeriod(getPreviousPeriod(period))}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 hover:bg-gray-200/80 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-gray-600 dark:text-zinc-300 transition-colors cursor-pointer"
-                title="Ir al mes anterior"
-              >
-                <ChevronLeftIcon className="w-3.5 h-3.5" />
-              </button>
-              <input
-                type="month"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                className="w-full px-2 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-medium focus:border-red-500 outline-none text-xs text-center"
-              />
-              <button
-                type="button"
-                onClick={() => setPeriod(getNextPeriod(period))}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 hover:bg-gray-200/80 dark:bg-zinc-800/50 dark:hover:bg-zinc-700 text-gray-600 dark:text-zinc-300 transition-colors cursor-pointer"
-                title="Ir al mes siguiente"
-              >
-                <ChevronRightIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
+
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500">
-                Saldo Inicial Extracto
-              </label>
-              {previousMonthClosingBalance !== null && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpeningBalance(previousMonthClosingBalance);
-                    handleAutoSave(statementLines, reconciledBookTxIds, previousMonthClosingBalance, closingBalance);
-                    showFeedback('info', `Saldo inicial actualizado desde cierre de ${getPreviousPeriod(period)}.`);
-                  }}
-                  className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
-                  title="Hacer clic para restablecer con el cierre del mes anterior"
-                >
-                  ✓ Cierre anterior: RD$ {previousMonthClosingBalance.toLocaleString('es-DO', { maximumFractionDigits: 0 })}
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono">RD$</span>
-              <input
-                type="number"
-                step="0.01"
-                value={openingBalance || ''}
-                placeholder="0.00"
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  setOpeningBalance(val);
-                  handleAutoSave(statementLines, reconciledBookTxIds, val, closingBalance);
-                }}
-                className="w-full pl-9 pr-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-mono text-xs focus:border-red-500 outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-semibold text-gray-400 dark:text-zinc-500 block mb-1">
-              Saldo Final Extracto
-            </label>
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px] font-mono">RD$</span>
-              <input
-                type="number"
-                step="0.01"
-                value={closingBalance || ''}
-                placeholder="0.00"
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value) || 0;
-                  setClosingBalance(val);
-                  handleAutoSave(statementLines, reconciledBookTxIds, openingBalance, val);
-                }}
-                className="w-full pl-9 pr-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50 text-gray-900 dark:text-white font-mono text-xs focus:border-red-500 outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Tarjetas de Cuadre Financiero (KPIs Minimalistas) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 print:hidden">
+      {/* 2. Tarjetas de Cuadre Financiero (KPIs Claros y Sencillos) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 print:hidden">
         {/* Saldo Libros */}
-        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
               Saldo en Libros
             </span>
-            <span className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-bold">
               {periodBookTransactions.length} txs
             </span>
           </div>
-          <p className="text-base sm:text-lg font-bold font-mono text-gray-900 dark:text-white">
+          <p className="text-lg sm:text-xl font-black font-mono text-gray-900 dark:text-white">
             RD$ {summary.bookCalculatedBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
+            Sistema Brianna Heavy
           </p>
         </div>
 
         {/* Saldo Extracto */}
-        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
               Extracto Banco
             </span>
-            <span className="text-[10px] font-mono text-gray-400 dark:text-zinc-500">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 font-bold">
               {statementLines.length} filas
             </span>
           </div>
-          <p className="text-base sm:text-lg font-bold font-mono text-gray-900 dark:text-white">
+          <p className="text-lg sm:text-xl font-black font-mono text-gray-900 dark:text-white">
             RD$ {summary.statementClosingBalance.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
+            Saldo final del extracto
           </p>
         </div>
 
         {/* En Tránsito */}
-        <div className="p-3.5 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+        <div className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-gray-200/80 dark:border-zinc-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
               Partidas en Tránsito
             </span>
-            <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-semibold">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 font-bold">
               {periodBookTransactions.length - reconciledBookTxIds.length} pend.
             </span>
           </div>
-          <p className="text-base sm:text-lg font-bold font-mono text-amber-600 dark:text-amber-400">
+          <p className="text-lg sm:text-xl font-black font-mono text-amber-600 dark:text-amber-400">
             RD$ {(summary.unreconciledBookIncome - summary.unreconciledBookExpense).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+          </p>
+          <p className="text-[11px] text-gray-400 dark:text-zinc-500 mt-1">
+            En libros, no en banco
           </p>
         </div>
 
         {/* Estado / Cuadre */}
-        <div className={`p-3.5 rounded-2xl border shadow-2xs ${
+        <div className={`p-4 rounded-2xl border shadow-2xs transition-all ${
           summary.isBalanced
-            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
             : (statementLines.length === 0 && closingBalance === 0)
-              ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40'
-              : 'bg-red-50/40 dark:bg-red-950/20 border-red-200/80 dark:border-red-900/40'
+              ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+              : 'bg-red-50/50 dark:bg-red-950/30 border-red-300 dark:border-red-800'
         }`}>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10.5px] font-medium text-gray-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
               Estado de Cuadre
             </span>
-            <span className={`text-[10px] font-bold ${
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
               summary.isBalanced 
-                ? 'text-emerald-700 dark:text-emerald-400' 
+                ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100' 
                 : (statementLines.length === 0 && closingBalance === 0)
-                  ? 'text-amber-700 dark:text-amber-400'
-                  : 'text-red-700 dark:text-red-400'
+                  ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100'
+                  : 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100'
             }`}>
               {summary.isBalanced 
                 ? '✓ Cuadrado' 
                 : (statementLines.length === 0 && closingBalance === 0)
-                  ? 'Pendiente Extracto'
+                  ? 'Pendiente'
                   : 'Descuadre'
               }
             </span>
           </div>
-          <p className={`text-base sm:text-lg font-bold font-mono ${
+          <p className={`text-lg sm:text-xl font-black font-mono ${
             summary.isBalanced 
               ? 'text-emerald-700 dark:text-emerald-400' 
               : (statementLines.length === 0 && closingBalance === 0)
@@ -1029,6 +1180,13 @@ export default function BankReconciliationTab({
                 ? 'Sin Conciliar'
                 : `RD$ ${summary.difference.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
             }
+          </p>
+          <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-1">
+            {summary.isBalanced 
+              ? 'Libros y banco coinciden' 
+              : (statementLines.length === 0 && closingBalance === 0)
+                ? 'Falta extracto del banco'
+                : 'Diferencia a conciliar'}
           </p>
         </div>
       </div>
@@ -1065,6 +1223,27 @@ export default function BankReconciliationTab({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Buscador Rápido en Libros */}
+          <div className="relative">
+            <MagnifyingGlassIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Buscar en libros por concepto, ref o monto..."
+              value={searchBooks}
+              onChange={(e) => setSearchBooks(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-800/40 text-gray-900 dark:text-white placeholder:text-gray-400 text-xs outline-none focus:border-blue-500"
+            />
+            {searchBooks && (
+              <button
+                type="button"
+                onClick={() => setSearchBooks('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {/* Lista de Libros */}
@@ -1171,37 +1350,77 @@ export default function BankReconciliationTab({
             </div>
           </div>
 
+          {/* Buscador Rápido en Extracto */}
+          <div className="relative">
+            <MagnifyingGlassIcon className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Buscar en extracto bancario..."
+              value={searchStatement}
+              onChange={(e) => setSearchStatement(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 rounded-lg border border-gray-200 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-800/40 text-gray-900 dark:text-white placeholder:text-gray-400 text-xs outline-none focus:border-purple-500"
+            />
+            {searchStatement && (
+              <button
+                type="button"
+                onClick={() => setSearchStatement('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           {/* Lista de Extracto */}
           <div className="max-h-[520px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-100 dark:divide-zinc-800/60">
             {visibleStatementLines.length === 0 ? (
-              <div className="py-12 px-4 text-center text-xs space-y-3">
-                <p className="text-gray-400 dark:text-zinc-500">
-                  No hay movimientos cargados en el extracto para este período.
-                </p>
+              <div className="py-10 px-4 text-center text-xs space-y-3 bg-gray-50/40 dark:bg-zinc-800/20 rounded-xl border border-dashed border-gray-200 dark:border-zinc-800">
+                <div className="w-10 h-10 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+                  <BuildingLibraryIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-800 dark:text-zinc-200">
+                    No hay movimientos en el extracto para {formattedPeriodName}
+                  </p>
+                  <p className="text-gray-400 dark:text-zinc-500 text-[11px] mt-0.5">
+                    Sube el extracto descargado de tu banco (Excel/CSV) o autocompleta con un clic para conciliar.
+                  </p>
+                </div>
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
+                  >
+                    <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                    <span>Subir Excel o CSV</span>
+                  </button>
+
                   {periodBookTransactions.length > 0 && (
                     <button
                       type="button"
                       onClick={handlePopulateFromBooks}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
                     >
+                      <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                       <span>Cargar desde Libros ({periodBookTransactions.length})</span>
                     </button>
                   )}
+
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-medium transition-all cursor-pointer text-xs"
+                    onClick={() => setIsManualLineModalOpen(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-medium transition-all cursor-pointer text-xs"
                   >
-                    <ArrowUpTrayIcon className="w-3.5 h-3.5" />
-                    <span>Subir Excel o CSV</span>
+                    <PlusIcon className="w-3.5 h-3.5" />
+                    <span>Manual</span>
                   </button>
                 </div>
                 <div>
                   <a
                     href="/Extracto_Banco_Popular_Octubre_2026.xlsx"
                     download="Extracto_Banco_Popular_Octubre_2026.xlsx"
-                    className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1"
+                    className="text-[11px] text-gray-400 hover:text-purple-600 transition-colors inline-flex items-center gap-1"
                   >
                     <span>Descargar plantilla de ejemplo</span>
                   </a>
@@ -1414,9 +1633,9 @@ export default function BankReconciliationTab({
           setIsReportModalOpen(false);
           setActiveSettlementReport(null);
         }}
-        accountName={activeSettlementReport ? activeSettlementReport.bankAccountName : selectedAccount.bankName}
-        accountNumber={activeSettlementReport ? activeSettlementReport.bankAccountNumber : selectedAccount.accountNumber}
-        currency={activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : selectedAccount.currency}
+        accountName={activeSettlementReport ? activeSettlementReport.bankAccountName : (selectedAccount?.bankName || 'Cuenta Bancaria')}
+        accountNumber={activeSettlementReport ? activeSettlementReport.bankAccountNumber : (selectedAccount?.accountNumber || '')}
+        currency={activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : (selectedAccount?.currency || 'DOP')}
         period={activeSettlementReport ? activeSettlementReport.period : period}
         summary={activeSettlementReport ? activeSettlementReport.summary : summary}
         bookTransactions={activeSettlementReport ? (activeSettlementReport.bookTransactionsSnapshot || []) : periodBookTransactions}
@@ -1457,12 +1676,12 @@ export default function BankReconciliationTab({
         {/* Datos de la Cuenta */}
         <div className="grid grid-cols-2 gap-4 p-3 bg-gray-100 border border-gray-300 rounded text-xs">
           <div>
-            <p><span className="font-bold">Entidad Bancaria:</span> {activeSettlementReport ? activeSettlementReport.bankAccountName : selectedAccount.bankName}</p>
-            <p><span className="font-bold">Número de Cuenta:</span> {activeSettlementReport ? (activeSettlementReport.bankAccountNumber || 'N/A') : selectedAccount.accountNumber}</p>
+            <p><span className="font-bold">Entidad Bancaria:</span> {activeSettlementReport ? activeSettlementReport.bankAccountName : (selectedAccount?.bankName || 'N/A')}</p>
+            <p><span className="font-bold">Número de Cuenta:</span> {activeSettlementReport ? (activeSettlementReport.bankAccountNumber || 'N/A') : (selectedAccount?.accountNumber || 'N/A')}</p>
           </div>
           <div>
-            <p><span className="font-bold">Moneda:</span> {activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : selectedAccount.currency}</p>
-            <p><span className="font-bold">Titular:</span> {selectedAccount.holderName}</p>
+            <p><span className="font-bold">Moneda:</span> {activeSettlementReport ? (activeSettlementReport.currency || 'DOP') : (selectedAccount?.currency || 'DOP')}</p>
+            <p><span className="font-bold">Titular:</span> {selectedAccount?.holderName || 'Brianna Heavy Equipment'}</p>
           </div>
         </div>
 

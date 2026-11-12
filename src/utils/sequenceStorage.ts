@@ -12,6 +12,7 @@ export interface SequenceSettings {
   // Facturación Interna y Cotizaciones
   seqInternalInvoice: string; // Factura Interna (INT-)
   seqQuotation: string; // Cotización (CT-)
+  seqInternalExpense: string; // Gasto Interno (GI-)
   seqNCInternal: string; // Nota de Crédito Interna (NC-)
 
   // Secuencias Operativas
@@ -41,6 +42,7 @@ export const DEFAULT_SEQUENCES: SequenceSettings = {
   expiryE45: '2027-12-31',
   seqInternalInvoice: '000001',
   seqQuotation: '000001',
+  seqInternalExpense: '000001',
   seqNCInternal: '000001',
   seqInspection: '0001',
   seqWorkOrder: '0001',
@@ -105,6 +107,7 @@ export function loadSequenceSettings(): SequenceSettings {
 
   const rawInt = localStorage.getItem('brianna_seq_invoice') || DEFAULT_SEQUENCES.seqInternalInvoice;
   const rawCt = localStorage.getItem('brianna_seq_ct') || DEFAULT_SEQUENCES.seqQuotation;
+  const rawGi = localStorage.getItem('brianna_seq_gasto_interno') || DEFAULT_SEQUENCES.seqInternalExpense;
   const rawNcInt = localStorage.getItem('brianna_seq_nc_internal') || DEFAULT_SEQUENCES.seqNCInternal;
 
   return {
@@ -118,6 +121,7 @@ export function loadSequenceSettings(): SequenceSettings {
     expiryE45,
     seqInternalInvoice: formatSequence6Digits(rawInt),
     seqQuotation: formatSequence6Digits(rawCt),
+    seqInternalExpense: formatSequence6Digits(rawGi),
     seqNCInternal: formatSequence6Digits(rawNcInt),
     seqInspection: localStorage.getItem('brianna_inspection_seq') || DEFAULT_SEQUENCES.seqInspection,
     seqWorkOrder: localStorage.getItem('brianna_workorder_seq') || DEFAULT_SEQUENCES.seqWorkOrder,
@@ -223,6 +227,10 @@ export function saveSequenceSettings(settings: Partial<SequenceSettings>, force 
     const val = formatSequence6Digits(settings.seqQuotation);
     localStorage.setItem('brianna_seq_ct', val);
   }
+  if (settings.seqInternalExpense !== undefined) {
+    const val = formatSequence6Digits(settings.seqInternalExpense);
+    localStorage.setItem('brianna_seq_gasto_interno', val);
+  }
   if (settings.seqNCInternal !== undefined) {
     const val = formatSequence6Digits(settings.seqNCInternal);
     localStorage.setItem('brianna_seq_nc_internal', val);
@@ -247,6 +255,7 @@ export function resetAllSequencesToZero(): SequenceSettings {
     expiryE45: '2027-12-31',
     seqInternalInvoice: '000001',
     seqQuotation: '000001',
+    seqInternalExpense: '000001',
     seqNCInternal: '000001',
     seqInspection: '0001',
     seqWorkOrder: '0001',
