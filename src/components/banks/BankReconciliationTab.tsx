@@ -10,7 +10,6 @@ import {
   CheckIcon,
   ArrowsRightLeftIcon,
   InformationCircleIcon,
-  ShieldCheckIcon,
   DocumentChartBarIcon,
   BookmarkSquareIcon,
   ChevronLeftIcon,

@@ -22,7 +22,7 @@ export interface SessionSale {
   ncf: string;
   time: string;
   client: string;
-  paymentMethod: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito' | 'Mixto';
+  paymentMethod: 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito' | 'Mixto' | 'Gasto Interno';
   invoiceType: string;
   total: number;
   subtotal?: number;

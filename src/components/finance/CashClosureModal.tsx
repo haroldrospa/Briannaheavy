@@ -514,7 +514,7 @@ export default function CashClosureModal({
     const list: Array<{
       id: string;
       type: 'Ingreso' | 'Egreso' | 'Crédito';
-      category: 'ingreso_manual' | 'egreso_manual' | 'cobro' | 'venta';
+      category: 'ingreso_manual' | 'egreso_manual' | 'cobro' | 'venta' | 'gasto_interno' | 'financiamiento';
       categoryLabel: string;
       concept: string;
       customer?: string;

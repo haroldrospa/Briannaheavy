@@ -133,7 +133,7 @@ const playBeep = () => {
 };
 
 
-export type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito' | 'Mixto';
+export type PaymentMethodType = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Crédito' | 'Mixto' | 'Gasto Interno';
 
 export interface MixedPaymentEntry {
   method: 'Efectivo' | 'Tarjeta' | 'Transferencia';
