@@ -208,6 +208,42 @@ export const createWorkOrder = async (order: Omit<WorkOrder, 'id' | 'created_at'
   return fullOrder;
 };
 
+export const deleteWorkOrder = async (idOrControlNumber: string): Promise<boolean> => {
+  if (!idOrControlNumber) return false;
+
+  const currentLocal = getLocalStorageWorkOrders();
+  const updatedList = currentLocal.filter(
+    (o) => o.id !== idOrControlNumber && o.control_number !== idOrControlNumber
+  );
+
+  inMemoryWorkOrders = updatedList;
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_WORK_ORDERS_KEY, JSON.stringify(updatedList));
+    window.dispatchEvent(new CustomEvent('brianna_work_orders_updated', { detail: { deletedId: idOrControlNumber } }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      // Intentar eliminar por id y por control_number
+      await supabase
+        .from('work_orders')
+        .delete()
+        .eq('id', idOrControlNumber);
+
+      await supabase
+        .from('work_orders')
+        .delete()
+        .eq('control_number', idOrControlNumber);
+    } catch (err) {
+      console.warn('Error deleting work order from Supabase:', err);
+    }
+  }
+
+  return true;
+};
+
 export const fetchTruckInspections = async (forceRefresh = false): Promise<TruckInspection[]> => {
   const now = Date.now();
   if (!forceRefresh && inMemoryInspections !== null && (now - lastInspectionsFetch) < MAINTENANCE_CACHE_TTL) {
@@ -329,4 +365,39 @@ export const createTruckInspection = async (inspection: Omit<TruckInspection, 'i
   }
 
   return fullInspection;
+};
+
+export const deleteTruckInspection = async (idOrReportNumber: string): Promise<boolean> => {
+  if (!idOrReportNumber) return false;
+
+  const currentLocal = getLocalStorageTruckInspections();
+  const updatedList = currentLocal.filter(
+    (i) => i.id !== idOrReportNumber && i.report_number !== idOrReportNumber
+  );
+
+  inMemoryInspections = updatedList;
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_INSPECTIONS_KEY, JSON.stringify(updatedList));
+    window.dispatchEvent(new CustomEvent('brianna_inspections_updated', { detail: { deletedId: idOrReportNumber } }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase
+        .from('truck_inspections')
+        .delete()
+        .eq('id', idOrReportNumber);
+
+      await supabase
+        .from('truck_inspections')
+        .delete()
+        .eq('report_number', idOrReportNumber);
+    } catch (err) {
+      console.warn('Error deleting truck inspection from Supabase:', err);
+    }
+  }
+
+  return true;
 };

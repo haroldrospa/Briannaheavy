@@ -17,8 +17,10 @@ import {
   XMarkIcon,
   EyeIcon,
   Squares2X2Icon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
+import { useConfirm } from '../contexts/ConfirmContext';
 import TruckInspectionForm from '../components/forms/TruckInspectionForm';
 import MaintenanceWorkOrderForm from '../components/forms/MaintenanceWorkOrderForm';
 import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvoice, isInternalExpenseInvoice } from '../services/invoicesService';
@@ -27,7 +29,7 @@ import { fetchCustomers, getLocalStorageCustomers } from '../services/customersS
 import { fetchInventory, getLocalStorageInventory } from '../services/inventoryService';
 import { fetchCashClosures, getLocalStorageCashClosures } from '../services/cashClosuresService';
 import { fetchCashMovements, getLocalStorageMovements } from '../services/cashMovementsService';
-import { fetchWorkOrders, getLocalStorageWorkOrders, fetchTruckInspections, getLocalStorageTruckInspections } from '../services/maintenanceService';
+import { fetchWorkOrders, getLocalStorageWorkOrders, deleteWorkOrder, fetchTruckInspections, getLocalStorageTruckInspections, deleteTruckInspection } from '../services/maintenanceService';
 import { getInvoiceCustomConfig } from '../utils/receiptSettings';
 
 export const CLOSURE_DENOMINATIONS = [
@@ -499,6 +501,7 @@ export default function Reports() {
   const [selectedInspectionForPrint, setSelectedInspectionForPrint] = useState<any>(null);
   const [selectedWorkOrderForPreview, setSelectedWorkOrderForPreview] = useState<any>(null);
   const [selectedClosureForDetail, setSelectedClosureForDetail] = useState<any>(null);
+  const confirm = useConfirm();
   const [companyConfig, setCompanyConfig] = useState(getInvoiceCustomConfig);
   const [activeQuickRange, setActiveQuickRange] = useState<'hoy' | 'mes' | 'mes_anterior' | 'ano' | 'todo'>('mes');
 
@@ -896,6 +899,64 @@ export default function Reports() {
       document.title = originalTitle;
       document.body.classList.remove('print-closure-mode');
     }, 2000);
+  };
+
+  const handleDeleteWorkOrder = async (order: any) => {
+    if (!order) return;
+    const orderCode = order.code || order.control_number || order.id;
+    const isConfirmed = await confirm({
+      title: '¿Eliminar orden de trabajo?',
+      description: (
+        <span>
+          ¿Estás seguro de que deseas eliminar permanentemente la orden de trabajo{' '}
+          <strong className="text-gray-900 dark:text-white font-mono font-bold">"{orderCode}"</strong>
+          {order.equipment ? ` de ${order.equipment}` : ''}? Esta acción no se puede deshacer y se borrará del historial.
+        </span>
+      ),
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (isConfirmed) {
+      if (selectedWorkOrderForPreview && (selectedWorkOrderForPreview.id === order.id || selectedWorkOrderForPreview.code === order.code)) {
+        setSelectedWorkOrderForPreview(null);
+      }
+      await deleteWorkOrder(order.id || orderCode);
+      setDbData(prev => ({
+        ...prev,
+        ordenes_trabajo: prev.ordenes_trabajo.filter((wo: any) => wo.id !== order.id && wo.code !== orderCode)
+      }));
+    }
+  };
+
+  const handleDeleteInspection = async (inspection: any) => {
+    if (!inspection) return;
+    const inspectionCode = inspection.code || inspection.report_number || inspection.id;
+    const isConfirmed = await confirm({
+      title: '¿Eliminar hoja de inspección?',
+      description: (
+        <span>
+          ¿Estás seguro de que deseas eliminar permanentemente la inspección{' '}
+          <strong className="text-gray-900 dark:text-white font-mono font-bold">"{inspectionCode}"</strong>
+          {inspection.vehicle ? ` del vehículo ${inspection.vehicle}` : ''}? Esta acción no se puede deshacer y se borrará del historial.
+        </span>
+      ),
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
+    });
+
+    if (isConfirmed) {
+      if (selectedInspectionForPrint && (selectedInspectionForPrint.id === inspection.id || selectedInspectionForPrint.code === inspection.code)) {
+        setSelectedInspectionForPrint(null);
+      }
+      await deleteTruckInspection(inspection.id || inspectionCode);
+      setDbData(prev => ({
+        ...prev,
+        inspecciones: prev.inspecciones.filter((ins: any) => ins.id !== inspection.id && ins.code !== inspectionCode)
+      }));
+    }
   };
 
   const handlePrint = () => {
@@ -2123,7 +2184,7 @@ export default function Reports() {
                             </span>
                           </td>
                           <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <button 
                                 onClick={() => setSelectedInspectionForPrint(row)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-bold text-xs transition-all shadow-sm cursor-pointer"
@@ -2142,6 +2203,13 @@ export default function Reports() {
                               >
                                 <PrinterIcon className="h-3.5 w-3.5" />
                                 <span>Imprimir</span>
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteInspection(row)}
+                                className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 border border-red-200 dark:border-red-900/40 transition-all cursor-pointer shadow-2xs"
+                                title="Eliminar esta hoja de inspección"
+                              >
+                                <TrashIcon className="h-4 w-4" />
                               </button>
                             </div>
                           </td>
@@ -2193,7 +2261,7 @@ export default function Reports() {
                           </td>
                           <td className="p-3 text-right font-black text-gray-900 dark:text-white">RD$ {row.totalCost.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
                           <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                               <button 
                                 onClick={() => setSelectedWorkOrderForPreview(row)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 font-bold text-xs transition-all shadow-sm cursor-pointer"
@@ -2212,6 +2280,13 @@ export default function Reports() {
                               >
                                 <PrinterIcon className="h-3.5 w-3.5" />
                                 <span>Imprimir</span>
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteWorkOrder(row)}
+                                className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 border border-red-200 dark:border-red-900/40 transition-all cursor-pointer shadow-2xs"
+                                title="Eliminar esta orden de trabajo"
+                              >
+                                <TrashIcon className="h-4 w-4" />
                               </button>
                             </div>
                           </td>
@@ -2942,7 +3017,15 @@ export default function Reports() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleDeleteInspection(selectedInspectionForPrint)} 
+                  className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 border border-red-200 dark:border-red-900/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  title="Eliminar esta hoja de inspección"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  <span>Eliminar</span>
+                </button>
                 <button 
                   onClick={() => window.print()} 
                   className="flex items-center gap-2 bg-[#ED1C24] hover:bg-[#d91920] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
@@ -2987,7 +3070,15 @@ export default function Reports() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => handleDeleteWorkOrder(selectedWorkOrderForPreview)} 
+                  className="flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-400 border border-red-200 dark:border-red-900/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  title="Eliminar esta orden de trabajo"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  <span>Eliminar Orden</span>
+                </button>
                 <button 
                   onClick={() => window.print()} 
                   className="flex items-center gap-2 bg-[#ED1C24] hover:bg-[#d91920] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
