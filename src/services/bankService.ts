@@ -1,7 +1,7 @@
 import { getCompanyBankAccounts, type CompanyBankAccount } from '../utils/receiptSettings';
-import { fetchCashMovements, getLocalStorageMovements, createCashMovement, deleteCashMovement, updateCashMovement, type CashMovement } from './cashMovementsService';
+import { fetchCashMovements, getLocalStorageMovements, saveLocalStorageMovements, createCashMovement, deleteCashMovement, updateCashMovement, addDeletedMovementId, getDeletedMovementIds, type CashMovement } from './cashMovementsService';
 import { fetchInvoices, getLocalStorageInvoices, deleteInvoice, updateInvoice, type Invoice } from './invoicesService';
-import { getStoredReceipts } from './financingReceiptsService';
+import { getStoredReceipts, getDeletedReceiptIds, deleteFinancingReceipt } from './financingReceiptsService';
 import { getLocalInvoicePayments, saveLocalInvoicePayments, deleteSingleInvoicePayment, updateSingleInvoicePayment } from './invoicePaymentsService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -39,6 +39,37 @@ export const CASH_ACCOUNT: CompanyBankAccount = {
 };
 
 const MANUAL_BANK_STORAGE_KEY = 'brianna_manual_bank_transactions';
+const DELETED_BANK_TRANSACTIONS_KEY = 'brianna_deleted_bank_transactions';
+
+export const getDeletedBankTransactionIds = (): Set<string> => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(DELETED_BANK_TRANSACTIONS_KEY) : null;
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(String));
+    }
+  } catch {}
+  return new Set();
+};
+
+export const addDeletedBankTransactionId = (id: string): void => {
+  if (!id) return;
+  try {
+    const set = getDeletedBankTransactionIds();
+    const str = String(id).trim();
+    set.add(str);
+    const clean = str.replace(/^(mov-|inv-|abono-|rcpt-|btx-)/, '');
+    set.add(clean);
+    set.add(`mov-${clean}`);
+    set.add(`btx-${clean}`);
+    set.add(`inv-${clean}`);
+    set.add(`abono-${clean}`);
+    set.add(`rcpt-${clean}`);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DELETED_BANK_TRANSACTIONS_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch {}
+};
 
 /**
  * Obtiene las transacciones bancarias directas guardadas localmente
@@ -126,8 +157,31 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   const aggregated: BankTransaction[] = [];
   const seenIds = new Set<string>();
 
+  const deletedBankIds = getDeletedBankTransactionIds();
+  const deletedMovementIds = getDeletedMovementIds();
+  const deletedReceiptIds = getDeletedReceiptIds();
+
+  const isBankTxDeleted = (id?: string, sourceId?: string): boolean => {
+    if (!id && !sourceId) return false;
+    const check = (val?: string): boolean => {
+      if (!val) return false;
+      const s = String(val).trim();
+      const clean = s.replace(/^(mov-|inv-|abono-|rcpt-|btx-)/, '');
+      return deletedBankIds.has(s) || 
+             deletedBankIds.has(clean) || 
+             deletedBankIds.has(`mov-${clean}`) ||
+             deletedMovementIds.has(s) || 
+             deletedMovementIds.has(clean) ||
+             deletedMovementIds.has(`mov-${clean}`) ||
+             deletedReceiptIds.has(s) || 
+             deletedReceiptIds.has(clean);
+    };
+    return check(id) || check(sourceId);
+  };
+
   // A. Añadir transacciones bancarias manuales
   manualTxs.forEach(tx => {
+    if (isBankTxDeleted(tx.id, tx.source_id)) return;
     if (!seenIds.has(tx.id)) {
       seenIds.add(tx.id);
       aggregated.push({
@@ -140,6 +194,7 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   // B. Añadir movimientos de caja (tanto transferencias bancarias como efectivo en caja)
   allMovements.forEach(m => {
     const txId = `mov-${m.id}`;
+    if (isBankTxDeleted(txId, m.id)) return;
     if (seenIds.has(txId)) return;
 
     // Si el movimiento de caja hace referencia explícita a una factura específica, verificar si esa factura sigue existiendo
@@ -233,6 +288,7 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
   // C. Añadir facturas de venta (Transferencias y Efectivo)
   allInvoices.forEach(inv => {
     const txId = `inv-${inv.id}`;
+    if (isBankTxDeleted(txId, inv.id)) return;
     if (seenIds.has(txId)) return;
     seenIds.add(txId);
 
@@ -326,6 +382,7 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
       if (Array.isArray(summary.payments_history)) {
         summary.payments_history.forEach(p => {
           const txId = `abono-${p.id}`;
+          if (isBankTxDeleted(txId, p.id)) return;
           if (seenIds.has(txId)) return;
           seenIds.add(txId);
 
@@ -414,6 +471,7 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
     const receipts = getStoredReceipts();
     receipts.forEach(r => {
       const txId = `rcpt-${r.id || r.receiptNumber}`;
+      if (isBankTxDeleted(txId, r.id) || isBankTxDeleted(txId, r.receiptNumber)) return;
       if (seenIds.has(txId)) return;
       seenIds.add(txId);
 
@@ -631,48 +689,112 @@ export const calculateBankAccountsSummary = (
 export const deleteBankTransaction = async (tx: BankTransaction): Promise<boolean> => {
   if (!tx || !tx.id) return false;
 
-  // 1. Si es un abono a factura de venta
-  if (tx.id.startsWith('abono-')) {
-    const paymentId = tx.source_id || tx.id.replace(/^abono-/, '');
-    const success = await deleteSingleInvoicePayment(paymentId);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+  const rawId = String(tx.id).trim();
+  const sourceId = String(tx.source_id || '').trim();
+  const cleanId = rawId.replace(/^(mov-|inv-|abono-|rcpt-|btx-)/, '');
+
+  // 1. Añadir a listas negras persistentes locales
+  addDeletedBankTransactionId(rawId);
+  if (sourceId) addDeletedBankTransactionId(sourceId);
+  if (cleanId) addDeletedBankTransactionId(cleanId);
+  addDeletedMovementId(rawId);
+  if (sourceId) addDeletedMovementId(sourceId);
+  if (cleanId) addDeletedMovementId(cleanId);
+
+  // 2. Si es un abono a factura de venta
+  if (rawId.startsWith('abono-') || tx.source_type === 'invoice_payment') {
+    const paymentId = sourceId || cleanId;
+    try {
+      await deleteSingleInvoicePayment(paymentId);
+    } catch (e) {
+      console.warn('Error borrando abono de factura:', e);
     }
-    return success;
   }
 
-  // 2. Si es una factura de venta (contado o crédito)
-  if (tx.source_type === 'invoice' || tx.id.startsWith('inv-')) {
-    const invId = tx.source_id || tx.id.replace(/^inv-/, '');
-    const success = await deleteInvoice(invId);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+  // 3. Si es una factura de venta (contado o crédito)
+  if (tx.source_type === 'invoice' || rawId.startsWith('inv-')) {
+    const invId = sourceId || cleanId;
+    try {
+      await deleteInvoice(invId);
+    } catch (e) {
+      console.warn('Error borrando factura:', e);
     }
-    return success;
   }
 
-  // 3. Si es un movimiento de efectivo o transferencia de caja
-  if (tx.source_type === 'cash_movement' || tx.id.startsWith('mov-')) {
-    const movId = tx.source_id || tx.id.replace(/^mov-/, '');
-    const success = await deleteCashMovement(movId);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+  // 4. Si es un movimiento de efectivo o transferencia de caja
+  if (tx.source_type === 'cash_movement' || rawId.startsWith('mov-')) {
+    const movId = sourceId || cleanId;
+    try {
+      await deleteCashMovement(movId);
+    } catch (e) {
+      console.warn('Error borrando movimiento de caja:', e);
     }
-    return success;
   }
 
-  // 4. Si es una transacción bancaria manual directa
-  if (tx.source_type === 'manual_bank' || tx.id.startsWith('btx-')) {
+  // 5. Si es un recibo de financiamiento
+  if (tx.source_type === 'financing_payment' || rawId.startsWith('rcpt-')) {
+    const rcptId = sourceId || cleanId;
+    try {
+      await deleteFinancingReceipt(rcptId);
+    } catch (e) {
+      console.warn('Error borrando recibo de financiamiento:', e);
+    }
+  }
+
+  // 6. Si es una transacción bancaria manual directa
+  try {
     const current = getManualBankTransactions();
-    const updated = current.filter(t => t.id !== tx.id && t.id !== tx.source_id);
-    saveManualBankTransactions(updated);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    const updated = current.filter(t => 
+      t.id !== rawId && 
+      t.id !== sourceId && 
+      t.id !== cleanId &&
+      t.source_id !== rawId &&
+      t.source_id !== sourceId
+    );
+    if (updated.length !== current.length) {
+      saveManualBankTransactions(updated);
     }
-    return true;
+  } catch (e) {
+    console.warn('Error limpiando transacciones bancarias manuales:', e);
   }
 
-  return false;
+  // 7. Limpiar movimientos en localStorage creados como reflejo
+  try {
+    const currentMovements = getLocalStorageMovements();
+    const updatedMovements = currentMovements.filter(m => {
+      const mId = String(m?.id || '');
+      if (mId === rawId || mId === sourceId || mId === cleanId) return false;
+      if (tx.reference && m.reference && m.reference === tx.reference) return false;
+      return true;
+    });
+    if (updatedMovements.length !== currentMovements.length) {
+      saveLocalStorageMovements(updatedMovements);
+    }
+  } catch {}
+
+  // 8. Intentar eliminar de Supabase si corresponde
+  if (isSupabaseConfigured()) {
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const targetUuid = [sourceId, cleanId, rawId].find(id => isUuid.test(id));
+      if (targetUuid) {
+        await supabase.from('cash_movements').delete().eq('id', targetUuid);
+      }
+      if (tx.reference) {
+        await supabase.from('cash_movements').delete().eq('reference', tx.reference);
+      }
+    } catch (err) {
+      console.warn('Error al eliminar en Supabase:', err);
+    }
+  }
+
+  // 9. Notificar a todas las pantallas
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('brianna_bank_transactions_changed', { detail: tx }));
+    window.dispatchEvent(new CustomEvent('brianna_cash_movements_changed', { detail: tx }));
+  }
+
+  return true;
 };
 
 /**

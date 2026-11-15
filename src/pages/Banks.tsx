@@ -219,16 +219,23 @@ export default function Banks() {
   const handleConfirmDelete = async () => {
     if (!transactionToDelete || isDeleting) return;
     setIsDeleting(true);
+    const target = transactionToDelete;
     try {
-      const typeLabel = transactionToDelete.type;
-      const amountLabel = Number(transactionToDelete.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 });
-      await deleteBankTransaction(transactionToDelete);
-      setDeleteFeedback(`Se eliminó correctamente el movimiento de ${typeLabel} de RD$ ${amountLabel}.`);
+      const typeLabel = target.type;
+      const amountLabel = Number(target.amount).toLocaleString('es-DO', { minimumFractionDigits: 2 });
+      
+      // Actualización optimista inmediata en la UI para feedback instantáneo
+      setTransactions(prev => prev.filter(t => t.id !== target.id));
       setTransactionToDelete(null);
+
+      await deleteBankTransaction(target);
+      setDeleteFeedback(`Se eliminó correctamente el movimiento de ${typeLabel} de RD$ ${amountLabel}.`);
       await loadData();
       setTimeout(() => setDeleteFeedback(null), 4000);
     } catch (err) {
       console.error('Error al eliminar transacción:', err);
+      alert('Hubo un error al eliminar el movimiento. Por favor intente nuevamente.');
+      await loadData();
     } finally {
       setIsDeleting(false);
     }
@@ -346,6 +353,46 @@ export default function Banks() {
   const currentSelectedAccount = selectedBankFilter === 'caja-general' 
     ? CASH_ACCOUNT 
     : bankAccounts.find(a => a.id === selectedBankFilter);
+
+  const getAccountDisplay = useCallback((tx: BankTransaction) => {
+    const isCash = tx.bank_account_id === 'caja-general' || (tx.payment_method || '').toLowerCase().includes('efectivo');
+    if (isCash || tx.bank_account_id === 'caja-general') {
+      return {
+        title: 'Caja General',
+        subtitle: 'Efectivo en Caja',
+        isCash: true,
+        fullTitle: 'Caja General (Efectivo)'
+      };
+    }
+
+    const matchBank = bankAccounts.find(b => 
+      b.id === tx.bank_account_id || 
+      (b.accountNumber && tx.bank_account_name?.includes(b.accountNumber))
+    );
+
+    if (matchBank) {
+      const shortAcc = matchBank.accountNumber ? `••${matchBank.accountNumber.slice(-4)}` : '';
+      const accType = matchBank.accountType || matchBank.currency || '';
+      return {
+        title: matchBank.bankName,
+        subtitle: [shortAcc, accType, 'Transferencia'].filter(Boolean).join(' · '),
+        isCash: false,
+        fullTitle: `${matchBank.bankName} - ${matchBank.accountNumber} (${matchBank.accountType || matchBank.currency})`
+      };
+    }
+
+    const raw = tx.bank_account_name || 'Cuenta Bancaria';
+    const parts = raw.split('-');
+    const name = parts[0]?.trim() || raw;
+    const rest = parts.slice(1).join('-').trim();
+
+    return {
+      title: name,
+      subtitle: rest || tx.payment_method || 'Transferencia',
+      isCash: false,
+      fullTitle: raw
+    };
+  }, [bankAccounts]);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -689,10 +736,10 @@ export default function Banks() {
             )}
 
             {/* Toolbar Principal Limpio */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 print:hidden">
+            <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5 print:hidden">
               
               {/* Buscador estilizado */}
-              <div className="relative flex-1 max-w-md">
+              <div className="relative flex-1 min-w-[220px]">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
                 <input
                   type="text"
@@ -718,7 +765,7 @@ export default function Banks() {
                 <select
                   value={selectedBankFilter}
                   onChange={(e) => setSelectedBankFilter(e.target.value)}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs"
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs max-w-[210px] truncate"
                 >
                   <option value="all">Todas las Cuentas ({transactions.length})</option>
                   <option value="caja-general">💵 Caja General (Efectivo) ({summary.cashAccountWithBalance.transactionCount})</option>
@@ -738,7 +785,7 @@ export default function Banks() {
                 </select>
 
                 {/* Flujo: Todos / Entradas / Salidas */}
-                <div className="flex items-center p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-xs">
+                <div className="flex items-center p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-zinc-200/60 dark:border-zinc-700/60 text-xs shrink-0">
                   <button
                     type="button"
                     onClick={() => setTypeFilter('all')}
@@ -778,7 +825,7 @@ export default function Banks() {
                 <select
                   value={datePreset}
                   onChange={(e) => setDatePreset(e.target.value as any)}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs"
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs shrink-0"
                 >
                   <option value="all">Todas las fechas</option>
                   <option value="today">Hoy</option>
@@ -790,7 +837,7 @@ export default function Banks() {
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs"
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 rounded-xl text-xs font-semibold text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/20 transition-all shadow-2xs max-w-[170px] truncate"
                 >
                   <option value="all">Todas las categorías</option>
                   <option value="Movimiento de Efectivo">Movimientos de Efectivo</option>
@@ -806,7 +853,7 @@ export default function Banks() {
                   <button
                     type="button"
                     onClick={handleResetFilters}
-                    className="px-3 py-2 text-xs font-bold text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
+                    className="px-3 py-2 text-xs font-bold text-[#ED1C24] hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer shrink-0"
                   >
                     Limpiar
                   </button>
@@ -836,7 +883,7 @@ export default function Banks() {
             </div>
 
             {/* Tabla de Transacciones Rediseñada (Limpia, Sin Ruido) */}
-            <div className="overflow-x-auto rounded-xl border border-zinc-100 dark:border-zinc-800">
+            <div className="overflow-x-auto rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs bg-white dark:bg-zinc-900">
               {filteredTransactions.length === 0 ? (
                 <div className="py-12 text-center space-y-2">
                   <BuildingLibraryIcon className="w-8 h-8 text-zinc-300 dark:text-zinc-700 mx-auto" />
@@ -854,30 +901,32 @@ export default function Banks() {
                   )}
                 </div>
               ) : (
-                <table className="min-w-full divide-y divide-zinc-100 dark:divide-zinc-800 text-left">
-                  <thead className="bg-zinc-50/70 dark:bg-zinc-850/60 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 print:text-black">
+                <table className="w-full text-left border-collapse min-w-[780px] lg:min-w-full">
+                  <thead className="bg-zinc-50 dark:bg-zinc-850/80 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 border-b border-zinc-200/80 dark:border-zinc-800 print:text-black">
                     <tr>
-                      <th className="py-3 px-4">Fecha / Hora</th>
-                      <th className="py-3 px-4">Cuenta / Origen</th>
-                      <th className="py-3 px-4">Concepto / Detalle</th>
-                      <th className="py-3 px-4">Referencia</th>
-                      <th className="py-3 px-4 text-right">Monto</th>
-                      <th className="py-3 px-4 print:hidden">Responsable</th>
-                      <th className="py-3 px-3 text-center print:hidden">Acción</th>
+                      <th className="py-3 px-3.5 whitespace-nowrap">Fecha / Hora</th>
+                      <th className="py-3 px-3.5 whitespace-nowrap">Cuenta / Origen</th>
+                      <th className="py-3 px-3.5 min-w-[170px]">Concepto / Detalle</th>
+                      <th className="py-3 px-3 whitespace-nowrap">Referencia</th>
+                      <th className="py-3 px-3.5 text-right whitespace-nowrap">Monto</th>
+                      <th className="py-3 px-3.5 print:hidden whitespace-nowrap">Responsable</th>
+                      <th className="py-3 px-3 text-center print:hidden sticky right-0 bg-zinc-50 dark:bg-zinc-850 shadow-[-6px_0_10px_-3px_rgba(0,0,0,0.06)] dark:shadow-[-6px_0_10px_-3px_rgba(0,0,0,0.3)] w-[90px] whitespace-nowrap z-10">
+                        Acción
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60 bg-white dark:bg-zinc-900 text-xs">
                     {filteredTransactions.map((tx) => {
                       const isIngreso = tx.type === 'Ingreso';
-                      const isCash = tx.bank_account_id === 'caja-general' || (tx.payment_method || '').toLowerCase().includes('efectivo');
+                      const accInfo = getAccountDisplay(tx);
 
                       return (
                         <tr 
                           key={tx.id}
-                          className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors"
+                          className="group hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors"
                         >
                           {/* Fecha */}
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-2.5 px-3.5 whitespace-nowrap">
                             <span className="font-semibold text-zinc-900 dark:text-white block print:text-black">
                               {new Date(tx.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
@@ -887,59 +936,47 @@ export default function Banks() {
                           </td>
 
                           {/* Cuenta o Caja con Icono Discreto */}
-                          <td className="py-3 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                                isCash 
+                          <td className="py-2.5 px-3.5">
+                            <div className="flex items-center gap-2 max-w-[210px]">
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                accInfo.isCash 
                                   ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' 
                                   : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'
                               }`}>
-                                {isCash ? (
+                                {accInfo.isCash ? (
                                   <BanknotesIcon className="w-3.5 h-3.5" />
                                 ) : (
                                   <BuildingLibraryIcon className="w-3.5 h-3.5" />
                                 )}
                               </div>
-                              <div>
-                                <span className="font-semibold text-zinc-900 dark:text-white block print:text-black">
-                                  {(() => {
-                                    if (isCash || tx.bank_account_id === 'caja-general') {
-                                      return 'Caja General (Efectivo)';
-                                    }
-                                    const matchBank = bankAccounts.find(b => 
-                                      b.id === tx.bank_account_id || 
-                                      (b.accountNumber && tx.bank_account_name?.includes(b.accountNumber))
-                                    );
-                                    if (matchBank) {
-                                      return `${matchBank.bankName} - ${matchBank.accountNumber} (${matchBank.accountType || matchBank.currency})`;
-                                    }
-                                    return tx.bank_account_name || 'Cuenta Bancaria';
-                                  })()}
+                              <div className="min-w-0">
+                                <span className="font-semibold text-zinc-900 dark:text-white block truncate text-xs" title={accInfo.fullTitle}>
+                                  {accInfo.title}
                                 </span>
-                                <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block">
-                                  {isCash ? 'Efectivo en Caja' : 'Transferencia'}
+                                <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono block truncate">
+                                  {accInfo.subtitle}
                                 </span>
                               </div>
                             </div>
                           </td>
 
                           {/* Concepto y Categoría */}
-                          <td className="py-3 px-4">
-                            <p className="font-medium text-zinc-800 dark:text-zinc-200 max-w-sm sm:max-w-md print:text-black">
+                          <td className="py-2.5 px-3.5 min-w-[170px] max-w-[260px] xl:max-w-[320px]">
+                            <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate" title={tx.concept}>
                               {tx.concept}
                             </p>
                             {tx.category && (
-                              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium block mt-0.5">
+                              <span className="inline-block text-[9.5px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-medium mt-0.5">
                                 {tx.category}
                               </span>
                             )}
                           </td>
 
                           {/* Referencia */}
-                          <td className="py-3 px-4 whitespace-nowrap">
+                          <td className="py-2.5 px-3 whitespace-nowrap">
                             {tx.reference ? (
                               <div className="flex items-center gap-1 font-mono text-xs font-semibold text-zinc-700 dark:text-zinc-300 print:text-black">
-                                <span>{tx.reference}</span>
+                                <span className="truncate max-w-[110px]" title={tx.reference}>{tx.reference}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleCopy(tx.reference!, tx.id, 'ref')}
@@ -959,35 +996,37 @@ export default function Banks() {
                           </td>
 
                           {/* Monto (El color y signo eliminan la necesidad de badges repetidos) */}
-                          <td className="py-3 px-4 whitespace-nowrap text-right font-mono text-xs sm:text-sm font-bold">
+                          <td className="py-2.5 px-3.5 whitespace-nowrap text-right font-mono text-xs sm:text-sm font-bold">
                             <span className={isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                               {isIngreso ? '+' : '-'}RD$ {tx.amount.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </td>
 
                           {/* Registrado Por */}
-                          <td className="py-3 px-4 whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 print:hidden">
-                            <span className="font-medium text-[11px]">{tx.created_by || 'Cajero'}</span>
+                          <td className="py-2.5 px-3.5 whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 print:hidden max-w-[120px]">
+                            <span className="font-medium text-[11px] truncate block" title={tx.created_by || 'Cajero'}>
+                              {tx.created_by || 'Cajero'}
+                            </span>
                           </td>
 
-                          {/* Acción: Editar y Eliminar */}
-                          <td className="py-3 px-3 whitespace-nowrap text-center print:hidden">
-                            <div className="flex items-center justify-center gap-1">
+                          {/* Acción: Editar y Eliminar (Sticky Right para visibilidad permanente) */}
+                          <td className="py-2.5 px-3 whitespace-nowrap text-center print:hidden sticky right-0 bg-white dark:bg-zinc-900 group-hover:bg-zinc-50 dark:group-hover:bg-zinc-850 shadow-[-6px_0_10px_-3px_rgba(0,0,0,0.06)] dark:shadow-[-6px_0_10px_-3px_rgba(0,0,0,0.3)] z-10">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => setTransactionToEdit(tx)}
                                 title="Editar movimiento"
-                                className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-all cursor-pointer opacity-80 hover:opacity-100"
+                                className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg transition-all cursor-pointer"
                               >
-                                <PencilSquareIcon className="w-3.5 h-3.5" />
+                                <PencilSquareIcon className="w-4 h-4" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setTransactionToDelete(tx)}
                                 title="Eliminar movimiento"
-                                className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer opacity-80 hover:opacity-100"
+                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition-all cursor-pointer"
                               >
-                                <TrashIcon className="w-3.5 h-3.5" />
+                                <TrashIcon className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
