@@ -10,7 +10,6 @@ import {
   TableCellsIcon,
   Squares2X2Icon,
   TruckIcon,
-  CreditCardIcon,
   ClockIcon,
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
@@ -24,13 +23,13 @@ import {
   type InsurancePolicy 
 } from '../services/insuranceService';
 import NewPolicyModal from '../components/insurance/NewPolicyModal';
-import PolicyDetailModal from '../components/insurance/PolicyDetailModal';
+import PolicyDetailModal, { MotorIcon, isMotorPolicy } from '../components/insurance/PolicyDetailModal';
 
 export default function Insurances() {
   const [policies, setPolicies] = useState<InsurancePolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'todos' | 'vehicular' | 'vida'>('todos');
+  const [categoryFilter, setCategoryFilter] = useState<'todos' | 'vehicular' | 'motor' | 'vida'>('todos');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'proximos' | 'vigentes' | 'vencidos'>('todos');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
     if (typeof window !== 'undefined') {
@@ -76,6 +75,7 @@ export default function Insurances() {
   const metrics = useMemo(() => {
     let total = policies.length;
     let vehiculares = 0;
+    let motores = 0;
     let vida = 0;
     let proximosAVencer = 0;
     let vencidos = 0;
@@ -86,6 +86,8 @@ export default function Insurances() {
       totalPrimaAnual += Number(p.annual_premium) || 0;
       if (p.category === 'vida') {
         vida++;
+      } else if (isMotorPolicy(p)) {
+        motores++;
       } else {
         vehiculares++;
       }
@@ -95,7 +97,7 @@ export default function Insurances() {
       else vigentes++;
     });
 
-    return { total, vehiculares, vida, proximosAVencer, vencidos, vigentes, totalPrimaAnual };
+    return { total, vehiculares, motores, vida, proximosAVencer, vencidos, vigentes, totalPrimaAnual };
   }, [policies]);
 
   // Filtrado
@@ -103,7 +105,8 @@ export default function Insurances() {
     const q = search.trim().toLowerCase();
     return policies.filter(p => {
       // Filtro de categoría
-      if (categoryFilter === 'vehicular' && p.category === 'vida') return false;
+      if (categoryFilter === 'vehicular' && (p.category === 'vida' || isMotorPolicy(p))) return false;
+      if (categoryFilter === 'motor' && !isMotorPolicy(p)) return false;
       if (categoryFilter === 'vida' && p.category !== 'vida') return false;
 
       const matchSearch = !q || 
@@ -157,11 +160,11 @@ export default function Insurances() {
                 Seguros & Pólizas
               </h1>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
-                {metrics.total} Pólizas ({metrics.vehiculares} Veh. • {metrics.vida} Vida)
+                {metrics.total} Pólizas ({metrics.vehiculares} Veh. • {metrics.motores} Motores • {metrics.vida} Vida)
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-zinc-400 font-medium">
-              Control integral de seguros vehiculares y de vida (One Alliance, La International, Humano, etc.), cuotas y vencimientos
+              Control integral de seguros vehiculares, motores (motocicletas) y de vida, cuotas, pagos y vencimientos
             </p>
           </div>
         </div>
@@ -188,7 +191,7 @@ export default function Insurances() {
         </div>
       </div>
 
-      {/* Selector de Categoría Principal: Todas, Vehicular, Vida */}
+      {/* Selector de Categoría Principal: Todas, Vehicular, Motores, Vida */}
       <div className="flex items-center p-1 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xs gap-1.5 overflow-x-auto">
         <button
           type="button"
@@ -213,7 +216,20 @@ export default function Insurances() {
           }`}
         >
           <TruckIcon className="w-4 h-4" />
-          <span>Seguros Vehiculares ({metrics.vehiculares})</span>
+          <span>Vehiculares ({metrics.vehiculares})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('motor')}
+          className={`flex-1 py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
+            categoryFilter === 'motor'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'
+          }`}
+        >
+          <MotorIcon className="w-4 h-4" />
+          <span>Motores / Motocicletas ({metrics.motores})</span>
         </button>
 
         <button
@@ -231,10 +247,17 @@ export default function Insurances() {
       </div>
 
       {/* Tarjetas de Métricas Rediseñadas (Minimalistas & Compactas) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         
         {/* Total */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-2xs flex flex-col justify-between">
+        <div 
+          onClick={() => setCategoryFilter('todos')}
+          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+            categoryFilter === 'todos'
+              ? 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-400 dark:border-zinc-600 shadow-2xs'
+              : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 shadow-2xs'
+          }`}
+        >
           <div className="flex items-center justify-between text-zinc-400 dark:text-zinc-500">
             <span className="text-[10px] font-bold uppercase tracking-wider">Total Pólizas</span>
             <ShieldCheckIcon className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
@@ -244,7 +267,62 @@ export default function Insurances() {
               {metrics.total}
             </span>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium mt-0.5">
-              {metrics.vehiculares} Vehiculares • {metrics.vida} de Vida
+              RD$ {metrics.totalPrimaAnual.toLocaleString('es-DO')}
+            </p>
+          </div>
+        </div>
+
+        {/* Vehiculares */}
+        <div 
+          onClick={() => setCategoryFilter(categoryFilter === 'vehicular' ? 'todos' : 'vehicular')}
+          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+            categoryFilter === 'vehicular'
+              ? 'bg-red-50/70 dark:bg-red-950/20 border-red-300 dark:border-red-900/50 shadow-2xs'
+              : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ED1C24] font-black">
+              Vehiculares
+            </span>
+            <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+          </div>
+          <div className="mt-2">
+            <span className="text-2xl font-black font-mono text-gray-900 dark:text-white">
+              {metrics.vehiculares}
+            </span>
+            <p className="text-[11px] text-gray-500 dark:text-zinc-400 font-medium mt-0.5">
+              Camiones y equipos pesados
+            </p>
+          </div>
+        </div>
+
+        {/* Motores / Motocicletas */}
+        <div 
+          onClick={() => setCategoryFilter(categoryFilter === 'motor' ? 'todos' : 'motor')}
+          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+            categoryFilter === 'motor' || metrics.motores > 0
+              ? 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-300 dark:border-amber-900/50 shadow-2xs'
+              : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 shadow-2xs'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 font-black">
+              Motores
+            </span>
+            <MotorIcon className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="mt-2">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">
+                {metrics.motores}
+              </span>
+              <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                Motos
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 font-medium mt-0.5">
+              Motocicletas aseguradas
             </p>
           </div>
         </div>
@@ -260,21 +338,16 @@ export default function Insurances() {
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300 font-black">
-              Seguros de Vida
+              Vida
             </span>
             <HeartIcon className="w-4 h-4 text-rose-500 fill-rose-500/20" />
           </div>
           <div className="mt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400">
-                {metrics.vida}
-              </span>
-              <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300">
-                One Alliance • Inter. • Humano
-              </span>
-            </div>
+            <span className="text-2xl font-black font-mono text-rose-600 dark:text-rose-400">
+              {metrics.vida}
+            </span>
             <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80 font-medium mt-0.5">
-              Pólizas de personas aseguradas
+              Personas aseguradas
             </p>
           </div>
         </div>
@@ -292,7 +365,7 @@ export default function Insurances() {
             <span className={`text-[10px] font-bold uppercase tracking-wider ${
               metrics.proximosAVencer > 0 ? 'text-amber-700 dark:text-amber-300 font-black' : 'text-zinc-400 dark:text-zinc-500'
             }`}>
-              Próximas a Vencer
+              Por Vencer
             </span>
             <ClockIcon className={`w-4 h-4 ${metrics.proximosAVencer > 0 ? 'text-amber-600' : 'text-zinc-400'}`} />
           </div>
@@ -313,23 +386,6 @@ export default function Insurances() {
               metrics.proximosAVencer > 0 ? 'text-amber-700/80 dark:text-amber-300/80 font-bold' : 'text-zinc-500 dark:text-zinc-400'
             }`}>
               {metrics.proximosAVencer > 0 ? 'Requieren renovación' : 'Ninguna en riesgo'}
-            </p>
-          </div>
-        </div>
-
-        {/* Prima Anual Total */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-zinc-400 dark:text-zinc-500">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Prima Total Anual</span>
-            <CreditCardIcon className="w-4 h-4 text-zinc-400" />
-          </div>
-          <div className="mt-2">
-            <span className="text-xl sm:text-2xl font-black font-mono text-zinc-900 dark:text-white truncate block">
-              RD$ {metrics.totalPrimaAnual.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-            </span>
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              {metrics.vigentes} póliza{metrics.vigentes !== 1 ? 's' : ''} al día
             </p>
           </div>
         </div>
@@ -504,6 +560,7 @@ export default function Insurances() {
                   const totalCount = policy.installments?.length || 0;
                   const percentPaid = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 100;
                   const isVida = policy.category === 'vida';
+                  const isMotor = isMotorPolicy(policy);
 
                   return (
                     <tr 
@@ -517,10 +574,14 @@ export default function Insurances() {
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
                             isVida
                               ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/50 dark:border-rose-900/40'
+                              : isMotor
+                              ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/50 dark:border-amber-900/40 group-hover:border-amber-500/30 group-hover:text-amber-600'
                               : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200/50 dark:border-zinc-700/50 group-hover:border-[#ED1C24]/30 group-hover:text-[#ED1C24]'
                           }`}>
                             {isVida ? (
                               <HeartIcon className="w-4 h-4 fill-rose-500/20 stroke-[2]" />
+                            ) : isMotor ? (
+                              <MotorIcon className="w-4 h-4 stroke-[2]" />
                             ) : (
                               <ShieldCheckIcon className="w-4 h-4 stroke-[2]" />
                             )}
@@ -536,16 +597,18 @@ export default function Insurances() {
                               <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
                                 isVida
                                   ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40'
+                                  : isMotor
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/60 dark:border-amber-900/40'
                                   : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
                               }`}>
-                                {isVida ? 'Vida' : 'Vehicular'}
+                                {isVida ? 'Vida' : isMotor ? 'Motor' : 'Vehicular'}
                               </span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Vehículo o Cobertura de Vida */}
+                      {/* Vehículo, Motor o Cobertura de Vida */}
                       <td className="py-3.5 px-4">
                         {isVida ? (
                           <div>
@@ -563,6 +626,26 @@ export default function Insurances() {
                                 <>
                                   <span>•</span>
                                   <span className="truncate max-w-[120px] font-sans">{policy.life_data.plan_name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ) : isMotor ? (
+                          <div>
+                            <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300">
+                              <MotorIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <span className="truncate max-w-[200px]">
+                                {policy.vehicle?.brand || 'Motor'} {policy.vehicle?.model}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono mt-0.5">
+                              <span>Chasis: {policy.vehicle?.vin || 'S/N'}</span>
+                              {policy.vehicle?.plate && (
+                                <>
+                                  <span>•</span>
+                                  <span className="bg-amber-100 dark:bg-amber-950/60 px-1 py-0.2 rounded text-[9.5px] text-amber-800 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                                    {policy.vehicle.plate}
+                                  </span>
                                 </>
                               )}
                             </div>
@@ -765,7 +848,7 @@ export default function Insurances() {
                     </span>
                   </div>
 
-                  {/* Vehículo o Asegurado de Vida */}
+                  {/* Vehículo, Motor o Asegurado de Vida */}
                   {policy.category === 'vida' ? (
                     <div className="bg-purple-50/80 dark:bg-purple-950/20 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/40 space-y-1 text-xs">
                       <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-white">
@@ -784,6 +867,28 @@ export default function Insurances() {
                         {policy.life_data?.coverage_amount ? (
                           <span className="font-mono font-semibold text-purple-700 dark:text-purple-300">
                             Cob: {policy.currency || 'USD'} {policy.life_data.coverage_amount.toLocaleString('es-DO')}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : isMotorPolicy(policy) ? (
+                    <div className="bg-amber-50/80 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 space-y-1 text-xs">
+                      <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-white">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MotorIcon className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span className="truncate">
+                            {policy.vehicle?.brand || 'Motor'} {policy.vehicle?.model}
+                          </span>
+                        </div>
+                        <span className="bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800 text-[10px] shrink-0 font-bold">
+                          Motor
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10.5px] text-zinc-500 dark:text-zinc-400 pl-5">
+                        <span className="truncate font-mono">Chasis: {policy.vehicle?.vin || 'S/N'}</span>
+                        {policy.vehicle?.plate ? (
+                          <span className="font-mono bg-white dark:bg-zinc-900 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800 text-[10px] shrink-0 font-bold text-amber-800 dark:text-amber-300">
+                            {policy.vehicle.plate}
                           </span>
                         ) : null}
                       </div>

@@ -6,17 +6,22 @@ import {
   UserIcon, 
   CalendarDaysIcon, 
   CheckCircleIcon,
-  HeartIcon
+  HeartIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 import { 
   createInsurancePolicy, 
   updateInsurancePolicy, 
   LIFE_INSURANCE_COMPANIES,
+  MOTOR_INSURANCE_COMPANIES,
   VEHICLE_INSURANCE_COMPANIES,
   type InsurancePolicy, 
   type InsuranceInstallment,
   type PolicyCategory
 } from '../../services/insuranceService';
+import { MotorIcon, isMotorPolicy } from './PolicyDetailModal';
+import { createCashMovement } from '../../services/cashMovementsService';
+import { getCompanyBankAccounts, type CompanyBankAccount } from '../../utils/receiptSettings';
 import { fetchCustomers, type Customer } from '../../services/customersService';
 import { fetchInventory, type InventoryItem } from '../../services/inventoryService';
 
@@ -67,6 +72,17 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
   const [currency, setCurrency] = useState<'DOP' | 'USD'>('DOP');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Registro de pago inicial y generación de movimiento
+  const [recordInitialPayment, setRecordInitialPayment] = useState(false);
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta'>('Efectivo');
+  const [initialBankId, setInitialBankId] = useState('banreservas');
+  const [initialReference, setInitialReference] = useState('');
+  const [initialPaymentDate, setInitialPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const bankAccounts = useMemo<CompanyBankAccount[]>(() => {
+    return getCompanyBankAccounts();
+  }, []);
 
   // Listas de datos reales desde Supabase / Inventario
   const [realCustomers, setRealCustomers] = useState<Customer[]>([]);
@@ -130,22 +146,31 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
   };
 
   const activeCompanies = useMemo(() => {
-    return category === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+    if (category === 'vida') return LIFE_INSURANCE_COMPANIES;
+    if (category === 'motor') return MOTOR_INSURANCE_COMPANIES;
+    return VEHICLE_INSURANCE_COMPANIES;
   }, [category]);
 
   const handleCategoryChange = (newCat: PolicyCategory) => {
     setCategory(newCat);
-    const comps = newCat === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+    const comps = newCat === 'vida' ? LIFE_INSURANCE_COMPANIES : (newCat === 'motor' ? MOTOR_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES);
     if (!comps.includes(insuranceCompany) && insuranceCompany !== 'Otra') {
       setInsuranceCompany(comps[0]);
+    }
+    if (newCat === 'motor') {
+      if (vehicleType === 'Camión') setVehicleType('Motor / Motocicleta');
+    } else if (newCat === 'vehicular') {
+      if (vehicleType === 'Motor / Motocicleta') setVehicleType('Camión');
     }
   };
 
   useEffect(() => {
     if (policyToEdit) {
-      const cat: PolicyCategory = policyToEdit.category === 'vida' ? 'vida' : 'vehicular';
+      const cat: PolicyCategory = policyToEdit.category === 'vida' 
+        ? 'vida' 
+        : (policyToEdit.category === 'motor' || isMotorPolicy(policyToEdit) ? 'motor' : 'vehicular');
       setCategory(cat);
-      const comps = cat === 'vida' ? LIFE_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES;
+      const comps = cat === 'vida' ? LIFE_INSURANCE_COMPANIES : (cat === 'motor' ? MOTOR_INSURANCE_COMPANIES : VEHICLE_INSURANCE_COMPANIES);
 
       if (comps.includes(policyToEdit.insurance_company)) {
         setInsuranceCompany(policyToEdit.insurance_company);
@@ -168,7 +193,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setPlanName(policyToEdit.life_data?.plan_name || 'Vida Entera / Cobertura Total');
       setBeneficiaries(policyToEdit.life_data?.beneficiaries || '');
 
-      // Vehicular
+      // Vehicular o Motor
       if (policyToEdit.vehicle) {
         setBrand(policyToEdit.vehicle.brand || '');
         setModel(policyToEdit.vehicle.model || '');
@@ -176,7 +201,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         setPlate(policyToEdit.vehicle.plate || '');
         setVin(policyToEdit.vehicle.vin || '');
         setColor(policyToEdit.vehicle.color || '');
-        setVehicleType(policyToEdit.vehicle.type || 'Camión');
+        setVehicleType(policyToEdit.vehicle.type || (cat === 'motor' ? 'Motor / Motocicleta' : 'Camión'));
       }
 
       setStartDate(policyToEdit.start_date);
@@ -192,6 +217,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       else setInstallmentsFrequency('mensual');
       setCurrency(policyToEdit.currency || 'DOP');
       setNotes(policyToEdit.notes || '');
+      setRecordInitialPayment(false);
     } else {
       setCategory('vehicular');
       setInsuranceCompany(VEHICLE_INSURANCE_COMPANIES[0]);
@@ -209,7 +235,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setPlanName('Vida Entera / Cobertura Total');
       setBeneficiaries('');
 
-      // Vehicular
+      // Vehicular o Motor
       setBrand('');
       setModel('');
       setYear(new Date().getFullYear().toString());
@@ -228,6 +254,9 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setInstallmentsFrequency('trimestral');
       setCurrency('DOP');
       setNotes('');
+      setRecordInitialPayment(false);
+      setInitialReference('');
+      setInitialPaymentDate(today);
     }
   }, [policyToEdit, isOpen]);
 
@@ -298,8 +327,8 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       alert('Por favor indica el nombre del cliente o contratante.');
       return;
     }
-    if (category === 'vehicular' && !plate.trim() && !vin.trim()) {
-      alert('Por favor indica la Placa o el Número de Chasis (VIN) del vehículo.');
+    if ((category === 'vehicular' || category === 'motor') && !plate.trim() && !vin.trim()) {
+      alert(`Por favor indica la Placa o el Número de Chasis (VIN) del ${category === 'motor' ? 'motor / motocicleta' : 'vehículo'}.`);
       return;
     }
     if (category === 'vida' && !insuredPersonName.trim() && !clientName.trim()) {
@@ -317,8 +346,59 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
           ...inst,
           status: policyToEdit.installments[idx]?.status || 'pendiente',
           paid_at: policyToEdit.installments[idx]?.paid_at,
-          payment_method: policyToEdit.installments[idx]?.payment_method
+          payment_method: policyToEdit.installments[idx]?.payment_method,
+          reference: policyToEdit.installments[idx]?.reference,
+          cash_movement_id: policyToEdit.installments[idx]?.cash_movement_id
         }));
+      }
+
+      // Si se marcó el pago inicial inmediato al crear una nueva póliza, generar movimiento de caja
+      if (!policyToEdit && recordInitialPayment && finalInstallments.length > 0) {
+        const isAnualPlan = paymentPlan === 'anual';
+        const payAmount = isAnualPlan ? premiumValue : finalInstallments[0].amount;
+        const selectedBank = bankAccounts.find(b => b.id === initialBankId) || bankAccounts[0];
+        const categoryLabel = category === 'motor' ? 'Motor' : category === 'vida' ? 'Vida' : 'Vehicular';
+        const concept = `Pago Póliza Seguro ${categoryLabel} #${policyNumber.trim().toUpperCase()} (${isAnualPlan ? 'Pago Anual' : 'Cuota #1'}) - Cliente: ${clientName.trim()}`;
+
+        try {
+          const newMov = await createCashMovement({
+            type: 'Ingreso',
+            amount: payAmount,
+            concept,
+            payment_method: initialPaymentMethod,
+            bank_account_id: initialPaymentMethod === 'Transferencia' ? selectedBank?.id : undefined,
+            bank_account_name: initialPaymentMethod === 'Transferencia' ? `${selectedBank?.bankName} (${selectedBank?.accountNumber})` : undefined,
+            reference: initialReference.trim() || undefined,
+            register_name: 'Caja 1 - Repuestos'
+          });
+
+          if (isAnualPlan) {
+            finalInstallments = finalInstallments.map(inst => ({
+              ...inst,
+              status: 'pagada' as const,
+              paid_at: initialPaymentDate,
+              payment_method: initialPaymentMethod,
+              reference: initialReference.trim() || undefined,
+              cash_movement_id: newMov.id
+            }));
+          } else {
+            finalInstallments = finalInstallments.map((inst, idx) => {
+              if (idx === 0) {
+                return {
+                  ...inst,
+                  status: 'pagada' as const,
+                  paid_at: initialPaymentDate,
+                  payment_method: initialPaymentMethod,
+                  reference: initialReference.trim() || undefined,
+                  cash_movement_id: newMov.id
+                };
+              }
+              return inst;
+            });
+          }
+        } catch (movErr) {
+          console.error('Error generando movimiento de caja inicial:', movErr);
+        }
       }
 
       const finalPaymentPlan = paymentPlan === 'anual' ? 'anual' : (installmentsCount === 4 ? 'cuotas_4' : `cuotas_${installmentsCount}`);
@@ -335,7 +415,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         installments: finalInstallments,
         start_date: startDate,
         expiration_date: expirationDate,
-        vehicle: category === 'vehicular' ? {
+        vehicle: (category === 'vehicular' || category === 'motor') ? {
           brand: brand.trim(),
           model: model.trim(),
           year: year.trim(),
@@ -411,25 +491,38 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           
-          {/* Selector de Tipo de Seguro: Vehicular vs Vida */}
+          {/* Selector de Tipo de Seguro: Vehicular vs Motores vs Vida */}
           <div className="bg-gray-100 dark:bg-zinc-800/80 p-1.5 rounded-2xl flex items-center gap-1.5 border border-gray-200/80 dark:border-zinc-700/60 shadow-2xs">
             <button
               type="button"
               onClick={() => handleCategoryChange('vehicular')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 category === 'vehicular'
                   ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs border border-gray-200/60 dark:border-zinc-700'
                   : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
               }`}
             >
               <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-              <span>Seguro Vehicular / Maquinaria</span>
+              <span>Vehicular / Pesado</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleCategoryChange('motor')}
+              className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                category === 'motor'
+                  ? 'bg-white dark:bg-zinc-900 text-amber-700 dark:text-amber-400 shadow-xs border border-amber-200/60 dark:border-amber-900/40'
+                  : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
+              }`}
+            >
+              <MotorIcon className="w-4 h-4 text-amber-600" />
+              <span>Motores (Motocicletas)</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleCategoryChange('vida')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 category === 'vida'
                   ? 'bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-xs border border-rose-200/60 dark:border-rose-900/40'
                   : 'text-gray-500 hover:text-gray-900 dark:text-zinc-400 dark:hover:text-white'
@@ -445,10 +538,12 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
               {category === 'vida' ? (
                 <HeartIcon className="w-4 h-4 text-rose-500" />
+              ) : category === 'motor' ? (
+                <MotorIcon className="w-4 h-4 text-amber-600" />
               ) : (
                 <ShieldCheckIcon className="w-4 h-4 text-[#ED1C24]" />
               )}
-              <span>1. Aseguradora & Póliza {category === 'vida' ? '(Seguro de Vida)' : '(Vehicular)'}</span>
+              <span>1. Aseguradora & Póliza {category === 'vida' ? '(Seguro de Vida)' : category === 'motor' ? '(Motores / Motocicletas)' : '(Vehicular)'}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
@@ -484,7 +579,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                 </label>
                 <input
                   type="text"
-                  placeholder={category === 'vida' ? 'Ej: VID-2026-0041' : 'Ej: POL-2026-9810'}
+                  placeholder={category === 'vida' ? 'Ej: VID-2026-0041' : category === 'motor' ? 'Ej: MOT-2026-0512' : 'Ej: POL-2026-9810'}
                   value={policyNumber}
                   onChange={(e) => setPolicyNumber(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -657,10 +752,14 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
             <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800/60">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                  <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
-                  <span>3. Datos del Vehículo Asegurado</span>
+                  {category === 'motor' ? (
+                    <MotorIcon className="w-4 h-4 text-amber-600" />
+                  ) : (
+                    <TruckIcon className="w-4 h-4 text-[#ED1C24]" />
+                  )}
+                  <span>3. Datos del {category === 'motor' ? 'Motor / Motocicleta Asegurada' : 'Vehículo Asegurado'}</span>
                 </div>
-                {realVehicles.length > 0 && (
+                {realVehicles.length > 0 && category !== 'motor' && (
                   <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-zinc-400">
                     <select
                       onChange={handleSelectRealVehicle}
@@ -684,7 +783,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   </label>
                   <input
                     type="text"
-                    placeholder="Mack, Freightliner..."
+                    placeholder={category === 'motor' ? 'Honda, Yamaha, Suzuki, Tauro...' : 'Mack, Freightliner...'}
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -698,7 +797,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   </label>
                   <input
                     type="text"
-                    placeholder="Pinnacle, Cascadia..."
+                    placeholder={category === 'motor' ? 'CG 150, AX 100, Super Cub...' : 'Pinnacle, Cascadia...'}
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -728,13 +827,26 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                     onChange={(e) => setVehicleType(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                   >
-                    <option value="Camión">Camión</option>
-                    <option value="Cabezote">Cabezote</option>
-                    <option value="Volteo">Volteo</option>
-                    <option value="Remolque">Remolque</option>
-                    <option value="Camioneta">Camioneta</option>
-                    <option value="Jeepeta">Jeepeta / SUV</option>
-                    <option value="Equipo Pesado">Equipo Pesado</option>
+                    {category === 'motor' ? (
+                      <>
+                        <option value="Motor / Motocicleta">Motor / Motocicleta</option>
+                        <option value="Pasola / Scooter">Pasola / Scooter</option>
+                        <option value="Four Wheel / Cuatrimoto">Four Wheel / Cuatrimoto</option>
+                        <option value="Moto de Carga / Trimoto">Moto de Carga / Trimoto</option>
+                        <option value="Otro">Otro Tipo de Motor</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Camión">Camión</option>
+                        <option value="Cabezote">Cabezote</option>
+                        <option value="Volteo">Volteo</option>
+                        <option value="Remolque">Remolque</option>
+                        <option value="Camioneta">Camioneta</option>
+                        <option value="Jeepeta">Jeepeta / SUV</option>
+                        <option value="Equipo Pesado">Equipo Pesado</option>
+                        <option value="Motor / Motocicleta">Motor / Motocicleta</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -744,7 +856,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   </label>
                   <input
                     type="text"
-                    placeholder="L384910"
+                    placeholder={category === 'motor' ? 'K0123456' : 'L384910'}
                     value={plate}
                     onChange={(e) => setPlate(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -757,7 +869,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   </label>
                   <input
                     type="text"
-                    placeholder="1M1AN07Y5NN012891"
+                    placeholder={category === 'motor' ? 'LC6PCJ8... / Chasis del Motor' : '1M1AN07Y5NN012891'}
                     value={vin}
                     onChange={(e) => setVin(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-mono font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -771,7 +883,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   </label>
                   <input
                     type="text"
-                    placeholder="Blanco, Azul..."
+                    placeholder="Blanco, Azul, Rojo, Negro..."
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
                     className="w-full px-3 py-2 bg-gray-50 dark:bg-zinc-800/80 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
@@ -970,6 +1082,92 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                 ))}
               </div>
             </div>
+
+            {/* Registro Inmediato de Pago Inicial & Generación de Movimiento */}
+            {!policyToEdit && (
+              <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-2xl space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recordInitialPayment}
+                    onChange={(e) => setRecordInitialPayment(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 rounded text-[#ED1C24] focus:ring-[#ED1C24] border-gray-300 dark:border-zinc-700 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <BanknotesIcon className="w-4 h-4 text-emerald-600" />
+                      ¿Registrar {paymentPlan === 'anual' ? 'el pago total' : 'el pago de la primera cuota'} inmediatamente?
+                    </span>
+                    <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 font-medium mt-0.5">
+                      Al marcar esta casilla, se registrará el pago y se generará automáticamente un movimiento de ingreso en Caja/Bancos por RD$ {(paymentPlan === 'anual' ? (typeof annualPremium === 'number' ? annualPremium : 0) : (previewInstallments[0]?.amount || 0)).toLocaleString('es-DO', { minimumFractionDigits: 2 })}.
+                    </p>
+                  </div>
+                </label>
+
+                {recordInitialPayment && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-900/30 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                        Método de Pago *
+                      </label>
+                      <select
+                        value={initialPaymentMethod}
+                        onChange={(e) => setInitialPaymentMethod(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl font-bold text-gray-900 dark:text-white"
+                      >
+                        <option value="Efectivo">Efectivo (Caja 1 - Repuestos)</option>
+                        <option value="Transferencia">Transferencia Bancaria</option>
+                        <option value="Tarjeta">Tarjeta de Crédito / Débito</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                        Fecha del Pago
+                      </label>
+                      <input
+                        type="date"
+                        value={initialPaymentDate}
+                        onChange={(e) => setInitialPaymentDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-gray-900 dark:text-white"
+                      />
+                    </div>
+
+                    {initialPaymentMethod === 'Transferencia' && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                          Cuenta Bancaria Destino *
+                        </label>
+                        <select
+                          value={initialBankId}
+                          onChange={(e) => setInitialBankId(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl font-bold text-gray-900 dark:text-white"
+                        >
+                          {bankAccounts.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.bankName} - {b.accountType} ({b.accountNumber})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-gray-700 dark:text-zinc-300 mb-1">
+                        Comprobante / Referencia (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Transf. #981240 / Recibo #401"
+                        value={initialReference}
+                        onChange={(e) => setInitialReference(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl font-medium text-gray-900 dark:text-white placeholder:text-gray-400"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Notas */}

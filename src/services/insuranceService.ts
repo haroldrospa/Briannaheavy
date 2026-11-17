@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-export type PolicyCategory = 'vehicular' | 'vida';
+export type PolicyCategory = 'vehicular' | 'motor' | 'vida';
 
 export interface VehicleData {
   brand: string;
@@ -27,6 +27,19 @@ export const LIFE_INSURANCE_COMPANIES = [
   'Humano'
 ];
 
+export const MOTOR_INSURANCE_COMPANIES = [
+  'Monumental de Seguros',
+  'Seguros Pepín',
+  'Seguros Sura',
+  'La Colonial de Seguros',
+  'Mapfre BHD Seguros',
+  'Seguros Universal',
+  'Seguros Reservas',
+  'Humano Seguros',
+  'General de Seguros',
+  'Angloamericana de Seguros'
+];
+
 export const VEHICLE_INSURANCE_COMPANIES = [
   'Seguros Universal',
   'Mapfre BHD Seguros',
@@ -48,6 +61,7 @@ export interface InsuranceInstallment {
   paid_at?: string;
   payment_method?: 'Efectivo' | 'Transferencia' | 'Tarjeta' | string;
   reference?: string;
+  cash_movement_id?: string;
 }
 
 export interface InsurancePolicy {
