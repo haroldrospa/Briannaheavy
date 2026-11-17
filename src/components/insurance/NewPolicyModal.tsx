@@ -218,6 +218,21 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setCurrency(policyToEdit.currency || 'DOP');
       setNotes(policyToEdit.notes || '');
       setRecordInitialPayment(false);
+
+      if (policyToEdit.installments && policyToEdit.installments.length > 0) {
+        setInstallments(policyToEdit.installments);
+        setHasManuallyEditedInstallments(true);
+      } else {
+        const init = generateDefaultInstallments(
+          policyToEdit.annual_premium || 0,
+          isAnual ? 'anual' : 'cuotas',
+          count,
+          count === 4 ? 'trimestral' : 'mensual',
+          policyToEdit.start_date
+        );
+        setInstallments(init);
+        setHasManuallyEditedInstallments(false);
+      }
     } else {
       setCategory('vehicular');
       setInsuranceCompany(VEHICLE_INSURANCE_COMPANIES[0]);
@@ -257,58 +272,150 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
       setRecordInitialPayment(false);
       setInitialReference('');
       setInitialPaymentDate(today);
+
+      const init = generateDefaultInstallments(45000, 'cuotas', 4, 'trimestral', today);
+      setInstallments(init);
+      setHasManuallyEditedInstallments(false);
     }
   }, [policyToEdit, isOpen]);
 
-  // Generar cuotas precalculadas dinámicas
-  const previewInstallments = useMemo(() => {
-    const total = typeof annualPremium === 'number' ? annualPremium : 0;
-    if (total <= 0) return [];
+  // Cuotas editables manualmente
+  const [installments, setInstallments] = useState<InsuranceInstallment[]>([]);
+  const [hasManuallyEditedInstallments, setHasManuallyEditedInstallments] = useState(false);
 
-    if (paymentPlan === 'anual') {
+  function generateDefaultInstallments(
+    total: number,
+    plan: 'anual' | 'cuotas',
+    count: number,
+    freq: 'mensual' | 'quincenal' | 'bimestral' | 'trimestral' | 'semestral',
+    start: string
+  ): InsuranceInstallment[] {
+    if (total <= 0) return [];
+    if (plan === 'anual') {
       return [
         {
           number: 1,
-          due_date: startDate || new Date().toISOString().slice(0, 10),
+          due_date: start || new Date().toISOString().slice(0, 10),
           amount: total,
           status: 'pendiente' as const
         }
       ];
     }
 
-    const count = Math.max(1, Math.min(60, Number(installmentsCount) || 1));
-    const baseAmount = Math.floor((total / count) * 100) / 100;
-    const remainder = Math.round((total - (baseAmount * count)) * 100) / 100;
+    const n = Math.max(1, Math.min(60, Number(count) || 1));
+    const baseAmount = Math.floor((total / n) * 100) / 100;
+    const remainder = Math.round((total - (baseAmount * n)) * 100) / 100;
 
     const items: InsuranceInstallment[] = [];
-    const baseDate = new Date(startDate || new Date().toISOString().slice(0, 10));
+    const baseDate = new Date(start || new Date().toISOString().slice(0, 10));
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < n; i++) {
       const d = new Date(baseDate);
-      if (installmentsFrequency === 'quincenal') {
+      if (freq === 'quincenal') {
         d.setDate(d.getDate() + (i * 15));
-      } else if (installmentsFrequency === 'bimestral') {
+      } else if (freq === 'bimestral') {
         d.setMonth(d.getMonth() + (i * 2));
-      } else if (installmentsFrequency === 'trimestral') {
+      } else if (freq === 'trimestral') {
         d.setMonth(d.getMonth() + (i * 3));
-      } else if (installmentsFrequency === 'semestral') {
+      } else if (freq === 'semestral') {
         d.setMonth(d.getMonth() + (i * 6));
       } else {
-        // mensual default
         d.setMonth(d.getMonth() + i);
       }
 
-      const amount = i === count - 1 ? Math.round((baseAmount + remainder) * 100) / 100 : baseAmount;
+      const amount = i === n - 1 ? Math.round((baseAmount + remainder) * 100) / 100 : baseAmount;
 
       items.push({
         number: i + 1,
-        due_date: !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : startDate,
+        due_date: !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : start,
         amount,
         status: 'pendiente'
       });
     }
     return items;
-  }, [annualPremium, paymentPlan, installmentsCount, installmentsFrequency, startDate]);
+  }
+
+  // Auto-calcular cuotas si el usuario no las ha editado manualmente y no es edición de póliza
+  useEffect(() => {
+    if (!hasManuallyEditedInstallments && !policyToEdit && isOpen) {
+      const total = typeof annualPremium === 'number' ? annualPremium : 0;
+      setInstallments(generateDefaultInstallments(total, paymentPlan, installmentsCount, installmentsFrequency, startDate));
+    }
+  }, [annualPremium, paymentPlan, installmentsCount, installmentsFrequency, startDate, hasManuallyEditedInstallments, policyToEdit, isOpen]);
+
+  const totalFromInstallments = useMemo(() => {
+    return Math.round(installments.reduce((sum, inst) => sum + (Number(inst.amount) || 0), 0) * 100) / 100;
+  }, [installments]);
+
+  const handleInstallmentAmountChange = (index: number, newAmount: number) => {
+    setHasManuallyEditedInstallments(true);
+    setInstallments(prev => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], amount: Math.max(0, newAmount) };
+      }
+      return next;
+    });
+  };
+
+  const handleInstallmentDateChange = (index: number, newDate: string) => {
+    setHasManuallyEditedInstallments(true);
+    setInstallments(prev => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], due_date: newDate };
+      }
+      return next;
+    });
+  };
+
+  const handleSyncPremiumWithInstallments = () => {
+    setAnnualPremium(totalFromInstallments);
+  };
+
+  const handleRedistributeEvenly = () => {
+    const total = typeof annualPremium === 'number' ? annualPremium : 0;
+    const generated = generateDefaultInstallments(total, paymentPlan, installmentsCount, installmentsFrequency, startDate);
+    const merged = generated.map((inst, idx) => ({
+      ...inst,
+      status: installments[idx]?.status || 'pendiente',
+      paid_at: installments[idx]?.paid_at,
+      payment_method: installments[idx]?.payment_method,
+      reference: installments[idx]?.reference,
+      cash_movement_id: installments[idx]?.cash_movement_id
+    }));
+    setInstallments(merged);
+    setHasManuallyEditedInstallments(false);
+  };
+
+  const handleCountChange = (newCount: number) => {
+    const validCount = Math.max(1, Math.min(60, newCount));
+    setInstallmentsCount(validCount);
+    if (!hasManuallyEditedInstallments) {
+      const total = typeof annualPremium === 'number' ? annualPremium : 0;
+      setInstallments(generateDefaultInstallments(total, paymentPlan, validCount, installmentsFrequency, startDate));
+    } else {
+      setInstallments(prev => {
+        if (validCount > prev.length) {
+          const added: InsuranceInstallment[] = [];
+          for (let i = prev.length; i < validCount; i++) {
+            const lastDate = prev[i - 1]?.due_date ? new Date(prev[i - 1].due_date) : new Date();
+            lastDate.setMonth(lastDate.getMonth() + 1);
+            added.push({
+              number: i + 1,
+              due_date: !isNaN(lastDate.getTime()) ? lastDate.toISOString().slice(0, 10) : startDate,
+              amount: 0,
+              status: 'pendiente'
+            });
+          }
+          return [...prev, ...added];
+        } else if (validCount < prev.length) {
+          return prev.slice(0, validCount);
+        }
+        return prev;
+      });
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -340,22 +447,17 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
     try {
       const premiumValue = typeof annualPremium === 'number' ? annualPremium : 0;
 
-      let finalInstallments = previewInstallments;
-      if (policyToEdit && policyToEdit.installments && policyToEdit.installments.length === previewInstallments.length) {
-        finalInstallments = previewInstallments.map((inst, idx) => ({
-          ...inst,
-          status: policyToEdit.installments[idx]?.status || 'pendiente',
-          paid_at: policyToEdit.installments[idx]?.paid_at,
-          payment_method: policyToEdit.installments[idx]?.payment_method,
-          reference: policyToEdit.installments[idx]?.reference,
-          cash_movement_id: policyToEdit.installments[idx]?.cash_movement_id
-        }));
-      }
+      let finalInstallments = installments.map((inst, idx) => ({
+        ...inst,
+        number: idx + 1,
+        amount: Number(inst.amount) || 0,
+        status: inst.status || 'pendiente'
+      }));
 
       // Si se marcó el pago inicial inmediato al crear una nueva póliza, generar movimiento de caja
       if (!policyToEdit && recordInitialPayment && finalInstallments.length > 0) {
         const isAnualPlan = paymentPlan === 'anual';
-        const payAmount = isAnualPlan ? premiumValue : finalInstallments[0].amount;
+        const payAmount = isAnualPlan ? (totalFromInstallments || premiumValue) : finalInstallments[0].amount;
         const selectedBank = bankAccounts.find(b => b.id === initialBankId) || bankAccounts[0];
         const categoryLabel = category === 'motor' ? 'Motor' : category === 'vida' ? 'Vida' : 'Vehicular';
         const concept = `Pago Póliza Seguro ${categoryLabel} #${policyNumber.trim().toUpperCase()} (${isAnualPlan ? 'Pago Anual' : 'Cuota #1'}) - Cliente: ${clientName.trim()}`;
@@ -957,13 +1059,14 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                     const val = e.target.value;
                     if (val === 'anual') {
                       setPaymentPlan('anual');
+                      handleCountChange(1);
                     } else if (val === 'custom') {
                       setPaymentPlan('cuotas');
                     } else {
                       setPaymentPlan('cuotas');
                       const parsed = parseInt(val, 10);
                       if (!isNaN(parsed)) {
-                        setInstallmentsCount(parsed);
+                        handleCountChange(parsed);
                         if (parsed === 2) setInstallmentsFrequency('semestral');
                         else if (parsed === 3) setInstallmentsFrequency('trimestral');
                         else if (parsed === 4) setInstallmentsFrequency('trimestral');
@@ -1002,7 +1105,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setInstallmentsCount(prev => Math.max(1, prev - 1))}
+                      onClick={() => handleCountChange(installmentsCount - 1)}
                       className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-base flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
                       title="Disminuir cuota"
                     >
@@ -1015,14 +1118,14 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                       value={installmentsCount}
                       onChange={(e) => {
                         const val = parseInt(e.target.value, 10);
-                        setInstallmentsCount(isNaN(val) ? 1 : Math.max(1, Math.min(60, val)));
+                        handleCountChange(isNaN(val) ? 1 : val);
                       }}
                       className="flex-1 px-3 py-2 text-center bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-black text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
                       required
                     />
                     <button
                       type="button"
-                      onClick={() => setInstallmentsCount(prev => Math.min(60, prev + 1))}
+                      onClick={() => handleCountChange(installmentsCount + 1)}
                       className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-zinc-200 font-black text-base flex items-center justify-center hover:bg-gray-100 dark:hover:bg-zinc-700 active:scale-95 transition-all shadow-xs cursor-pointer"
                       title="Aumentar cuota"
                     >
@@ -1051,33 +1154,114 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
               </div>
             )}
 
-            {/* Vista previa de Cuotas Generadas */}
-            <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-xs font-bold text-gray-500 dark:text-zinc-400">
-                  Desglose de Cuotas ({previewInstallments.length} {previewInstallments.length === 1 ? 'Cuota' : 'Cuotas'} • {paymentPlan === 'anual' ? '1 Pago Único' : installmentsFrequency.charAt(0).toUpperCase() + installmentsFrequency.slice(1)}):
-                </span>
-                <span className="text-xs font-black text-gray-900 dark:text-white">
-                  Total: {currency === 'DOP' ? 'RD$' : 'US$'} {(typeof annualPremium === 'number' ? annualPremium : 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                </span>
+            {/* Vista interactiva de Cuotas Editables */}
+            <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-gray-200/80 dark:border-zinc-700/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                      Desglose de Cuotas ({installments.length} {installments.length === 1 ? 'Cuota' : 'Cuotas'})
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                      Montos Editables
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 mt-0.5">
+                    Puedes ajustar libremente el monto y la fecha de cada cuota si no coinciden exactamente con la tabla de la aseguradora.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRedistributeEvenly}
+                  className="self-start sm:self-auto px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:text-gray-900 dark:hover:text-white text-[11px] font-bold shadow-2xs hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-all"
+                  title="Dividir la prima anual equitativamente entre las cuotas"
+                >
+                  ⟳ Dividir Equitativo
+                </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                {previewInstallments.map((inst) => (
+
+              {/* Indicador de Suma vs Prima */}
+              <div className="p-2.5 bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                    Suma de Cuotas: <strong className="font-mono text-gray-900 dark:text-white font-black">{currency === 'DOP' ? 'RD$' : 'US$'} {totalFromInstallments.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                  </span>
+                  <span className="text-gray-300 dark:text-zinc-600">•</span>
+                  <span className="text-gray-500 dark:text-zinc-400 font-medium">
+                    Prima Configurada: <strong className="font-mono text-gray-900 dark:text-white font-black">{currency === 'DOP' ? 'RD$' : 'US$'} {(typeof annualPremium === 'number' ? annualPremium : 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>
+                  </span>
+                </div>
+
+                {Math.abs(totalFromInstallments - (typeof annualPremium === 'number' ? annualPremium : 0)) > 0.05 && (
+                  <button
+                    type="button"
+                    onClick={handleSyncPremiumWithInstallments}
+                    className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-black hover:bg-amber-100 transition-colors cursor-pointer"
+                  >
+                    ⚡ Ajustar Prima a {currency === 'DOP' ? 'RD$' : 'US$'} {totalFromInstallments.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+                  </button>
+                )}
+              </div>
+
+              {/* Grid de Cuotas Editables */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                {installments.map((inst, index) => (
                   <div 
                     key={inst.number}
-                    className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-gray-200 dark:border-zinc-700/60 flex flex-col justify-between"
+                    className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 transition-all ${
+                      inst.status === 'pagada'
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700/80 shadow-2xs'
+                    }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black text-gray-600 dark:text-zinc-300">
-                        Cuota #{inst.number}
-                      </span>
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-zinc-500">
-                        {inst.due_date}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 flex items-center justify-center font-black text-[10px]">
+                          #{inst.number}
+                        </span>
+                        <span className="text-xs font-bold text-gray-800 dark:text-zinc-200">
+                          Cuota #{inst.number}
+                        </span>
+                      </div>
+
+                      {inst.status === 'pagada' && (
+                        <span className="text-[9.5px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                          ✓ Pagada
+                        </span>
+                      )}
                     </div>
-                    <span className="text-sm font-black text-gray-900 dark:text-white mt-1">
-                      {currency === 'DOP' ? 'RD$' : 'US$'} {inst.amount.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
-                    </span>
+
+                    {/* Fecha de vencimiento editable */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-400 font-medium shrink-0">Vence:</span>
+                      <input
+                        type="date"
+                        value={inst.due_date}
+                        onChange={(e) => handleInstallmentDateChange(index, e.target.value)}
+                        className="flex-1 px-2 py-1 bg-gray-50 dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 rounded-lg text-xs font-mono font-bold text-gray-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-[#ED1C24]/30"
+                      />
+                    </div>
+
+                    {/* Monto editable */}
+                    <div>
+                      <label className="block text-[9.5px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
+                        Monto de Cuota *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1.5 text-xs font-bold text-gray-400">
+                          {currency === 'DOP' ? 'RD$' : 'US$'}
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={inst.amount}
+                          onChange={(e) => handleInstallmentAmountChange(index, parseFloat(e.target.value) || 0)}
+                          className="w-full pl-10 pr-2.5 py-1.5 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm font-black font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ED1C24]/30"
+                          required
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1099,7 +1283,7 @@ export default function NewPolicyModal({ isOpen, onClose, onSuccess, policyToEdi
                       ¿Registrar {paymentPlan === 'anual' ? 'el pago total' : 'el pago de la primera cuota'} inmediatamente?
                     </span>
                     <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 font-medium mt-0.5">
-                      Al marcar esta casilla, se registrará el pago y se generará automáticamente un movimiento de ingreso en Caja/Bancos por RD$ {(paymentPlan === 'anual' ? (typeof annualPremium === 'number' ? annualPremium : 0) : (previewInstallments[0]?.amount || 0)).toLocaleString('es-DO', { minimumFractionDigits: 2 })}.
+                      Al marcar esta casilla, se registrará el pago y se generará automáticamente un movimiento de ingreso en Caja/Bancos por RD$ {(paymentPlan === 'anual' ? (typeof annualPremium === 'number' ? annualPremium : 0) : (installments[0]?.amount || 0)).toLocaleString('es-DO', { minimumFractionDigits: 2 })}.
                     </p>
                   </div>
                 </label>
