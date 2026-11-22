@@ -22,7 +22,6 @@ import { fetchInvoices, getLocalStorageInvoices, isQuotationInvoice, isAbonoInvo
 import { fetchAllFinancingReceipts } from '../../services/financingReceiptsService';
 import { getCompanyBankAccounts, type CompanyBankAccount, getCompanyCreditCards, type CompanyCreditCard } from '../../utils/receiptSettings';
 import { getActiveShift, filterMovementsByShift, isMovementOfUser } from '../../services/shiftsService';
-import logo from '../../assets/logo.png';
 
 interface CashMovementModalProps {
   isOpen: boolean;
@@ -43,6 +42,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
   const [reference, setReference] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [concept, setConcept] = useState<string>('');
+  const [customerName, setCustomerName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // History and session states
@@ -441,6 +441,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
         type,
         amount: parsedAmount,
         concept: concept.trim(),
+        customer_name: customerName.trim() || undefined,
         payment_method: paymentMethod,
         bank_account_id: entityId,
         bank_account_name: entityLabel,
@@ -456,6 +457,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
       // Limpiar campos para el siguiente registro
       setAmount('');
       setConcept('');
+      setCustomerName('');
       setReference('');
     } finally {
       setIsSubmitting(false);
@@ -484,10 +486,10 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
           <div className="flex justify-between items-start mb-2.5">
             <div>
               <div className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-zinc-500">
-                Brianna Heavy Equipment • {registerScope === 'todas' ? 'Todas las Cajas' : activeRegisterName}
+                Brianna Heavy Equipment • {registerScope === 'todas' ? 'Todas las Cajas' : activeRegisterName} • Sin Logo
               </div>
               <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
-                {activeTab === 'form' ? `Movimiento de Fondos (${type})` : 'Historial de Movimientos'}
+                {activeTab === 'form' ? `Generar Factura Manual (${type === 'Ingreso' ? 'Recibir Dinero' : 'Pagar'})` : 'Historial de Facturas y Movimientos'}
               </h3>
             </div>
             <button 
@@ -563,7 +565,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                       className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
                     >
                       <PrinterIcon className="w-4 h-4" />
-                      <span>Imprimir Constancia</span>
+                      <span>Imprimir Factura / Recibo (Sin Logo)</span>
                     </button>
                     <button
                       type="button"
@@ -599,7 +601,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     }`}
                   >
                     <ArrowDownCircleIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Ingreso de Fondos</span>
+                    <span>Recibir Dinero (Ingreso)</span>
                   </button>
                   <button
                     type="button"
@@ -611,7 +613,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     }`}
                   >
                     <ArrowUpCircleIcon className="h-4 w-4 stroke-[2.5]" />
-                    <span>Egreso / Gasto</span>
+                    <span>Pagar Dinero (Egreso)</span>
                   </button>
                 </div>
               </div>
@@ -838,7 +840,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
               {/* Monto */}
               <div>
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">
-                  3. Monto del Movimiento (RD$)
+                  3. Monto de la Factura / Movimiento (RD$)
                 </label>
                 <input
                   type="text"
@@ -851,10 +853,24 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 />
               </div>
 
+              {/* Cliente / Proveedor / Beneficiario */}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">
+                  4. {type === 'Ingreso' ? 'Cliente / Recibido de (Opcional)' : 'Beneficiario / Suplidor / Pagado a (Opcional)'}
+                </label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="block w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white dark:placeholder-zinc-500 border-none rounded-xl focus:ring-2 focus:ring-[#ED1C24]/30 transition-all font-bold text-xs outline-none"
+                  placeholder={type === 'Ingreso' ? 'Ej. Juan Pérez / Empresa XYZ...' : 'Ej. Suplidor / Proveedor ABC / Chofer...'}
+                />
+              </div>
+
               {/* Concepto */}
               <div>
                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">
-                  4. Concepto / Descripción del Movimiento
+                  5. Concepto / Detalle de la Factura
                 </label>
                 <input
                   type="text"
@@ -862,7 +878,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                   value={concept}
                   onChange={(e) => setConcept(e.target.value)}
                   className="block w-full px-4 py-2.5 bg-[#f4f3f1] dark:bg-[#222222] text-gray-900 dark:text-white dark:placeholder-zinc-500 border-none rounded-xl focus:ring-2 focus:ring-[#ED1C24]/30 transition-all font-bold text-xs outline-none"
-                  placeholder={type === 'Ingreso' ? 'Ej. Cobro de cuota, aporte de capital, devolución...' : 'Ej. Pago de combustible, almuerzo de personal, compra de repuestos, pago suplidor...'}
+                  placeholder={type === 'Ingreso' ? 'Ej. Cobro de servicios, pago de cliente, abono...' : 'Ej. Pago de combustible, compra de repuestos, pago suplidor, almuerzo...'}
                 />
               </div>
 
@@ -883,7 +899,7 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                       : 'bg-[#ED1C24] hover:bg-red-700 shadow-red-900/20'
                   }`}
                 >
-                  {isSubmitting ? 'Guardando...' : `Registrar ${type}`}
+                  {isSubmitting ? 'Generando...' : type === 'Ingreso' ? 'Generar Factura de Ingreso' : 'Generar Comprobante de Pago'}
                 </button>
               </div>
             </form>
@@ -1306,16 +1322,13 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
       {selectedMovementForPrint && typeof document !== 'undefined' && createPortal(
         <div className="hidden print:block printable-movement bg-white text-black font-sans w-full max-w-full">
           <div className="max-w-2xl mx-auto border border-gray-300 p-8 rounded-xl">
-            {/* Cabecera de Empresa */}
+            {/* Cabecera de Empresa (Sin Logo) */}
             <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <img src={logo} alt="Brianna Heavy Equipment" className="h-14 w-auto object-contain" />
-                <div>
-                  <h1 className="text-xl font-black uppercase tracking-tight">Brianna Heavy Equipment</h1>
-                  <p className="text-xs font-bold text-gray-700">Repuestos, Maquinarias y Servicios Pesados</p>
-                  <p className="text-[11px] text-gray-600">RNC: 1-33-28687-3 • Tel: (809) 586-1234</p>
-                  <p className="text-[10px] text-gray-500">Santiago, República Dominicana</p>
-                </div>
+              <div>
+                <h1 className="text-xl font-black uppercase tracking-tight">Brianna Heavy Equipment</h1>
+                <p className="text-xs font-bold text-gray-700">Repuestos, Maquinarias y Servicios Pesados</p>
+                <p className="text-[11px] text-gray-600">RNC: 1-33-28687-3 • Tel: (809) 586-1234</p>
+                <p className="text-[10px] text-gray-500">Santiago, República Dominicana</p>
               </div>
               <div className="text-right">
                 <div className={`inline-block px-3 py-1 rounded text-xs font-black uppercase border ${
@@ -1323,10 +1336,10 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                     ? 'border-emerald-600 text-emerald-800 bg-emerald-50' 
                     : 'border-red-600 text-red-800 bg-red-50'
                 }`}>
-                  {selectedMovementForPrint.type === 'Ingreso' ? 'RECIBO DE INGRESO' : 'COMPROBANTE DE EGRESO'}
+                  {selectedMovementForPrint.type === 'Ingreso' ? 'RECIBO DE INGRESO / FACTURA' : 'COMPROBANTE DE EGRESO / PAGO'}
                 </div>
                 <div className="text-xs font-mono font-bold mt-2">
-                  No. MOV-{selectedMovementForPrint.id.slice(0, 8).toUpperCase()}
+                  No. REC-{selectedMovementForPrint.id.slice(0, 8).toUpperCase()}
                 </div>
                 <div className="text-[11px] text-gray-600 mt-0.5">
                   Fecha: {new Date(selectedMovementForPrint.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -1340,10 +1353,10 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
             {/* Título Oficial */}
             <div className="text-center mb-6">
               <h2 className="text-base font-black uppercase tracking-wider underline">
-                CONSTANCIA OFICIAL DE MOVIMIENTO DE FONDOS ({selectedMovementForPrint.type.toUpperCase()})
+                {selectedMovementForPrint.type === 'Ingreso' ? 'FACTURA / RECIBO DE INGRESO MANUAL' : 'FACTURA / COMPROBANTE DE PAGO MANUAL'}
               </h2>
               <p className="text-xs text-gray-600 mt-1">
-                Documento de control interno y auditoría de caja
+                Constancia oficial de fondos • Emisión manual sin logo
               </p>
             </div>
 
@@ -1376,6 +1389,15 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
                 <div className="pt-2 border-t border-gray-200 text-xs">
                   <span className="font-bold text-gray-600 block uppercase text-[10px]">Cuenta Bancaria:</span>
                   <span className="font-black text-gray-900">🏦 {selectedMovementForPrint.bank_account_name}</span>
+                </div>
+              )}
+
+              {selectedMovementForPrint.customer_name && (
+                <div className="pt-2 border-t border-gray-200 text-xs">
+                  <span className="font-bold text-gray-600 block uppercase text-[10px]">
+                    {selectedMovementForPrint.type === 'Ingreso' ? 'Recibido de (Cliente / Pagador):' : 'Pagado a (Beneficiario / Suplidor):'}
+                  </span>
+                  <span className="font-black text-gray-900 text-sm mt-0.5 block">{selectedMovementForPrint.customer_name}</span>
                 </div>
               )}
 
@@ -1434,16 +1456,13 @@ export default function CashMovementModal({ isOpen, onClose, onSuccess, defaultR
       {isPrintingSessionSummary && typeof document !== 'undefined' && createPortal(
         <div className="hidden print:block printable-movement bg-white text-black font-sans w-full max-w-full">
           <div className="max-w-3xl mx-auto">
-            {/* Cabecera Empresa */}
+            {/* Cabecera Empresa (Sin Logo) */}
             <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-4">
-              <div className="flex items-center gap-3">
-                <img src={logo} alt="Brianna Heavy Equipment" className="h-14 w-auto object-contain" />
-                <div>
-                  <h1 className="text-xl font-black uppercase tracking-tight">Brianna Heavy Equipment</h1>
-                  <p className="text-xs font-bold text-gray-700">Repuestos, Maquinarias y Servicios Pesados</p>
-                  <p className="text-[11px] text-gray-600">RNC: 1-33-28687-3 • Tel: (809) 586-1234</p>
-                  <p className="text-[10px] text-gray-500">Santiago, República Dominicana</p>
-                </div>
+              <div>
+                <h1 className="text-xl font-black uppercase tracking-tight">Brianna Heavy Equipment</h1>
+                <p className="text-xs font-bold text-gray-700">Repuestos, Maquinarias y Servicios Pesados</p>
+                <p className="text-[11px] text-gray-600">RNC: 1-33-28687-3 • Tel: (809) 586-1234</p>
+                <p className="text-[10px] text-gray-500">Santiago, República Dominicana</p>
               </div>
               <div className="text-right">
                 <div className="text-xs font-black uppercase tracking-wider text-gray-800">

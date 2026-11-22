@@ -197,6 +197,12 @@ export const fetchAllBankTransactions = async (): Promise<BankTransaction[]> => 
     if (isBankTxDeleted(txId, m.id)) return;
     if (seenIds.has(txId)) return;
 
+    // Si este movimiento de caja es un espejo de un movimiento bancario manual (creado por createDirectBankTransaction),
+    // no duplicarlo en la lista bancaria ya que ya está incluido desde manualTxs
+    if ((m.concept || '').startsWith('[Banco: ')) {
+      return;
+    }
+
     // Si el movimiento de caja hace referencia explícita a una factura específica, verificar si esa factura sigue existiendo
     const conceptLower = (m.concept || '').toLowerCase();
     const isInvoiceMove = conceptLower.includes('factura #') || conceptLower.includes('factura ');
@@ -567,7 +573,8 @@ export const createDirectBankTransaction = async (data: {
       bank_account_name: data.bank_account_name,
       reference: data.reference,
       register_name: 'Banco Empresarial',
-      created_by
+      created_by,
+      created_at: date
     });
   } catch (err) {
     console.warn('Error mirroring bank transaction to cash movements:', err);

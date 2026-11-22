@@ -5,6 +5,7 @@ export interface CashMovement {
   type: 'Ingreso' | 'Egreso' | 'Crédito';
   amount: number;
   concept: string;
+  customer_name?: string;
   payment_method?: 'Efectivo' | 'Transferencia' | string;
   bank_account_id?: string;
   bank_account_name?: string;
@@ -170,7 +171,7 @@ export const fetchCashMovements = async (forceRefresh = false): Promise<CashMove
 };
 
 export const createCashMovement = async (
-  movement: Omit<CashMovement, 'id' | 'created_at'>
+  movement: Omit<CashMovement, 'id' | 'created_at'> & { created_at?: string }
 ): Promise<CashMovement> => {
   const authorName = movement.created_by || (typeof window !== 'undefined' ? localStorage.getItem('brianna_user_name') : '') || 'Harold Rosado';
 
@@ -179,7 +180,7 @@ export const createCashMovement = async (
     id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     concept: movement.concept || (movement.type === 'Ingreso' ? 'Ingreso de Fondos' : 'Egreso / Gasto'),
     created_by: authorName,
-    created_at: new Date().toISOString(),
+    created_at: movement.created_at || new Date().toISOString(),
   };
 
   // 1. Guardar localmente DE INMEDIATO para asegurar persistencia 100% y 0ms latencia
@@ -198,6 +199,7 @@ export const createCashMovement = async (
       try {
         const formattedReason = [
           newMov.concept,
+          newMov.customer_name ? `[Cliente/Beneficiario: ${newMov.customer_name}]` : '',
           newMov.payment_method === 'Tarjeta' ? '[Tarjeta de Crédito]' : '',
           newMov.bank_account_name ? `(Banco: ${newMov.bank_account_name})` : '',
           newMov.reference ? `[Ref: ${newMov.reference}]` : '',

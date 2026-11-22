@@ -31,6 +31,15 @@ import CashMovementModal from '../components/finance/CashMovementModal';
 import BankReconciliationTab from '../components/banks/BankReconciliationTab';
 import logo from '../assets/logo.png';
 
+const toSafeDate = (dateVal?: string): Date => {
+  if (!dateVal) return new Date();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+    return new Date(`${dateVal}T12:00:00`);
+  }
+  const d = new Date(dateVal);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
+
 export default function Banks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentTab = searchParams.get('tab');
@@ -80,7 +89,7 @@ export default function Banks() {
 
   useEffect(() => {
     if (transactionToEdit) {
-      const d = new Date(transactionToEdit.date);
+      const d = toSafeDate(transactionToEdit.date);
       const pad = (n: number) => String(n).padStart(2, '0');
       const formattedDateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
@@ -292,7 +301,7 @@ export default function Banks() {
 
       // 4. Filtro por Fecha
       if (datePreset !== 'all') {
-        const txDate = new Date(tx.date);
+        const txDate = toSafeDate(tx.date);
         const now = new Date();
         if (datePreset === 'today') {
           const isToday = txDate.toDateString() === now.toDateString();
@@ -928,10 +937,10 @@ export default function Banks() {
                           {/* Fecha */}
                           <td className="py-2.5 px-3.5 whitespace-nowrap">
                             <span className="font-semibold text-zinc-900 dark:text-white block print:text-black">
-                              {new Date(tx.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {toSafeDate(tx.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </span>
                             <span className="text-[10px] text-zinc-400 block font-mono">
-                              {new Date(tx.date).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              {tx.date && tx.date.includes('T') ? toSafeDate(tx.date).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                             </span>
                           </td>
 
@@ -1273,7 +1282,7 @@ export default function Banks() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-500 dark:text-zinc-400 font-medium">Fecha:</span>
                 <span className="text-gray-700 dark:text-zinc-300">
-                  {new Date(transactionToDelete.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {toSafeDate(transactionToDelete.date).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
               {transactionToDelete.created_by && (

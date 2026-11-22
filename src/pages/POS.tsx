@@ -3674,15 +3674,15 @@ export default function POS() {
               )}
             </button>
 
-            {/* Movimientos de Caja */}
+            {/* Generar Factura Manual (Recibir Dinero o Pagar - Sin Logo) */}
             <button
               type="button"
               onClick={() => setIsCashMovementOpen(true)}
-              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
-              title="Movimientos de Caja"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap shadow-2xs border border-zinc-200/80 dark:border-zinc-700"
+              title="Generar Factura Manual de Recibir Dinero o Pagar (Sin logo)"
             >
-              <BanknotesIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
-              <span className="hidden sm:inline">Movimientos</span>
+              <DocumentTextIcon className="h-3.5 w-3.5 text-[#ED1C24] stroke-[2.2]" />
+              <span className="font-black">Generar Factura</span>
             </button>
 
             {/* Cierre de Caja / Abrir Turno */}

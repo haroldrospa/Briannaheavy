@@ -72,6 +72,17 @@ const MONTHS = [
   { value: '12', label: 'Diciembre' },
 ];
 
+// Helper para mostrar la fecha de manera exacta DD/MM/YYYY sin desfasajes de zona horaria
+const formatDisplayDate = (dStr: string) => {
+  if (!dStr) return '';
+  const clean = sanitizeBankText(dStr);
+  if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+    const parts = clean.slice(0, 10).split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return clean;
+};
+
 export default function BankReconciliationTab({
   bankAccounts,
   transactions,
@@ -173,6 +184,18 @@ export default function BankReconciliationTab({
   const [manualLineRef, setManualLineRef] = useState<string>('');
   const [manualLineType, setManualLineType] = useState<'Ingreso' | 'Egreso'>('Egreso');
   const [manualLineAmount, setManualLineAmount] = useState<string>('');
+
+  // Abrir modal de renglón manual asegurando que la fecha por defecto corresponda al período actual
+  const handleOpenManualLineModal = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const currentPeriod = today.slice(0, 7);
+    if (period === currentPeriod) {
+      setManualLineDate(today);
+    } else {
+      setManualLineDate(`${period}-15`);
+    }
+    setIsManualLineModalOpen(true);
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -555,15 +578,22 @@ export default function BankReconciliationTab({
           ? 'Gasto / Servicio'
           : 'Retiro / Pago';
 
+      // Asegurar fecha ISO con mediodía para evitar cualquier desplazamiento de fecha por zona horaria
+      const lineDateWithTime = line.date.includes('T') 
+        ? line.date 
+        : `${line.date}T12:00:00.000Z`;
+
+      const linePeriod = line.date.slice(0, 7) || period;
+
       const newTx = await createDirectBankTransaction({
         bank_account_id: selectedAccount.id,
         bank_account_name: selectedAccount.bankName,
         type: line.type,
         amount: line.amount,
         concept: line.concept,
-        reference: line.reference || `EXTR-${period}`,
+        reference: line.reference || `EXTR-${linePeriod}`,
         category,
-        date: line.date
+        date: lineDateWithTime
       });
 
       // Marcar ambos como conciliados
@@ -601,15 +631,42 @@ export default function BankReconciliationTab({
       status: 'pending'
     };
 
-    const nextLines = [newLine, ...statementLines];
-    setStatementLines(nextLines);
-    handleAutoSave(nextLines, reconciledBookTxIds, openingBalance, closingBalance);
+    const targetPeriod = manualLineDate.slice(0, 7); // "YYYY-MM"
+
+    if (targetPeriod !== period && selectedAccount?.id) {
+      // Si el usuario ingresó una fecha que corresponde a OTRO mes (ej. fecha del 2026-10 estando en 2026-11),
+      // se debe ubicar y guardar en el período correspondiente (targetPeriod) y navegar a ese mes.
+      const targetSaved = loadReconciliationData(selectedAccount.id, targetPeriod);
+      const existingLines = targetSaved?.statementLines || [];
+      const updatedTargetLines = [newLine, ...existingLines];
+
+      const targetRecord: BankReconciliationData = {
+        id: targetSaved?.id || `rec-${selectedAccount.id}-${targetPeriod}`,
+        bankAccountId: selectedAccount.id,
+        bankAccountName: selectedAccount.bankName,
+        period: targetPeriod,
+        openingBalance: targetSaved?.openingBalance || 0,
+        closingBalance: targetSaved?.closingBalance || 0,
+        statementLines: updatedTargetLines,
+        reconciledBookTxIds: targetSaved?.reconciledBookTxIds || [],
+        lastUpdated: new Date().toISOString()
+      };
+      saveReconciliationData(targetRecord);
+
+      // Cambiar automáticamente el período activo para que el usuario vea su renglón en la fecha/mes correspondiente
+      setPeriod(targetPeriod);
+      showFeedback('success', `Renglón añadido al extracto y ubicado en el período ${targetPeriod}.`);
+    } else {
+      const nextLines = [newLine, ...statementLines];
+      setStatementLines(nextLines);
+      handleAutoSave(nextLines, reconciledBookTxIds, openingBalance, closingBalance);
+      showFeedback('success', 'Renglón añadido al extracto bancario.');
+    }
 
     setIsManualLineModalOpen(false);
     setManualLineConcept('');
     setManualLineRef('');
     setManualLineAmount('');
-    showFeedback('success', 'Renglón añadido al extracto bancario.');
   };
 
   // 7. Eliminar renglón del extracto
@@ -854,7 +911,7 @@ export default function BankReconciliationTab({
                 {/* Herramientas Secundarias */}
                 <button
                   type="button"
-                  onClick={() => setIsManualLineModalOpen(true)}
+                  onClick={handleOpenManualLineModal}
                   className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-gray-100 hover:bg-gray-200/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl text-xs font-semibold transition-all cursor-pointer border border-gray-200/60 dark:border-zinc-700"
                   title="Agregar renglón manual al extracto"
                 >
@@ -1303,7 +1360,7 @@ export default function BankReconciliationTab({
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
-                          <span>{tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : ''}</span>
+                          <span>{tx.date ? formatDisplayDate(tx.date) : ''}</span>
                           {tx.reference && (
                             <>
                               <span>•</span>
@@ -1424,7 +1481,7 @@ export default function BankReconciliationTab({
 
                   <button
                     type="button"
-                    onClick={() => setIsManualLineModalOpen(true)}
+                    onClick={handleOpenManualLineModal}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-medium transition-all cursor-pointer text-xs"
                   >
                     <PlusIcon className="w-3.5 h-3.5" />
@@ -1474,7 +1531,7 @@ export default function BankReconciliationTab({
                           {sanitizeBankText(line.concept)}
                         </p>
                         <div className="flex items-center gap-1.5 text-[10px] text-gray-400 mt-0.5">
-                          <span>{sanitizeBankText(line.date)}</span>
+                          <span>{formatDisplayDate(line.date)}</span>
                           {line.reference && (
                             <>
                               <span>•</span>

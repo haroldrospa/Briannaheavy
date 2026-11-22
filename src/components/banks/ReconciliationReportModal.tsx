@@ -20,6 +20,16 @@ import {
 import type { BankTransaction } from '../../services/bankService';
 import logo from '../../assets/logo.png';
 
+const formatDisplayDate = (dStr?: string) => {
+  if (!dStr) return '';
+  const clean = sanitizeBankText(dStr);
+  if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+    const parts = clean.slice(0, 10).split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return clean;
+};
+
 export interface ReconciliationReportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -443,7 +453,7 @@ export default function ReconciliationReportModal({
                                 <span className="font-bold text-gray-900 dark:text-white">{tx.concept}</span>
                               </div>
                               <span className="text-[10.5px] text-gray-400">
-                                {tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : 'Sin fecha'} • Ref: {tx.reference || 'N/A'}
+                                {formatDisplayDate(tx.date) || 'Sin fecha'} • Ref: {tx.reference || 'N/A'}
                               </span>
                             </div>
                             <span className="font-black font-mono text-gray-900 dark:text-white shrink-0">
@@ -479,7 +489,7 @@ export default function ReconciliationReportModal({
                                 <span className="font-bold text-gray-900 dark:text-white">{sanitizeBankText(line.concept)}</span>
                               </div>
                               <span className="text-[10.5px] text-gray-400">
-                                {sanitizeBankText(line.date)} • Ref: {sanitizeBankText(line.reference || 'N/A')}
+                                {formatDisplayDate(line.date)} • Ref: {sanitizeBankText(line.reference || 'N/A')}
                               </span>
                             </div>
                             <span className="font-black font-mono text-gray-900 dark:text-white shrink-0">
@@ -519,7 +529,7 @@ export default function ReconciliationReportModal({
                         <div>
                           <p className="font-bold text-gray-900 dark:text-white">{tx.concept}</p>
                           <p className="text-[10.5px] text-gray-400">
-                            {tx.date ? new Date(tx.date).toLocaleDateString('es-DO') : ''} • Ref: {tx.reference || 'S/N'} • {tx.type}
+                            {formatDisplayDate(tx.date)} • Ref: {tx.reference || 'S/N'} • {tx.type}
                           </p>
                         </div>
                       </div>
