@@ -3674,6 +3674,17 @@ export default function POS() {
               )}
             </button>
 
+            {/* Movimientos de Caja */}
+            <button
+              type="button"
+              onClick={() => setIsCashMovementOpen(true)}
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer whitespace-nowrap"
+              title="Movimientos de Caja (Ingresos / Egresos / Historial)"
+            >
+              <ArrowsRightLeftIcon className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400 stroke-[2.2]" />
+              <span className="hidden sm:inline">Movimientos</span>
+            </button>
+
             {/* Cierre de Caja / Abrir Turno */}
             {isShiftActive ? (
               <button
