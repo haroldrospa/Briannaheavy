@@ -21,6 +21,7 @@ export const MODULE_LIST = [
   'Seguros',
   'Bancos',
   'Reportes',
+  'Recibos',
   'Usuarios',
   'Configuración'
 ];
@@ -40,6 +41,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     Seguros: { ver: true, crear: true, editar: true, eliminar: true },
     Bancos: { ver: true, crear: true, editar: true, eliminar: true },
     Reportes: { ver: true, crear: true, editar: true, eliminar: true },
+    Recibos: { ver: true, crear: true, editar: true, eliminar: true },
     Usuarios: { ver: true, crear: true, editar: true, eliminar: true },
     Configuración: { ver: true, crear: true, editar: true, eliminar: true },
   },
@@ -57,6 +59,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     Seguros: { ver: true, crear: true, editar: true, eliminar: false },
     Bancos: { ver: true, crear: true, editar: true, eliminar: false },
     Reportes: { ver: true, crear: true, editar: true, eliminar: false },
+    Recibos: { ver: true, crear: true, editar: true, eliminar: true },
     Usuarios: { ver: false, crear: false, editar: false, eliminar: false },
     Configuración: { ver: true, crear: false, editar: true, eliminar: false },
   },
@@ -74,6 +77,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     Seguros: { ver: true, crear: false, editar: false, eliminar: false },
     Bancos: { ver: false, crear: false, editar: false, eliminar: false },
     Reportes: { ver: false, crear: false, editar: false, eliminar: false },
+    Recibos: { ver: true, crear: true, editar: true, eliminar: false },
     Usuarios: { ver: false, crear: false, editar: false, eliminar: false },
     Configuración: { ver: false, crear: false, editar: false, eliminar: false },
   }
@@ -259,6 +263,9 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/bancos': 'Bancos',
   '/banco': 'Bancos',
   '/reportes': 'Reportes',
+  '/recibos': 'Recibos',
+  '/recibo': 'Recibos',
+  '/receipts': 'Recibos',
   '/usuarios': 'Usuarios',
   '/configuracion': 'Configuración'
 };

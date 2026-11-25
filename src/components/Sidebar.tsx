@@ -19,7 +19,8 @@ import {
   TruckIcon,
   ShieldCheckIcon,
   WrenchIcon,
-  ReceiptRefundIcon
+  ReceiptRefundIcon,
+  TicketIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveRole, isRouteAllowed, type UserRole } from '../utils/rolePermissions';
@@ -37,6 +38,7 @@ const navigation = [
   { name: 'Seguros', href: '/seguros', icon: ShieldCheckIcon },
   { name: 'Banco', href: '/bancos', icon: BuildingLibraryIcon },
   { name: 'Reportes', href: '/reportes', icon: DocumentChartBarIcon, badge: '2' },
+  { name: 'Recibos', href: '/recibos', icon: TicketIcon },
   { name: 'Usuarios', href: '/configuracion?tab=usuarios', icon: ShieldCheckIcon },
   { name: 'Ajustes', href: '/configuracion', icon: Cog6ToothIcon },
 ];

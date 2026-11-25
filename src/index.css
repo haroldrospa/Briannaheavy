@@ -152,6 +152,7 @@ button, a, input, select, textarea {
     body.print-receipt-mode #root,
     body.print-statement-mode #root,
     body.print-statement-letter-mode #root,
+    body.print-manual-receipt-mode #root,
     body.print-portal-active #root {
       display: none !important;
     }
@@ -258,6 +259,36 @@ button, a, input, select, textarea {
     }
 
     body:not(.print-receipt-mode) .printable-financing-receipt {
+      display: none !important;
+    }
+
+    /* Printable Manual Classic Receipt (Talonario) */
+    body.print-manual-receipt-mode {
+      height: auto !important;
+      overflow: visible !important;
+      background-color: #ffffff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    body.print-manual-receipt-mode .printable-manual-receipt {
+      display: block !important;
+      position: relative !important;
+      width: 100% !important;
+      max-width: 215mm !important;
+      margin: 0 auto !important;
+      padding: 4mm 6mm !important;
+      box-sizing: border-box !important;
+      background-color: #ffffff !important;
+      color: #103778 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      page-break-after: avoid !important;
+      break-after: avoid !important;
+      z-index: 9999999 !important;
+    }
+
+    body:not(.print-manual-receipt-mode) .printable-manual-receipt {
       display: none !important;
     }
 

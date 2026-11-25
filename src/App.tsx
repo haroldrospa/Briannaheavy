@@ -43,6 +43,7 @@ const CreditNotes = lazyWithRetry(() => import('./pages/CreditNotes'));
 const Banks = lazyWithRetry(() => import('./pages/Banks'));
 const Catalog = lazyWithRetry(() => import('./pages/Catalog'));
 const Tools = lazyWithRetry(() => import('./pages/Tools'));
+const Receipts = lazyWithRetry(() => import('./pages/Receipts'));
 
 // Configuración de React Query
 const queryClient = new QueryClient({
@@ -101,9 +102,12 @@ function App() {
                   <Route path="/financiamientos" element={<Navigate to="/seguros" replace />} />
                   <Route path="/bancos" element={<Banks />} />
                   <Route path="/reportes" element={<Reports />} />
+                  <Route path="/recibos" element={<Receipts />} />
                   <Route path="/configuracion" element={<Settings />} />
 
                   {/* Alias en Inglés & Catch-all Fallback */}
+                  <Route path="/receipts" element={<Navigate to="/recibos" replace />} />
+                  <Route path="/recibo" element={<Navigate to="/recibos" replace />} />
                   <Route path="/seguro" element={<Navigate to="/seguros" replace />} />
                   <Route path="/insurance" element={<Navigate to="/seguros" replace />} />
                   <Route path="/insurances" element={<Navigate to="/seguros" replace />} />

@@ -255,16 +255,21 @@ export default function BankReconciliationTab({
     const prevClosing = getPreviousClosingBalance(selectedAccount.id, period);
 
     if (saved) {
-      // Si el registro guardado no tenía saldo inicial pero el mes anterior cerró con saldo, dar continuidad
-      const effectiveOpenBal = (saved.openingBalance !== 0 && saved.openingBalance != null)
+      // Si el registro guardado tenía el valor dummy de prueba 500,000, limpiarlo
+      const isDummy500k = saved.openingBalance === 500000;
+      const effectiveOpenBal = (!isDummy500k && saved.openingBalance !== 0 && saved.openingBalance != null)
         ? saved.openingBalance
         : (prevClosing ?? 0);
 
       setOpeningBalance(effectiveOpenBal);
-      setClosingBalance(saved.closingBalance || 0);
+      let effectiveCloseBal = saved.closingBalance || 0;
+      if (isDummy500k && effectiveCloseBal >= 500000) {
+        effectiveCloseBal = Math.max(0, effectiveCloseBal - 500000 + effectiveOpenBal);
+      }
+      setClosingBalance(effectiveCloseBal);
       const cleanLines = (saved.statementLines || [])
         .filter(l => {
-          if (l.id?.startsWith('stmt-gen-com-')) return false;
+          if (l.id?.startsWith('stmt-gen-')) return false; // Purgar líneas simuladas
           if (excludeBankTax && isBankTaxOrFeeLine(l.concept, l.id)) return false;
           return true;
         })
@@ -275,7 +280,15 @@ export default function BankReconciliationTab({
           reference: l.reference ? sanitizeBankText(l.reference) : undefined,
         }));
       setStatementLines(cleanLines);
-      setReconciledBookTxIds(saved.reconciledBookTxIds || []);
+
+      // Si las líneas guardadas eran simuladas y fueron purgadas, limpiar también los IDs conciliados artificialmente
+      const hadSimulatedLines = (saved.statementLines || []).some(l => l.id?.startsWith('stmt-gen-'));
+      if (cleanLines.length === 0 && hadSimulatedLines) {
+        setReconciledBookTxIds([]);
+        handleAutoSave([], [], effectiveOpenBal, effectiveCloseBal);
+      } else {
+        setReconciledBookTxIds(saved.reconciledBookTxIds || []);
+      }
     } else {
       // Sin conciliación previa para este período: HEREDA automáticamente el Saldo Final del mes anterior!
       const inheritedOpen = prevClosing ?? 0;
@@ -389,46 +402,6 @@ export default function BankReconciliationTab({
     }
 
     // Mostrar reporte con los resultados de la conciliación de inmediato
-    setActiveSettlementReport(null);
-    setIsReportModalOpen(true);
-  };
-
-  // 2b. Utilizar movimientos de libros de este período para poblar el extracto bancario
-  const handlePopulateFromBooks = () => {
-    if (periodBookTransactions.length === 0) {
-      showFeedback('info', 'No hay movimientos en libros registrados para este período.');
-      return;
-    }
-
-    // Convertir las transacciones de libros a líneas del extracto del banco (sin impuestos artificiales ni comisiones ficticias)
-    const generatedLines: BankStatementLine[] = periodBookTransactions.map((tx, idx) => ({
-      id: `stmt-gen-${tx.id || idx}-${Date.now()}`,
-      date: tx.date ? tx.date.split('T')[0] : `${period}-01`,
-      concept: tx.concept,
-      reference: tx.reference || undefined,
-      type: tx.type,
-      amount: Number(tx.amount) || 0,
-      status: 'pending'
-    }));
-
-    // Saldos inicial y final coherentes
-    const simulatedOpening = 500000;
-    const totalOut = generatedLines.filter(l => l.type === 'Egreso').reduce((s, l) => s + l.amount, 0);
-    const totalIn = generatedLines.filter(l => l.type === 'Ingreso').reduce((s, l) => s + l.amount, 0);
-    const simulatedClosing = simulatedOpening + totalIn - totalOut;
-
-    setOpeningBalance(simulatedOpening);
-    setClosingBalance(simulatedClosing);
-
-    // Auto-conciliar de inmediato
-    const autoMatchResult = runAutoReconciliation(periodBookTransactions, generatedLines, []);
-    setReconciledBookTxIds(autoMatchResult.reconciledBookIds);
-    setStatementLines(autoMatchResult.updatedStatementLines);
-
-    handleAutoSave(autoMatchResult.updatedStatementLines, autoMatchResult.reconciledBookIds, simulatedOpening, simulatedClosing);
-    showFeedback('success', `¡Listo! Se cargó el extracto del banco con los ${generatedLines.length} movimientos y se conciliaron automáticamente.`);
-
-    // Mostrar reporte con los resultados del cuadre
     setActiveSettlementReport(null);
     setIsReportModalOpen(true);
   };
@@ -740,6 +713,83 @@ export default function BankReconciliationTab({
       return true;
     });
   }, [statementLines, filterStatement, searchStatement]);
+
+  // 6. Selección Masiva (Seleccionar Todo / Deseleccionar Todo) en Libros
+  const selectedVisibleBooksCount = useMemo(() => {
+    return visibleBookTransactions.filter(tx => reconciledBookTxIds.includes(tx.id)).length;
+  }, [visibleBookTransactions, reconciledBookTxIds]);
+
+  const isAllBooksSelected = visibleBookTransactions.length > 0 && selectedVisibleBooksCount === visibleBookTransactions.length;
+  const isSomeBooksSelected = selectedVisibleBooksCount > 0 && selectedVisibleBooksCount < visibleBookTransactions.length;
+
+  const handleToggleSelectAllBooks = () => {
+    const visibleIds = visibleBookTransactions.map(tx => tx.id);
+    if (visibleIds.length === 0) return;
+
+    let nextIds: string[];
+    if (isAllBooksSelected) {
+      const visibleSet = new Set(visibleIds);
+      nextIds = reconciledBookTxIds.filter(id => !visibleSet.has(id));
+      const nextStatement = statementLines.map(l => (l.matchedTransactionId && visibleSet.has(l.matchedTransactionId)) ? { ...l, status: 'pending' as const, matchedTransactionId: undefined } : l);
+      setStatementLines(nextStatement);
+      setReconciledBookTxIds(nextIds);
+      handleAutoSave(nextStatement, nextIds, openingBalance, closingBalance);
+      showFeedback('info', `Deseleccionados ${visibleIds.length} movimientos de libros.`);
+    } else {
+      const nextIdsSet = new Set([...reconciledBookTxIds, ...visibleIds]);
+      nextIds = Array.from(nextIdsSet);
+      setReconciledBookTxIds(nextIds);
+      handleAutoSave(statementLines, nextIds, openingBalance, closingBalance);
+      showFeedback('success', `Seleccionados ${visibleIds.length} movimientos de libros.`);
+    }
+  };
+
+  // 7. Selección Masiva (Seleccionar Todo / Deseleccionar Todo) en Extracto Bancario
+  const selectedVisibleStatementCount = useMemo(() => {
+    return visibleStatementLines.filter(line => line.status === 'reconciled').length;
+  }, [visibleStatementLines]);
+
+  const isAllStatementSelected = visibleStatementLines.length > 0 && selectedVisibleStatementCount === visibleStatementLines.length;
+  const isSomeStatementSelected = selectedVisibleStatementCount > 0 && selectedVisibleStatementCount < visibleStatementLines.length;
+
+  const handleToggleSelectAllStatement = () => {
+    const visibleIds = visibleStatementLines.map(line => line.id);
+    if (visibleIds.length === 0) return;
+
+    const nextStatus: 'reconciled' | 'pending' = isAllStatementSelected ? 'pending' : 'reconciled';
+    const visibleSet = new Set(visibleIds);
+
+    const updated = statementLines.map(l => {
+      if (visibleSet.has(l.id)) {
+        return {
+          ...l,
+          status: nextStatus,
+          matchedTransactionId: nextStatus === 'pending' ? undefined : l.matchedTransactionId
+        };
+      }
+      return l;
+    });
+
+    if (isAllStatementSelected) {
+      const matchedIdsToUnlink = new Set(
+        visibleStatementLines.map(l => l.matchedTransactionId).filter(Boolean) as string[]
+      );
+      if (matchedIdsToUnlink.size > 0) {
+        const nextBookIds = reconciledBookTxIds.filter(id => !matchedIdsToUnlink.has(id));
+        setReconciledBookTxIds(nextBookIds);
+        setStatementLines(updated);
+        handleAutoSave(updated, nextBookIds, openingBalance, closingBalance);
+        showFeedback('info', `Deseleccionadas ${visibleIds.length} líneas del extracto.`);
+        return;
+      }
+      showFeedback('info', `Deseleccionadas ${visibleIds.length} líneas del extracto.`);
+    } else {
+      showFeedback('success', `Seleccionadas ${visibleIds.length} líneas del extracto.`);
+    }
+
+    setStatementLines(updated);
+    handleAutoSave(updated, reconciledBookTxIds, openingBalance, closingBalance);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -1318,6 +1368,45 @@ export default function BankReconciliationTab({
             )}
           </div>
 
+          {/* Opción Seleccionar Todo en Libros */}
+          {visibleBookTransactions.length > 0 && (
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-blue-50/60 dark:bg-blue-950/25 border border-blue-100 dark:border-blue-900/40 rounded-xl text-xs select-none">
+              <button
+                type="button"
+                onClick={handleToggleSelectAllBooks}
+                className="flex items-center gap-2 text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 font-semibold cursor-pointer transition-colors"
+                title={isAllBooksSelected ? 'Deseleccionar todos los movimientos visibles' : 'Seleccionar todos los movimientos visibles'}
+              >
+                <div className={`w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0 ${
+                  isAllBooksSelected
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : isSomeBooksSelected
+                    ? 'bg-blue-100 border-blue-400 text-blue-600 dark:bg-blue-900/50 dark:border-blue-500'
+                    : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'
+                }`}>
+                  {isAllBooksSelected && <CheckIcon className="w-3 h-3 stroke-[3]" />}
+                  {!isAllBooksSelected && isSomeBooksSelected && (
+                    <span className="w-1.5 h-1.5 rounded-xs bg-blue-600 dark:bg-blue-400" />
+                  )}
+                </div>
+                <span>
+                  {isAllBooksSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                </span>
+                <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono font-normal">
+                  ({selectedVisibleBooksCount} de {visibleBookTransactions.length})
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleSelectAllBooks}
+                className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+              >
+                {isAllBooksSelected ? 'Desmarcar todos' : 'Marcar todos'}
+              </button>
+            </div>
+          )}
+
           {/* Lista de Libros */}
           <div className="max-h-[520px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-100 dark:divide-zinc-800/60">
             {visibleBookTransactions.length === 0 ? (
@@ -1443,6 +1532,45 @@ export default function BankReconciliationTab({
             )}
           </div>
 
+          {/* Opción Seleccionar Todo en Extracto */}
+          {visibleStatementLines.length > 0 && (
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-purple-50/60 dark:bg-purple-950/25 border border-purple-100 dark:border-purple-900/40 rounded-xl text-xs select-none">
+              <button
+                type="button"
+                onClick={handleToggleSelectAllStatement}
+                className="flex items-center gap-2 text-gray-800 dark:text-gray-200 hover:text-purple-600 dark:hover:text-purple-400 font-semibold cursor-pointer transition-colors"
+                title={isAllStatementSelected ? 'Deseleccionar todas las líneas visibles' : 'Seleccionar todas las líneas visibles'}
+              >
+                <div className={`w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0 ${
+                  isAllStatementSelected
+                    ? 'bg-purple-600 border-purple-600 text-white'
+                    : isSomeStatementSelected
+                    ? 'bg-purple-100 border-purple-400 text-purple-600 dark:bg-purple-900/50 dark:border-purple-500'
+                    : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'
+                }`}>
+                  {isAllStatementSelected && <CheckIcon className="w-3 h-3 stroke-[3]" />}
+                  {!isAllStatementSelected && isSomeStatementSelected && (
+                    <span className="w-1.5 h-1.5 rounded-xs bg-purple-600 dark:bg-purple-400" />
+                  )}
+                </div>
+                <span>
+                  {isAllStatementSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                </span>
+                <span className="text-[10px] text-gray-400 dark:text-zinc-500 font-mono font-normal">
+                  ({selectedVisibleStatementCount} de {visibleStatementLines.length})
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleSelectAllStatement}
+                className="text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+              >
+                {isAllStatementSelected ? 'Desmarcar todos' : 'Marcar todos'}
+              </button>
+            </div>
+          )}
+
           {/* Lista de Extracto */}
           <div className="max-h-[520px] overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-100 dark:divide-zinc-800/60">
             {visibleStatementLines.length === 0 ? (
@@ -1452,40 +1580,29 @@ export default function BankReconciliationTab({
                 </div>
                 <div>
                   <p className="font-bold text-gray-800 dark:text-zinc-200">
-                    No hay movimientos en el extracto para {formattedPeriodName}
+                    No hay extracto bancario cargado para {formattedPeriodName}
                   </p>
                   <p className="text-gray-400 dark:text-zinc-500 text-[11px] mt-0.5">
-                    Sube el extracto descargado de tu banco (Excel/CSV) o autocompleta con un clic para conciliar.
+                    Sube el archivo oficial descargado de tu banco (Excel o CSV de Banco Popular, Banreservas o BHD) o ingresa líneas reales manualmente.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
                   >
                     <ArrowUpTrayIcon className="w-3.5 h-3.5" />
-                    <span>Subir Excel o CSV</span>
+                    <span>Subir Extracto Bancario (Excel / CSV)</span>
                   </button>
-
-                  {periodBookTransactions.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handlePopulateFromBooks}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all cursor-pointer shadow-2xs text-xs"
-                    >
-                      <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                      <span>Cargar desde Libros ({periodBookTransactions.length})</span>
-                    </button>
-                  )}
 
                   <button
                     type="button"
                     onClick={handleOpenManualLineModal}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-medium transition-all cursor-pointer text-xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-200 rounded-xl font-bold transition-all cursor-pointer text-xs border border-gray-200/80 dark:border-zinc-700"
                   >
                     <PlusIcon className="w-3.5 h-3.5" />
-                    <span>Manual</span>
+                    <span>+ Agregar Línea Manual</span>
                   </button>
                 </div>
                 <div>

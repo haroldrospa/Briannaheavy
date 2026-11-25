@@ -85,6 +85,7 @@ export interface ReconciliationSummary {
 }
 
 const STORAGE_PREFIX = 'brianna_bank_reconciliation_';
+const SETTLEMENTS_STORAGE_KEY = 'brianna_bank_reconciliation_settlements';
 
 /**
  * Detecta si un concepto o ID de movimiento corresponde a un impuesto bancario
@@ -122,10 +123,10 @@ export const loadReconciliationData = (
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as BankReconciliationData;
-    // Limpiar comisiones o impuestos artificiales previamente inyectados y sanear textos corruptos
+    // Limpiar cualquier línea simulada (stmt-gen-) y sanear textos corruptos
     if (parsed && Array.isArray(parsed.statementLines)) {
       parsed.statementLines = parsed.statementLines
-        .filter(l => !l.id?.startsWith('stmt-gen-com-'))
+        .filter(l => !l.id?.startsWith('stmt-gen-'))
         .map(l => ({
           ...l,
           concept: sanitizeBankText(l.concept),
@@ -177,21 +178,78 @@ export const sanitizeAllStoredBankReconciliations = (): void => {
     }
     keysToClean.forEach(key => {
       const raw = localStorage.getItem(key);
-      if (raw && (raw.includes('\u0000') || raw.includes('\u2261') || raw.includes('≡'))) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.statementLines)) {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        let modified = false;
+
+        if (parsed && Array.isArray(parsed.statementLines)) {
+          // 1. Purgar cualquier línea simulada o clonada (stmt-gen-)
+          const originalLen = parsed.statementLines.length;
+          parsed.statementLines = parsed.statementLines.filter((l: any) => !l.id?.startsWith('stmt-gen-'));
+          if (parsed.statementLines.length !== originalLen) {
+            modified = true;
+            if (parsed.statementLines.length === 0) {
+              parsed.reconciledBookTxIds = [];
+            }
+          }
+
+          const hasWeirdChars = raw.includes('\u0000') || raw.includes('\u2261') || raw.includes('≡');
+          if (hasWeirdChars) {
             parsed.statementLines = parsed.statementLines.map((l: any) => ({
               ...l,
               concept: sanitizeBankText(l.concept),
               date: sanitizeBankText(l.date),
               reference: l.reference ? sanitizeBankText(l.reference) : undefined,
             }));
-            localStorage.setItem(key, JSON.stringify(parsed));
+            modified = true;
           }
-        } catch {}
-      }
+        }
+
+        // Purgar valor de prueba dummy de 500,000 en Saldo Inicial
+        if (parsed && parsed.openingBalance === 500000) {
+          parsed.openingBalance = 0;
+          if (typeof parsed.closingBalance === 'number' && parsed.closingBalance >= 500000) {
+            parsed.closingBalance = parsed.closingBalance - 500000;
+          }
+          modified = true;
+        }
+
+        if (modified) {
+          localStorage.setItem(key, JSON.stringify(parsed));
+        }
+      } catch {}
     });
+
+    // Sanitizar también historial de cuadres si alguno contiene el saldo de prueba 500,000 o líneas simuladas
+    const rawSettlements = localStorage.getItem(SETTLEMENTS_STORAGE_KEY);
+    if (rawSettlements && (rawSettlements.includes('500000') || rawSettlements.includes('stmt-gen-'))) {
+      try {
+        const parsedSettlements = JSON.parse(rawSettlements);
+        if (Array.isArray(parsedSettlements)) {
+          let modSettlements = false;
+          parsedSettlements.forEach((s: any) => {
+            if (s && Array.isArray(s.statementLinesSnapshot)) {
+              const origLen = s.statementLinesSnapshot.length;
+              s.statementLinesSnapshot = s.statementLinesSnapshot.filter((l: any) => !l.id?.startsWith('stmt-gen-'));
+              if (s.statementLinesSnapshot.length !== origLen) {
+                modSettlements = true;
+              }
+            }
+            if (s && s.summary && s.summary.statementOpeningBalance === 500000) {
+              s.summary.statementOpeningBalance = 0;
+              if (s.summary.statementClosingBalance >= 500000) {
+                s.summary.statementClosingBalance = s.summary.statementClosingBalance - 500000;
+              }
+              modSettlements = true;
+            }
+          });
+          if (modSettlements) {
+            localStorage.setItem(SETTLEMENTS_STORAGE_KEY, JSON.stringify(parsedSettlements));
+          }
+        }
+      } catch {}
+    }
   } catch (err) {
     console.warn('Error sanitizing stored bank reconciliations:', err);
   }
@@ -216,8 +274,6 @@ export const clearReconciliationData = (bankAccountId: string, period: string): 
     console.error('Error al limpiar datos de conciliación:', err);
   }
 };
-
-const SETTLEMENTS_STORAGE_KEY = 'brianna_bank_reconciliation_settlements';
 
 /**
  * Obtiene el historial completo de cuadres de conciliación bancaria guardados
