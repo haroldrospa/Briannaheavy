@@ -4,7 +4,8 @@ export interface ManualReceipt {
   id: string;
   receiptNumber: string; // e.g. "0001"
   date: string; // YYYY-MM-DD
-  receivedFrom: string; // "Recibí de:"
+  recipientType?: 'receivedFrom' | 'deliveredTo'; // 'receivedFrom' -> "Recibí de:", 'deliveredTo' -> "Entregué a:"
+  receivedFrom: string; // Nombre de la persona o entidad
   amount: number; // RD$
   amountWords: string; // "La suma de:"
   concept: string; // "Por concepto de:"

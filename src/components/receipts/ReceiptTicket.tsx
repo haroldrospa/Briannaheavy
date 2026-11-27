@@ -135,11 +135,20 @@ export const ReceiptTicket = ({
 
           {/* Cuerpo del Recibo con las Líneas Clásicas */}
           <div className="space-y-4 sm:space-y-5 my-4 sm:my-6 text-sm sm:text-base">
-            {/* Línea 1: Recibí de */}
+            {/* Línea 1: Recibí de / Entregué a */}
             <div className="flex items-end gap-2">
               <div className="flex items-baseline whitespace-nowrap font-bold">
-                <span className="font-serif italic text-2xl sm:text-3xl font-black leading-none mr-0.5">R</span>
-                <span className="text-sm sm:text-base">ecibí de:</span>
+                {receipt.recipientType === 'deliveredTo' ? (
+                  <>
+                    <span className="font-serif italic text-2xl sm:text-3xl font-black leading-none mr-0.5">E</span>
+                    <span className="text-sm sm:text-base">ntregué a:</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-serif italic text-2xl sm:text-3xl font-black leading-none mr-0.5">R</span>
+                    <span className="text-sm sm:text-base">ecibí de:</span>
+                  </>
+                )}
               </div>
               <div
                 className="flex-1 border-b border-[#103778] pb-0.5 px-2 font-bold text-gray-900 tracking-wide uppercase text-xs sm:text-sm"

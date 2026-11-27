@@ -38,6 +38,7 @@ export default function Receipts() {
   // Form State
   const [receiptNumber, setReceiptNumber] = useState<string>('0001');
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [recipientType, setRecipientType] = useState<'receivedFrom' | 'deliveredTo'>('receivedFrom');
   const [receivedFrom, setReceivedFrom] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [amountWords, setAmountWords] = useState<string>('');
@@ -92,6 +93,7 @@ export default function Receipts() {
     return {
       receiptNumber: receiptNumber || '0001',
       date: date || new Date().toISOString().split('T')[0],
+      recipientType,
       receivedFrom: receivedFrom || '',
       amount: num,
       amountWords: amountWords || (num > 0 ? numeroALetras(num) : ''),
@@ -100,12 +102,13 @@ export default function Receipts() {
       headerTag: headerTag || '★ STAR Premium',
       registerInCash
     };
-  }, [receiptNumber, date, receivedFrom, amount, amountWords, concept, signature, headerTag, registerInCash]);
+  }, [receiptNumber, date, recipientType, receivedFrom, amount, amountWords, concept, signature, headerTag, registerInCash]);
 
   // Reset form to emit next receipt
   const handleResetForm = () => {
     setReceiptNumber(getNextReceiptNumber());
     setDate(new Date().toISOString().split('T')[0]);
+    setRecipientType('receivedFrom');
     setReceivedFrom('');
     setAmount('');
     setAmountWords('');
@@ -121,7 +124,7 @@ export default function Receipts() {
       return null;
     }
     if (!receivedFrom.trim()) {
-      setStatusMessage('Por favor indica a quién o de quién se recibió (Recibí de)');
+      setStatusMessage(`Por favor indica a quién o de quién (${recipientType === 'deliveredTo' ? 'Entregué a' : 'Recibí de'})`);
       return null;
     }
 
@@ -129,6 +132,7 @@ export default function Receipts() {
       const created = await createManualReceipt({
         receiptNumber: receiptNumber || getNextReceiptNumber(),
         date,
+        recipientType,
         receivedFrom: receivedFrom.trim(),
         amount: numAmount,
         amountWords: amountWords || numeroALetras(numAmount),
@@ -350,11 +354,28 @@ export default function Receipts() {
                 </div>
               </div>
 
-              {/* Recibí de (Con autocompletado) */}
+              {/* Recibí de / Entregué a (Seleccionable en lista) */}
               <div className="relative">
-                <label className="block text-xs font-black text-zinc-700 dark:text-zinc-300 mb-1">
-                  Recibí de: <span className="text-[#ED1C24]">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-black text-zinc-700 dark:text-zinc-300">
+                      Tipo de Operación:
+                    </label>
+                    <select
+                      value={recipientType}
+                      onChange={e => setRecipientType(e.target.value as 'receivedFrom' | 'deliveredTo')}
+                      className="text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-[#103778] dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg px-2 py-0.5 outline-none cursor-pointer"
+                    >
+                      <option value="receivedFrom">Recibí de:</option>
+                      <option value="deliveredTo">Entregué a:</option>
+                    </select>
+                    <span className="text-[#ED1C24] font-bold">*</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                    {recipientType === 'deliveredTo' ? 'Entrega / Pago' : 'Recepción / Cobro'}
+                  </span>
+                </div>
+
                 <input
                   type="text"
                   value={receivedFrom}
@@ -364,7 +385,7 @@ export default function Receipts() {
                   }}
                   onFocus={() => setShowCustomerSuggestions(true)}
                   className="w-full text-sm font-semibold bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-[#ED1C24] outline-none"
-                  placeholder="Nombre de la persona o empresa"
+                  placeholder={recipientType === 'deliveredTo' ? "Nombre de la persona o empresa a quien se entrega" : "Nombre de la persona o empresa de quien se recibe"}
                 />
 
                 {/* Sugerencias de clientes */}
@@ -621,7 +642,7 @@ export default function Receipts() {
                   <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400 uppercase font-black text-[10px]">
                     <th className="py-2.5 px-3">No. Recibo</th>
                     <th className="py-2.5 px-3">Fecha</th>
-                    <th className="py-2.5 px-3">Recibí de</th>
+                    <th className="py-2.5 px-3">Persona / Entidad</th>
                     <th className="py-2.5 px-3">Concepto</th>
                     <th className="py-2.5 px-3 text-right">Monto (RD$)</th>
                     <th className="py-2.5 px-3 text-center">Acciones</th>
@@ -644,7 +665,16 @@ export default function Receipts() {
                           {r.date}
                         </td>
                         <td className="py-2.5 px-3 font-bold text-zinc-800 dark:text-zinc-200">
-                          {r.receivedFrom}
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-black uppercase tracking-wider ${
+                              r.recipientType === 'deliveredTo'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                            }`}>
+                              {r.recipientType === 'deliveredTo' ? 'Entregué a' : 'Recibí de'}
+                            </span>
+                            <span>{r.receivedFrom}</span>
+                          </div>
                         </td>
                         <td className="py-2.5 px-3 text-zinc-600 dark:text-zinc-400 max-w-xs truncate">
                           {r.concept}
@@ -667,6 +697,7 @@ export default function Receipts() {
                               onClick={() => {
                                 setReceiptNumber(r.receiptNumber);
                                 setDate(r.date);
+                                setRecipientType(r.recipientType || 'receivedFrom');
                                 setReceivedFrom(r.receivedFrom);
                                 setAmount(String(r.amount));
                                 setAmountWords(r.amountWords);
