@@ -560,7 +560,7 @@ export default function Receipts() {
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-xs font-black uppercase tracking-wider text-zinc-500">
-                      Vista Previa en Vivo (Fiel al Talonario Físico)
+                      Vista Previa en Vivo (Formato Minimalista Profesional)
                     </span>
                   </div>
                   <span className="text-[11px] font-bold text-zinc-400">
@@ -568,7 +568,7 @@ export default function Receipts() {
                   </span>
                 </div>
 
-                {/* Renderizado idéntico al talonario físico */}
+                {/* Renderizado minimalista profesional */}
                 <div className="overflow-x-auto p-2 sm:p-4 bg-zinc-100/60 dark:bg-zinc-950 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 flex flex-col items-center gap-4">
                   <ReceiptTicket receipt={currentDraftReceipt} copyLabel={printCopies === '2' ? 'ORIGINAL' : undefined} />
                   {printCopies === '2' && (
@@ -584,7 +584,7 @@ export default function Receipts() {
                 </div>
 
                 <div className="mt-4 flex items-center justify-between text-xs text-zinc-400 px-1">
-                  <span>* Formateado exactamente con bordes azules clásicos y tipografía de talonario.</span>
+                  <span>* Formato minimalista, sobrio y optimizado para impresión ejecutiva o media hoja.</span>
                   <button
                     type="button"
                     onClick={() => {
